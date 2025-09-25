@@ -77,6 +77,7 @@ public interface TraceThreadService {
 class TraceThreadServiceImpl implements TraceThreadService {
 
     private static final Duration LOCK_DURATION = Duration.ofSeconds(5);
+    private static final int BATCH_THREAD_PROCESSING_CONCURRENCY = 5;
 
     private final @NonNull TraceThreadDAO traceThreadDAO;
     private final @NonNull TraceThreadIdService traceThreadIdService;
@@ -391,18 +392,14 @@ class TraceThreadServiceImpl implements TraceThreadService {
                         LOCK_DURATION)));
     }
 
-    /**
-     * Batch version of verifyAndCreateThreadIfNeed to improve performance by processing threads concurrently
-     * and discarding results rather than collecting them (avoiding collectList()). This reduces memory usage
-     * and speeds up thread creation for large batches.
-     */
     private Mono<Void> verifyAndCreateThreadsIfNeeded(UUID projectId, Set<String> threadIds) {
         if (CollectionUtils.isEmpty(threadIds)) {
             return Mono.empty();
         }
 
         return Flux.fromIterable(threadIds)
-                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId), Math.min(threadIds.size(), 5)) // Limit the concurrency to 5
+                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId),
+                        Math.min(threadIds.size(), BATCH_THREAD_PROCESSING_CONCURRENCY)) // Limit the concurrency to BATCH_THREAD_PROCESSING_CONCURRENCY
                 .then();
     }
 
