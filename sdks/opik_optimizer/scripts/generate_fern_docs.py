@@ -252,7 +252,6 @@ classes_to_document = [
 res = """---
 title: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
-pytest_codeblocks_skip: true
 ---
 
 The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
