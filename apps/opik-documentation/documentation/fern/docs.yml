@@ -956,6 +956,9 @@ redirects:
     destination: "/docs/opik/integrations/opentelemetry-ruby-sdk"
     permanent: true
   # Cookbook redirects
+  - source: "/docs/opik/cookbook/overview"
+    destination: "/docs/opik/integrations/overview"
+    permanent: true
   - source: "/docs/opik/cookbook/openai"
     destination: "/docs/opik/integrations/openai"
     permanent: true
