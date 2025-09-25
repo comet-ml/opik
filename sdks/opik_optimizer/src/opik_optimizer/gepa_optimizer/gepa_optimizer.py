@@ -12,11 +12,14 @@ from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
 from ..utils import optimization_context, create_litellm_agent_class
+from ..logging_config import setup_logging as _setup_logging
 from .. import task_evaluator
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
-logger = logging.getLogger(__name__)
+
+_setup_logging()
+LOGGER = logging.getLogger("opik_optimizer.gepa.optimizer")
 
 
 class GepaOptimizer(BaseOptimizer):
@@ -31,54 +34,11 @@ class GepaOptimizer(BaseOptimizer):
         seed: int = 42,
         **model_kwargs: Any,
     ) -> None:
-        # Validate required parameters
-        if model is None:
-            raise ValueError("model parameter is required and cannot be None")
-        if not isinstance(model, str):
-            raise ValueError(f"model must be a string, got {type(model).__name__}")
-        if not model.strip():
-            raise ValueError("model cannot be empty or whitespace-only")
-
-        # Validate optional parameters
-        if project_name is not None and not isinstance(project_name, str):
-            raise ValueError(
-                f"project_name must be a string or None, got {type(project_name).__name__}"
-            )
-
-        if reflection_model is not None and not isinstance(reflection_model, str):
-            raise ValueError(
-                f"reflection_model must be a string or None, got {type(reflection_model).__name__}"
-            )
-
-        if not isinstance(verbose, int):
-            raise ValueError(
-                f"verbose must be an integer, got {type(verbose).__name__}"
-            )
-        if verbose < 0:
-            raise ValueError("verbose must be non-negative")
-
-        if not isinstance(seed, int):
-            raise ValueError(f"seed must be an integer, got {type(seed).__name__}")
-
         super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
         self.project_name = project_name
         self.reflection_model = reflection_model or model
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self._gepa_live_metric_calls = 0
-        self._adapter = None  # Will be set during optimization
-
-    def cleanup(self) -> None:
-        """
-        Clean up GEPA-specific resources.
-        """
-        # Call parent cleanup
-        super().cleanup()
-
-        # Clear GEPA-specific resources
-        self._adapter = None
-        self._gepa_live_metric_calls = 0
-
-        logger.debug("Cleaned up GEPA-specific resources")
 
     # ------------------------------------------------------------------
     # Helpers
@@ -154,7 +114,7 @@ class GepaOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
-
+        
         Args:
             prompt: The prompt to optimize
             dataset: Opik Dataset to optimize on
@@ -177,12 +137,21 @@ class GepaOptimizer(BaseOptimizer):
                 seed (int): Random seed for reproducibility (default: 42)
                 raise_on_exception (bool): Raise exceptions instead of continuing (default: True)
                 mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
-
+        
         Returns:
             OptimizationResult: Result of the optimization
         """
-        # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
+        # Validate inputs according to API specification
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
+        
+        if not isinstance(dataset, Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+        
+        if not callable(metric):
+            raise ValueError(
+                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+            )
 
         # Extract GEPA-specific parameters from kwargs
         max_metric_calls: int | None = kwargs.get("max_metric_calls", 30)
@@ -199,7 +168,7 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = kwargs.get("display_progress_bar", False)
         seed: int = int(kwargs.get("seed", 42))
         raise_on_exception: bool = kwargs.get("raise_on_exception", True)
-        kwargs.pop("mcp_config", None)  # Added for MCP support (for future use)
+        mcp_config = kwargs.pop("mcp_config", None)  # Added for MCP support
 
         prompt = prompt.copy()
         if self.project_name:
@@ -290,7 +259,7 @@ class GepaOptimizer(BaseOptimizer):
                         )
                     baseline.set_score(initial_score)
                 except Exception:
-                    logger.exception("Baseline evaluation failed")
+                    LOGGER.exception("Baseline evaluation failed")
 
             adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
             adapter_prompt.project_name = self.project_name
@@ -395,7 +364,7 @@ class GepaOptimizer(BaseOptimizer):
             try:
                 score = float(self._evaluate_prompt_logged(**eval_kwargs))
             except Exception:
-                logger.debug("Rescoring failed for candidate %s", idx, exc_info=True)
+                LOGGER.debug("Rescoring failed for candidate %s", idx, exc_info=True)
                 score = 0.0
 
             rescored.append(score)
@@ -469,12 +438,12 @@ class GepaOptimizer(BaseOptimizer):
             try:
                 self._evaluate_prompt_logged(**final_eval_kwargs)
             except Exception:
-                logger.debug("Final evaluation failed", exc_info=True)
+                LOGGER.debug("Final evaluation failed", exc_info=True)
 
         per_item_scores: list[dict[str, Any]] = []
         try:
             analysis_prompt = final_prompt.copy()
-            agent_cls = create_litellm_agent_class(analysis_prompt, optimizer=self)
+            agent_cls = create_litellm_agent_class(analysis_prompt)
             agent = agent_cls(analysis_prompt)
             for item in items:
                 messages = analysis_prompt.get_messages(item)
@@ -495,7 +464,7 @@ class GepaOptimizer(BaseOptimizer):
                     }
                 )
         except Exception:
-            logger.debug("Per-item diagnostics failed", exc_info=True)
+            LOGGER.debug("Per-item diagnostics failed", exc_info=True)
 
         details: dict[str, Any] = {
             "model": self.model,
@@ -533,16 +502,16 @@ class GepaOptimizer(BaseOptimizer):
                 best_prompt_text, best_score, verbose=self.verbose
             )
 
-        if logger.isEnabledFor(logging.DEBUG):
+        if LOGGER.isEnabledFor(logging.DEBUG):
             for idx, row in enumerate(candidate_rows):
-                logger.debug(
+                LOGGER.debug(
                     "candidate=%s source=%s gepa=%s opik=%s",
                     idx,
                     row.get("source"),
                     row.get("gepa_score"),
                     row.get("opik_score"),
                 )
-            logger.debug(
+            LOGGER.debug(
                 "selected candidate idx=%s gepa=%s opik=%.4f",
                 best_idx,
                 details.get("selected_candidate_gepa_score"),
@@ -603,7 +572,7 @@ class GepaOptimizer(BaseOptimizer):
         if prompt.model_kwargs is None:
             prompt.model_kwargs = self.model_kwargs
 
-        agent_class = create_litellm_agent_class(prompt, optimizer=self)
+        agent_class = create_litellm_agent_class(prompt)
         agent = agent_class(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
