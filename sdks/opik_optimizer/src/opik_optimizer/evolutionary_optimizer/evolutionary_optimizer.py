@@ -13,7 +13,7 @@ import opik
 # DEAP imports
 from deap import base, tools
 from deap import creator as _creator
-from opik.api_objects import opik_client, optimization
+from opik.api_objects import optimization
 from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
@@ -21,7 +21,6 @@ from opik_optimizer.optimization_config import chat_prompt
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.optimizable_agent import OptimizableAgent
 
-from .. import utils
 from . import reporting
 from .llm_support import LlmSupport
 from .mutation_ops import MutationOps

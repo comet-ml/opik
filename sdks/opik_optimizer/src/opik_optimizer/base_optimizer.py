@@ -90,39 +90,37 @@ class BaseOptimizer:
         """Lazy initialization of Opik client."""
         if self._opik_client is None:
             import opik
+
             self._opik_client = opik.Opik()
         return self._opik_client
 
     def validate_optimization_inputs(
-        self,
-        prompt: "chat_prompt.ChatPrompt",
-        dataset: "Dataset", 
-        metric: Callable
+        self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
     ) -> None:
         """
         Validate common optimization inputs.
-        
+
         Args:
             prompt: The chat prompt to validate
             dataset: The dataset to validate
             metric: The metric function to validate
-            
+
         Raises:
             ValueError: If any input is invalid
         """
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
-            
+
         if not isinstance(dataset, Dataset):
             raise ValueError("Dataset must be a Dataset object")
-        
+
         if not callable(metric):
-            raise ValueError("Metric must be a function that takes `dataset_item` and `llm_output` as arguments.")
+            raise ValueError(
+                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+            )
 
     def setup_agent_class(
-        self,
-        prompt: "chat_prompt.ChatPrompt",
-        agent_class: Any = None
+        self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
     ) -> Any:
         """
         Setup agent class for optimization.
@@ -147,26 +145,23 @@ class BaseOptimizer:
             prompt: The chat prompt to configure
         """
         # Only configure if prompt is a valid ChatPrompt object
-        if hasattr(prompt, 'model') and hasattr(prompt, 'model_kwargs'):
+        if hasattr(prompt, "model") and hasattr(prompt, "model_kwargs"):
             if prompt.model is None:
                 prompt.model = self.model
             if prompt.model_kwargs is None:
                 prompt.model_kwargs = self.model_kwargs
 
     def create_optimization_context(
-        self, 
-        dataset: "Dataset", 
-        metric: Callable, 
-        metadata: dict | None = None
+        self, dataset: "Dataset", metric: Callable, metadata: dict | None = None
     ):
         """
         Create optimization context for tracking.
-        
+
         Args:
             dataset: The dataset being optimized
             metric: The metric function
             metadata: Additional metadata
-            
+
         Returns:
             Optimization context manager
         """
@@ -177,7 +172,7 @@ class BaseOptimizer:
         }
         if metadata:
             context_metadata.update(metadata)
-            
+
         return optimization_context(
             client=self.opik_client,
             dataset_name=dataset.name,
@@ -231,11 +226,11 @@ class BaseOptimizer:
     ) -> optimization_result.OptimizationResult:
         """
         Optimize prompts that rely on MCP (Model Context Protocol) tooling.
-        
+
         This method provides a standardized interface for optimizing prompts that use
         external tools through the MCP protocol. It handles tool invocation, second-pass
         coordination, and fallback mechanisms.
-        
+
         Args:
             prompt: The chat prompt to optimize, must include tools
             dataset: Opik dataset containing evaluation data
@@ -250,10 +245,10 @@ class BaseOptimizer:
             fallback_arguments: Function to extract tool arguments (default: None)
             allow_tool_use_on_second_pass: Whether to allow tool use on second pass (default: False)
             **kwargs: Additional arguments for optimization
-            
+
         Returns:
             OptimizationResult: The optimization result containing the optimized prompt and metrics
-            
+
         Raises:
             NotImplementedError: If the optimizer doesn't implement MCP optimization
             ValueError: If the prompt doesn't include required tools
