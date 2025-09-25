@@ -1,0 +1,299 @@
+# Introduction to Opik Agent Optimizer
+
+You will need:
+
+1. A Comet account, for seeing Opik visualizations (free!) - [comet.com](https://comet.com)
+2. An OpenAI account, for using an LLM
+[platform.openai.com/settings/organization/api-keys](https://platform.openai.com/settings/organization/api-keys)
+
+
+## Setup
+
+This pip-install takes about a minute.
+
+
+```python
+%pip install opik-optimizer --quiet
+```
+
+Let's make sure we have the correct version:
+
+
+```python
+import opik_optimizer
+
+opik_optimizer.__version__
+```
+
+The version should be 1.0.6 or greater.
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=langchain&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik) for more information.
+
+Enter your Comet API key, followed by "Y" to use your own workspace:
+
+
+```python
+import opik
+
+# Configure Opik
+opik.configure()
+```
+
+For this example, we'll use OpenAI models, so we need to set our OpenAI API key:
+
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+```
+
+To optimize any prompt, we'll need three basic things:
+
+1. A starting prompt
+2. A metric
+3. A dataset
+
+## The Dataset
+
+In this experiment, we are going to use the **HotPotQA** dataset. This dataset was designed to be difficult for regular LLMs to handle. This dataset is called a "**multi-hop**" dataset because answering the questions involves multiple reasoning steps and multiple tool calls, where the LLM needs to infer relationships, combine information, or draw conclusions based on the combined context.
+
+Example:
+
+> "What are the capitals of the states that border California?"
+
+You'd need to find which states border California, and then lookup each state's capital.
+
+The dataset has about 113,000 such crowd-sourced questions that are constructed to require the introductory paragraphs of two Wikipedia articles to answer.
+
+**NOTE:** The name "HotPot" comes from the restaurant where the authors came up with the idea of the dataset.
+
+
+```python
+from opik_optimizer.demo import get_or_create_dataset
+
+dataset = get_or_create_dataset("hotpot-300")
+```
+
+Let's take a look at some dataset items:
+
+
+```python
+rows = dataset.get_items()
+rows[0]
+```
+
+We see that each item has a "question" and "answer". Some of the answers are short and direct, and some of them are more complicated:
+
+
+```python
+rows[1]
+```
+
+## Opik Project
+
+All LLM traces in Opik are saved in a "project". We'll put them all in the following project name:
+
+
+```python
+project_name = "optimize-workshop-2025"
+```
+
+## The Metric
+
+Choosing a good metric for optimization is tricky. For these examples, we'll pick one that will allow us to show improvement, and also provide a gradient of scores. In general though, this metric isn't the best for optimization runs.
+
+We'll use "Edit Distance" AKA "Levenshtein Distance":
+
+
+```python
+from opik.evaluation.metrics import LevenshteinRatio
+
+metric = LevenshteinRatio(project_name=project_name)
+```
+
+The metric takes two things: the `output` of the LLM and the `reference` (the truth):
+
+
+```python
+metric.score("Hello", "Hello")
+```
+
+
+```python
+metric.score("Hello!", "Hello")
+```
+
+The edit distance between "Hello!" and "Hello" is 1. Here is how the .91 is computed:
+
+
+```python
+edit_distance = 1
+
+1 - edit_distance / (len("Hello1") + len("Hello"))
+```
+
+For more information see: [Levenshtein Distance](https://en.wikipedia.org/wiki/Levenshtein_distance)
+
+## Configuation
+
+To create the necesary configurations for using an Opik Agent Optimizer, you'll need three things:
+
+1. An initial prompt
+2. A metric wrapper
+
+We're going to start with a pretty bad prompt... so we can optimize it!
+
+
+```python
+from opik_optimizer import ChatPrompt
+
+initial_prompt = ChatPrompt(
+    system="Provide an answer to the question",
+    user="{question}",
+)
+```
+
+The metric wrapper:
+
+
+```python
+def levenshtein_ratio(dataset_item, llm_output):
+    metric = LevenshteinRatio(project_name=project_name)
+    return metric.score(
+        reference=dataset_item["answer"], # This must match dataset field
+        output=llm_output,
+)
+```
+
+As you can see the metric wrapper is composed of our chosen metric. It takes a dataset item (a dictionary row from the dataset) and the output from the LLM. You should replace "answer" when using a different dataset.
+
+## FewShotBayesianOptimizer
+
+The FewShotBayesianOptimizer name indicates two things:
+
+1. It will produce Chat Prompts, or FewShot examples as described in the slides.
+2. Secondly, it describes how it searches for the best set of these FewShot examples.
+
+To use this optimizer, we import it and create an instance, passing in the project name and model parameters:
+
+
+```python
+from opik_optimizer import (
+    FewShotBayesianOptimizer,
+)
+
+optimizer = FewShotBayesianOptimizer(
+    model="openai/gpt-4o",  # LiteLLM name
+    min_examples=3,
+    max_examples=8,
+    n_threads=4,
+    seed=42,
+)
+```
+
+Ok, let's optimize that prompt!
+
+
+```python
+result = optimizer.optimize_prompt(
+    prompt=initial_prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    n_trials=10,
+    n_samples=50,
+)
+```
+
+
+```python
+result.display()
+```
+
+
+```python
+result.get_run_link()
+```
+
+Well done optimizer!
+
+You should see the percentage correct going from about 15% to about 50% (or more!) correct.
+
+What did we find? The result is a series of messages:
+
+
+```python
+result.details["chat_messages"]
+```
+
+## Opik Visualization UI
+
+When you create an Optimization Run, you'll see it in the Opik UI (either running locally or hosted).
+
+If you go to your `comet.com/opik/YOURID/optimizations` page, you'll see your run at the top of the list:
+
+<img src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/sdks/opik_optimizer/docs/images/optimizer-ui.png" width="500px">
+
+Along the top of the page you'll see a running history of the metric scores, with the latest dataset selected.
+
+If you click on your run, you'll see the set of trials that ran durring this optimization run. Running across the top of this page are the scores just for this trial. On the top right you'll see the best so far:
+
+<img src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/sdks/opik_optimizer/docs/images/optimize-trials.png" width="500px">
+
+If you click on a trial, you'll see the prompt for that trial:
+
+<img src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/sdks/opik_optimizer/docs/images/optimizer-prompt.png" width="500px">
+
+From the trial page you can also see the Trial items, and even dig down (mouse over the "Evaluation task" column on a row) to see the traces.
+
+## Using Optimized Prompts
+
+How can we use the optimized results?
+
+
+Once we have the "chat_messages", we can do the following:
+
+
+```python
+from litellm.integrations.opik.opik import OpikLogger
+import litellm
+
+opik_logger = OpikLogger()
+litellm.callbacks = [opik_logger]
+
+
+def query(question, chat_messages):
+    messages = chat_messages[:-1]  # Cut off the last one
+    # replace it with question in proper format:
+    messages.append({"role": "user", "content": '{"question": "%s"}"}' % question})
+
+    response = litellm.completion(
+        model="gpt-4o-mini",
+        temperature=0.1,
+        max_tokens=5000,
+        messages=messages,
+    )
+    return response.choices[0].message.content
+```
+
+
+```python
+query("When was David Chalmers born?", result.details["chat_messages"])
+```
+
+
+```python
+query("What weighs more: a baby elephant or an SUV?", result.details["chat_messages"])
+```
+
+If it says "elephant" that is not correct!
+
+We'll need to use an agent with tools to get a better answer.
+
+# Next Steps
+
+You can try out other optimizers. More details can be found in the [Opik Agent Optimizer documentation](https://www.comet.com/docs/opik/agent_optimization/overview).
