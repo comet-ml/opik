@@ -112,8 +112,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         elif self.verbose == 2:
             logger.setLevel(logging.DEBUG)
 
-        self._opik_client = opik.Opik()
-        self.llm_call_counter = 0
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
     @_throttle.rate_limited(_limiter)
@@ -512,33 +510,17 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
-
-        if not isinstance(dataset, Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+        self.configure_prompt_model(prompt)
+        self.agent_class = self.setup_agent_class(prompt, agent_class)
         
         # Extract n_trials from kwargs for backward compatibility
         n_trials = kwargs.get('n_trials', 10)
 
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
-
-        if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt)
-        else:
-            self.agent_class = agent_class
-
         optimization = None
         try:
-            optimization = self._opik_client.create_optimization(
+            optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},

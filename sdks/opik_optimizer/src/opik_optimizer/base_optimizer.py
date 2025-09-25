@@ -17,7 +17,7 @@ from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import create_litellm_agent_class
+from .utils import create_litellm_agent_class, optimization_context
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -66,9 +66,110 @@ class BaseOptimizer:
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
+        self._opik_client = None  # Lazy initialization
 
         # Initialize shared cache
         initialize_cache()
+
+    @property
+    def opik_client(self):
+        """Lazy initialization of Opik client."""
+        if self._opik_client is None:
+            import opik
+            self._opik_client = opik.Opik()
+        return self._opik_client
+
+    def validate_optimization_inputs(
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: "Dataset", 
+        metric: Callable
+    ) -> None:
+        """
+        Validate common optimization inputs.
+        
+        Args:
+            prompt: The chat prompt to validate
+            dataset: The dataset to validate
+            metric: The metric function to validate
+            
+        Raises:
+            ValueError: If any input is invalid
+        """
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
+            
+        if not isinstance(dataset, Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+        
+        if not callable(metric):
+            raise ValueError("Metric must be a function that takes `dataset_item` and `llm_output` as arguments.")
+
+    def setup_agent_class(
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        agent_class: Any = None
+    ) -> Any:
+        """
+        Setup agent class for optimization.
+
+        Args:
+            prompt: The chat prompt
+            agent_class: Optional custom agent class
+
+        Returns:
+            The agent class to use
+        """
+        if agent_class is None:
+            return create_litellm_agent_class(prompt)
+        else:
+            return agent_class
+
+    def configure_prompt_model(self, prompt: "chat_prompt.ChatPrompt") -> None:
+        """
+        Configure prompt model and model_kwargs if not set.
+
+        Args:
+            prompt: The chat prompt to configure
+        """
+        # Only configure if prompt is a valid ChatPrompt object
+        if hasattr(prompt, 'model') and hasattr(prompt, 'model_kwargs'):
+            if prompt.model is None:
+                prompt.model = self.model
+            if prompt.model_kwargs is None:
+                prompt.model_kwargs = self.model_kwargs
+
+    def create_optimization_context(
+        self, 
+        dataset: "Dataset", 
+        metric: Callable, 
+        metadata: dict | None = None
+    ):
+        """
+        Create optimization context for tracking.
+        
+        Args:
+            dataset: The dataset being optimized
+            metric: The metric function
+            metadata: Additional metadata
+            
+        Returns:
+            Optimization context manager
+        """
+        context_metadata = {
+            "optimizer": self.__class__.__name__,
+            "model": self.model,
+            "seed": self.seed,
+        }
+        if metadata:
+            context_metadata.update(metadata)
+            
+        return optimization_context(
+            client=self.opik_client,
+            dataset_name=dataset.name,
+            objective_name=metric.__name__,
+            metadata=context_metadata,
+        )
 
     @abstractmethod
     def optimize_prompt(
