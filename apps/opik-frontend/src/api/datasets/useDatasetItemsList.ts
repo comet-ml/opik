@@ -1,10 +1,12 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 import { generateSearchByFieldFilters, processFilters } from "@/lib/filters";
 
 type UseDatasetItemsListParams = {
   datasetId: string;
+  filters?: Filters;
   page: number;
   size: number;
   search?: string;
@@ -21,6 +23,7 @@ const getDatasetItemsList = async (
   { signal }: QueryFunctionContext,
   {
     datasetId,
+    filters,
     size,
     page,
     search,
@@ -32,7 +35,10 @@ const getDatasetItemsList = async (
     {
       signal,
       params: {
-        ...processFilters(generateSearchByFieldFilters("data", search)),
+        ...processFilters(
+          filters,
+          generateSearchByFieldFilters("data", search),
+        ),
         size,
         page,
         truncate,
