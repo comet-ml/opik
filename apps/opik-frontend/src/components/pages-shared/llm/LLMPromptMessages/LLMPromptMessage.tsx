@@ -1,5 +1,12 @@
-import React, { useRef, useState } from "react";
-import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
+import {
+  ChevronDown,
+  CopyPlus,
+  GripHorizontal,
+  Image as ImageIcon,
+  Trash,
+  Type,
+} from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { useSortable } from "@dnd-kit/sortable";
@@ -15,7 +22,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import {
+  LLM_MESSAGE_ROLE,
+  LLMMessage,
+  LLMMessageContentItem,
+} from "@/types/llm";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -24,6 +35,11 @@ import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 import { DropdownOption } from "@/types/shared";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import LLMPromptMessageActions from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
+import { Input } from "@/components/ui/input";
+import {
+  getMessageContentTextSegments,
+  isStructuredMessageContent,
+} from "@/lib/llm";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -88,6 +104,123 @@ const LLMPromptMessage = ({
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { id, role, content } = message;
+
+  const isStructured = isStructuredMessageContent(content);
+  const structuredContent = useMemo<LLMMessageContentItem[]>(
+    () => (isStructured ? content : []),
+    [content, isStructured],
+  );
+
+  const canConvertToText = useMemo(
+    () =>
+      isStructured &&
+      structuredContent.length > 0 &&
+      structuredContent.every((item) => item.type === "text"),
+    [isStructured, structuredContent],
+  );
+
+  const setStructuredContent = (items: LLMMessageContentItem[]) => {
+    if (items.length === 0) {
+      onChangeMessage({ content: "" });
+      return;
+    }
+
+    if (items.length === 1 && items[0].type === "text") {
+      onChangeMessage({ content: items[0].text });
+      return;
+    }
+
+    onChangeMessage({ content: items });
+  };
+
+  const handleAddImagePart = () => {
+    if (isStructured) {
+      setStructuredContent([
+        ...structuredContent,
+        { type: "image_url", image_url: { url: "" } },
+      ]);
+      return;
+    }
+
+    const parts: LLMMessageContentItem[] = [];
+
+    if (typeof content === "string" && content.trim().length > 0) {
+      parts.push({ type: "text", text: content });
+    }
+
+    parts.push({ type: "image_url", image_url: { url: "" } });
+
+    setStructuredContent(parts);
+  };
+
+  const handleAddTextPart = () => {
+    if (isStructured) {
+      setStructuredContent([
+        ...structuredContent,
+        { type: "text", text: "" },
+      ]);
+      return;
+    }
+
+    onChangeMessage({ content: `${content ?? ""}` });
+  };
+
+  const handleStructuredTextChange = (index: number, value: string) => {
+    if (!isStructured) return;
+
+    const updated = structuredContent.map((item, itemIndex) => {
+      if (itemIndex !== index) {
+        return item;
+      }
+
+      if (item.type !== "text") {
+        return item;
+      }
+
+      return { ...item, text: value };
+    });
+
+    setStructuredContent(updated);
+  };
+
+  const handleStructuredImageUrlChange = (index: number, value: string) => {
+    if (!isStructured) return;
+
+    const updated = structuredContent.map((item, itemIndex) => {
+      if (itemIndex !== index) {
+        return item;
+      }
+
+      if (item.type !== "image_url") {
+        return item;
+      }
+
+      return {
+        ...item,
+        image_url: { ...item.image_url, url: value },
+      };
+    });
+
+    setStructuredContent(updated);
+  };
+
+  const handleRemovePart = (index: number) => {
+    if (!isStructured) return;
+
+    setStructuredContent(
+      structuredContent.filter((_, itemIndex) => itemIndex !== index),
+    );
+  };
+
+  const handleConvertToText = () => {
+    if (!isStructured) return;
+
+    const textValue = getMessageContentTextSegments(structuredContent).join(
+      "\n\n",
+    );
+
+    onChangeMessage({ content: textValue });
+  };
 
   const { active, attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id });
@@ -154,14 +287,15 @@ const LLMPromptMessage = ({
               )}
               {!hideRemoveButton && (
                 <TooltipWrapper content="Delete a message">
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={onRemoveMessage}
-                    type="button"
-                  >
-                    <Trash />
-                  </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={onRemoveMessage}
+                  type="button"
+                  aria-label="Delete message"
+                >
+                  <Trash />
+                </Button>
                 </TooltipWrapper>
               )}
               <TooltipWrapper content="Duplicate a message">
@@ -170,6 +304,7 @@ const LLMPromptMessage = ({
                   size="icon-sm"
                   onClick={onDuplicateMessage}
                   type="button"
+                  aria-label="Duplicate message"
                 >
                   <CopyPlus />
                 </Button>
@@ -180,6 +315,7 @@ const LLMPromptMessage = ({
                   className="cursor-move"
                   size="icon-sm"
                   type="button"
+                  aria-label="Reorder message"
                   {...listeners}
                 >
                   <GripHorizontal />
@@ -190,23 +326,143 @@ const LLMPromptMessage = ({
 
           {isLoading ? (
             <Loader className="min-h-32" />
+          ) : isStructured ? (
+            <div className="flex flex-col gap-3">
+              {structuredContent.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border p-4 text-center text-muted-slate">
+                  No content. Add a text or image part below.
+                </div>
+              ) : null}
+              {structuredContent.map((item, index) => {
+                const label =
+                  item.type === "text"
+                    ? `Text block ${index + 1}`
+                    : `Image ${index + 1}`;
+
+                let partContent: React.ReactNode = null;
+
+                if (item.type === "text") {
+                  partContent = (
+                    <CodeMirror
+                      onCreateEditor={(view) => {
+                        if (index === 0) {
+                          editorViewRef.current = view;
+                        }
+                      }}
+                      theme={theme}
+                      value={item.text}
+                      onChange={(value) =>
+                        handleStructuredTextChange(index, value)
+                      }
+                      placeholder="Type your message"
+                      basicSetup={{
+                        foldGutter: false,
+                        allowMultipleSelections: false,
+                        lineNumbers: false,
+                        highlightActiveLine: false,
+                      }}
+                      extensions={[EditorView.lineWrapping, mustachePlugin]}
+                    />
+                  );
+                } else if (item.type === "image_url") {
+                  partContent = (
+                    <Input
+                      value={item.image_url.url}
+                      onChange={(event) =>
+                        handleStructuredImageUrlChange(
+                          index,
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Image URL or {{input.image_url}}"
+                      aria-label={`Image URL for message part ${index + 1}`}
+                    />
+                  );
+                }
+
+                return (
+                  <div
+                    key={`${id}-structured-${index}`}
+                    className="rounded-md border border-border p-3"
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="comet-body-s text-muted-slate">
+                        {label}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleRemovePart(index)}
+                        type="button"
+                        aria-label="Remove content part"
+                      >
+                        <Trash />
+                      </Button>
+                    </div>
+
+                    {partContent}
+                  </div>
+                );
+              })}
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={handleAddTextPart}
+                >
+                  <Type className="mr-2 size-4" /> Add text
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={handleAddImagePart}
+                >
+                  <ImageIcon className="mr-2 size-4" /> Add image
+                </Button>
+                {canConvertToText ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    onClick={handleConvertToText}
+                  >
+                    Convert to text message
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           ) : (
-            <CodeMirror
-              onCreateEditor={(view) => {
-                editorViewRef.current = view;
-              }}
-              theme={theme}
-              value={content}
-              onChange={(c) => onChangeMessage({ content: c })}
-              placeholder="Type your message"
-              basicSetup={{
-                foldGutter: false,
-                allowMultipleSelections: false,
-                lineNumbers: false,
-                highlightActiveLine: false,
-              }}
-              extensions={[EditorView.lineWrapping, mustachePlugin]}
-            />
+            <>
+              <CodeMirror
+                onCreateEditor={(view) => {
+                  editorViewRef.current = view;
+                }}
+                theme={theme}
+                value={(content as string) ?? ""}
+                onChange={(c) => onChangeMessage({ content: c })}
+                placeholder="Type your message"
+                basicSetup={{
+                  foldGutter: false,
+                  allowMultipleSelections: false,
+                  lineNumbers: false,
+                  highlightActiveLine: false,
+                }}
+                extensions={[EditorView.lineWrapping, mustachePlugin]}
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={handleAddImagePart}
+                >
+                  <ImageIcon className="mr-2 size-4" /> Add image
+                </Button>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

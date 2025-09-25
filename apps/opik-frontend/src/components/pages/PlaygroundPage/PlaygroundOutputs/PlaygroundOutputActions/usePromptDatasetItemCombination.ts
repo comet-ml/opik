@@ -9,10 +9,12 @@ import {
 } from "@/store/PlaygroundStore";
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
-import { getPromptMustacheTags } from "@/lib/prompt";
+import {
+  getMessageContentMustacheTags,
+  renderMessageContent,
+} from "@/lib/llm";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
-import mustache from "mustache";
 import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
@@ -23,8 +25,11 @@ export interface DatasetItemPromptCombination {
   prompt: PlaygroundPromptType;
 }
 
-const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
-  const newDatasetItem = cloneDeep(datasetItem);
+const serializeTags = (
+  datasetItem: DatasetItem["data"],
+  tags: string[],
+) => {
+  const newDatasetItem = cloneDeep(datasetItem) as Record<string, unknown>;
 
   tags.forEach((tag) => {
     const value = get(newDatasetItem, tag);
@@ -38,7 +43,7 @@ const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
-  const messageTags = getPromptMustacheTags(message.content);
+  const messageTags = getMessageContentMustacheTags(message.content);
   const serializedDatasetItem = serializeTags(datasetItem, messageTags);
 
   const notDefinedVariables = messageTags.filter((tag) =>
@@ -51,15 +56,7 @@ const transformMessageIntoProviderMessage = (
 
   return {
     role: message.role,
-    content: mustache.render(
-      message.content,
-      serializedDatasetItem,
-      {},
-      {
-        // avoid escaping of a mustache
-        escape: (val: string) => val,
-      },
-    ),
+    content: renderMessageContent(message.content, serializedDatasetItem),
   };
 };
 

@@ -2,6 +2,11 @@ import React, { useCallback } from "react";
 import { ClipboardPaste, Trash } from "lucide-react";
 
 import { ChatLLMessage, LLM_MESSAGE_ROLE } from "@/types/llm";
+import {
+  getMessageContentImageSegments,
+  getMessageContentTextSegments,
+  stringifyMessageContent,
+} from "@/lib/llm";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +22,14 @@ type ChatMessageProps = {
 };
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
-  const noContent = message.content === "";
+  const textSegments = getMessageContentTextSegments(message.content);
+  const mergedText = textSegments.join("\n\n");
+  const imageSegments = getMessageContentImageSegments(message.content);
+
+  const hasText = mergedText.trim().length > 0;
+  const hasImages = imageSegments.length > 0;
+  const noContent = !hasText && !hasImages;
+  const messageTextForCopy = stringifyMessageContent(message.content);
   const deleteMessage = useDeleteMessage();
   const updateChat = useUpdateChat();
 
@@ -26,8 +38,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   }, [deleteMessage, message.id]);
 
   const onCopyToEditMessage = useCallback(() => {
-    updateChat({ value: message.content });
-  }, [message.content, updateChat]);
+    updateChat({ value: mergedText });
+  }, [mergedText, updateChat]);
 
   return (
     <div
@@ -52,6 +64,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 variant="outline"
                 size="icon-sm"
                 onClick={onRemoveMessage}
+                aria-label="Delete message"
               >
                 <Trash />
               </Button>
@@ -61,13 +74,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 variant="outline"
                 size="icon-sm"
                 onClick={onCopyToEditMessage}
+                aria-label="Copy message to input"
               >
                 <ClipboardPaste />
               </Button>
             </TooltipWrapper>
             <CopyButton
               tooltipText="Copy message"
-              text={message.content}
+              text={messageTextForCopy}
               variant="outline"
             ></CopyButton>
           </div>
@@ -85,9 +99,25 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
               <Skeleton className="inline-block h-2 w-1/4" />
             </div>
           ) : (
-            <MarkdownPreview className="py-1">
-              {message.content}
-            </MarkdownPreview>
+            <>
+              {hasText ? (
+                <MarkdownPreview className="py-1">
+                  {mergedText}
+                </MarkdownPreview>
+              ) : null}
+              {hasImages ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {imageSegments.map((segment, index) => (
+                    <img
+                      key={`${message.id}-image-${index}`}
+                      src={segment.image_url.url}
+                      alt={`Message image ${index + 1}`}
+                      className="max-h-40 rounded-md border border-border object-contain"
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
           )}
         </CardContent>
       </Card>
