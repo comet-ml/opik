@@ -85,6 +85,33 @@ class BaseOptimizer:
         """Increment the tool call counter."""
         self.tool_call_counter += 1
 
+    def cleanup(self) -> None:
+        """
+        Clean up resources and perform memory management.
+        Should be called when the optimizer is no longer needed.
+        """
+        # Reset counters
+        self.reset_counters()
+        
+        # Clear history to free memory
+        self._history.clear()
+        
+        # Clear Opik client if it exists
+        if self._opik_client is not None:
+            # Note: Opik client doesn't have explicit cleanup, but we can clear the reference
+            self._opik_client = None
+        
+        logger.debug(f"Cleaned up resources for {self.__class__.__name__}")
+
+
+    def __del__(self) -> None:
+        """Destructor to ensure cleanup is called."""
+        try:
+            self.cleanup()
+        except Exception:
+            # Ignore exceptions during cleanup in destructor
+            pass
+
     @property
     def opik_client(self):
         """Lazy initialization of Opik client."""
