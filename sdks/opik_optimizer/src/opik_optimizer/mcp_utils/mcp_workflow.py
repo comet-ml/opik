@@ -465,6 +465,7 @@ def preview_second_pass(
     dataset_item: dict[str, Any],
     coordinator: MCPSecondPassCoordinator,
     agent_factory: Callable[[Any], Any],
+    seed: int = 42,
 ) -> None:
     """Debug helper mirroring the old inline scripts."""
 
@@ -472,7 +473,7 @@ def preview_second_pass(
     agent = agent_factory(prompt)
     base_messages = prompt.get_messages(dataset_item)
 
-    raw_output = agent.llm_invoke(messages=base_messages, seed=42, allow_tool_use=True)
+    raw_output = agent.llm_invoke(messages=base_messages, seed=seed, allow_tool_use=True)
     logger.debug("Raw model output: %s", raw_output)
 
     second_pass_messages = coordinator.build_second_pass_messages(
@@ -484,7 +485,7 @@ def preview_second_pass(
         logger.debug("Second-pass messages: %s", second_pass_messages)
         final_output = agent.llm_invoke(
             messages=second_pass_messages,
-            seed=101,
+            seed=seed,
             allow_tool_use=True,
         )
     else:
