@@ -68,6 +68,20 @@ class GepaOptimizer(BaseOptimizer):
         self.reflection_model = reflection_model or model
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self._gepa_live_metric_calls = 0
+        self._adapter = None  # Will be set during optimization
+
+    def cleanup(self) -> None:
+        """
+        Clean up GEPA-specific resources.
+        """
+        # Call parent cleanup
+        super().cleanup()
+        
+        # Clear GEPA-specific resources
+        self._adapter = None
+        self._gepa_live_metric_calls = 0
+        
+        logger.debug("Cleaned up GEPA-specific resources")
 
     # ------------------------------------------------------------------
     # Helpers
@@ -172,6 +186,7 @@ class GepaOptimizer(BaseOptimizer):
         """
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
+        
 
         # Extract GEPA-specific parameters from kwargs
         max_metric_calls: int | None = kwargs.get("max_metric_calls", 30)

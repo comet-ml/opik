@@ -273,6 +273,7 @@ class MiproOptimizer(BaseOptimizer):
         """
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
+        
 
         # Extract MIPRO-specific parameters from kwargs
         task_config = kwargs.pop("task_config", None)
@@ -349,13 +350,24 @@ class MiproOptimizer(BaseOptimizer):
         output_key = task_config.output_dataset_field
         self.tools = task_config.tools
         self.num_candidates = num_candidates
-        self.seed = 42
         self.input_key = input_key
         self.output_key = output_key
         self.prompt = prompt
         self.num_trials = num_trials
         self.n_samples = n_samples
-        self.auto = auto
+
+    def cleanup(self) -> None:
+        """
+        Clean up MIPRO-specific resources.
+        """
+        # Call parent cleanup
+        super().cleanup()
+        
+        # Clear MIPRO-specific resources
+        self.tools = None
+        self.prompt = None
+        
+        logger.debug("Cleaned up MIPRO-specific resources")
 
         # Convert to values for MIPRO:
         if isinstance(dataset, str):
