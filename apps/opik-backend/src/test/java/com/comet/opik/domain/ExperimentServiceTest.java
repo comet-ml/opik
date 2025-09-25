@@ -1,9 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import jakarta.ws.rs.NotFoundException;
@@ -16,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.UUID;
 
@@ -57,6 +60,7 @@ class ExperimentServiceTest {
     private ExperimentResponseBuilder responseBuilder;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @BeforeEach
     void setUp() {
@@ -89,6 +93,13 @@ class ExperimentServiceTest {
                     .status(ExperimentStatus.RUNNING)
                     .build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.empty());
 
@@ -96,6 +107,7 @@ class ExperimentServiceTest {
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .verifyComplete();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
 
@@ -108,6 +120,13 @@ class ExperimentServiceTest {
                     .name("New Name Only")
                     .build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.empty());
 
@@ -115,6 +134,7 @@ class ExperimentServiceTest {
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .verifyComplete();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
 
@@ -130,6 +150,13 @@ class ExperimentServiceTest {
                     .metadata(metadata)
                     .build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.empty());
 
@@ -137,6 +164,7 @@ class ExperimentServiceTest {
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .verifyComplete();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
 
@@ -149,6 +177,13 @@ class ExperimentServiceTest {
                     .type(ExperimentType.MINI_BATCH)
                     .build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.empty());
 
@@ -156,6 +191,7 @@ class ExperimentServiceTest {
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .verifyComplete();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
 
@@ -168,6 +204,13 @@ class ExperimentServiceTest {
                     .status(ExperimentStatus.COMPLETED)
                     .build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.empty());
 
@@ -175,6 +218,7 @@ class ExperimentServiceTest {
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .verifyComplete();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
 
@@ -193,6 +237,13 @@ class ExperimentServiceTest {
                     .status(ExperimentStatus.CANCELLED)
                     .build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.empty());
 
@@ -200,6 +251,7 @@ class ExperimentServiceTest {
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .verifyComplete();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
 
@@ -212,15 +264,17 @@ class ExperimentServiceTest {
                     .name("Update Non-Existent")
                     .build();
 
-            when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
-                    .thenReturn(Mono.error(new NotFoundException("Experiment not found")));
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.empty());
+            when(experimentDAO.update(experimentId, experimentUpdate))
+                    .thenReturn(Mono.empty());
 
             // when & then
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .expectError(NotFoundException.class)
                     .verify();
 
-            verify(experimentDAO).update(experimentId, experimentUpdate);
+            verify(experimentDAO).getById(experimentId);
         }
 
         @Test
@@ -232,7 +286,14 @@ class ExperimentServiceTest {
                     .name("Update Failed")
                     .build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
             var expectedError = new RuntimeException("Database error");
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.error(expectedError));
 
@@ -241,6 +302,7 @@ class ExperimentServiceTest {
                     .expectError(RuntimeException.class)
                     .verify();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
 
@@ -251,6 +313,13 @@ class ExperimentServiceTest {
             var experimentId = UUID.randomUUID();
             var experimentUpdate = ExperimentUpdate.builder().build();
 
+            var existingExperiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .id(experimentId)
+                    .build();
+
+            when(experimentDAO.getById(experimentId))
+                    .thenReturn(Mono.just(existingExperiment));
             when(experimentDAO.update(eq(experimentId), any(ExperimentUpdate.class)))
                     .thenReturn(Mono.empty());
 
@@ -258,6 +327,7 @@ class ExperimentServiceTest {
             StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
                     .verifyComplete();
 
+            verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
         }
     }
