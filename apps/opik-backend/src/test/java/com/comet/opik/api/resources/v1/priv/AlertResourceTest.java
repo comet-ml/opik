@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -128,7 +129,7 @@ class AlertResourceTest {
 
             var alert = Alert.builder()
                     .name("Test Alert: " + UUID.randomUUID())
-                    .webhookId(UUID.randomUUID())
+                    .webhook(factory.manufacturePojo(Webhook.class))
                     .build();
 
             var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
@@ -222,9 +223,9 @@ class AlertResourceTest {
 
                     // WebhookId validation
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().webhookId(null).build(),
+                            factory.manufacturePojo(Alert.class).toBuilder().webhook(null).build(),
                             422,
-                            new ErrorMessage(List.of("webhookId must not be null")),
+                            new ErrorMessage(List.of("webhook must not be null")),
                             ErrorMessage.class),
 
                     // Invalid UUID version

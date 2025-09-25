@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
@@ -75,8 +76,10 @@ class AlertServiceImpl implements AlertService {
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
+            alertDAO.save(workspaceId, alert, alert.webhook().id());
 
-            alertDAO.save(workspaceId, alert);
+            WebhookDAO webhookDAO = handle.attach(WebhookDAO.class);
+            webhookDAO.save(workspaceId, alert.webhook());
 
             return null;
         });
@@ -92,11 +95,16 @@ class AlertServiceImpl implements AlertService {
         UUID id = alert.id() == null ? idGenerator.generateId() : alert.id();
         IdGenerator.validateVersion(id, "Alert");
 
-        log.debug("Preparing Alert with id '{}', name '{}'",
-                id, alert.name());
+        Webhook webhook = alert.webhook()
+                .toBuilder()
+                .id(idGenerator.generateId())
+                .createdBy(userName)
+                .lastUpdatedBy(userName)
+                .build();
 
         return alert.toBuilder()
                 .id(id)
+                .webhook(webhook)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .enabled(alert.enabled() != null ? alert.enabled() : true)
