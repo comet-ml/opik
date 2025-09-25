@@ -23,6 +23,20 @@ and running evaluation, you can use Opik Agent Optimizer to automatically optimi
   <img src="/img/agent_optimization/dashboard.png" alt="Opik Agent Optimizer Dashboard" />
 </Frame>
 
+## Key Features
+
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+- **Multiple Optimization Algorithms**: Choose from evolutionary, few-shot, meta-prompt, MIPRO, and GEPA optimizers
+- **Optimizer Chaining**: Results from one optimizer can be used as input for another
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+- **Type Safety**: Full type hints and validation for robust development
+- **Flexible Configuration**: Customize optimization parameters for your specific use case
+- **Comprehensive Evaluation**: Built-in support for various evaluation metrics and datasets
+- **Easy Integration**: Simple API that works with your existing Opik setup
+- **Tool Support**: Optimize prompts for tool-using agents and complex workflows
+
 ## Why optimize prompts ?
 
 Prompt engineering is a skill that can be difficult to master as highlighted by
@@ -76,14 +90,52 @@ optimizer = opik_optimizer.MetaPromptOptimizer(model="openai/gpt-4")
 opt_result = optimizer.optimize_prompt(
   prompt=prompt,
   dataset=dataset,
-  metric=levenshtein_ratio
+  metric=levenshtein_ratio,
+  n_samples=100,
+  experiment_config={"task": "overview", "model": "gpt-4"}
 )
 
-print(opt_result.prompt)
+print(f"Optimized prompt: {opt_result.prompt}")
+print(f"Score: {opt_result.score}")
+print(f"LLM calls: {opt_result.llm_calls}")
 ```
 
 You can learn more about running your first optimization in the
 [Quickstart guide](/agent_optimization/opik_optimizer/quickstart).
+
+## Standardized API
+
+All optimizers follow the same interface, making it easy to switch between algorithms or chain them together:
+
+```python
+# All optimizers have the same signature
+def optimize_prompt(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+
+# All optimizers return the same result type
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=metric,
+    n_samples=100
+)
+
+# Results can be chained
+chained_result = another_optimizer.optimize_prompt(
+    prompt=ChatPrompt.from_result(result),  # Use previous result
+    dataset=dataset,
+    metric=metric
+)
+```
 
 ## Optimization Algorithms
 

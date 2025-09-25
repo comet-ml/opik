@@ -88,24 +88,33 @@ Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
   </Step>
   <Step title="7. Run the optimization">
     The `optimizer.optimize_prompt(...)` method is called with the dataset, metric configuration,
-    and prompt to start the optimization process.
+    and prompt to start the optimization process. All optimizers follow the same standardized API.
     ```python
     print("Starting optimization...")
     result = optimizer.optimize_prompt(
         prompt=prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
+        n_samples=100,  # Number of samples to evaluate
+        experiment_config={"task": "quickstart", "model": "gpt-4"}
     )
     print("Optimization finished.")
     ```
   </Step>
   <Step title="9. View results in the CLI">
     After optimization completes, call `result.display()` to see a summary of the optimization,
-    including the best prompt found and its score, directly in your terminal.
+    including the best prompt found and its score, directly in your terminal. You can also access
+    individual result fields for further processing.
 
     ```python
     print("Optimization Results:")
     result.display()
+    
+    # Access individual result fields
+    print(f"Optimized prompt: {result.prompt}")
+    print(f"Score: {result.score}")
+    print(f"LLM calls: {result.llm_calls}")
+    print(f"Tool calls: {result.tool_calls}")
     ```
 
     The `OptimizationResult` object also contains more details in `result.history` and
