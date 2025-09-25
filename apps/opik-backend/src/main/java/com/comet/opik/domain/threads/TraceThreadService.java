@@ -392,7 +392,9 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     /**
-     * Batch version of verifyAndCreateThreadIfNeed to improve performance by avoiding collectList().
+     * Batch version of verifyAndCreateThreadIfNeed to improve performance by processing threads concurrently
+     * and discarding results rather than collecting them (avoiding collectList()). This reduces memory usage
+     * and speeds up thread creation for large batches.
      * Verifies and creates multiple threads in a single operation.
      */
     private Mono<Void> verifyAndCreateThreadsIfNeeded(UUID projectId, Set<String> threadIds) {
