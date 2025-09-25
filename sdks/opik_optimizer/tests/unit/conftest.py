@@ -43,7 +43,7 @@ def mock_metric() -> Callable[[dict[str, Any], str], ScoreResult]:
 
 
 @pytest.fixture
-def sample_chat_prompt():
+def sample_chat_prompt() -> Any:
     """Create a sample chat prompt for testing."""
     from opik_optimizer.optimization_config import chat_prompt
 
@@ -54,7 +54,7 @@ def sample_chat_prompt():
 
 
 @pytest.fixture
-def sample_messages_prompt():
+def sample_messages_prompt() -> Any:
     """Create a sample messages-based prompt for testing."""
     from opik_optimizer.optimization_config import chat_prompt
 
@@ -69,7 +69,7 @@ def sample_messages_prompt():
 
 
 @pytest.fixture
-def mock_litellm_completion():
+def mock_litellm_completion() -> Any:
     """Mock litellm.completion for testing."""
     from unittest.mock import patch
 
@@ -81,7 +81,7 @@ def mock_litellm_completion():
 
 
 @pytest.fixture
-def mock_litellm_completion_with_json():
+def mock_litellm_completion_with_json() -> Any:
     """Mock litellm.completion that returns JSON for testing."""
     from unittest.mock import patch
 
@@ -99,7 +99,7 @@ def mock_litellm_completion_with_json():
 
 
 @pytest.fixture
-def mock_litellm_completion_error():
+def mock_litellm_completion_error() -> Any:
     """Mock litellm.completion that raises an error for testing."""
     from unittest.mock import patch
     from litellm.exceptions import APIError
@@ -110,7 +110,7 @@ def mock_litellm_completion_error():
 
 
 @pytest.fixture
-def sample_optimization_result():
+def sample_optimization_result() -> Any:
     """Create a sample OptimizationResult for testing."""
     from opik_optimizer.optimization_result import OptimizationResult
 
@@ -130,7 +130,7 @@ def sample_optimization_result():
 
 
 @pytest.fixture
-def all_optimizer_classes():
+def all_optimizer_classes() -> list[type]:
     """Get all optimizer classes for testing."""
     from opik_optimizer import (
         MetaPromptOptimizer,
@@ -150,7 +150,7 @@ def all_optimizer_classes():
 
 
 @pytest.fixture
-def optimizer_instances():
+def optimizer_instances() -> list[Any]:
     """Create instances of all optimizers for testing."""
     from opik_optimizer import (
         MetaPromptOptimizer,
@@ -254,12 +254,12 @@ INVALID_OPTIMIZER_PARAMS = {
 
 
 @pytest.fixture
-def valid_optimizer_params():
+def valid_optimizer_params() -> dict[str, dict[str, Any]]:
     """Get valid parameters for each optimizer."""
     return VALID_OPTIMIZER_PARAMS
 
 
 @pytest.fixture
-def invalid_optimizer_params():
+def invalid_optimizer_params() -> dict[str, list[dict[str, Any]]]:
     """Get invalid parameters for each optimizer."""
     return INVALID_OPTIMIZER_PARAMS

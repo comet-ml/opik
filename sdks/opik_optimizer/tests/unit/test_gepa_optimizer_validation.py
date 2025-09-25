@@ -9,7 +9,7 @@ from opik_optimizer.gepa_optimizer.gepa_optimizer import GepaOptimizer
 class TestGepaOptimizerValidation:
     """Test GepaOptimizer parameter validation."""
 
-    def test_valid_parameters(self):
+    def test_valid_parameters(self) -> None:
         """Test that valid parameters work correctly."""
         optimizer = GepaOptimizer(
             model="openai/gpt-4",
@@ -24,7 +24,7 @@ class TestGepaOptimizerValidation:
         assert optimizer.verbose == 1
         assert optimizer.seed == 42
 
-    def test_model_validation(self):
+    def test_model_validation(self) -> None:
         """Test model parameter validation."""
         # Test None model
         with pytest.raises(
@@ -48,7 +48,7 @@ class TestGepaOptimizerValidation:
         with pytest.raises(ValueError, match="model must be a string, got int"):
             GepaOptimizer(model=123)
 
-    def test_project_name_validation(self):
+    def test_project_name_validation(self) -> None:
         """Test project_name parameter validation."""
         # Test valid project_name
         optimizer = GepaOptimizer(model="openai/gpt-4", project_name="test-project")
@@ -64,7 +64,7 @@ class TestGepaOptimizerValidation:
         ):
             GepaOptimizer(model="openai/gpt-4", project_name=123)
 
-    def test_reflection_model_validation(self):
+    def test_reflection_model_validation(self) -> None:
         """Test reflection_model parameter validation."""
         # Test valid reflection_model
         optimizer = GepaOptimizer(
@@ -82,7 +82,7 @@ class TestGepaOptimizerValidation:
         ):
             GepaOptimizer(model="openai/gpt-4", reflection_model=123)
 
-    def test_verbose_validation(self):
+    def test_verbose_validation(self) -> None:
         """Test verbose parameter validation."""
         # Test valid verbose values
         optimizer = GepaOptimizer(model="openai/gpt-4", verbose=0)
@@ -102,7 +102,7 @@ class TestGepaOptimizerValidation:
         with pytest.raises(ValueError, match="verbose must be non-negative"):
             GepaOptimizer(model="openai/gpt-4", verbose=-1)
 
-    def test_seed_validation(self):
+    def test_seed_validation(self) -> None:
         """Test seed parameter validation."""
         # Test valid seed values
         optimizer = GepaOptimizer(model="openai/gpt-4", seed=42)

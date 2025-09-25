@@ -32,14 +32,14 @@ class TestOptimizerAPICompliance:
     """Test that all optimizers comply with the production API specification."""
 
     @pytest.fixture
-    def mock_prompt(self):
+    def mock_prompt(self) -> Mock:
         """Create a mock ChatPrompt for testing."""
         prompt = Mock(spec=chat_prompt.ChatPrompt)
         prompt.get_messages.return_value = [{"role": "user", "content": "test"}]
         return prompt
 
     @pytest.fixture
-    def mock_dataset(self):
+    def mock_dataset(self) -> Mock:
         """Create a mock Dataset for testing."""
         dataset = Mock(spec=Dataset)
         dataset.__len__ = Mock(return_value=2)
@@ -58,7 +58,7 @@ class TestOptimizerAPICompliance:
         return dataset
 
     @pytest.fixture
-    def mock_metric(self):
+    def mock_metric(self) -> Callable[[Any, Any], float]:
         """Create a mock metric function for testing."""
 
         def metric(dataset_item, llm_output):
@@ -66,7 +66,7 @@ class TestOptimizerAPICompliance:
 
         return metric
 
-    def test_optimize_prompt_signature_consistency(self):
+    def test_optimize_prompt_signature_consistency(self) -> None:
         """Test that all optimizers have identical optimize_prompt signatures."""
         optimizers = [
             FewShotBayesianOptimizer,
@@ -90,7 +90,7 @@ class TestOptimizerAPICompliance:
                 f"Got: {sig}"
             )
 
-    def test_optimize_prompt_parameter_order(self):
+    def test_optimize_prompt_parameter_order(self) -> None:
         """Test that all optimizers have consistent parameter order."""
         optimizers = [
             FewShotBayesianOptimizer,
@@ -121,7 +121,7 @@ class TestOptimizerAPICompliance:
                     f"got '{param_names[i]}'"
                 )
 
-    def test_optimize_prompt_return_type_consistency(self):
+    def test_optimize_prompt_return_type_consistency(self) -> None:
         """Test that all optimizers return OptimizationResult."""
         optimizers = [
             FewShotBayesianOptimizer,
@@ -145,7 +145,7 @@ class TestOptimizerAPICompliance:
                 f"{optimizer_class.__name__} has string return annotation: {return_annotation}"
             )
 
-    def test_input_validation_consistency(self):
+    def test_input_validation_consistency(self) -> None:
         """Test that all optimizers have consistent input validation."""
         # Create optimizer instances with required parameters
         optimizers = [
@@ -180,7 +180,7 @@ class TestOptimizerAPICompliance:
                     metric="invalid_metric",
                 )
 
-    def test_optimization_result_structure(self):
+    def test_optimization_result_structure(self) -> None:
         """Test that OptimizationResult has the expected structure."""
         # Test creating an OptimizationResult with all fields
         result = OptimizationResult(
@@ -216,7 +216,7 @@ class TestOptimizerAPICompliance:
         assert result.mipro_prompt == "test prompt"
         assert result.tool_prompts == {"tool1": "description"}
 
-    def test_optimization_result_serialization(self):
+    def test_optimization_result_serialization(self) -> None:
         """Test that OptimizationResult can be serialized properly."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -240,7 +240,7 @@ class TestOptimizerAPICompliance:
         assert reconstructed.score == result.score
         assert reconstructed.metric_name == result.metric_name
 
-    def test_optimization_result_string_representation(self):
+    def test_optimization_result_string_representation(self) -> None:
         """Test that OptimizationResult has proper string representation."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -259,7 +259,7 @@ class TestOptimizerAPICompliance:
         assert "0.6000" in str_repr  # Initial score
         assert "test_metric" in str_repr
 
-    def test_optimization_result_rich_display(self):
+    def test_optimization_result_rich_display(self) -> None:
         """Test that OptimizationResult has proper rich display."""
         result = OptimizationResult(
             optimizer="TestOptimizer",
@@ -278,7 +278,7 @@ class TestOptimizerAPICompliance:
 
         assert isinstance(rich_repr, Panel)
 
-    def test_optimizer_chaining_compatibility(self):
+    def test_optimizer_chaining_compatibility(self) -> None:
         """Test that optimizers can be chained together."""
         # This test verifies that the API is compatible with chaining
         optimizers = [
@@ -305,7 +305,7 @@ class TestOptimizerAPICompliance:
                 "preventing chaining"
             )
 
-    def test_api_specification_summary(self):
+    def test_api_specification_summary(self) -> None:
         """Test that summarizes the API specification compliance."""
         optimizers = [
             FewShotBayesianOptimizer,

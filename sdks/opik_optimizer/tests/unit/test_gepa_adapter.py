@@ -19,13 +19,13 @@ class DummyOptimizer:
         self.llm_call_counter = 0
         self.tool_call_counter = 0
 
-    def increment_llm_counter(self):
+    def increment_llm_counter(self) -> None:
         self.llm_call_counter += 1
 
-    def increment_tool_counter(self):
+    def increment_tool_counter(self) -> None:
         self.tool_call_counter += 1
 
-    def reset_counters(self):
+    def reset_counters(self) -> None:
         self.llm_call_counter = 0
         self.tool_call_counter = 0
 
