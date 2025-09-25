@@ -18,6 +18,7 @@ from ..optimization_result import OptimizationResult
 from ..utils import optimization_context
 from ..base_optimizer import BaseOptimizer
 from ..optimization_config.configs import TaskConfig
+from ..optimization_config import chat_prompt
 from ._lm import LM
 from ._mipro_optimizer_v2 import MIPROv2
 from .utils import (
@@ -239,16 +240,47 @@ class MiproOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
-        dataset: str | Dataset,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
         metric: Callable,
-        task_config: TaskConfig,
-        num_candidates: int = 10,
         experiment_config: dict | None = None,
-        num_trials: int | None = 3,
         n_samples: int | None = 10,
-        auto: Literal["light", "medium", "heavy"] | None = "light",
+        auto_continue: bool = False,
+        agent_class: str | None = None,
         **kwargs,
     ) -> OptimizationResult:
+        """
+        Optimize a prompt using MIPRO (Multi-Input Prompt Optimization).
+
+        Args:
+            prompt: The chat prompt to optimize
+            dataset: Opik dataset containing evaluation data
+            metric: Evaluation function that takes (dataset_item, llm_output) and returns a score
+            experiment_config: Optional configuration for the experiment
+            n_samples: Number of samples to use for optimization (default: 10)
+            auto_continue: Whether to auto-continue optimization (default: False)
+            agent_class: Custom agent class to use (default: None)
+            **kwargs: Additional arguments including:
+                task_config: TaskConfig instance (required)
+                num_candidates: Number of candidates to generate (default: 10)
+                num_trials: Number of trials to run (default: 3)
+                auto: Optimization mode - "light", "medium", or "heavy" (default: "light")
+
+        Returns:
+            OptimizationResult: The optimization result containing the optimized prompt and metrics
+
+        Raises:
+            ValueError: If task_config is not provided
+        """
+        # Extract MIPRO-specific parameters from kwargs
+        task_config = kwargs.pop('task_config', None)
+        if task_config is None:
+            raise ValueError("task_config is required for MiproOptimizer")
+        
+        num_candidates = kwargs.pop('num_candidates', 10)
+        num_trials = kwargs.pop('num_trials', 3)
+        auto = kwargs.pop('auto', 'light')
+        
         self._opik_client = opik.Opik()
         with optimization_context(
             client=self._opik_client,
