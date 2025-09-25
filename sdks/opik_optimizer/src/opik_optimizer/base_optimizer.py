@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 import logging
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 import random
 
 
@@ -41,7 +41,7 @@ class OptimizationRound(BaseModel):
     improvement: float
 
 
-class BaseOptimizer:
+class BaseOptimizer(ABC):
     def __init__(
         self,
         model: str,
