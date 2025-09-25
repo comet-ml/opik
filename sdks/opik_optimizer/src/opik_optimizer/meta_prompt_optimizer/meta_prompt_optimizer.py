@@ -172,8 +172,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_threads = num_threads
         self.num_threads = n_threads
         self.dataset: Dataset | None = None
-        self._opik_client = opik_client.get_client_cached()
-        self.llm_call_counter = 0
         self.enable_context = enable_context
         logger.debug(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
@@ -475,26 +473,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
-
-        if not isinstance(dataset, Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
-
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
-
-        if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt)
-        else:
-            self.agent_class = agent_class
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+        self.configure_prompt_model(prompt)
+        self.agent_class = self.setup_agent_class(prompt, agent_class)
 
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
@@ -505,7 +487,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         optimization = None
         try:
-            optimization = self._opik_client.create_optimization(
+            optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
                 metadata={"optimizer": self.__class__.__name__},

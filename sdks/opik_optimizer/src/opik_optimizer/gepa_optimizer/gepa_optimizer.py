@@ -164,17 +164,8 @@ class GepaOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
-        # Validate inputs according to API specification
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
-        
-        if not isinstance(dataset, Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-        
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
 
         # Extract GEPA-specific parameters from kwargs
         max_metric_calls: int | None = kwargs.get("max_metric_calls", 30)
