@@ -21,6 +21,7 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -57,7 +58,7 @@ public interface TraceThreadService {
 
     Mono<Void> openThread(UUID projectId, String threadId);
 
-    Mono<Void> closeThread(UUID projectId, String threadId);
+    Mono<Void> closeThreads(UUID projectId, List<String> threadIds);
 
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
 
@@ -369,16 +370,21 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     @Override
-    public Mono<Void> closeThread(@NonNull UUID projectId, @NonNull String threadId) {
-        List<String> threadIds = List.of(threadId);
-        return verifyAndCreateThreadIfNeed(projectId, threadId)
-                // Once we have all, we can close the thread
+    public Mono<Void> closeThreads(@NonNull UUID projectId, @NonNull List<String> threadIds) {
+        if (CollectionUtils.isEmpty(threadIds)) {
+            return Mono.empty();
+        }
+
+        // For batch operations, we need to verify and create each thread if needed
+        return Flux.fromIterable(threadIds)
+                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId))
+                .collectList()
                 .then(Mono.defer(() -> lockService.executeWithLockCustomExpire(
                         new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                         Mono.defer(() -> traceThreadDAO.closeThread(projectId, threadIds))
-                                .doOnSuccess(
-                                        count -> log.info("Closed count '{}' for threadId '{}' and  projectId: '{}'",
-                                                count, threadId, projectId))
+                                .doOnSuccess(count -> log.info(
+                                        "Closed count '{}' for threadIds '{}' and projectId: '{}'",
+                                        count, threadIds, projectId))
                                 .then(Mono.defer(() -> traceThreadDAO.findThreadsByProject(1, threadIds.size(),
                                         TraceThreadCriteria.builder()
                                                 .projectId(projectId)

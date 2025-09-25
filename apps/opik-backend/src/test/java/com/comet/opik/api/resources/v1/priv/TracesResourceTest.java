@@ -10177,6 +10177,69 @@ class TracesResourceTest {
 
             TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
         }
+
+        @Test
+        void closeMultipleTraceThreads__happyPath() {
+            // Given: Create multiple traces with different thread IDs
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            var threadId1 = randomUUID().toString();
+            var threadId2 = randomUUID().toString();
+            var threadId3 = randomUUID().toString();
+
+            // Create traces with different thread IDs
+            Trace trace1 = createTrace().toBuilder()
+                    .threadId(threadId1)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .build();
+
+            Trace trace2 = createTrace().toBuilder()
+                    .threadId(threadId2)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .build();
+
+            Trace trace3 = createTrace().toBuilder()
+                    .threadId(threadId3)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
+
+            // Wait for threads to be created
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var traceThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
+                        List.of(), List.of(), Map.of());
+                assertThat(traceThreadPage.content()).hasSize(3);
+            });
+
+            // When: Close multiple trace threads using the batch endpoint
+            traceResourceClient.closeTraceThreads(List.of(threadId1, threadId2, threadId3), projectId, projectName,
+                    apiKey, workspaceName);
+
+            // Then: Assert that all threads are closed using getTraceThreads API
+            var closedThreadPage = traceResourceClient.getTraceThreads(projectId, projectName, apiKey, workspaceName,
+                    List.of(), List.of(), Map.of());
+
+            var expectedClosedThreads = List.of(
+                    getExpectedThreads(List.of(trace1), projectId, threadId1, List.of(), TraceThreadStatus.INACTIVE)
+                            .getFirst(),
+                    getExpectedThreads(List.of(trace2), projectId, threadId2, List.of(), TraceThreadStatus.INACTIVE)
+                            .getFirst(),
+                    getExpectedThreads(List.of(trace3), projectId, threadId3, List.of(), TraceThreadStatus.INACTIVE)
+                            .getFirst());
+
+            TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
+        }
     }
 
     @Nested
