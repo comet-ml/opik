@@ -401,7 +401,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
         }
 
         return Flux.fromIterable(threadIds)
-                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId), Math.min(threadIds.size(), 5)) // Limit the concurrency to 10
+                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId), Math.min(threadIds.size(), 5)) // Limit the concurrency to 5
                 .then();
     }
 
