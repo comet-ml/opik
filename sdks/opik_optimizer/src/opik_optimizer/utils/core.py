@@ -274,7 +274,7 @@ def get_optimization_run_url_by_id(
 
 
 def create_litellm_agent_class(
-    prompt: "ChatPrompt", optimizer=None
+    prompt: "ChatPrompt", optimizer: Any = None
 ) -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
@@ -292,7 +292,7 @@ def create_litellm_agent_class(
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
 
-            def __init__(self, prompt):
+            def __init__(self, prompt: Any) -> None:
                 super().__init__(prompt)
                 self.optimizer = optimizer
 
@@ -310,7 +310,7 @@ def create_litellm_agent_class(
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
 
-            def __init__(self, prompt):
+            def __init__(self, prompt: Any) -> None:
                 super().__init__(prompt)
                 self.optimizer = optimizer
 
@@ -318,7 +318,7 @@ def create_litellm_agent_class(
 
 
 def function_to_tool_definition(
-    func: Callable, description: str | None = None
+    func: Callable[..., Any], description: str | None = None
 ) -> dict[str, Any]:
     sig = inspect.signature(func)
     doc = description or func.__doc__ or ""
