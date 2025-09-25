@@ -1,12 +1,12 @@
 import React, { useCallback } from "react";
 import { Trace } from "@/types/traces";
-import TraceMessage from "@/components/pages-shared/traces/ThreadDetailsPanel/TraceMessage";
+import TraceMessage from "@/components/pages-shared/traces/TraceMessages/TraceMessage";
 import isNumber from "lodash/isNumber";
 
 type TraceMessagesProps = {
   traces: Trace[];
   traceId?: string;
-  handleOpenTrace: (id: string) => void;
+  handleOpenTrace?: (id: string) => void;
 };
 
 const TraceMessages: React.FC<TraceMessagesProps> = ({

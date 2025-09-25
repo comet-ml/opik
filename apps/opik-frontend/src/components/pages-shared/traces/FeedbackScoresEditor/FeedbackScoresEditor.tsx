@@ -20,6 +20,7 @@ type FeedbackScoresEditorProps = {
   onDeleteFeedbackScore: (name: string, author?: string) => void;
   header?: React.ReactNode;
   footer?: React.ReactNode;
+  feedbackDefinitionNames?: string[];
 };
 
 type FeedbackScoreRow = {
@@ -85,6 +86,7 @@ const FeedbackScoresEditor = ({
   className,
   header,
   footer,
+  feedbackDefinitionNames,
 }: FeedbackScoresEditorProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -99,10 +101,17 @@ const FeedbackScoresEditor = ({
     [feedbackScores],
   );
 
-  const feedbackDefinitions: FeedbackDefinition[] = useMemo(
-    () => feedbackDefinitionsData?.content || [],
-    [feedbackDefinitionsData?.content],
-  );
+  const feedbackDefinitions: FeedbackDefinition[] = useMemo(() => {
+    const allDefinitions = feedbackDefinitionsData?.content || [];
+
+    if (feedbackDefinitionNames && feedbackDefinitionNames.length > 0) {
+      return allDefinitions.filter((definition) =>
+        feedbackDefinitionNames.includes(definition.name),
+      );
+    }
+
+    return allDefinitions;
+  }, [feedbackDefinitionsData?.content, feedbackDefinitionNames]);
 
   const rows: FeedbackScoreRow[] = useMemo(() => {
     return sortBy(

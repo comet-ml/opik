@@ -48,6 +48,58 @@ SubmitButton.displayName = "CommentFormSubmitButton";
 
 const MAX_LENGTH_LIMIT = 5000;
 
+export type StandaloneTextareaFieldProps = Omit<TextareaProps, "ref"> & {
+  value?: string;
+  onValueChange?: (value: string) => void;
+  error?: string;
+};
+
+const StandaloneTextareaField: React.FC<StandaloneTextareaFieldProps> = ({
+  value = "",
+  onValueChange,
+  error,
+  className,
+  ...props
+}) => {
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const { unsubscribe } = { unsubscribe: () => {} };
+    updateTextAreaHeight(textAreaRef.current);
+    return () => unsubscribe();
+  });
+
+  const callbackTextareaRef = useCallback((e: HTMLTextAreaElement | null) => {
+    textAreaRef.current = e;
+    updateTextAreaHeight(e);
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (textAreaRef.current) {
+      updateTextAreaHeight(textAreaRef.current);
+    }
+    onValueChange?.(e.target.value);
+  };
+
+  return (
+    <Textarea
+      {...props}
+      value={value}
+      onChange={handleChange}
+      autoFocus
+      ref={callbackTextareaRef}
+      maxLength={MAX_LENGTH_LIMIT}
+      className={cn(
+        "min-h-[64px] w-full rounded-md border p-3 pr-10 resize-none overflow-hidden",
+        {
+          "border-destructive": error,
+        },
+        className,
+      )}
+    />
+  );
+};
+
 type TextareaFieldProps = Omit<
   TextareaProps,
   "onChange" | "onFocus" | "ref" | "value"
@@ -97,6 +149,7 @@ type UserCommentFormComponents = {
   SubmitButton: typeof SubmitButton;
   CancelButton: typeof CancelButton;
   TextareaField: typeof TextareaField;
+  StandaloneTextareaField: typeof StandaloneTextareaField;
 };
 
 const commentSchema = z.object({
@@ -169,5 +222,6 @@ const UserCommentForm: UserCommentFormComponents &
 UserCommentForm.CancelButton = CancelButton;
 UserCommentForm.SubmitButton = SubmitButton;
 UserCommentForm.TextareaField = TextareaField;
+UserCommentForm.StandaloneTextareaField = StandaloneTextareaField;
 
 export default UserCommentForm;

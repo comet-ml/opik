@@ -5,14 +5,18 @@ import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 import { FEEDBACK_SCORE_TYPE } from "@/types/traces";
 
-type UseThreadFeedbackScoreSetMutationParams = {
+type UseThreadFeedbackScoreSetMutationScore = {
   categoryName?: string;
   name: string;
-  threadId: string;
   value: number;
-  projectId: string;
-  projectName: string;
   reason?: string;
+};
+
+type UseThreadFeedbackScoreSetMutationParams = {
+  threadId: string;
+  projectName: string;
+  projectId: string;
+  scores: UseThreadFeedbackScoreSetMutationScore[];
 };
 
 const useThreadFeedbackScoreSetMutation = () => {
@@ -21,27 +25,22 @@ const useThreadFeedbackScoreSetMutation = () => {
 
   return useMutation({
     mutationFn: async ({
-      categoryName,
-      name,
       threadId,
-      value,
       projectName,
-      reason,
+      scores,
     }: UseThreadFeedbackScoreSetMutationParams) => {
       const { data } = await api.put(
         `${TRACES_REST_ENDPOINT}threads/feedback-scores`,
         {
-          scores: [
-            {
-              category_name: categoryName,
-              thread_id: threadId,
-              project_name: projectName,
-              name,
-              source: FEEDBACK_SCORE_TYPE.ui,
-              value,
-              reason,
-            },
-          ],
+          scores: scores.map(({ categoryName, name, value, reason }) => ({
+            category_name: categoryName,
+            thread_id: threadId,
+            project_name: projectName,
+            name,
+            source: FEEDBACK_SCORE_TYPE.ui,
+            value,
+            reason,
+          })),
         },
       );
 

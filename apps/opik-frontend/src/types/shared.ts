@@ -22,6 +22,7 @@ export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
 export const COLUMN_DATASET_ID = "dataset_id";
+export const COLUMN_PROJECT_ID = "project_id";
 export const COLUMN_DURATION_ID = "duration";
 export const COLUMN_CUSTOM_ID = "custom";
 

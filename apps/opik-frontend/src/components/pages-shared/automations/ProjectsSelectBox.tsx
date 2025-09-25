@@ -15,13 +15,13 @@ interface BaseProjectsSelectBoxProps {
 
 interface SingleSelectProjectsProps extends BaseProjectsSelectBoxProps {
   value: string;
-  onChange: (value: string) => void;
+  onValueChange: (value: string) => void;
   multiselect?: false;
 }
 
 interface MultiSelectProjectsProps extends BaseProjectsSelectBoxProps {
   value: string[];
-  onChange: (value: string[]) => void;
+  onValueChange: (value: string[]) => void;
   multiselect: true;
 }
 
@@ -61,14 +61,14 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
         options,
         value: props.value,
         placeholder: "Select projects",
-        onChange: props.onChange,
+        onChange: props.onValueChange,
         multiselect: true as const,
       }
     : {
         options,
         value: props.value,
         placeholder: "Select a project",
-        onChange: props.onChange,
+        onChange: props.onValueChange,
         multiselect: false as const,
       };
 
