@@ -19,10 +19,12 @@ const GetStartedView: React.FC = () => {
     <SMEFlowLayout
       header={
         <>
-          <h1 className="comet-title-xl">Get started with Opik</h1>
+          <h1 className="comet-title-xl mb-1">
+            Welcome to {annotationQueue?.name ?? "opik annotation"}
+          </h1>
           <div className="comet-body-s mt-2 text-muted-slate">
-            Welcome! You&apos;ve been invited to review examples of AI responses
-            in this queue and share your feedback.
+            You&apos;ve been invited to review examples of AI responses in this
+            queue and share your feedback.
           </div>
         </>
       }
@@ -43,11 +45,11 @@ const GetStartedView: React.FC = () => {
           </Alert>
         )}
         <div>
-          <h2 className="comet-title-s mb-4">Instructions</h2>
+          <h2 className="comet-title-l mb-4">Instructions</h2>
           <InstructionsContent annotationQueue={annotationQueue} />
         </div>
         <div>
-          <h2 className="comet-title-s mb-2">Feedback options</h2>
+          <h2 className="comet-title-l mb-1">Feedback options</h2>
           <div className="comet-body-s mb-4 text-muted-slate">
             Here are the types of feedback you can give when reviewing
             responses, along with the possible values for each.

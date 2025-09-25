@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import {
   Accordion,
   AccordionContent,
@@ -9,7 +9,7 @@ import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighl
 import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 
-const TraceDataViewer: React.FunctionComponent = () => {
+const TraceDataViewer: React.FC = () => {
   const { currentItem } = useSMEFlow();
 
   const trace = currentItem as Trace;
@@ -22,7 +22,9 @@ const TraceDataViewer: React.FunctionComponent = () => {
         defaultValue={["input", "output"]}
       >
         <AccordionItem className="group" value="input" disabled>
-          <AccordionTrigger className="[&>svg]:hidden">Input</AccordionTrigger>
+          <AccordionTrigger className="pointer-events-none [&>svg]:hidden">
+            Input
+          </AccordionTrigger>
           <AccordionContent
             forceMount
             className="group-data-[state=closed]:hidden"
@@ -37,7 +39,9 @@ const TraceDataViewer: React.FunctionComponent = () => {
         </AccordionItem>
 
         <AccordionItem className="group" value="output" disabled>
-          <AccordionTrigger className="[&>svg]:hidden">Output</AccordionTrigger>
+          <AccordionTrigger className="pointer-events-none [&>svg]:hidden">
+            Output
+          </AccordionTrigger>
           <AccordionContent
             forceMount
             className="group-data-[state=closed]:hidden"

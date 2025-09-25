@@ -17,7 +17,7 @@ const ThemeToggle = () => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon">
+        <Button variant="outline" size="icon-sm">
           <CurrentIcon className="size-[1.2rem]" />
           <span className="sr-only">
             Current theme: {currentOption?.label || "Unknown"}

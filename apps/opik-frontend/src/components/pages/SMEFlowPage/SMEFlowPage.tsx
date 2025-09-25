@@ -41,6 +41,7 @@ const SMEFlowContent: React.FunctionComponent = () => {
               content={
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => setCurrentView(WORKFLOW_STATUS.INITIAL)}
                 >
                   <Info className="mr-1.5 size-3.5 shrink-0" />

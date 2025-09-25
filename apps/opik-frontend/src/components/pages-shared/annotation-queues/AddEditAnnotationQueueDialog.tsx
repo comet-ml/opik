@@ -204,7 +204,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         <FormControl>
                           <ProjectsSelectBox
                             value={field.value}
-                            onChange={field.onChange}
+                            onValueChange={field.onChange}
                             className={cn({
                               "border-destructive": Boolean(
                                 validationErrors?.message,

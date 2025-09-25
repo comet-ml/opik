@@ -78,7 +78,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
       header={header}
       footer={
         <>
-          <div className="flex items-center text-sm text-muted-foreground">
+          <div className="comet-body-s flex items-center text-light-slate">
             {currentIndex + 1} of {queueItems.length}
           </div>
           <TooltipWrapper content="Previous item" hotkeys={LEFT_HOTKEYS}>
