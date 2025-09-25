@@ -4,6 +4,9 @@ set -euo pipefail
 
 # Opik Development Runner Script
 
+# Variables
+DEBUG_MODE=${DEBUG_MODE:-false}
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
@@ -34,6 +37,12 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_debug() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        echo -e "${YELLOW}[DEBUG]${NC} $1"
+    fi
 }
 
 require_command() {
@@ -106,8 +115,10 @@ verify_infrastructure() {
 build_backend() {
     require_command mvn
     log_info "Building backend (skipping tests)..."
+    log_debug "Backend directory: $BACKEND_DIR"
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
 
+    log_debug "Running: mvn clean install -DskipTests"
     if mvn clean install -DskipTests; then
         log_success "Backend build completed successfully"
     else
@@ -162,6 +173,7 @@ lint_backend() {
 start_backend() {
     require_command java
     log_info "Starting backend..."
+    log_debug "Backend directory: $BACKEND_DIR"
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
     
     # Check if backend is already running
@@ -179,18 +191,28 @@ start_backend() {
     # Set environment variables
     export CORS=true
 
+    # Set debug logging if debug mode is enabled
+    if [ "$DEBUG_MODE" = "true" ]; then
+        export GENERAL_LOG_LEVEL="DEBUG"
+        export OPIK_LOG_LEVEL="DEBUG"
+        log_debug "Debug logging enabled - GENERAL_LOG_LEVEL=DEBUG, OPIK_LOG_LEVEL=DEBUG"
+    fi
+
     # Find and validate the JAR file
     if ! find_jar_files; then
         log_warning "No backend JAR file found in target/. Building backend automatically..."
         build_backend
-        
+
         # Re-scan for JAR files after build
         if ! find_jar_files; then
             log_error "Backend build completed but no JAR file found. Build may have failed."
             exit 1
         fi
     fi
-    
+
+    log_debug "Starting backend with JAR: $JAR_FILE"
+    log_debug "Command: java -jar $JAR_FILE server config.yml"
+
     # Start backend in background using the JAR file
     nohup java -jar "$JAR_FILE" \
         server config.yml \
@@ -199,11 +221,16 @@ start_backend() {
     BACKEND_PID=$!
     echo "$BACKEND_PID" > "$BACKEND_PID_FILE"
 
+    log_debug "Backend process started with PID: $BACKEND_PID"
+
     # Wait a bit and check if process is still running
     sleep 3
     if kill -0 "$BACKEND_PID" 2>/dev/null; then
         log_success "Backend started successfully (PID: $BACKEND_PID)"
         log_info "Backend logs: tail -f /tmp/opik-backend.log"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_debug "Debug mode enabled - check logs for detailed output"
+        fi
     else
         log_error "Backend failed to start. Check logs: cat /tmp/opik-backend.log"
         rm -f "$BACKEND_PID_FILE"
@@ -215,6 +242,7 @@ start_backend() {
 start_frontend() {
     require_command npm
     log_info "Starting frontend..."
+    log_debug "Frontend directory: $FRONTEND_DIR"
     cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
     
     # Check if frontend is already running
@@ -228,11 +256,21 @@ start_frontend() {
             rm -f "$FRONTEND_PID_FILE"
         fi
     fi
-    
+
+    # Set debug logging for frontend if debug mode is enabled
+    if [ "$DEBUG_MODE" = "true" ]; then
+        export NODE_ENV="development"
+        log_debug "Frontend debug mode enabled - NODE_ENV=development"
+    fi
+
+    log_debug "Starting frontend with: npm run start"
+
     # Start frontend in background with interactive mode disabled
     CI=true nohup npm run start > /tmp/opik-frontend.log 2>&1 &
     FRONTEND_PID=$!
     echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
+
+    log_debug "Frontend process started with PID: $FRONTEND_PID"
 
     # Wait a bit and check if process is still running
     sleep 3
@@ -425,11 +463,14 @@ show_usage() {
     echo "  --stop         - Stop all services"
     echo "  --restart      - Stop, build, and start all services (DEFAULT IF NO OPTIONS PROVIDED)"
     echo "  --verify       - Verify status of all services"
+    echo "  --debug        - Enable debug mode (meant to be combined with other flags)"
     echo "  --logs         - Show logs for backend and frontend services"
     echo "  --lint-fe      - Lint frontend code"
     echo "  --lint-be      - Lint backend code"
     echo "  --help         - Show this help message"
     echo ""
+    echo "Environment Variables:"
+    echo "  DEBUG_MODE=true  - Enable debug mode"
 }
 
 # Function to show logs
@@ -450,6 +491,33 @@ show_logs() {
     echo "  Backend:  tail -f /tmp/opik-backend.log"
     echo "  Frontend: tail -f /tmp/opik-frontend.log"
 }
+
+# Parse arguments to handle debug flag
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --debug)
+      DEBUG_MODE=true
+      shift # Remove --debug from arguments
+      ;;
+    *)
+      ARGS+=("$1") # Keep other arguments
+      shift
+      ;;
+  esac
+done
+
+# Restore arguments without --debug
+if [ ${#ARGS[@]} -gt 0 ]; then
+  set -- "${ARGS[@]}"
+else
+  set --  # Clear all arguments
+fi
+
+# Show debug mode status
+if [ "$DEBUG_MODE" = "true" ]; then
+    log_debug "Debug mode is ENABLED"
+fi
 
 # Main script logic
 case "${1:-}" in
