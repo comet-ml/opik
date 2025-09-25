@@ -145,7 +145,7 @@ class LM(BaseLM):
         ):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
-        self.llm_call_counter += 1
+        self.increment_llm_counter()
         return results
 
     def launch(self, launch_kwargs: dict[str, Any] | None = None):

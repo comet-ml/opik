@@ -104,7 +104,7 @@ class LlmSupport:
                 response = litellm.completion(
                     model=self.model, messages=messages, **llm_config_params
                 )
-                self.llm_call_counter += 1
+                self.increment_llm_counter()
                 return response.choices[0].message.content
             except (
                 litellm_exceptions.RateLimitError,

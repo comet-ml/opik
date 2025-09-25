@@ -541,7 +541,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # Step 1. Step variables and define fitness function
-        self.llm_call_counter = 0
+        self.reset_counters()  # Reset counters for run
         self._history: list[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
@@ -936,6 +936,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             details=final_details,
             history=[x.model_dump() for x in self.get_history()],
             llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
             optimization_id=self._current_optimization_id,
         )
