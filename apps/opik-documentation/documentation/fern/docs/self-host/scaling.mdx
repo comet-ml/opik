@@ -4,7 +4,7 @@ subtitle: Comprehensive guide for scaling Opik in production environments
 
 # Scaling Opik
 
-Opik is built to power mission-critical workloads at scale. Whether you're running a small proof of concept or a high-volume enterprise deployment, Opik adapts seamlessly to your needs. Its stateless architecture and powerful ClickHouse-backed storage make it highly resilient, horizontally scalable, and future-proof for your data growth.
+Opik is built to power mission-critical workloads at scale. Whether you're running a small proof of concept or a high-volume enterprise deployment, Opik adapts seamlessly to your needs. Its stateless architecture and powerful ClickHouse backed storage make it highly resilient, horizontally scalable, and future-proof for your data growth.
 
 This guide outlines recommended configurations and best practices for running Opik in production.
 
@@ -14,26 +14,24 @@ Opik is engineered to handle demanding, production-grade workloads. The followin
 
 | Metric | Value |
 |--------|-------|
-| Select queries per second | Up to 80 |
-| Insert queries per second | Up to 20 |
+| Select queries per second | ~80 |
+| Insert queries per second | ~20 |
 | Rows inserted per minute | Up to 75K |
 | Traces (count) | 40 million |
-| Traces (size) | 370 GB |
-| Spans (count) | 215 million |
+| Traces (size) | 400 GB |
+| Spans (count) | 250M  |
 | Spans (size) | 3.1 TB |
 | Total data on disk | 5 TB |
-| Weekly data ingestion | 91 GB |
-| Share of ingestion (top 2 customers) | 50% |
-| Share of ingestion (2000 users) | 50% |
+| Weekly data ingestion | 100 GB |
 
 A deployment of this scale is fully supported using:
 
-**Opik Services** — running on c7i.2xlarge instances with 3 replicas each:
+**Opik Services** - running on c7i.2xlarge instances with 3 replicas each:
 - Opik Backend
 - Opik Python Backend  
 - Opik Frontend
 
-**ClickHouse** — running on m7i.8xlarge instances with 2 replicas.
+**ClickHouse** - running on m7i.8xlarge instances with 2 replicas.
 
 This configuration provides both performance and reliability while leaving room for seamless expansion.
 
@@ -41,9 +39,9 @@ This configuration provides both performance and reliability while leaving room 
 
 Opik is designed with flexibility at its core. As your data grows and query volumes increase, Opik grows with you.
 
-- **Horizontal scaling** — add more replicas of services to instantly handle more traffic
-- **Vertical scaling** — increase CPU, memory, or storage to handle denser workloads  
-- **Seamless elasticity** — scale out during peak usage and scale back during quieter periods
+- **Horizontal scaling** - add more replicas of services to instantly handle more traffic
+- **Vertical scaling** - increase CPU, memory, or storage to handle denser workloads  
+- **Seamless elasticity** - scale out during peak usage and scale back during quieter periods
 
 For larger workloads, ClickHouse can be scaled to support enterprise-level deployments. A common configuration includes:
 
@@ -153,6 +151,4 @@ With Opik, you can start small and scale confidently, knowing your observability
 
 ## References
 
-- [Opik scalability and performance plan](https://github.com/comet-ml/opik/issues)
-- [Opik recommended resources (WIP)](https://github.com/comet-ml/opik/issues)
 - [ClickHouse sizing & hardware recommendations](https://clickhouse.com/docs/operations/requirements)
