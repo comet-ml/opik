@@ -222,6 +222,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
                 datasetItemSearchCriteria, page, size);
 
+        // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
         return dao.getItems(datasetItemSearchCriteria, page, size)
