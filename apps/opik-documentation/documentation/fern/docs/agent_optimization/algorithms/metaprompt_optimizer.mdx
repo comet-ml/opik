@@ -4,48 +4,108 @@ subtitle: "Refine and improve LLM prompts with systematic analysis."
 description: "Learn how to use the MetaPrompt Optimizer to refine and improve your LLM prompts through systematic analysis and iterative refinement."
 ---
 
-The MetaPrompter is a specialized optimizer designed for meta-prompt optimization. It focuses on
-improving the structure and effectiveness of prompts through systematic analysis and refinement of
-prompt templates, instructions, and examples.
+The MetaPrompter is a specialized optimizer designed for meta-prompt optimization. It focuses on improving the structure and effectiveness of prompts through systematic analysis and refinement of prompt templates, instructions, and examples.
 
 <Note>
-  The `MetaPromptOptimizer` is a strong choice when you have an initial instruction prompt and want to
-  iteratively refine its wording, structure, and clarity using LLM-driven suggestions. It excels at
-  general-purpose prompt improvement where the core idea of your prompt is sound but could be
-  phrased better for the LLM, or when you want to explore variations suggested by a reasoning model.
+  **When to Use This Optimizer:**
+  `MetaPromptOptimizer` is a strong choice when you have an initial instruction prompt and want to iteratively refine its wording, structure, and clarity using LLM-driven suggestions. It excels at general-purpose prompt improvement where the core idea of your prompt is sound but could be phrased better for the LLM, or when you want to explore variations suggested by a reasoning model.
+
+**Key Trade-offs:**
+
+- Relies on the quality of the `reasoning_model` for generating good candidates.
+- May be less suited than specialized optimizers if your primary goal is _only_ few-shot example selection (see [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer)) or _only_ complex agent/tool-use optimization (see [`MiproOptimizer`](/agent_optimization/algorithms/mipro_optimizer)).
+- Optimization process involves multiple LLM calls for both reasoning and evaluation, which can impact cost and time.
+
 </Note>
 
-## How it works
+<Info>
+  Looking for common questions about this optimizer or others? Check out the [Optimizer & SDK
+  FAQ](/agent_optimization/opik_optimizer/faq), which includes specific sections for `MetaPromptOptimizer` questions
+  like when to use it, understanding `model` vs. `reasoning_model`, and how parameters like `max_rounds` affect
+  optimization.
+</Info>
 
-The `MetaPromptOptimizer` automates the process of prompt refinement by using a "reasoning" LLM to
-critique and improve your initial prompt. Here's a conceptual breakdown:
+## How It Works
 
-<Frame>
-  <img src="/img/agent_optimization/metaprompt_optimizer.png" alt="MetaPrompt Optimizer" />
-</Frame>
+The `MetaPromptOptimizer` automates the process of prompt refinement by using a "reasoning" LLM to critique and improve your initial prompt. Here's a conceptual breakdown:
+
+1.  **Initial Prompt Evaluation**: Your starting `prompt` messages is first evaluated on the dataset using the specified `metric` to establish a baseline score.
+
+2.  **Reasoning and Candidate Generation**:
+
+    - The optimizer takes your current best prompt and detailed context about the task (derived from `prompt` and `metric`).
+    - It then queries a `reasoning_model` (which can be the same as the evaluation `model` or a different, potentially more powerful one). This `reasoning_model` is guided by a system prompt (the "meta-prompt") that instructs it to act as an expert prompt engineer.
+    - The `reasoning_model` analyzes the provided prompt and task context, then generates a set of new candidate prompts. Each candidate is designed to improve upon the previous best, with specific reasoning for the suggested changes (e.g., "added more specific constraints," "rephrased for clarity").
+
+3.  **Candidate Evaluation**:
+
+    - These newly generated candidate prompts are then evaluated on the dataset.
+    - The optimizer uses an adaptive trial strategy: promising candidates (based on initial trials) may receive more evaluation trials up to `max_trials_per_candidate`.
+
+4.  **Selection and Iteration**:
+
+    - The best-performing candidate from the current round becomes the new "current best prompt."
+    - This process repeats for a configured number of `max_rounds` or until the improvement in score falls below `improvement_threshold`.
+
+5.  **Result**: The highest-scoring prompt found throughout all rounds is returned as the optimized prompt.
+
+This iterative loop of generation, evaluation, and selection allows the `MetaPromptOptimizer` to explore different phrasings and structures, guided by the reasoning capabilities of an LLM.
 
 <Tip>
-  The optimizer is open-source, you can check out the code in the
-  [Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/few_shot_bayesian_optimizer).
+  The evaluation of each candidate prompt (Step 3) uses the `metric` you provide and runs against the `dataset`. This
+  process is fundamental to how the optimizer determines which prompts are better. For a deeper understanding of Opik's
+  evaluation capabilities, refer to: - [Evaluation Overview](/evaluation/overview) - [Evaluate
+  Prompts](/evaluation/evaluate_prompt) - [Metrics Overview](/evaluation/metrics/overview)
 </Tip>
 
+## Configuration Options
 
-## Quickstart
+### Basic Configuration
 
-You can use the `MetaPromptOptimizer` to optimize a prompt by following these steps:
+```python
+from opik_optimizer import MetaPromptOptimizer
 
-```python maxLines=1000
+prompter = MetaPromptOptimizer(
+    model="openai/gpt-4",  # or "azure/gpt-4"
+    # LLM parameters like temperature, max_tokens are passed as keyword arguments
+    temperature=0.1,
+    max_tokens=5000,
+    # Optimizer-specific parameters
+    reasoning_model="openai/gpt-4-turbo", # Optional: model for generating prompt suggestions
+    max_rounds=3,
+    num_prompts_per_round=4,
+    n_threads=8,
+    seed=42 # Seed for LLM calls if supported by the model
+)
+```
+
+### Advanced Configuration
+
+The `MetaPromptOptimizer` primarily uses the constructor parameters listed above for its configuration.
+Key parameters include:
+
+- `model`: The LLM used for evaluating generated prompts.
+- `reasoning_model`: (Optional) A separate, potentially more powerful LLM used by the optimizer to analyze and generate new prompt candidates. If not provided, `model` is used.
+- `max_rounds`: The number of optimization iterations.
+- `num_prompts_per_round`: How many new prompt candidates are generated in each round.
+- `initial_trials_per_candidate` / `max_trials_per_candidate`: Control the number of evaluations for each candidate.
+
+Additional LLM call parameters (e.g., `temperature`, `max_tokens`, `top_p`) for both the evaluation model and the reasoning model can be passed as keyword arguments (`**model_kwargs`) to the constructor. These will be used when making calls to the respective LLMs.
+
+The optimizer works by iteratively generating new prompt suggestions using its `reasoning_model` based on the performance of previous prompts and then evaluating these suggestions.
+
+## Example Usage
+
+```python
 from opik_optimizer import MetaPromptOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import datasets, ChatPrompt
 
 # Initialize optimizer
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4",
-    model_parameters={
-        "temperature": 0.1,
-        "max_tokens": 5000
-    },
+    model="openai/gpt-4",  # or "azure/gpt-4"
+    temperature=0.1,
+    max_tokens=5000,
     n_threads=8,
     seed=42
 )
@@ -58,6 +118,7 @@ def levenshtein_ratio(dataset_item, llm_output):
     return LevenshteinRatio().score(reference=dataset_item['answer'], output=llm_output)
 
 prompt = ChatPrompt(
+    project_name="my-project",
     messages=[
         {"role": "system", "content": "Provide an answer to the question."},
         {"role": "user", "content": "{question}"}
@@ -69,72 +130,61 @@ results = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_samples=100
+    n_samples=100,
+    experiment_config={"task": "hotpot", "model": "gpt-4"}
 )
 
 # Access results
 results.display()
 ```
 
-## Configuration Options
+## Model Support
 
-### Optimizer parameters
+The MetaPrompter supports all models available through LiteLLM. This provides broad compatibility
+with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others, including locally
+hosted models.
 
-The optimizer has the following parameters:
+For detailed instructions on how to specify different models and configure providers, please refer
+to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="prompts_per_round" type="int" optional={true} default="4">Number of candidate prompts to generate per optimization round</ParamField>
-<ParamField path="enable_context" type="bool" optional={true} default="True">Whether to include task-specific context when reasoning about improvements</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for prompt evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
-
-### `optimize_prompt` parameters
-
-The `optimize_prompt` method has the following parameters:
-
-<ParamField path="prompt" type="ChatPrompt">The ChatPrompt to optimize. Can include system/user/assistant messages, tools, and model configuration.</ParamField>
-<ParamField path="dataset" type="Dataset">Opik Dataset containing evaluation examples. Each item is passed to the prompt during evaluation.</ParamField>
-<ParamField path="metric" type="Callable">Evaluation function that takes (dataset_item, llm_output) and returns a score (float). Higher scores indicate better performance.</ParamField>
-<ParamField path="experiment_config" type="dict | None" optional={true}>Optional metadata dictionary to log with Opik experiments. Useful for tracking experiment parameters and context.</ParamField>
-<ParamField path="n_samples" type="int | None" optional={true}>Number of dataset items to use per evaluation. If None, uses full dataset. Lower values speed up optimization but may be less reliable.</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} default="False">If True, optimizer may continue beyond max_trials if improvements are still being found.</ParamField>
-<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Custom agent class for prompt execution. If None, uses default LiteLLM-based agent. Must inherit from OptimizableAgent.</ParamField>
-<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces and experiments. Default: "Optimization"</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="10">Maximum total number of prompts to evaluate across all rounds. Optimizer stops when this limit is reached.</ParamField>
-<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>Optional MCP (Model Context Protocol) execution configuration for prompts that use external tools. Enables tool-calling workflows. Default: None</ParamField>
-<ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
-<ParamField path="candidate_generator_kwargs" type="dict[str, typing.Any] | None" optional={true}>Optional kwargs to pass to candidate_generator.</ParamField>
-<ParamField path="args" type="Any" />
-<ParamField path="kwargs" type="Any" />
-
-
-### Model Support
-
-There are two models to consider when using the `MetaPromptOptimizer`:
-- `MetaPromptOptimizer.model`: The model used for the reasoning and candidate generation.
-- `ChatPrompt.model`: The model used to evaluate the prompt.
-
-The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
-`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
-using the `model_parameters` parameter:
+### Configuration Example using LiteLLM model string
 
 ```python
 optimizer = MetaPromptOptimizer(
-    model="anthropic/claude-3-opus-20240229",
-    model_parameters={
-        "temperature": 0.7,
-        "max_tokens": 4096
-    }
+    model="google/gemini-pro",  # or any LiteLLM supported model
+    temperature=0.1,
+    max_tokens=5000
 )
 ```
 
+## Best Practices
+
+1. **Template Design**
+
+   - Start with clear structure
+   - Use consistent formatting
+   - Include placeholders for variables
+
+2. **Instruction Writing**
+
+   - Be specific and clear
+   - Use active voice
+   - Include success criteria
+
+3. **Example Selection**
+
+   - Choose diverse examples
+   - Ensure relevance to task
+   - Balance complexity levels
+
+4. **Optimization Strategy**
+   - Focus on one component at a time
+   - Track changes systematically
+   - Validate improvements
+
 ## MCP Tool Calling Support
 
-The MetaPrompt Optimizer is the only optimizer that currently supports **MCP (Model Context
-Protocol) tool calling optimization**. This means you can optimize prompts that include MCP tools
-and function calls.
+The MetaPrompt Optimizer is the only optimizer that currently supports **MCP (Model Context Protocol) tool calling optimization**. This means you can optimize prompts that include MCP tools and function calls.
 
 <Note>
   MCP tool calling optimization is a specialized feature that allows the optimizer to understand and optimize prompts
