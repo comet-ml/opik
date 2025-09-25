@@ -5,9 +5,6 @@ import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.HashSet;
-import java.util.Set;
-
 public class TraceThreadBatchIdentifierValidator
         implements
             ConstraintValidator<TraceThreadBatchIdentifierValidation, TraceThreadBatchIdentifier> {
@@ -48,17 +45,6 @@ public class TraceThreadBatchIdentifierValidator
                     "Cannot provide both 'threadId' and 'threadIds'. Use 'threadId' for single operations or 'threadIds' for batch operations.")
                     .addConstraintViolation();
             isValid = false;
-        }
-
-        // Validate that threadIds doesn't contain duplicates (for performance and correctness)
-        if (hasThreadIds && identifier.threadIds() != null) {
-            Set<String> uniqueThreadIds = new HashSet<>(identifier.threadIds());
-            if (uniqueThreadIds.size() != identifier.threadIds().size()) {
-                context.buildConstraintViolationWithTemplate(
-                        "Duplicate thread IDs are not allowed. Each thread ID must be unique in the batch operation.")
-                        .addConstraintViolation();
-                isValid = false;
-            }
         }
 
         return isValid;

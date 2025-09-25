@@ -7,7 +7,7 @@ without requiring the full dspy dependency.
 
 import copy
 import time
-from typing import Any, Dict, List, Union
+from typing import Any
 import requests  # type: ignore[import-untyped]
 from requests.adapters import HTTPAdapter  # type: ignore[import-untyped]
 from urllib3.util.retry import Retry
@@ -64,14 +64,14 @@ class dotdict(dict):
         else:
             del self[key]
 
-    def __deepcopy__(self, memo: Dict[Any, Any]) -> "dotdict":
+    def __deepcopy__(self, memo: dict[Any, Any]) -> "dotdict":
         # Use the default dict copying method to avoid infinite recursion.
         return dotdict(copy.deepcopy(dict(self), memo))
 
 
 def colbertv2_get_request(
     url: str, query: str, k: int, max_retries: int = 4
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Make a GET request to ColBERTv2 server with retry logic.
 
@@ -84,12 +84,12 @@ def colbertv2_get_request(
     Returns:
         List of search results
     """
-    assert (
-        k <= 100
-    ), "Only k <= 100 is supported for the hosted ColBERTv2 server at the moment."
+    assert k <= 100, (
+        "Only k <= 100 is supported for the hosted ColBERTv2 server at the moment."
+    )
 
     session = _create_session_with_retries(max_retries)
-    payload: Dict[str, Union[str, int]] = {"query": query, "k": k}
+    payload: dict[str, str | int] = {"query": query, "k": k}
 
     # Application-level retry for server connection errors
     for attempt in range(max_retries):
@@ -132,7 +132,7 @@ def colbertv2_get_request(
 
 def colbertv2_post_request(
     url: str, query: str, k: int, max_retries: int = 4
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Make a POST request to ColBERTv2 server with retry logic.
 
@@ -192,7 +192,7 @@ class ColBERTv2:
     def __init__(
         self,
         url: str = "http://0.0.0.0",
-        port: Union[str, int, None] = None,
+        port: str | int | None = None,
         post_requests: bool = False,
     ):
         """
@@ -212,7 +212,7 @@ class ColBERTv2:
         k: int = 10,
         simplify: bool = False,
         max_retries: int = 4,
-    ) -> Union[List[str], List[dotdict]]:
+    ) -> list[str] | list[dotdict]:
         """
         Search using ColBERTv2.
 

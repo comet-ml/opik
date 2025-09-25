@@ -1,7 +1,10 @@
+import copy
 import json
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+import textwrap
+from typing import Any, cast
+from collections.abc import Callable
 
 import litellm
 import opik
@@ -13,7 +16,7 @@ from opik.environment import get_tqdm_for_current_environment
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from opik_optimizer import task_evaluator
-from opik_optimizer import utils
+from ..utils.core import create_litellm_agent_class
 
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
@@ -21,6 +24,15 @@ from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
 from . import reporting
+import re
+
+from ..mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
+from ..mcp_utils.mcp_workflow import (
+    MCPExecutionConfig,
+    MCPSecondPassCoordinator,
+    extract_tool_arguments,
+)
+from ..utils.prompt_segments import apply_segment_updates, extract_prompt_segments
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -32,6 +44,48 @@ litellm.cache = Cache(type=LiteLLMCacheType.DISK, disk_cache_dir=disk_cache_dir)
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
+
+
+def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
+    if not prompt.system or not getattr(prompt, "tools", None):
+        return
+
+    description = (
+        prompt.tools[0].get("function", {}).get("description") if prompt.tools else None
+    )
+    if not description:
+        return
+
+    tool_name = (
+        prompt.tools[0].get("function", {}).get("name") if prompt.tools else None
+    )
+
+    system_text = cast(str, prompt.system)
+    if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
+        return
+
+    start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
+    end = system_text.index(PROMPT_TOOL_FOOTER)
+    description_text = description.strip()
+    system_text = (
+        system_text[:start] + "\n" + description_text + "\n" + system_text[end:]
+    )
+    prompt.system = system_text
+
+    if tool_name:
+        pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
+
+        def _tool_section_replacer(match: re.Match[str]) -> str:
+            return f"{match.group(1)}{description_text}"
+
+        system_text = re.sub(
+            pattern,
+            _tool_section_replacer,
+            system_text,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        prompt.system = system_text
 
 
 class MetaPromptOptimizer(BaseOptimizer):
@@ -82,10 +136,10 @@ class MetaPromptOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str,
-        reasoning_model: Optional[str] = None,
+        reasoning_model: str | None = None,
         rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
-        num_threads: Optional[int] = None,
+        num_threads: int | None = None,
         verbose: int = 1,
         enable_context: bool = True,
         n_threads: int = 12,
@@ -116,7 +170,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             print("num_threads is deprecated; use n_threads instead")
             n_threads = num_threads
         self.num_threads = n_threads
-        self.dataset: Optional[Dataset] = None
+        self.dataset: Dataset | None = None
         self._opik_client = opik_client.get_client_cached()
         self.llm_call_counter = 0
         self.enable_context = enable_context
@@ -131,9 +185,9 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _call_model(
         self,
         project_name: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         is_reasoning: bool = False,
-        optimization_id: Optional[str] = None,
+        optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
         self.llm_call_counter += 1
@@ -163,7 +217,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             }
 
             # Prepare metadata that we want to be part of the LLM call context.
-            metadata_for_opik: Dict[str, Any] = {}
+            metadata_for_opik: dict[str, Any] = {}
             if project_name:
                 metadata_for_opik["project_name"] = (
                     project_name  # Top-level for general use
@@ -225,11 +279,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric: Callable,
-        n_samples: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
+        n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
         use_full_dataset: bool = True,
-        optimization_id: Optional[str] = None,
+        optimization_id: str | None = None,
+        mcp_config: MCPExecutionConfig | None = None,
         **kwargs: Any,
     ) -> float:
         """
@@ -277,6 +332,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "dataset": dataset.name,
                 "configuration": {
                     "prompt": prompt.get_messages(),
+                    "tools": getattr(prompt, "tools", None),
                     "n_samples": subset_size,
                     "use_full_dataset": use_full_dataset,
                 },
@@ -285,39 +341,80 @@ class MetaPromptOptimizer(BaseOptimizer):
         if optimization_id:
             experiment_config["optimization_id"] = optimization_id
 
-        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
-            # --- Step 1: Prepare the prompt for the LLM ---
-            # messages = [
-            #    {
-            #        "role": item["role"],
-            #        "content": item["content"].format(**dataset_item),
-            #    }
-            #    for item in prompt.get_messages()
-            # ]
-            # Step 1: create the agent
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
             agent = self.agent_class(new_prompt)
 
-            # --- Step 2: Call the model ---
-            try:
-                logger.debug(
-                    f"Calling LLM with prompt length: {sum(len(msg['content']) for msg in messages)}"
-                )
-                raw_model_output = agent.invoke(messages)
-                logger.debug(f"LLM raw response length: {len(raw_model_output)}")
-                logger.debug(f"LLM raw output: {raw_model_output}")
-            except Exception as e:
-                logger.error(f"Error calling model with prompt: {e}")
-                logger.error(f"Failed prompt: {messages}")
-                logger.error(
-                    f"Prompt length: {sum(len(msg['content']) for msg in messages)}"
-                )
-                raise
+            if mcp_config is not None:
+                coordinator = mcp_config.coordinator
+                coordinator.reset()
+                try:
+                    logger.debug(
+                        "Calling MCP-enabled LLM with tool access; prompt length=%s",
+                        sum(len(msg["content"]) for msg in messages),
+                    )
+                    raw_model_output = agent.llm_invoke(
+                        messages=messages,
+                        seed=None,
+                        allow_tool_use=True,
+                    )
+                except Exception as exc:
+                    logger.error("Error during MCP first pass: %s", exc)
+                    raise
 
-            # --- Step 3: Clean the model's output before metric evaluation ---
-            cleaned_model_output = raw_model_output.strip()
+                second_pass_messages = coordinator.build_second_pass_messages(
+                    base_messages=messages,
+                    dataset_item=dataset_item,
+                )
+
+                if second_pass_messages is None and mcp_config.fallback_invoker:
+                    fallback_args = mcp_config.fallback_arguments(dataset_item)
+                    if fallback_args:
+                        logger.debug(
+                            "MCP fallback triggered for tool %s with args=%s",
+                            mcp_config.tool_name,
+                            fallback_args,
+                        )
+                        summary_override = mcp_config.fallback_invoker(fallback_args)
+                        second_pass_messages = coordinator.build_second_pass_messages(
+                            base_messages=messages,
+                            dataset_item=dataset_item,
+                            summary_override=summary_override,
+                        )
+
+                if second_pass_messages is not None:
+                    logger.debug(
+                        "Executing MCP second pass with %d messages",
+                        len(second_pass_messages),
+                    )
+                    final_response = agent.llm_invoke(
+                        messages=second_pass_messages,
+                        seed=None,
+                        allow_tool_use=mcp_config.allow_tool_use_on_second_pass,
+                    )
+                else:
+                    final_response = raw_model_output
+
+                cleaned_model_output = final_response.strip()
+            else:
+                try:
+                    logger.debug(
+                        f"Calling LLM with prompt length: {sum(len(msg['content']) for msg in messages)}"
+                    )
+                    raw_model_output = agent.invoke(messages)
+                    logger.debug(f"LLM raw response length: {len(raw_model_output)}")
+                    logger.debug(f"LLM raw output: {raw_model_output}")
+                except Exception as e:
+                    logger.error(f"Error calling model with prompt: {e}")
+                    logger.error(f"Failed prompt: {messages}")
+                    logger.error(
+                        f"Prompt length: {sum(len(msg['content']) for msg in messages)}"
+                    )
+                    raise
+
+                cleaned_model_output = raw_model_output.strip()
 
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
@@ -348,12 +445,16 @@ class MetaPromptOptimizer(BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
-        experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: Optional[Type[OptimizableAgent]] = None,
+        agent_class: type[OptimizableAgent] | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
+        mcp_config = kwargs.pop("mcp_config", None)
+        candidate_generator = kwargs.pop("candidate_generator", None)
+        candidate_generator_kwargs = kwargs.pop("candidate_generator_kwargs", None)
+
         """
         Optimize a prompt using meta-reasoning.
 
@@ -385,7 +486,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             prompt.model_kwargs = self.model_kwargs
 
         if agent_class is None:
-            self.agent_class = utils.create_litellm_agent_class(prompt)
+            self.agent_class = create_litellm_agent_class(prompt)
         else:
             self.agent_class = agent_class
 
@@ -424,6 +525,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "auto_continue": auto_continue,
             },
             verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
         )
 
         try:
@@ -436,6 +538,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 experiment_config=experiment_config,
                 n_samples=n_samples,
                 auto_continue=auto_continue,
+                mcp_config=mcp_config,
+                candidate_generator=candidate_generator,
+                candidate_generator_kwargs=candidate_generator_kwargs,
                 **kwargs,
             )
             if optimization:
@@ -449,15 +554,80 @@ class MetaPromptOptimizer(BaseOptimizer):
                 logger.debug("Optimization marked as cancelled")
             raise e
 
-    def _optimize_prompt(
+    def optimize_mcp(
         self,
-        optimization_id: Optional[str],
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
-        experiment_config: Optional[Dict],
-        n_samples: Optional[int],
+        *,
+        tool_name: str,
+        second_pass: MCPSecondPassCoordinator,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: type[OptimizableAgent] | None = None,
+        fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+        fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+        allow_tool_use_on_second_pass: bool = False,
+        **kwargs: Any,
+    ) -> OptimizationResult:
+        panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
+
+        if prompt.tools is None or not prompt.tools:
+            raise ValueError("Prompt must include tools for MCP optimization")
+
+        fallback_args_fn = fallback_arguments or extract_tool_arguments
+
+        if fallback_invoker is None:
+            function_map = prompt.function_map or {}
+            fallback_invoker = function_map.get(tool_name)
+
+        mcp_config = MCPExecutionConfig(
+            coordinator=second_pass,
+            tool_name=tool_name,
+            fallback_arguments=fallback_args_fn,
+            fallback_invoker=fallback_invoker,
+            allow_tool_use_on_second_pass=allow_tool_use_on_second_pass,
+        )
+
+        tool_segment_id = f"tool:{tool_name}"
+        segments = extract_prompt_segments(prompt)
+        if tool_segment_id not in {segment.segment_id for segment in segments}:
+            raise ValueError(f"Tool '{tool_name}' not present in prompt tools")
+
+        return self.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            n_samples=n_samples,
+            auto_continue=auto_continue,
+            agent_class=agent_class,
+            mcp_config=mcp_config,
+            candidate_generator=self._generate_mcp_candidate_prompts,
+            candidate_generator_kwargs={
+                "tool_segment_id": tool_segment_id,
+                "tool_name": tool_name,
+                "panel_style": panel_style,
+            },
+            tool_panel_style=panel_style,
+            **kwargs,
+        )
+
+    def _optimize_prompt(
+        self,
+        optimization_id: str | None,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
+        metric: Callable,
+        experiment_config: dict | None,
+        n_samples: int | None,
         auto_continue: bool,
+        mcp_config: MCPExecutionConfig | None = None,
+        candidate_generator: None
+        | (Callable[..., list[chat_prompt.ChatPrompt]]) = None,
+        candidate_generator_kwargs: dict[str, Any] | None = None,
+        tool_panel_style: str = "bright_magenta",
         **kwargs: Any,
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
@@ -494,10 +664,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                 experiment_config=experiment_config,
                 use_full_dataset=n_samples is None,
                 verbose=self.verbose,
+                mcp_config=mcp_config,
             )
             best_score = initial_score
             best_prompt = current_prompt
-            rounds: List[OptimizationRound] = []
+            rounds: list[OptimizationRound] = []
 
             baseline_reporter.set_score(initial_score)
 
@@ -510,8 +681,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                 previous_best_score = best_score
 
                 # Step 1. Create a set of candidate prompts
+                generator = candidate_generator or self._generate_candidate_prompts
+                generator_kwargs = dict(candidate_generator_kwargs or {})
+
                 try:
-                    candidate_prompts = self._generate_candidate_prompts(
+                    candidate_prompts = generator(
                         project_name=self.agent_class.project_name,
                         current_prompt=best_prompt,
                         best_score=best_score,
@@ -519,25 +693,25 @@ class MetaPromptOptimizer(BaseOptimizer):
                         previous_rounds=rounds,
                         metric=metric,
                         optimization_id=optimization_id,
+                        **generator_kwargs,
                     )
                 except Exception as e:
                     round_reporter.failed_to_generate(self.num_prompts_per_round, e)
                     continue
 
                 # Step 2. Score each candidate prompt
-                prompt_scores: List[Tuple[chat_prompt.ChatPrompt, float]] = []
+                prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
                 for candidate_count, prompt in enumerate(candidate_prompts):
                     with reporting.display_prompt_candidate_scoring_report(
                         verbose=self.verbose
                     ) as eval_report:
                         eval_report.set_generated_prompts(candidate_count, prompt)
 
-                        new_prompt = current_prompt.copy()
-                        new_prompt.set_messages(prompt.get_messages())
+                        candidate_prompt = prompt.copy()
 
                         try:
                             prompt_score = self._evaluate_prompt(
-                                prompt=new_prompt,
+                                prompt=candidate_prompt,
                                 optimization_id=optimization_id,
                                 dataset=dataset,
                                 metric=metric,
@@ -545,11 +719,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 use_full_dataset=False,
                                 experiment_config=experiment_config,
                                 verbose=self.verbose,
+                                mcp_config=mcp_config,
                             )
 
                             eval_report.set_final_score(best_score, prompt_score)
                         except Exception:
-                            print("Failed evaluating agent; continuing...")
+                            logger.warning("Failed evaluating agent; continuing...")
                             prompt_score = 0
 
                     prompt_scores.append((prompt, prompt_score))
@@ -584,24 +759,39 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_score = best_cand_score_avg
                     best_prompt = best_candidate_this_round
 
+        if tool_panel_style and getattr(best_prompt, "tools", None):
+            description = (
+                best_prompt.tools[0].get("function", {}).get("description", "")
+                if best_prompt.tools
+                else ""
+            )
+            if description.strip():
+                reporting.display_tool_description(
+                    description.strip(),
+                    "Final tool description",
+                    tool_panel_style,
+                )
+
         reporting.display_result(
             initial_score,
             best_score,
             best_prompt.get_messages() if best_prompt is not None else [],
             verbose=self.verbose,
+            tools=getattr(best_prompt, "tools", None) if best_prompt else None,
         )
 
         return self._create_result(
             metric,
-            initial_prompt=initial_prompt.get_messages()
-            if initial_prompt is not None
-            else [],
+            initial_prompt=(
+                initial_prompt.get_messages() if initial_prompt is not None else []
+            ),
             best_prompt=best_prompt.get_messages() if best_prompt is not None else [],
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,
             dataset_id=dataset.id,
             optimization_id=optimization_id,
+            best_tools=getattr(best_prompt, "tools", None) if best_prompt else None,
         )
 
     def _calculate_improvement(
@@ -620,19 +810,24 @@ class MetaPromptOptimizer(BaseOptimizer):
         current_best_prompt: chat_prompt.ChatPrompt,
         current_best_score: float,
         best_prompt_overall: chat_prompt.ChatPrompt,
-        evaluated_candidates: List[Tuple[chat_prompt.ChatPrompt, float]],
+        evaluated_candidates: list[tuple[chat_prompt.ChatPrompt, float]],
         previous_best_score: float,
         improvement_this_round: float,
     ) -> OptimizationRound:
         """Create an OptimizationRound object with the current round's data."""
-        generated_prompts_log = []
+        generated_prompts_log: list[dict[str, Any]] = []
         for prompt, score in evaluated_candidates:
             improvement_vs_prev = self._calculate_improvement(
                 score, previous_best_score
             )
+            tool_entries: list[Any] = []
+            if getattr(prompt, "tools", None):
+                tool_entries = copy.deepcopy(list(prompt.tools or []))
+
             generated_prompts_log.append(
                 {
                     "prompt": prompt.get_messages(),
+                    "tools": tool_entries,
                     "score": score,
                     "improvement": improvement_vs_prev,
                 }
@@ -651,13 +846,14 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_result(
         self,
         metric: Callable,
-        initial_prompt: List[Dict[str, str]],
-        best_prompt: List[Dict[str, str]],
+        initial_prompt: list[dict[str, str]],
+        best_prompt: list[dict[str, str]],
         best_score: float,
         initial_score: float,
-        rounds: List[OptimizationRound],
-        dataset_id: Optional[str],
-        optimization_id: Optional[str],
+        rounds: list[OptimizationRound],
+        dataset_id: str | None,
+        optimization_id: str | None,
+        best_tools: list[dict[str, Any]] | None,
     ) -> OptimizationResult:
         """Create the final OptimizationResult object."""
         details = {
@@ -670,6 +866,18 @@ class MetaPromptOptimizer(BaseOptimizer):
             "temperature": self.model_kwargs.get("temperature"),
         }
 
+        if best_tools:
+            details["final_tools"] = best_tools
+
+        tool_prompts = None
+        if best_tools:
+            tool_prompts = {
+                (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
+                    "function", {}
+                ).get("description")
+                for idx, tool in enumerate(best_tools)
+            }
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=best_prompt,
@@ -681,6 +889,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             llm_calls=self.llm_call_counter,
             dataset_id=dataset_id,
             optimization_id=optimization_id,
+            tool_prompts=tool_prompts,
         )
 
     def _get_task_context(self, metric: Callable) -> str:
@@ -714,11 +923,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         current_prompt: chat_prompt.ChatPrompt,
         best_score: float,
         round_num: int,
-        previous_rounds: List[OptimizationRound],
+        previous_rounds: list[OptimizationRound],
         metric: Callable,
-        optimization_id: Optional[str] = None,
-        project_name: Optional[str] = None,
-    ) -> List[chat_prompt.ChatPrompt]:
+        optimization_id: str | None = None,
+        project_name: str | None = None,
+    ) -> list[chat_prompt.ChatPrompt]:
         """Generate candidate prompts using meta-prompting."""
         with reporting.display_candidate_generation_report(
             self.num_prompts_per_round, verbose=self.verbose
@@ -819,7 +1028,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     )
 
                 # Extract and log valid prompts
-                valid_prompts: List[chat_prompt.ChatPrompt] = []
+                valid_prompts: list[chat_prompt.ChatPrompt] = []
                 for item in json_result["prompts"]:
                     if (
                         isinstance(item, dict)
@@ -870,7 +1079,128 @@ class MetaPromptOptimizer(BaseOptimizer):
                     f"Unexpected error during candidate prompt generation: {e}"
                 )
 
-    def _build_history_context(self, previous_rounds: List[OptimizationRound]) -> str:
+    def _generate_mcp_candidate_prompts(
+        self,
+        current_prompt: chat_prompt.ChatPrompt,
+        best_score: float,
+        round_num: int,
+        previous_rounds: list[OptimizationRound],
+        metric: Callable,
+        tool_segment_id: str,
+        tool_name: str,
+        optimization_id: str | None = None,
+        project_name: str | None = None,
+        panel_style: str = "bright_magenta",
+    ) -> list[chat_prompt.ChatPrompt]:
+        segments = {
+            segment.segment_id: segment
+            for segment in extract_prompt_segments(current_prompt)
+        }
+        if tool_segment_id not in segments:
+            raise ValueError(f"Tool segment '{tool_segment_id}' not found in prompt")
+
+        target_segment = segments[tool_segment_id]
+        current_description = target_segment.content
+        tool_metadata = target_segment.metadata.get("raw_tool", {})
+
+        history_context = self._build_history_context(previous_rounds)
+
+        instruction = textwrap.dedent(
+            f"""
+            Current tool name: {tool_name}
+            Current tool description:
+            ---
+            {current_description}
+            ---
+
+            Tool metadata (JSON):
+            {json.dumps(tool_metadata, indent=2)}
+
+            Current best score: {best_score:.4f}
+            {history_context}
+
+            Generate {self.num_prompts_per_round} improved descriptions for this tool.
+            Each description should clarify expected input arguments and set explicit expectations
+            for how the tool output must be used in the final response.
+            Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
+
+            Return a JSON object of the form:
+            {{
+              "prompts": [
+                {{
+                  "tool_description": "...",
+                  "improvement_focus": "...",
+                  "reasoning": "..."
+                }}
+              ]
+            }}
+            """
+        ).strip()
+
+        with reporting.display_candidate_generation_report(
+            self.num_prompts_per_round, verbose=self.verbose
+        ) as candidate_generation_report:
+            try:
+                content = self._call_model(
+                    project_name,
+                    messages=[
+                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "user", "content": instruction},
+                    ],
+                    is_reasoning=True,
+                    optimization_id=optimization_id,
+                )
+
+                try:
+                    json_result = json.loads(content)
+                except json.JSONDecodeError:
+                    import re
+
+                    json_match = re.search(r"\{.*\}", content, re.DOTALL)
+                    if not json_match:
+                        raise ValueError("No JSON object found in reasoning output")
+                    json_result = json.loads(json_match.group())
+
+                prompts_payload = json_result.get("prompts")
+                if not isinstance(prompts_payload, list):
+                    raise ValueError("Reasoning output missing 'prompts' list")
+
+                candidate_generation_report.set_generated_prompts()
+
+                candidates: list[chat_prompt.ChatPrompt] = []
+                for item in prompts_payload:
+                    if not isinstance(item, dict):
+                        continue
+                    description = item.get("tool_description")
+                    if not isinstance(description, str) or not description.strip():
+                        continue
+
+                    updated_prompt = apply_segment_updates(
+                        current_prompt,
+                        {tool_segment_id: description.strip()},
+                    )
+                    _sync_tool_description_in_system(updated_prompt)
+                    if (
+                        description.strip()
+                        and description.strip() != current_description.strip()
+                    ):
+                        reporting.display_tool_description(
+                            description.strip(),
+                            f"Round {round_num + 1} tool description",
+                            panel_style,
+                        )
+                    candidates.append(updated_prompt)
+
+                if not candidates:
+                    raise ValueError(
+                        "Reasoning output did not produce valid tool descriptions"
+                    )
+
+                return candidates
+            except Exception as exc:
+                raise ValueError(f"Error generating MCP prompt candidates: {exc}")
+
+    def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
         """Build context from previous optimization rounds."""
         if not previous_rounds:
             return ""
@@ -896,7 +1226,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _get_evaluation_subset(
         self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get a random subset of the dataset for evaluation.
 
         Returns:

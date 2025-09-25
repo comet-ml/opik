@@ -9,7 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
-import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -37,5 +37,5 @@ public record TraceThreadBatchIdentifier(
         @Schema String projectName,
         @Schema UUID projectId,
         @Schema String threadId,
-        @Schema @Size(min = 1, max = 1000) List<@NotBlank String> threadIds) {
+        @Schema @Size(min = 1, max = 1000) Set<@NotBlank String> threadIds) {
 }

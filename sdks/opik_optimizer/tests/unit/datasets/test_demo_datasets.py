@@ -1,7 +1,7 @@
 import inspect
 import unittest.mock as mock
 import pytest
-from typing import Callable
+from collections.abc import Callable
 
 import opik_optimizer
 from opik.api_objects import opik_client

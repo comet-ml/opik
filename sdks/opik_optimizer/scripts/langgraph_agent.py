@@ -1,4 +1,4 @@
-from typing import Any, List, Dict
+from typing import Any
 from typing_extensions import TypedDict
 
 from opik.integrations.langchain import OpikTracer
@@ -88,7 +88,7 @@ class LangGraphAgent(OptimizableAgent):
             self.prompt.get_messages()[0]["content"],
         )
 
-    def invoke(self, messages: List[Dict[str, str]], seed: int | None = None) -> str:
+    def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         if len(messages) > 1:
             # Skip the system prompt
             messages = messages[1:]
