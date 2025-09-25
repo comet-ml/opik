@@ -37,7 +37,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Alerts", description = "Alert resources")
-public class AlertsResource {
+public class AlertResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull AlertService alertService;

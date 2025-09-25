@@ -2,9 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -12,9 +12,9 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -85,7 +85,7 @@ class AlertServiceImpl implements AlertService {
     }
 
     private EntityAlreadyExistsException newAlertConflict() {
-        return new EntityAlreadyExistsException(new ErrorMessage(List.of(ALERT_ALREADY_EXISTS)));
+        return new EntityAlreadyExistsException(new ErrorMessage(HttpStatus.SC_CONFLICT, ALERT_ALREADY_EXISTS));
     }
 
     private Alert prepareAlert(Alert alert, String userName) {
