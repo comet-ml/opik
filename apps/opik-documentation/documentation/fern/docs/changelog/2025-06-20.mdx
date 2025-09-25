@@ -1,5 +1,5 @@
 ## 🔌 Integrations and SDK
-- Added **CloudFlare's WorkersAI** integration ([docs](https://www.comet.com/docs/opik/reference/typescript-sdk/integrations/workers-ai))
+- Added **CloudFlare's WorkersAI** integration ([docs](/docs/opik/integrations/cloudflare-workers-ai))
 - **Google ADK** integration: tracing is now automatically propagated to all sub-agents in agentic systems with the new `track_adk_agent_recursive` feature, eliminating the need to manually add tracing to each sub-agent.
 - **Google ADK** integration: now we retrieve session-level information from the ADK framework to enrich the threads data.
 - **New in the SDK!** Real-time tracking for long-running spans/traces is now supported. When enabled (set `os.environ["OPIK_LOG_START_TRACE_SPAN"] = "True"` in your environment), you can see traces and spans update live in the UI—even for jobs that are still running. This makes debugging and monitoring long-running agents much more responsive and convenient.

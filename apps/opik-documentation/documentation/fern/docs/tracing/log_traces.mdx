@@ -14,7 +14,7 @@ Opik's tracing functionality allows you to track not just all the LLM calls made
 
 Opik provides different ways to log your LLM calls and traces to the platform:
 
-1. **Using one of our [integrations](/tracing/integrations/overview):** This is the easiest way to get started.
+1. **Using one of our [integrations](/integrations/overview):** This is the easiest way to get started.
 2. **Using the `@track` decorator:** This allows you to track not just LLM calls but any function call in your application, it is often used in conjunction with the integrations.
 3. **Using the Python SDK:** This allows for the most flexibility and customizability and is recommended if you want to have full control over the logging process.
 4. **Using the Opik REST API:** If you are not using Python, you can use the REST API to log traces to the platform. The REST API is currently in beta and subject to change.
@@ -68,7 +68,7 @@ opik.configure(use_local=False)
 ### Using an integration
 
 When using one of Opik's integration you will simply need to add a couple of lines of code to your existing application to track your LLM calls and traces. There are
-integrations available for [many of the most popular LLM frameworks and libraries](/tracing/integrations/overview).
+integrations available for [many of the most popular LLM frameworks and libraries](/integrations/overview).
 
 Here is a short overview of our most popular integrations:
 
@@ -175,7 +175,7 @@ If you are using a framework that Opik does not integrate with, we recommend you
 ### Using function decorators
 
 Using the `opik.track` decorator is a great way to add Opik logging to your existing LLM application. We recommend using this
-method in conjunction with one of our [integrations](/tracing/integrations/overview) for the most seamless experience.
+method in conjunction with one of our [integrations](/integrations/overview) for the most seamless experience.
 
 When you add the `@track` decorator to a function, Opik will create a span for that function call and log the input parameters and function output
 for that function. If we detect that a decorated function is being called within another decorated function, we will create a nested span for the

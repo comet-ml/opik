@@ -1,49 +1,17 @@
 ---
-description: Cookbook that showcases Opik's integration with [INTEGRATION_NAME]
+title: Observability for [INTEGRATION_NAME] with Opik
+description: Start here to integrate Opik into your [INTEGRATION_NAME]-based genai application for end-to-end LLM observability, unit testing, and optimization.
 ---
-
-# Integration Documentation Guidelines
-
-This document provides comprehensive guidelines for creating and maintaining integration documentation for Opik. It covers both code integrations (requiring Python SDK) and OpenTelemetry configuration-only integrations.
-
-## 📋 Integration Type Decision Matrix
-
-Use this matrix to determine which template to use:
-
-| Integration Type              | Requirements                                                                                                                            | Template to Use                   | Examples                                                            |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| **Code Integration**          | • Users install Opik Python SDK<br>• Users modify their code<br>• Uses `track_*()` wrapper functions<br>• Direct Python integration     | `integration_template_code.md`    | LangChain, CrewAI, DSPy, Haystack                                   |
-| **OpenAI-Based Integration**  | • Uses OpenAI-compatible API<br>• Users install Opik Python SDK<br>• Uses `track_openai()` wrapper<br>• Compatible with OpenAI SDK      | `integration_template_openai.md`  | BytePlus, OpenRouter, Any OpenAI-compatible API                     |
-| **LiteLLM Integration**       | • LLM provider supported by LiteLLM<br>• Uses OpikLogger callback<br>• Unified LiteLLM interface<br>• API key configuration required    | `integration_template_litellm.md` | OpenAI, Anthropic, Groq, Fireworks AI, Cohere, Mistral AI, xAI Grok |
-| **OpenTelemetry Integration** | • Users configure OTEL endpoints<br>• No code changes required<br>• Configuration via env vars<br>• Works through OTEL instrumentations | `integration_template_otel.md`    | Ruby SDK, Pydantic AI (via Logfire), Direct OTEL Python             |
-
-# Integration Template: Code Integration
-
-**Use this template for**: Code integrations that require users to install Opik Python SDK and modify their code to use `track_*()` wrapper functions.
-
-**Requirements**:
-
-- Users install Opik Python SDK
-- Users modify their code
-- Uses `track_*()` wrapper functions
-- Direct Python integration
-
-**Examples**: LangChain, CrewAI, DSPy, Haystack, etc.
-
----
-
-## Template Structure
 
 [INTEGRATION_NAME]([INTEGRATION_WEBSITE_URL]) is [INTEGRATION_DESCRIPTION].
 
 This guide explains how to integrate Opik with [INTEGRATION_NAME] using the [INTEGRATION_NAME] integration provided by Opik. By using the [INTEGRATION_NAME] integration provided by Opik, you can easily track and evaluate your [INTEGRATION_NAME] API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
-<!--
-OPTIONAL: Include Colab notebook link only if a cookbook notebook exists.
-If no notebook exists, remove this entire section.
--->
+## Account Setup
 
-[OPTIONAL_COLAB_NOTEBOOK_SECTION]
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=[integration_name]&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=[integration_name]&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=[integration_name]&utm_campaign=opik) for more information.
 
 ## Getting Started
 
@@ -57,27 +25,35 @@ pip install opik [integration_package]
 
 ### Configuring Opik
 
-Configure Opik to send traces to your Comet project:
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
 
-```python
-import opik
-
-opik.configure(
-    project_name="your-project-name",
-    workspace="your-workspace-name",
-)
-```
-
-You can also set environment variables:
-
-```bash
-export OPIK_PROJECT_NAME="your-project-name"
-export OPIK_WORKSPACE="your-workspace-name"
-```
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
 
 ### Configuring [INTEGRATION_NAME]
 
-[INTEGRATION_NAME_SPECIFIC_CONFIGURATION_INSTRUCTIONS]
+In order to configure [INTEGRATION_NAME], you will need to have your [INTEGRATION_NAME] API Key. You can [find or create your [INTEGRATION_NAME] API Key in this page]([INTEGRATION_API_KEY_URL]).
+
+You can set it as an environment variable:
+
+```bash {pytest_codeblocks_skip=true}
+export [INTEGRATION_API_KEY_NAME]="YOUR_API_KEY"
+```
+
+Or set it programmatically:
+
+```python
+import os
+import getpass
+
+if "[INTEGRATION_API_KEY_NAME]" not in os.environ:
+    os.environ["[INTEGRATION_API_KEY_NAME]"] = getpass.getpass("Enter your [INTEGRATION_NAME] API key: ")
+
+# Set project name for organization
+os.environ["OPIK_PROJECT_NAME"] = "[integration_name]-integration-demo"
+```
 
 ## Usage
 
@@ -91,7 +67,10 @@ from [package] import [ClientClass]
 
 # Initialize the [INTEGRATION_NAME] client
 client = [ClientClass]()
-tracked_client = track_[integration_name](client, project_name="optional")
+tracked_client = track_[integration_name](client)
+
+# Set project name for organization
+os.environ["OPIK_PROJECT_NAME"] = "[integration_name]-integration-demo"
 
 # Make API calls
 response = tracked_client.some_method()
@@ -209,3 +188,18 @@ Once you have [INTEGRATION_NAME] integrated with Opik, you can:
 - [Create datasets](/datasets/overview) to test and improve your models
 - [Set up feedback collection](/feedback/overview) to gather human evaluations
 - [Monitor performance](/tracing/overview) across different models and configurations
+
+## Required Placeholders
+
+Replace these placeholders in templates:
+
+**Code Integrations:**
+- `[INTEGRATION_NAME]` → Actual integration name (e.g., "OpenAI")
+- `[integration_name]` → Lowercase version (e.g., "openai")
+- `[integration_module]` → Python module name (e.g., "openai")
+- `[integration_package]` → Package to install (e.g., "openai")
+- `[ClientClass]` → Main client class (e.g., "OpenAI")
+- `[INTEGRATION_API_KEY_NAME]` → Environment variable name (e.g., "OPENAI_API_KEY")
+- `[INTEGRATION_API_KEY_URL]` → URL where users can create/manage API keys
+- `[INTEGRATION_WEBSITE_URL]` → Main website URL for the integration
+- `[INTEGRATION_DESCRIPTION]` → Brief description of what the integration does

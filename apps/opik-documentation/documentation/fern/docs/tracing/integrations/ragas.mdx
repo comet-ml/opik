@@ -11,25 +11,15 @@ There are two main ways to use Ragas with Opik:
 1. Using Ragas to score traces or spans.
 2. Using Ragas to evaluate a RAG pipeline.
 
-<div style="display: flex; align-items: center; flex-wrap: wrap; margin: 20px 0;">
-  <span style="margin-right: 10px;">
-    You can check out the Colab Notebook if you'd like to jump straight to the code:
-  </span>
-  <a
-    className="no-external-icon"
-    href="https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb"
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <img
-      src="https://colab.research.google.com/assets/colab-badge.svg"
-      alt="Open In Colab"
-      style="vertical-align: middle;"
-    />
-  </a>
-</div>
+## Account Setup
 
-## Getting started
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=ragas&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=ragas&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=ragas&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
 
 You will first need to install the `opik` and `ragas` packages:
 
@@ -37,10 +27,33 @@ You will first need to install the `opik` and `ragas` packages:
 pip install opik ragas
 ```
 
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring Ragas
+
+In order to use Ragas, you will need to configure your LLM provider API keys. For this example, we'll use OpenAI. You can [find or create your API keys in these pages](https://platform.openai.com/settings/organization/api-keys):
+
+You can set them as environment variables:
 
 ```bash
-opik configure
+export OPENAI_API_KEY="YOUR_API_KEY"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
 ## Using Ragas to score traces or spans
@@ -114,6 +127,92 @@ In the Opik UI, you will be able to see the full trace including the score calcu
 <Frame>
   <img src="/img/tracing/ragas_opik_trace.png" />
 </Frame>
+
+## Comprehensive Example: Dataset Evaluation
+
+For more advanced use cases, you can evaluate entire datasets using Ragas metrics with the Opik evaluation platform:
+
+### 1. Create a Dataset
+
+```python
+from datasets import load_dataset
+import opik
+
+opik_client = opik.Opik()
+
+# Create a small dataset
+fiqa_eval = load_dataset("explodinggradients/fiqa", "ragas_eval")
+
+# Reformat the dataset to match the schema expected by the Ragas evaluate function
+hf_dataset = fiqa_eval["baseline"].select(range(3))
+dataset_items = hf_dataset.map(
+    lambda x: {
+        "user_input": x["question"],
+        "reference": x["ground_truths"][0],
+        "retrieved_contexts": x["contexts"],
+    }
+)
+dataset = opik_client.get_or_create_dataset("ragas-demo-dataset")
+dataset.insert(dataset_items)
+```
+
+### 2. Define Evaluation Task
+
+```python
+# Create an evaluation task
+def evaluation_task(x):
+    return {
+        "user_input": x["question"],
+        "response": x["answer"],
+        "retrieved_contexts": x["contexts"],
+    }
+```
+
+### 3. Run Evaluation
+
+```python
+# Use the RagasMetricWrapper directly with Opik's evaluate function
+opik.evaluation.evaluate(
+    dataset,
+    evaluation_task,
+    scoring_metrics=[answer_relevancy_metric],
+    task_threads=1,
+)
+```
+
+### 4. Alternative: Using Ragas Native Evaluation
+
+You can also use Ragas' native evaluation function with Opik tracing:
+
+```python
+from datasets import load_dataset
+from opik.integrations.langchain import OpikTracer
+from ragas.metrics import context_precision, answer_relevancy, faithfulness
+from ragas import evaluate
+
+fiqa_eval = load_dataset("explodinggradients/fiqa", "ragas_eval")
+
+# Reformat the dataset to match the schema expected by the Ragas evaluate function
+dataset = fiqa_eval["baseline"].select(range(3))
+
+dataset = dataset.map(
+    lambda x: {
+        "user_input": x["question"],
+        "reference": x["ground_truths"][0],
+        "retrieved_contexts": x["contexts"],
+    }
+)
+
+opik_tracer_eval = OpikTracer(tags=["ragas_eval"], metadata={"evaluation_run": True})
+
+result = evaluate(
+    dataset,
+    metrics=[context_precision, faithfulness, answer_relevancy],
+    callbacks=[opik_tracer_eval],
+)
+
+print(result)
+```
 
 ## Using Ragas metrics to evaluate a RAG pipeline
 

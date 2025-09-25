@@ -1,7 +1,7 @@
 When working with agents, it can become challenging to track the flow of the agent and its interactions with the environment.
 Opik provides a way to track both the agent definition and its flow.
 
-Opik has integrations with many popular Agent frameworks ([LangGraph](/tracing/integrations/langgraph), [LLamaIndex](/tracing/integrations/llama_index))
+Opik has integrations with many popular Agent frameworks ([LangGraph](/integrations/langgraph), [LLamaIndex](/integrations/llama_index))
 and can also be used to log agents manually using the `@track` decorator.
 
 <Tip>
@@ -13,11 +13,11 @@ and can also be used to log agents manually using the `@track` decorator.
 
 ## Track agent execution
 
-You can track the agent execution by using either one of [Opik's integrations](/tracing/integrations/overview) or the `@track` decorator:
+You can track the agent execution by using either one of [Opik's integrations](/integrations/overview) or the `@track` decorator:
 
 <Tabs>
     <Tab value="LangGraph" title="LangGraph">
-    You can log the agent execution by using the [OpikTracer](/tracing/integrations/langgraph) callback:
+    You can log the agent execution by using the [OpikTracer](/integrations/langgraph) callback:
 
     ```python
     from opik.integrations.langchain import OpikTracer
@@ -41,7 +41,7 @@ You can track the agent execution by using either one of [Opik's integrations](/
     The `OpikTracer` can be added
     </Tab>
     <Tab value="Haystack" title="Haystack">
-    To log a Haystack pipeline run, you can use the [`OpikConnector`](/tracing/integrations/haystack). This connector will log the pipeline run to the Opik platform and add a `tracer` key to the pipeline run response with the trace ID:
+    To log a Haystack pipeline run, you can use the [`OpikConnector`](/integrations/haystack). This connector will log the pipeline run to the Opik platform and add a `tracer` key to the pipeline run response with the trace ID:
 
     ```python
     import os
@@ -73,7 +73,7 @@ You can track the agent execution by using either one of [Opik's integrations](/
 
     </Tab>
     <Tab value="LLamaIndex" title="LLamaIndex">
-    Opik has a built-in integration with [LLamaIndex](/tracing/integrations/llama_index) that makes it easy to track the agent execution:
+    Opik has a built-in integration with [LLamaIndex](/integrations/llama_index) that makes it easy to track the agent execution:
 
     ```python
     from llama_index.core import global_handler, set_global_handler
@@ -118,7 +118,7 @@ each step that has been executed in chronological order:
 
 ## Track the agent definition
 
-If you are using our [LangGraph](/tracing/integrations/langgraph) integration, you can also track the agent definition by passing in the `graph` argument to the `OpikTracer` callback:
+If you are using our [LangGraph](/integrations/langgraph) integration, you can also track the agent definition by passing in the `graph` argument to the `OpikTracer` callback:
 
 ```python
 from opik.integrations.langchain import OpikTracer
