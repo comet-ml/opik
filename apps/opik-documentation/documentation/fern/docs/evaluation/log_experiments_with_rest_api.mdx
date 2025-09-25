@@ -276,10 +276,11 @@ Use the bulk endpoint to efficiently log multiple evaluation results at once.
   smaller batches.
 </Warning>
 
-If you wish to divide the data into smaller batches, just add the `experiment_id` to the payload 
+If you wish to divide the data into smaller batches, just add the `experiment_id` to the payload
 so experiment items can be added to an existing experiment.
 Below is an example of splitting the `evaluation_items` into two batches which will both be added
 to the same experiment:
+
 ```python
 experiment_id = str(uuid6.uuid7())
 experiment_name = "Bulk experiment upload"
@@ -301,10 +302,10 @@ for half in halves:
                 "dataset_item_id": item["dataset_item_id"],
                 "evaluate_task_result": item["evaluate_task_result"],
                 "feedback_scores": [
-                    {**score, "source": "sdk"} 
+                    {**score, "source": "sdk"}
                     for score in item["feedback_scores"]
                 ]
-            } 
+            }
             for item in half
         ]
     )
@@ -738,4 +739,4 @@ Then use them in your code:
 - **Max Payload Size**: 4MB
 - **Required Fields**: `experiment_name`, `dataset_name`, `items` (with `dataset_item_id`)
 - **SDK Reference**: [ExperimentsClient.experiment_items_bulk](https://www.comet.com/docs/opik/python-sdk-reference/rest_api/clients/experiments.html#opik.rest_api.experiments.client.ExperimentsClient.experiment_items_bulk)
-- **REST API Reference**: [Experiments API](https://www.comet.com/docs/opik/reference/rest-api/experiments/experiment-items-bulk)
+- **REST API Reference**: [Experiments API](/reference/rest-api/experiments/experiment-items-bulk)

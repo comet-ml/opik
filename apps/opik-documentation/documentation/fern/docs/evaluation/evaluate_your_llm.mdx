@@ -313,6 +313,7 @@ evaluation = evaluate(
     dataset_sampler=samplers.RandomDatasetSampler(max_samples=10),
 )
 ```
+
 In the example above, the evaluation will sample 10 random items from the dataset.
 
 Also, you can implement your own dataset sampler by extending the `BaseDatasetSampler` and overriding the `sample` method.
@@ -376,7 +377,7 @@ In order to evaluate datasets more efficiently, Opik uses multiple background th
 
 ### Passing additional arguments to `evaluation_task`
 
-Sometimes your evaluation task needs extra context besides the dataset item (commonly referred to as `x`). For example, you may want to pass a model name, a system prompt, or a pre-initialized client. 
+Sometimes your evaluation task needs extra context besides the dataset item (commonly referred to as `x`). For example, you may want to pass a model name, a system prompt, or a pre-initialized client.
 Since `evaluate` calls the task as `task(x)` for each dataset item, the recommended pattern is to create a wrapper (or use `functools.partial`) that closes over any additional arguments.
 
 Using a wrapper function:
@@ -424,7 +425,7 @@ evaluation = evaluate(
 
 You can access all the experiments logged to the platform from the SDK with the [`Opik.get_experiments_by_name`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_name) and [`Opik.get_experiment_by_id`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_id) methods:
 
-```python {pytest_codeblocks_skip=true}
+```python
 import opik
 
 # Get the experiment
