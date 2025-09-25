@@ -396,6 +396,7 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 **Files**: `README.md`, `readme_CN.md`, `readme_JP.md`, `readme_KO.md`
 **Section**: "📝 Logging Traces with Integrations"
 - Update the integrations table/list in ALL README files (including translated versions)
+- **Table Format**: 3-column table (Integration, Description, Documentation)
 - Ensure all integration names are consistent across all languages
 - **Documentation Links**: Point to `/integrations/[integration_name]` (new integrations tab URLs)
 - **No Colab links** - comprehensive examples are included in the integration docs
@@ -478,6 +479,7 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 When modifying integrations, verify:
 
 - [ ] All README files are updated (README.md, readme_CN.md, readme_JP.md, readme_KO.md)
+- [ ] README integration tables use 3-column format (Integration, Description, Documentation)
 - [ ] Integration overview cards are updated with correct categories and card structure
 - [ ] Integration tab navigation in docs.yml is updated
 - [ ] Integration names are consistent across all locations
@@ -494,9 +496,9 @@ When modifying integrations, verify:
 ### Example Integration Entry
 
 ```markdown
-| Integration | Description | Documentation | Try in Colab |
-|-------------|-------------|---------------|--------------|
-| NewIntegration | Log traces for all NewIntegration LLM calls | [Documentation](/tracing/integrations/newintegration) | [![Open Quickstart In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/newintegration.ipynb) |
+| Integration | Description | Documentation |
+|-------------|-------------|---------------|
+| NewIntegration | Log traces for all NewIntegration LLM calls | [Documentation](/tracing/integrations/newintegration) |
 ```
 
 ### Common Maintenance Mistakes to Avoid
@@ -524,6 +526,7 @@ When modifying integrations, verify:
 - ❌ Inconsistent card titles or hrefs in integration overview
 - ❌ Adding Colab links in README files instead of pointing to comprehensive integration docs
 - ❌ Using old `/tracing/integrations/` URLs in README instead of `/integrations/`
+- ❌ Including "Try in Colab" column in README integration tables (use 3-column format only)
 
 ## 📖 Integration-Specific Guidance
 
