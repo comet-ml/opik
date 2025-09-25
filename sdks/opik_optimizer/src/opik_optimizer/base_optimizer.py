@@ -215,7 +215,7 @@ class BaseOptimizer:
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: str | None = None,
+        agent_class: type[OptimizableAgent] | None = None,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -244,7 +244,7 @@ class BaseOptimizer:
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: str | None = None,
+        agent_class: type[OptimizableAgent] | None = None,
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,

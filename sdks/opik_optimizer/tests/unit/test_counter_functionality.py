@@ -2,6 +2,8 @@
 Test counter functionality across optimizers.
 """
 
+from typing import Any
+
 from opik_optimizer.gepa_optimizer.gepa_optimizer import GepaOptimizer
 from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (
     MetaPromptOptimizer,
@@ -25,10 +27,36 @@ class TestCounterFunctionality:
 
         # Create a mock optimizer that inherits from BaseOptimizer
         class MockOptimizer(BaseOptimizer):
-            def optimize_prompt(self, *args: object, **kwargs: object) -> object:
+            def optimize_prompt(
+                self,
+                prompt: Any,
+                dataset: Any,
+                metric: Any,
+                experiment_config: dict[Any, Any] | None = None,
+                n_samples: int | None = None,
+                auto_continue: bool = False,
+                agent_class: type[Any] | None = None,
+                **kwargs: Any,
+            ) -> Any:
                 pass
 
-            def optimize_mcp(self, *args: object, **kwargs: object) -> object:
+            def optimize_mcp(
+                self,
+                prompt: Any,
+                dataset: Any,
+                metric: Any,
+                *,
+                tool_name: str,
+                second_pass: Any,
+                experiment_config: dict[Any, Any] | None = None,
+                n_samples: int | None = None,
+                auto_continue: bool = False,
+                agent_class: type[Any] | None = None,
+                fallback_invoker: Any | None = None,
+                fallback_arguments: Any | None = None,
+                allow_tool_use_on_second_pass: bool = False,
+                **kwargs: Any,
+            ) -> Any:
                 pass
 
         optimizer = MockOptimizer(model="gpt-4o-mini")
