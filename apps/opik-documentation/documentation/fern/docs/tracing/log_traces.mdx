@@ -14,7 +14,7 @@ Opik's tracing functionality allows you to track not just all the LLM calls made
 
 Opik provides different ways to log your LLM calls and traces to the platform:
 
-1. **Using one of our [integrations](/tracing/integrations/overview):** This is the easiest way to get started.
+1. **Using one of our [integrations](/integrations/overview):** This is the easiest way to get started.
 2. **Using the `@track` decorator:** This allows you to track not just LLM calls but any function call in your application, it is often used in conjunction with the integrations.
 3. **Using the Python SDK:** This allows for the most flexibility and customizability and is recommended if you want to have full control over the logging process.
 4. **Using the Opik REST API:** If you are not using Python, you can use the REST API to log traces to the platform. The REST API is currently in beta and subject to change.
@@ -68,7 +68,7 @@ opik.configure(use_local=False)
 ### Using an integration
 
 When using one of Opik's integration you will simply need to add a couple of lines of code to your existing application to track your LLM calls and traces. There are
-integrations available for [many of the most popular LLM frameworks and libraries](/tracing/integrations/overview).
+integrations available for [many of the most popular LLM frameworks and libraries](/integrations/overview).
 
 Here is a short overview of our most popular integrations:
 
@@ -175,7 +175,7 @@ If you are using a framework that Opik does not integrate with, we recommend you
 ### Using function decorators
 
 Using the `opik.track` decorator is a great way to add Opik logging to your existing LLM application. We recommend using this
-method in conjunction with one of our [integrations](/tracing/integrations/overview) for the most seamless experience.
+method in conjunction with one of our [integrations](/integrations/overview) for the most seamless experience.
 
 When you add the `@track` decorator to a function, Opik will create a span for that function call and log the input parameters and function output
 for that function. If we detect that a decorated function is being called within another decorated function, we will create a nested span for the
@@ -298,13 +298,12 @@ def llm_chain(input_text):
 
 You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
 
-#### Logging additional data using opik_args parameter
+Also, you can use the `opik_args` parameter to pass additional configuration to traced functions, including `tags`, `metadata`, and trace-level settings like `thread_id`.
+This parameter can be used in two ways: implicitly or explicitly.
 
-The `opik_args` parameter allows you to pass additional configuration to traced functions, including span tags, metadata, and trace-level settings like `thread_id`. This parameter can be used in two ways:
+##### Implicit `opik_args` (functions without `opik_args` parameter)
 
-##### Implicit opik_args (functions without opik_args parameter)
-
-When your function doesn't explicitly declare an `opik_args` parameter, you can still pass opik_args when calling the function. The decorator will handle it internally:
+When your function doesn't explicitly declare an `opik_args` parameter, you can still pass `opik_args` when calling the function. The decorator will handle it internally:
 
 ```python
 import opik
@@ -332,9 +331,9 @@ result = llm_chain(
 )
 ```
 
-##### Explicit opik_args (functions with opik_args parameter)
+##### Explicit `opik_args` (functions with `opik_args` parameter)
 
-When your function explicitly declares an `opik_args` parameter, it will receive the opik_args value directly. This is useful for propagating configuration through nested function calls:
+When your function explicitly declares an `opik_args` parameter, it will receive the `opik_args` value directly. This is useful for propagating configuration through nested function calls:
 
 ```python
 from typing import Optional, Dict, Any
@@ -364,7 +363,7 @@ result = parent_function(
 )
 ```
 
-##### The opik_args structure
+##### The `opik_args` structure
 
 The `opik_args` parameter accepts a dictionary with the following structure:
 
@@ -384,12 +383,11 @@ opik_args = {
 
 Both `"span"` and `"trace"` sections are optional - you can include either or both as needed.
 
-
 #### Configuring the project name
 
 You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
 
-```python {pytest_codeblocks_skip=true}
+```python
 import opik
 
 @opik.track(project_name="my_project")
@@ -444,6 +442,52 @@ You can disable the logging of traces and spans using the environment variable `
 import os
 
 os.environ["OPIK_TRACK_DISABLE"] = "true"
+```
+
+### Configuring the `thread_id`
+
+You can group multiple traces into a single conversational thread by updating each created trace with a specific `thread_id` parameter.
+Often, this isn’t possible directly because tracing occurs inside a function you can’t modify. In such cases, you can use the `opik_args` parameter to pass the `thread_id` to the function, as shown below:
+
+```python
+from google import genai
+from opik.integrations.genai import track_genai
+
+client = genai.Client()
+gemini_client = track_genai(client, project_name="opik_args demo")
+
+response = gemini_client.models.generate_content(
+    model="gemini-2.0-flash",
+    contents="What is Opik?",
+    opik_args={"trace": {"thread_id": "f174a"}}
+)
+
+print(response.text)
+
+```
+
+Also, you can pass it to the function with `opik.track` decorator:
+
+```python
+from google import genai
+
+import opik
+from opik.integrations.genai import track_genai
+
+client = genai.Client()
+gemini_client = track_genai(client)
+
+@opik.track(project_name="opik_args demo")
+def chat_message(input_text):
+    response = gemini_client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=input_text
+    )
+    return response.text
+
+opik_args={"trace": {"thread_id": "f174a"}}
+chat_message("What is Opik ?", opik_args=opik_args)
+chat_message("Who is Opik?", opik_args=opik_args)
 ```
 
 ### Using the low-level Opik client

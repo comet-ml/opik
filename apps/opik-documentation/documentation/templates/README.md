@@ -51,10 +51,7 @@ Use this matrix to determine which template to use:
 
 1. **Use the decision matrix above** to determine which template fits your integration
 2. **Copy the appropriate template** to the correct documentation location:
-   - Code integrations: `fern/docs/cookbook/[integration_name].mdx`
-   - OTEL integrations: `fern/docs/tracing/opentelemetry/[framework_name].mdx`
-   - OpenAI-based integrations: `fern/docs/tracing/integrations/[integration_name].mdx`
-   - LiteLLM integrations: `fern/docs/tracing/integrations/[integration_name].mdx`
+   - All integrations: `fern/docs/tracing/integrations/[integration_name].mdx`
 3. **Replace all placeholder text** with actual values
 4. **Test all code examples** in a fresh environment
 5. **Add realistic examples** - avoid "hello world" scenarios
