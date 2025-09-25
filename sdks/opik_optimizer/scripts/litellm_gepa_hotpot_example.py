@@ -37,6 +37,7 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
 system_prompt = "Answer the question"
 
 prompt = ChatPrompt(
+    project_name="GEPA-Hotpot",
     system=system_prompt,
     user="{question}",
     tools=[
@@ -70,7 +71,6 @@ prompt = ChatPrompt(
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",  # smaller task model (valid LiteLLM)
     reflection_model="openai/gpt-4o",  # larger reflection model (valid LiteLLM)
-    project_name="GEPA-Hotpot",
     temperature=0.0,  # deterministic completions during optimization
     max_tokens=400,
 )

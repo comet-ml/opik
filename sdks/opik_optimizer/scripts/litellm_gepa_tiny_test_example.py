@@ -34,6 +34,7 @@ def main() -> None:
     dataset = datasets.tiny_test()
 
     prompt = ChatPrompt(
+        project_name="GEPA_TinyTest",
         system=(
             "You are a helpful assistant. Use the `search_wikipedia` tool when needed and "
             "answer concisely with the exact answer string."
@@ -66,7 +67,6 @@ def main() -> None:
     optimizer = GepaOptimizer(
         model="openai/gpt-4o-mini",
         reflection_model="openai/gpt-4o",  # stronger reflector, optional
-        project_name="GEPA_TinyTest",
         temperature=0.2,
         max_tokens=200,
     )

@@ -21,6 +21,8 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 - **Type Safety**: Full type hints and validation for robust development
+- **Backward Compatibility**: All original parameters preserved through kwargs extraction
+- **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
@@ -219,6 +221,46 @@ optimizer = MetaPromptOptimizer(model="gpt-4")
 ```
 
 For comprehensive documentation on tool optimization, see the [Tool Optimization Guide](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization).
+
+## Deprecation Warnings
+
+The following parameters are deprecated and will be removed in future versions:
+
+### Constructor Parameters
+
+- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
+- **`num_threads`** in optimizer constructors: Use `n_threads` instead
+
+### Example Migration
+
+```python
+# ❌ Deprecated
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    project_name="my-project",  # Deprecated
+    num_threads=16,             # Deprecated
+)
+
+# ✅ Correct
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    n_threads=16,  # Use n_threads instead
+)
+
+prompt = ChatPrompt(
+    project_name="my-project",  # Set here instead
+    messages=[...]
+)
+```
+
+### Suppressing Deprecation Warnings
+
+To suppress deprecation warnings during development:
+
+```python
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+```
 
 ### MCP Integration (Beta)
 
