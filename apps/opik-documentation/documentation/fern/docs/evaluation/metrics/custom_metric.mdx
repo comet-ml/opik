@@ -122,9 +122,8 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         )
         response_dict = json.loads(response.choices[0].message.content)
 
-        # Parse the response using the binary result model
-        binary_result = LLMJudgeBinaryResult(**response_dict)
-        response_score = binary_result.score
+        # Parse the response and convert to integer for logging
+        response_score = bool(response_dict["score"])
 
         return score_result.ScoreResult(
             name=self.name,
@@ -207,6 +206,7 @@ metric.score(output="Paris is the capital of France")
 ```
 
 #### Example: Creating a metric with multiple scores
+
 You can implement a metric that returns multiple scores, which will display as separate columns in the UI when using it in an evaluation.
 
 To do so, setup your `score` method to return a list of `ScoreResult` objects.
