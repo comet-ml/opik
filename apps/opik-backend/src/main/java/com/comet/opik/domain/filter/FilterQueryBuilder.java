@@ -2,6 +2,7 @@ package com.comet.opik.domain.filter;
 
 import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.DatasetField;
+import com.comet.opik.api.filter.DatasetItemField;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
@@ -79,6 +80,10 @@ public class FilterQueryBuilder {
     private static final String STATUS_DB = "status";
     public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
     public static final String SCOPE_DB = "scope";
+    private static final String DATA_ANALYTICS_DB = "toString(data)";
+    private static final String SOURCE_DB = "source";
+    private static final String TRACE_ID_DB = "trace_id";
+    private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
@@ -270,6 +275,19 @@ public class FilterQueryBuilder {
                     .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
                     .build());
 
+    private static final Map<DatasetItemField, String> DATASET_ITEM_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DatasetItemField, String>builder()
+                    .put(DatasetItemField.ID, ID_DB)
+                    .put(DatasetItemField.DATA, DATA_ANALYTICS_DB)
+                    .put(DatasetItemField.SOURCE, SOURCE_DB)
+                    .put(DatasetItemField.TRACE_ID, TRACE_ID_DB)
+                    .put(DatasetItemField.SPAN_ID, SPAN_ID_DB)
+                    .put(DatasetItemField.CREATED_AT, CREATED_AT_DB)
+                    .put(DatasetItemField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DatasetItemField.CREATED_BY, CREATED_BY_DB)
+                    .put(DatasetItemField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
     private static final Map<AnnotationQueueField, String> ANNOTATION_QUEUE_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<AnnotationQueueField, String>builder()
                     .put(AnnotationQueueField.ID, ID_DB)
@@ -408,6 +426,17 @@ public class FilterQueryBuilder {
                 TraceThreadField.STATUS,
                 TraceThreadField.TAGS));
 
+        map.put(FilterStrategy.DATASET_ITEM, Set.of(
+                DatasetItemField.ID,
+                DatasetItemField.DATA,
+                DatasetItemField.SOURCE,
+                DatasetItemField.TRACE_ID,
+                DatasetItemField.SPAN_ID,
+                DatasetItemField.CREATED_AT,
+                DatasetItemField.LAST_UPDATED_AT,
+                DatasetItemField.CREATED_BY,
+                DatasetItemField.LAST_UPDATED_BY));
+
         return map;
     }
 
@@ -497,6 +526,7 @@ public class FilterQueryBuilder {
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
             case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
             case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
+            case DatasetItemField datasetItemField -> DATASET_ITEM_FIELDS_MAP.get(datasetItemField);
             case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
             default -> {
 
