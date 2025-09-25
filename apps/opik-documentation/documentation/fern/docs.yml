@@ -376,19 +376,6 @@ navigation:
       - page: Overview
         path: docs/tracing/integrations/overview.mdx
         slug: overview
-      - section: Native
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Python SDK
-            path: docs/reference/python-sdk/overview.mdx
-            slug: python-sdk
-          - page: TypeScript SDK
-            path: docs/reference/typescript-sdk/overview.mdx
-            slug: typescript-sdk
-          - page: OpenTelemetry
-            path: docs/tracing/opentelemetry/overview.mdx
-            slug: opentelemetry
       - section: Frameworks
         skip-slug: true
         collapsed: true
@@ -465,23 +452,6 @@ navigation:
           - page: VoltAgent
             path: docs/tracing/integrations/voltagent.mdx
             slug: voltagent
-      - section: Dataset Management
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Gretel
-            path: docs/tracing/integrations/gretel.mdx
-            slug: gretel
-          - page: Hugging Face Datasets
-            path: docs/tracing/integrations/huggingface-datasets.mdx
-            slug: huggingface-datasets
-      - section: Evaluation
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Ragas
-            path: docs/tracing/integrations/ragas.mdx
-            slug: ragas
       - section: Model Providers
         skip-slug: true
         collapsed: true
@@ -540,6 +510,36 @@ navigation:
           - page: xAI Grok
             path: docs/tracing/integrations/xai-grok.mdx
             slug: xai-grok
+      - section: Manual Integration
+        skip-slug: true
+        collapsed: true
+        contents:
+          - page: Python SDK
+            path: docs/reference/python-sdk/overview.mdx
+            slug: python-sdk
+          - page: TypeScript SDK
+            path: docs/reference/typescript-sdk/overview.mdx
+            slug: typescript-sdk
+          - page: OpenTelemetry
+            path: docs/tracing/opentelemetry/overview.mdx
+            slug: opentelemetry
+      - section: Dataset Management
+        skip-slug: true
+        collapsed: true
+        contents:
+          - page: Gretel
+            path: docs/tracing/integrations/gretel.mdx
+            slug: gretel
+          - page: Hugging Face Datasets
+            path: docs/tracing/integrations/huggingface-datasets.mdx
+            slug: huggingface-datasets
+      - section: Evaluation
+        skip-slug: true
+        collapsed: true
+        contents:
+          - page: Ragas
+            path: docs/tracing/integrations/ragas.mdx
+            slug: ragas
       - section: Gateways
         skip-slug: true
         collapsed: true
@@ -973,9 +973,6 @@ redirects:
     permanent: true
   - source: "/docs/opik/cookbook/langchain"
     destination: "/docs/opik/integrations/langchain"
-    permanent: true
-  - source: "/docs/opik/cookbook/ai-suite"
-    destination: "/docs/opik/integrations/ai-suite"
     permanent: true
   - source: "/docs/opik/cookbook/anthropic"
     destination: "/docs/opik/integrations/anthropic"
