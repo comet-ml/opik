@@ -41,22 +41,28 @@ class GepaOptimizer(BaseOptimizer):
             raise ValueError(f"model must be a string, got {type(model).__name__}")
         if not model.strip():
             raise ValueError("model cannot be empty or whitespace-only")
-        
+
         # Validate optional parameters
         if project_name is not None and not isinstance(project_name, str):
-            raise ValueError(f"project_name must be a string or None, got {type(project_name).__name__}")
-        
+            raise ValueError(
+                f"project_name must be a string or None, got {type(project_name).__name__}"
+            )
+
         if reflection_model is not None and not isinstance(reflection_model, str):
-            raise ValueError(f"reflection_model must be a string or None, got {type(reflection_model).__name__}")
-        
+            raise ValueError(
+                f"reflection_model must be a string or None, got {type(reflection_model).__name__}"
+            )
+
         if not isinstance(verbose, int):
-            raise ValueError(f"verbose must be an integer, got {type(verbose).__name__}")
+            raise ValueError(
+                f"verbose must be an integer, got {type(verbose).__name__}"
+            )
         if verbose < 0:
             raise ValueError("verbose must be non-negative")
-        
+
         if not isinstance(seed, int):
             raise ValueError(f"seed must be an integer, got {type(seed).__name__}")
-        
+
         super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
         self.project_name = project_name
         self.reflection_model = reflection_model or model
@@ -137,7 +143,7 @@ class GepaOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
-        
+
         Args:
             prompt: The prompt to optimize
             dataset: Opik Dataset to optimize on
@@ -160,7 +166,7 @@ class GepaOptimizer(BaseOptimizer):
                 seed (int): Random seed for reproducibility (default: 42)
                 raise_on_exception (bool): Raise exceptions instead of continuing (default: True)
                 mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
-        
+
         Returns:
             OptimizationResult: Result of the optimization
         """
