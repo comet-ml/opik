@@ -5,10 +5,7 @@ from pathlib import Path
 
 import pytest
 
-try:
-    import gepa  # noqa: F401
-except ImportError:
-    pytest.fail("gepa package is required for GEPA adapter tests")  # pragma: no cover
+pytest.importorskip("gepa", reason="gepa package required for GEPA adapter tests")
 
 
 class DummyMetricResult:
@@ -21,14 +18,14 @@ class DummyOptimizer:
         self._gepa_live_metric_calls = 0
         self.llm_call_counter = 0
         self.tool_call_counter = 0
-
-    def _increment_llm_counter(self) -> None:
+    
+    def increment_llm_counter(self):
         self.llm_call_counter += 1
-
-    def _increment_tool_counter(self) -> None:
+    
+    def increment_tool_counter(self):
         self.tool_call_counter += 1
-
-    def _reset_counters(self) -> None:
+    
+    def reset_counters(self):
         self.llm_call_counter = 0
         self.tool_call_counter = 0
 
@@ -56,7 +53,7 @@ def test_adapter_evaluate_uses_metric(
 
     monkeypatch.setattr(
         "opik_optimizer.gepa_optimizer.adapter.create_litellm_agent_class",
-        lambda _prompt, optimizer_ref=None: lambda prompt: DummyAgent(prompt),
+        lambda _prompt, optimizer=None: lambda prompt: DummyAgent(prompt),
     )
 
     def metric(dataset_item: dict[str, Any], llm_output: str) -> DummyMetricResult:
