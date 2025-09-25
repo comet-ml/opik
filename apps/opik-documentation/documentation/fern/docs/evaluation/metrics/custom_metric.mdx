@@ -92,19 +92,20 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         self.model_name = model_name
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy.
-        Analyze it carefully and respond with a number between 0 and 1: 1 if completely
-        accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of your response
-        should be a single number with no other text.
+        Analyze it carefully and provide a binary score: true if the claim is accurate,
+        false if it is inaccurate or contains errors. The format of your response
+        should be a JSON object with no additional text or backticks.
 
         The format of your response should be a JSON object with no additional text or backticks that follows the format:
         {{
-            "score": <score between 0 and 1>
+            "score": <true or false>
         }}
 
         Claim to evaluate: {output}
 
         Response:
         """
+
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Score the output of an LLM.
@@ -115,6 +116,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         """
         # Construct the prompt based on the output of the LLM
         prompt = self.prompt_template.format(output=output)
+
         # Generate and parse the response from the LLM
         response = self.llm_client.chat.completions.create(
             model=self.model_name,
@@ -122,7 +124,12 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         )
         response_dict = json.loads(response.choices[0].message.content)
 
-        response_score = float(response_dict["score"])
+        # Parse the response and convert to integer for logging
+        response_score = (
+            response_dict["score"]
+            if isinstance(response_dict["score"], bool)
+            else str(response_dict["score"]).strip().lower() == "true"
+        )
 
         return score_result.ScoreResult(
             name=self.name,
@@ -157,7 +164,9 @@ from opik.evaluation import models
 class LLMJudgeMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "Factuality check", model_name: str = "gpt-4o"):
         super().__init__(name)
+
         self.llm_client = models.LiteLLMChatModel(model_name=model_name)
+
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully
         and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate.
@@ -173,6 +182,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
 
         Response:
         """
+
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
         Score the output of an LLM.
@@ -205,6 +215,7 @@ metric.score(output="Paris is the capital of France")
 ```
 
 #### Example: Creating a metric with multiple scores
+
 You can implement a metric that returns multiple scores, which will display as separate columns in the UI when using it in an evaluation.
 
 To do so, setup your `score` method to return a list of `ScoreResult` objects.
@@ -237,7 +248,7 @@ class MultiScoreCustomMetric(base_metric.BaseMetric):
 
 In the examples above, we ask the LLM to respond with a JSON object. However as this is not enforced, it is possible that the LLM returns a non-structured response. In order to avoid this, you can use the `litellm` library to enforce a structured output. This will make our custom metric more robust and less prone to failure.
 
-For this we define the format of the response we expect from the LLM in the `LLMJudgeResult` class and pass it to the LiteLLM client:
+For this we define the format of the response we expect from the LLM in the `LLMJudgeBinaryResult` class and pass it to the LiteLLM client:
 
 ```python
 import json
@@ -247,8 +258,8 @@ from typing import Any
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation import models
 
-class LLMJudgeResult(BaseModel):
-    score: int
+class LLMJudgeBinaryResult(BaseModel):
+    score: bool
     reason: str
 
 class LLMJudgeMetric(base_metric.BaseMetric):
@@ -256,12 +267,12 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         super().__init__(name)
         self.llm_client = models.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
-        You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling.
+        You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and provide a binary score: true if the claim is accurate, false if it is inaccurate or contains errors. Then provide one brief sentence explaining your ruling.
 
          The format of the your response should be a json with no backticks that returns:
 
         {{
-            "score": <score between 0 and 1>,
+            "score": <true or false>,
             "reason": "<reason for the score>"
         }}
 
@@ -282,7 +293,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         prompt = self.prompt_template.format(output=output)
 
         # Generate and parse the response from the LLM
-        response = self.llm_client.generate_string(input=prompt, response_format=LLMJudgeResult)
+        response = self.llm_client.generate_string(input=prompt, response_format=LLMJudgeBinaryResult)
         response_dict = json.loads(response)
 
         return score_result.ScoreResult(
