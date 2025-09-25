@@ -239,10 +239,12 @@ class ClassInspector:
 classes_to_document = [
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
+    opik_optimizer.MiproOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
     opik_optimizer.GepaOptimizer,
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
+    opik_optimizer.OptimizableAgent,
     # opik_optimizer.datasets
 ]
 
@@ -253,8 +255,65 @@ subtitle: "Technical SDK reference guide"
 pytest_codeblocks_skip: true
 ---
 
-The Opik Agent Optimizer SDK provides a set of tools for optimizing LLM prompts. This reference
-guide will help you understand the available APIs and how to use them effectively.
+The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
+
+## Key Features
+
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+
+## Core Classes
+
+The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
+
+- **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
+- **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
+- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
+- **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
+- **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
+
+## Standardized Method Signatures
+
+All optimizers implement these core methods with identical signatures:
+
+### optimize_prompt()
+```python
+def optimize_prompt(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+```
+
+### optimize_mcp()
+```python
+def optimize_mcp(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    *,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+    fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+    allow_tool_use_on_second_pass: bool = False,
+    **kwargs: Any,
+) -> OptimizationResult
+```
 
 """
 
