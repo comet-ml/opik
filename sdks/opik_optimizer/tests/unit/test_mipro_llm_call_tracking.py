@@ -1,8 +1,5 @@
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 from opik_optimizer.mipro_optimizer import MiproOptimizer
-from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
-from opik_optimizer.optimization_config.configs import TaskConfig
 
 
 class TestMiproLlmCallTracking:
@@ -21,16 +18,11 @@ class TestMiproLlmCallTracking:
         mock_program.total_calls = 5  # DSPy tracked 5 LLM calls
         mock_program.dump_state.return_value = {
             "signature": {"instructions": "Test prompt"},
-            "demos": []
+            "demos": [],
         }
 
         # Mock the best_programs structure
-        optimizer.best_programs = [
-            {
-                "score": 0.8,
-                "program": mock_program
-            }
-        ]
+        optimizer.best_programs = [{"score": 0.8, "program": mock_program}]
 
         # Mock the metric
         optimizer.opik_metric = Mock()
@@ -58,16 +50,11 @@ class TestMiproLlmCallTracking:
         mock_program.total_calls = 5  # DSPy tracked 5 LLM calls
         mock_program.dump_state.return_value = {
             "signature": {"instructions": "Test prompt"},
-            "demos": []
+            "demos": [],
         }
 
         # Mock the best_programs structure
-        optimizer.best_programs = [
-            {
-                "score": 0.8,
-                "program": mock_program
-            }
-        ]
+        optimizer.best_programs = [{"score": 0.8, "program": mock_program}]
 
         # Mock the metric
         optimizer.opik_metric = Mock()
@@ -92,19 +79,15 @@ class TestMiproLlmCallTracking:
 
         # Mock the DSPy program module without total_calls attribute
         mock_program = Mock()
-        # No total_calls attribute
+        # Explicitly remove total_calls attribute to ensure getattr returns 0
+        del mock_program.total_calls
         mock_program.dump_state.return_value = {
             "signature": {"instructions": "Test prompt"},
-            "demos": []
+            "demos": [],
         }
 
         # Mock the best_programs structure
-        optimizer.best_programs = [
-            {
-                "score": 0.8,
-                "program": mock_program
-            }
-        ]
+        optimizer.best_programs = [{"score": 0.8, "program": mock_program}]
 
         # Mock the metric
         optimizer.opik_metric = Mock()
