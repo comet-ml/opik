@@ -98,9 +98,8 @@ exposed directly in its constructor:
 - `model`: The LLM used for evaluating prompts with different few-shot example combinations.
 - `min_examples` / `max_examples`: Define the range for the number of few-shot examples to be
   selected by Optuna during optimization.
-- `n_iterations`: The total number of optimization iterations (trials) Optuna will run.
-- `n_initial_prompts`: The number of initial random configurations Optuna will evaluate before
-  starting its TPE sampling.
+- `n_trials`: The total number of optimization trials Optuna will run (passed via kwargs in optimize_prompt).
+- `n_threads`: Number of parallel threads for evaluation.
 
 LLM call parameters (e.g., `temperature`, `max_tokens`, `seed`) are passed via keyword arguments
 (`**model_kwargs`) to the constructor.
@@ -140,14 +139,12 @@ prompt = ChatPrompt(
 )
 
 # Run optimization
-# Note: `num_trials` is an argument for older versions or a conceptual representation.
-# For current FewShotBayesianOptimizer, `n_iterations` is set at initialization.
-# The optimize_prompt method itself doesn't take num_trials.
-# We'll use a representative call here.
 results = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
-    metric=levenshtein_ratio
+    metric=levenshtein_ratio,
+    n_samples=100,
+    experiment_config={"task": "hotpot", "model": "gpt-4"}
 )
 
 # Access results
