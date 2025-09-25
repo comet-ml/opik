@@ -230,21 +230,24 @@ class TracesClient:
     def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -257,10 +260,14 @@ class TracesClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.traces.close_trace_thread(thread_id='thread_id', )
+        client.traces.close_trace_thread()
         """
         _response = self._raw_client.close_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            project_name=project_name,
+            project_id=project_id,
+            thread_id=thread_id,
+            thread_ids=thread_ids,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1546,21 +1553,24 @@ class AsyncTracesClient:
     async def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1575,11 +1585,15 @@ class AsyncTracesClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.traces.close_trace_thread(thread_id='thread_id', )
+            await client.traces.close_trace_thread()
         asyncio.run(main())
         """
         _response = await self._raw_client.close_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            project_name=project_name,
+            project_id=project_id,
+            thread_id=thread_id,
+            thread_ids=thread_ids,
+            request_options=request_options,
         )
         return _response.data
 

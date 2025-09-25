@@ -295,27 +295,25 @@ export class Traces {
     }
 
     /**
-     * Close trace thread
+     * Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
      *
-     * @param {OpikApi.TraceThreadIdentifier} request
+     * @param {OpikApi.TraceThreadBatchIdentifier} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.traces.closeTraceThread({
-     *         threadId: "thread_id"
-     *     })
+     *     await client.traces.closeTraceThread()
      */
     public closeTraceThread(
-        request: OpikApi.TraceThreadIdentifier,
+        request: OpikApi.TraceThreadBatchIdentifier = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__closeTraceThread(request, requestOptions));
     }
 
     private async __closeTraceThread(
-        request: OpikApi.TraceThreadIdentifier,
+        request: OpikApi.TraceThreadBatchIdentifier = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -339,7 +337,7 @@ export class Traces {
             },
             contentType: "application/json",
             requestType: "json",
-            body: serializers.TraceThreadIdentifier.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            body: serializers.TraceThreadBatchIdentifier.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
             withCredentials: true,

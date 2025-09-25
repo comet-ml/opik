@@ -872,6 +872,104 @@ export class Prompts {
     }
 
     /**
+     * Restore a prompt version by creating a new version with the content from the specified version
+     *
+     * @param {string} promptId
+     * @param {string} versionId
+     * @param {Prompts.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.prompts.restorePromptVersion("promptId", "versionId")
+     */
+    public restorePromptVersion(
+        promptId: string,
+        versionId: string,
+        requestOptions?: Prompts.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.PromptVersionDetail> {
+        return core.HttpResponsePromise.fromPromise(this.__restorePromptVersion(promptId, versionId, requestOptions));
+    }
+
+    private async __restorePromptVersion(
+        promptId: string,
+        versionId: string,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.PromptVersionDetail>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/prompts/${encodeURIComponent(promptId)}/versions/${encodeURIComponent(versionId)}/restore`,
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.PromptVersionDetail.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/prompts/{promptId}/versions/{versionId}/restore.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Retrieve prompt version
      *
      * @param {OpikApi.PromptVersionRetrieveDetail} request

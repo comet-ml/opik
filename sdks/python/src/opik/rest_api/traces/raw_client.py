@@ -251,21 +251,24 @@ class RawTracesClient:
     def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -281,6 +284,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "thread_ids": thread_ids,
             },
             headers={
                 "content-type": "application/json",
@@ -2033,21 +2037,24 @@ class AsyncRawTracesClient:
     async def close_trace_thread(
         self,
         *,
-        thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        thread_id: typing.Optional[str] = OMIT,
+        thread_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
-        Close trace thread
+        Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.
 
         Parameters
         ----------
-        thread_id : str
-
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        thread_id : typing.Optional[str]
+
+        thread_ids : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2063,6 +2070,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "thread_ids": thread_ids,
             },
             headers={
                 "content-type": "application/json",

@@ -1195,7 +1195,7 @@ export class Datasets {
         request: OpikApi.GetDatasetItemsRequest = {},
         requestOptions?: Datasets.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetItemPagePublic>> {
-        const { page, size, truncate } = request;
+        const { page, size, filters, truncate } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -1203,6 +1203,10 @@ export class Datasets {
 
         if (size != null) {
             _queryParams["size"] = size.toString();
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
         }
 
         if (truncate != null) {
