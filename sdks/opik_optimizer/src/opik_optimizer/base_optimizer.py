@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 import logging
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import random
 
 
@@ -17,7 +17,7 @@ from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import create_litellm_agent_class, optimization_context
+from .utils import create_litellm_agent_class
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -41,7 +41,7 @@ class OptimizationRound(BaseModel):
     improvement: float
 
 
-class BaseOptimizer(ABC):
+class BaseOptimizer:
     def __init__(
         self,
         model: str,
@@ -66,145 +66,9 @@ class BaseOptimizer(ABC):
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
-        self.tool_call_counter = 0
-        self._opik_client = None  # Lazy initialization
 
         # Initialize shared cache
         initialize_cache()
-
-    def reset_counters(self) -> None:
-        """Reset all call counters for a new optimization run."""
-        self.llm_call_counter = 0
-        self.tool_call_counter = 0
-
-    def increment_llm_counter(self) -> None:
-        """Increment the LLM call counter."""
-        self.llm_call_counter += 1
-
-    def increment_tool_counter(self) -> None:
-        """Increment the tool call counter."""
-        self.tool_call_counter += 1
-
-    def cleanup(self) -> None:
-        """
-        Clean up resources and perform memory management.
-        Should be called when the optimizer is no longer needed.
-        """
-        # Reset counters
-        self.reset_counters()
-
-        # Clear history to free memory
-        self._history.clear()
-
-        # Clear Opik client if it exists
-        if self._opik_client is not None:
-            # Note: Opik client doesn't have explicit cleanup, but we can clear the reference
-            self._opik_client = None
-
-        logger.debug(f"Cleaned up resources for {self.__class__.__name__}")
-
-    def __del__(self) -> None:
-        """Destructor to ensure cleanup is called."""
-        try:
-            self.cleanup()
-        except Exception:
-            # Ignore exceptions during cleanup in destructor
-            pass
-
-    @property
-    def opik_client(self) -> Any:
-        """Lazy initialization of Opik client."""
-        if self._opik_client is None:
-            import opik
-
-            self._opik_client = opik.Opik()
-        return self._opik_client
-
-    def validate_optimization_inputs(
-        self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
-    ) -> None:
-        """
-        Validate common optimization inputs.
-
-        Args:
-            prompt: The chat prompt to validate
-            dataset: The dataset to validate
-            metric: The metric function to validate
-
-        Raises:
-            ValueError: If any input is invalid
-        """
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
-
-        if not isinstance(dataset, Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
-
-    def setup_agent_class(
-        self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
-    ) -> Any:
-        """
-        Setup agent class for optimization.
-
-        Args:
-            prompt: The chat prompt
-            agent_class: Optional custom agent class
-
-        Returns:
-            The agent class to use
-        """
-        if agent_class is None:
-            return create_litellm_agent_class(prompt, optimizer=self)
-        else:
-            return agent_class
-
-    def configure_prompt_model(self, prompt: "chat_prompt.ChatPrompt") -> None:
-        """
-        Configure prompt model and model_kwargs if not set.
-
-        Args:
-            prompt: The chat prompt to configure
-        """
-        # Only configure if prompt is a valid ChatPrompt object
-        if hasattr(prompt, "model") and hasattr(prompt, "model_kwargs"):
-            if prompt.model is None:
-                prompt.model = self.model
-            if prompt.model_kwargs is None:
-                prompt.model_kwargs = self.model_kwargs
-
-    def create_optimization_context(
-        self, dataset: "Dataset", metric: Callable, metadata: dict | None = None
-    ) -> Any:
-        """
-        Create optimization context for tracking.
-
-        Args:
-            dataset: The dataset being optimized
-            metric: The metric function
-            metadata: Additional metadata
-
-        Returns:
-            Optimization context manager
-        """
-        context_metadata = {
-            "optimizer": self.__class__.__name__,
-            "model": self.model,
-            "seed": self.seed,
-        }
-        if metadata:
-            context_metadata.update(metadata)
-
-        return optimization_context(
-            client=self.opik_client,
-            dataset_name=dataset.name,
-            objective_name=metric.__name__,
-            metadata=context_metadata,
-        )
 
     @abstractmethod
     def optimize_prompt(
@@ -215,7 +79,7 @@ class BaseOptimizer(ABC):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
+        agent_class: str | None = None,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -244,7 +108,7 @@ class BaseOptimizer(ABC):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
+        agent_class: str | None = None,
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
@@ -252,11 +116,11 @@ class BaseOptimizer(ABC):
     ) -> optimization_result.OptimizationResult:
         """
         Optimize prompts that rely on MCP (Model Context Protocol) tooling.
-
+        
         This method provides a standardized interface for optimizing prompts that use
         external tools through the MCP protocol. It handles tool invocation, second-pass
         coordination, and fallback mechanisms.
-
+        
         Args:
             prompt: The chat prompt to optimize, must include tools
             dataset: Opik dataset containing evaluation data
@@ -271,10 +135,10 @@ class BaseOptimizer(ABC):
             fallback_arguments: Function to extract tool arguments (default: None)
             allow_tool_use_on_second_pass: Whether to allow tool use on second pass (default: False)
             **kwargs: Additional arguments for optimization
-
+            
         Returns:
             OptimizationResult: The optimization result containing the optimized prompt and metrics
-
+            
         Raises:
             NotImplementedError: If the optimizer doesn't implement MCP optimization
             ValueError: If the prompt doesn't include required tools
@@ -342,7 +206,7 @@ class BaseOptimizer(ABC):
         self.agent_class: type[OptimizableAgent]
 
         if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt, optimizer=self)
+            self.agent_class = create_litellm_agent_class(prompt)
         else:
             self.agent_class = agent_class
 
