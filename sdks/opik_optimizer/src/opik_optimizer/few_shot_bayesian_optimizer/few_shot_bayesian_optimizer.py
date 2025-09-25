@@ -490,19 +490,24 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
-        n_trials: int = 10,
-        agent_class: type[OptimizableAgent] | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
         Args:
-            prompt:
+            prompt: The prompt to optimize
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
-            n_trials: Number of trials for Bayesian Optimization
             experiment_config: Optional configuration for the experiment, useful to log additional metadata
             n_samples: Optional number of items to test in the dataset
+            auto_continue: Whether to auto-continue optimization
+            agent_class: Optional agent class to use
+            **kwargs: Additional parameters including:
+                n_trials (int): Number of trials for Bayesian Optimization (default: 10)
+                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
 
         Returns:
             OptimizationResult: Result of the optimization
@@ -517,6 +522,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             raise ValueError(
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
+        
+        # Extract n_trials from kwargs for backward compatibility
+        n_trials = kwargs.get('n_trials', 10)
 
         if prompt.model is None:
             prompt.model = self.model
