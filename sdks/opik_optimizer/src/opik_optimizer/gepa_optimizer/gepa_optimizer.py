@@ -188,7 +188,7 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = kwargs.get("display_progress_bar", False)
         seed: int = int(kwargs.get("seed", 42))
         raise_on_exception: bool = kwargs.get("raise_on_exception", True)
-        mcp_config = kwargs.pop("mcp_config", None)  # Added for MCP support
+        kwargs.pop("mcp_config", None)  # Added for MCP support (for future use)
 
         prompt = prompt.copy()
         if self.project_name:
