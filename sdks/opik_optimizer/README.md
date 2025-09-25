@@ -12,7 +12,6 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 * **MetaPromptOptimizer** - Employs meta-prompting techniques for optimization
 * **MiproOptimizer** - Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 * **GepaOptimizer** - Leverages GEPA (Genetic-Pareto) optimization approach
-* **ParameterOptimizer** - Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 
 ## 🎯 Key Features
 
@@ -22,8 +21,6 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 - **Type Safety**: Full type hints and validation for robust development
-- **Backward Compatibility**: All original parameters preserved through kwargs extraction
-- **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
@@ -154,15 +151,14 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=hot_pot_dataset,
     metric=levenshtein_ratio,
-    n_samples=150  # Number of dataset samples for evaluation per trial
+    n_samples=150, # Number of dataset samples for evaluation per trial
+    experiment_config={"task": "hotpot", "model": "gpt-4o-mini"}
 )
 
 # Display the best prompt and its score
 result.display()
 ```
 The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
-
-The optimizer automatically logs run metadata—including optimizer version, tool schemas, prompt messages, and the models used—so you get consistent experiment context without any additional arguments. If you still need custom tags (for example identifying the dataset or task), pass an `experiment_config` dictionary and your fields will be merged on top of the defaults.
 
 ## Tool Optimization (MCP) - Beta
 
@@ -223,46 +219,6 @@ optimizer = MetaPromptOptimizer(model="gpt-4")
 ```
 
 For comprehensive documentation on tool optimization, see the [Tool Optimization Guide](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization).
-
-## Deprecation Warnings
-
-The following parameters are deprecated and will be removed in future versions:
-
-### Constructor Parameters
-
-- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
-- **`num_threads`** in optimizer constructors: Use `n_threads` instead
-
-### Example Migration
-
-```python
-# ❌ Deprecated
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    project_name="my-project",  # Deprecated
-    num_threads=16,             # Deprecated
-)
-
-# ✅ Correct
-optimizer = FewShotBayesianOptimizer(
-    model="gpt-4o-mini",
-    n_threads=16,  # Use n_threads instead
-)
-
-prompt = ChatPrompt(
-    project_name="my-project",  # Set here instead
-    messages=[...]
-)
-```
-
-### Suppressing Deprecation Warnings
-
-To suppress deprecation warnings during development:
-
-```python
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-```
 
 ### MCP Integration (Beta)
 
