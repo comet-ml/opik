@@ -122,7 +122,11 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         )
         response_dict = json.loads(response.choices[0].message.content)
 
-        response_score = bool(response_dict["score"])
+        response_score = (
+            response_dict["score"]
+            if isinstance(response_dict["score"], bool)
+            else str(response_dict["score"]).strip().lower() == "true"
+        )
 
         return score_result.ScoreResult(
             name=self.name,
