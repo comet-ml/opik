@@ -900,6 +900,9 @@ redirects:
   - source: "/docs/opik/tracing/integrations/openai-typescript"
     destination: "/docs/opik/integrations/openai-typescript"
     permanent: true
+  - source: "/docs/opik/tracing/integrations/aisuite"
+    destination: "/docs/opik/integrations/aisuite"
+    permanent: true
   - source: "/docs/opik/tracing/integrations/openai_agents"
     destination: "/docs/opik/integrations/openai_agents"
     permanent: true
@@ -963,7 +966,7 @@ redirects:
     destination: "/docs/opik/integrations/openai"
     permanent: true
   - source: "/docs/opik/cookbook/openai-agents"
-    destination: "/docs/opik/integrations/openai-agents"
+    destination: "/docs/opik/integrations/openai_agents"
     permanent: true
   - source: "/docs/opik/cookbook/litellm"
     destination: "/docs/opik/integrations/litellm"
@@ -1045,6 +1048,9 @@ redirects:
     permanent: true
   - source: "/docs/opik/cookbook/huggingface_datasets_integration"
     destination: "/docs/opik/integrations/huggingface-datasets"
+    permanent: true
+  - source: "/docs/opik/cookbook/watsonx"
+    destination: "/docs/opik/integrations/watsonx"
     permanent: true
   - source: "/docs/opik/cookbook"
     destination: "/docs/opik/integrations"
