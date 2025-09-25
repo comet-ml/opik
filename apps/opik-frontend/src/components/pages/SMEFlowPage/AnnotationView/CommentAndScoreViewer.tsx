@@ -6,6 +6,7 @@ import { useSMEFlow } from "../SMEFlowContext";
 
 const CommentAndScoreViewer: React.FC = () => {
   const {
+    currentItem,
     currentAnnotationState,
     annotationQueue,
     updateComment,
@@ -24,6 +25,7 @@ const CommentAndScoreViewer: React.FC = () => {
       <Separator orientation="horizontal" className="my-4" />
 
       <FeedbackScoresEditor
+        key={currentItem?.id}
         feedbackScores={currentAnnotationState.scores}
         onUpdateFeedbackScore={updateFeedbackScore}
         onDeleteFeedbackScore={deleteFeedbackScore}

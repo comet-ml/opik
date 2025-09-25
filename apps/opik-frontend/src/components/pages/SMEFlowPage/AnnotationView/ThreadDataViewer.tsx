@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import last from "lodash/last";
 import { Thread } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
@@ -24,7 +25,8 @@ const ThreadDataViewer: React.FunctionComponent = () => {
         },
       ],
       page: 1,
-      size: 100,
+      size: 1000,
+      truncate: true,
     },
     {
       enabled: !!thread?.id,
@@ -32,11 +34,15 @@ const ThreadDataViewer: React.FunctionComponent = () => {
     },
   );
 
-  const traces = useMemo(() => tracesData?.content ?? [], [tracesData]);
+  const traces = useMemo(
+    () =>
+      (tracesData?.content ?? []).sort((t1, t2) => t1.id.localeCompare(t2.id)),
+    [tracesData],
+  );
 
   return (
     <div className="pr-4">
-      <TraceMessages traces={traces} traceId={traces[0]?.id} />
+      <TraceMessages traces={traces} traceId={last(traces)?.id} />
     </div>
   );
 };
