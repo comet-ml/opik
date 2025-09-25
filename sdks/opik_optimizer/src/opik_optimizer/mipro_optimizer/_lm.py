@@ -302,7 +302,7 @@ def request_cache(maxsize: int | None = None):
     return decorator
 
 
-@request_cache(maxsize=None)
+@request_cache(maxsize=2000)
 def cached_litellm_completion(request: dict[str, Any], num_retries: int):
     return litellm_completion(
         request,
@@ -361,7 +361,7 @@ def litellm_completion(
     return stream_completion()
 
 
-@request_cache(maxsize=None)
+@request_cache(maxsize=2000)
 def cached_litellm_text_completion(request: dict[str, Any], num_retries: int):
     return litellm_text_completion(
         request,
