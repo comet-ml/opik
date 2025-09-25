@@ -92,13 +92,13 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         self.model_name = model_name
         self.prompt_template = """
         You are an impartial judge evaluating the following claim for factual accuracy.
-        Analyze it carefully and respond with a number between 0 and 1: 1 if completely
-        accurate, 0.5 if mixed accuracy, or 0 if inaccurate. The format of your response
-        should be a single number with no other text.
+        Analyze it carefully and provide a binary score: true if the claim is accurate,
+        false if it is inaccurate or contains errors. The format of your response
+        should be a JSON object with no additional text or backticks.
 
         The format of your response should be a JSON object with no additional text or backticks that follows the format:
         {{
-            "score": <score between 0 and 1>
+            "score": <true or false>
         }}
 
         Claim to evaluate: {output}
@@ -122,7 +122,7 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         )
         response_dict = json.loads(response.choices[0].message.content)
 
-        response_score = float(response_dict["score"])
+        response_score = bool(response_dict["score"])
 
         return score_result.ScoreResult(
             name=self.name,
@@ -248,7 +248,7 @@ from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation import models
 
 class LLMJudgeResult(BaseModel):
-    score: int
+    score: bool
     reason: str
 
 class LLMJudgeMetric(base_metric.BaseMetric):
@@ -256,12 +256,12 @@ class LLMJudgeMetric(base_metric.BaseMetric):
         super().__init__(name)
         self.llm_client = models.LiteLLMChatModel(model_name=model_name)
         self.prompt_template = """
-        You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and respond with a number between 0 and 1: 1 if completely accurate, 0.5 if mixed accuracy, or 0 if inaccurate. Then provide one brief sentence explaining your ruling.
+        You are an impartial judge evaluating the following claim for factual accuracy. Analyze it carefully and provide a binary score: true if the claim is accurate, false if it is inaccurate or contains errors. Then provide one brief sentence explaining your ruling.
 
          The format of the your response should be a json with no backticks that returns:
 
         {{
-            "score": <score between 0 and 1>,
+            "score": <true or false>,
             "reason": "<reason for the score>"
         }}
 
