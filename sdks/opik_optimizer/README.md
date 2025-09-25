@@ -5,13 +5,22 @@
 [![Downloads](https://static.pepy.tech/badge/opik-optimizer)](https://pepy.tech/project/opik-optimizer)
 [![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 
-The Opik Agent Optimizer refines your prompts to achieve better performance from your Large Language Models (LLMs). It supports a variety of optimization algorithms, including:
+The Opik Agent Optimizer refines your prompts to achieve better performance from your Large Language Models (LLMs). It supports a variety of optimization algorithms, all with a **standardized API** for consistent usage and chaining:
 
-* EvolutionaryOptimizer
-* FewShotBayesianOptimizer
-* MetaPromptOptimizer
-* MiproOptimizer
-* GepaOptimizer
+* **EvolutionaryOptimizer** - Uses genetic algorithms for prompt evolution
+* **FewShotBayesianOptimizer** - Uses few-shot learning with Bayesian optimization
+* **MetaPromptOptimizer** - Employs meta-prompting techniques for optimization
+* **MiproOptimizer** - Implements MIPRO (Multi-Input Prompt Optimization) algorithm
+* **GepaOptimizer** - Leverages GEPA (Genetic-Pareto) optimization approach
+
+## 🎯 Key Features
+
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+- **Optimizer Chaining**: Results from one optimizer can be used as input for another
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+- **Type Safety**: Full type hints and validation for robust development
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
@@ -63,6 +72,40 @@ You'll typically need:
 *   An [Opik Metric](https://www.comet.com/docs/opik/evaluation/metrics/overview/) (or a custom evaluation function).
 *   A starting prompt (template string).
 
+## Standardized API
+
+All optimizers follow the same interface, making it easy to switch between algorithms or chain them together:
+
+```python
+# All optimizers have the same signature
+def optimize_prompt(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+
+# All optimizers return the same result type
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=metric,
+    n_samples=100
+)
+
+# Results can be chained
+chained_result = another_optimizer.optimize_prompt(
+    prompt=ChatPrompt.from_result(result),  # Use previous result
+    dataset=dataset,
+    metric=metric
+)
+```
+
 ## Example
 
 Here's a brief example of how to use the `FewShotBayesianOptimizer`. We'll use a sample dataset provided by Opik.
@@ -108,8 +151,8 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=hot_pot_dataset,
     metric=levenshtein_ratio,
-    n_trials=10,   # Number of optimization trials
     n_samples=150, # Number of dataset samples for evaluation per trial
+    experiment_config={"task": "hotpot", "model": "gpt-4o-mini"}
 )
 
 # Display the best prompt and its score
