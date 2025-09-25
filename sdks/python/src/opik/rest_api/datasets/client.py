@@ -523,6 +523,7 @@ class DatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPagePublic:
@@ -536,6 +537,8 @@ class DatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -554,7 +557,7 @@ class DatasetsClient:
         client.datasets.get_dataset_items(id='id', )
         """
         _response = self._raw_client.get_dataset_items(
-            id, page=page, size=size, truncate=truncate, request_options=request_options
+            id, page=page, size=size, filters=filters, truncate=truncate, request_options=request_options
         )
         return _response.data
 
@@ -1175,6 +1178,7 @@ class AsyncDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPagePublic:
@@ -1188,6 +1192,8 @@ class AsyncDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1209,7 +1215,7 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_dataset_items(
-            id, page=page, size=size, truncate=truncate, request_options=request_options
+            id, page=page, size=size, filters=filters, truncate=truncate, request_options=request_options
         )
         return _response.data
 

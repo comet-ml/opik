@@ -1,3 +1,4 @@
+export { TraceThreadBatchIdentifier } from "./TraceThreadBatchIdentifier";
 export { TraceBatchWrite } from "./TraceBatchWrite";
 export { TraceUpdate } from "./TraceUpdate";
 export { DeleteThreadFeedbackScores } from "./DeleteThreadFeedbackScores";

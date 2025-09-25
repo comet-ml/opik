@@ -9,5 +9,6 @@
 export interface GetDatasetItemsRequest {
     page?: number;
     size?: number;
+    filters?: string;
     truncate?: boolean;
 }
