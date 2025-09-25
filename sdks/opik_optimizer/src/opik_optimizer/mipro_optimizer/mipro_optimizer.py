@@ -598,6 +598,10 @@ class MiproOptimizer(BaseOptimizer):
             logger.error(
                 "get_best() called but no best_programs found. MIPRO compile might have failed or yielded no results."
             )
+            # Get LLM call count from the optimizer if available
+            dspy_llm_calls = getattr(self.optimizer, "total_calls", 0) if hasattr(self, "optimizer") and self.optimizer else 0
+            actual_llm_calls = max(self.llm_call_counter, dspy_llm_calls)
+            
             return OptimizationResult(
                 optimizer="MiproOptimizer",
                 prompt=[
@@ -616,7 +620,7 @@ class MiproOptimizer(BaseOptimizer):
                 ),
                 details={"error": "No programs generated or compile failed"},
                 history=[],
-                llm_calls=self.llm_call_counter,
+                llm_calls=actual_llm_calls,
                 tool_calls=self.tool_call_counter,
             )
 
@@ -635,6 +639,11 @@ class MiproOptimizer(BaseOptimizer):
             best_prompt = state["signature"]["instructions"]
             demos = [x.toDict() for x in state["demos"]]
 
+        # Get LLM call count from the DSPy program module
+        dspy_llm_calls = getattr(program_module, "total_calls", 0)
+        # Use the higher of our counter or DSPy's counter
+        actual_llm_calls = max(self.llm_call_counter, dspy_llm_calls)
+
         print(best_prompt)
         return OptimizationResult(
             optimizer="MiproOptimizer",
@@ -644,6 +653,6 @@ class MiproOptimizer(BaseOptimizer):
             metric_name=self.opik_metric.__name__,
             demonstrations=demos,
             details={"program": program_module},
-            llm_calls=self.llm_call_counter,
+            llm_calls=actual_llm_calls,
             tool_calls=self.tool_call_counter,
         )
