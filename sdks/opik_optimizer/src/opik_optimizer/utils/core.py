@@ -8,7 +8,6 @@ from typing import (
 )
 from collections.abc import Callable
 
-import ast
 import inspect
 import base64
 import json
@@ -24,14 +23,12 @@ import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
 
-from .colbert import ColBERTv2
+ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from opik_optimizer.optimizable_agent import OptimizableAgent
     from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
-
-ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
-logger = logging.getLogger(__name__)
 
 
 class OptimizationContextManager:
@@ -205,7 +202,7 @@ def json_to_dict(json_str: str) -> Any:
 
     try:
         return json.loads(cleaned_json_string)
-    except json.JSONDecodeError as json_error:
+    except json.JSONDecodeError:
         if cleaned_json_string.startswith("```json"):
             cleaned_json_string = cleaned_json_string[7:]
             if cleaned_json_string.endswith("```"):
@@ -217,44 +214,10 @@ def json_to_dict(json_str: str) -> Any:
 
         try:
             return json.loads(cleaned_json_string)
-        except json.JSONDecodeError:
-            try:
-                literal_result = ast.literal_eval(cleaned_json_string)
-            except (ValueError, SyntaxError):
-                logger.debug("Failed to parse JSON string: %s", json_str)
-                raise json_error
-
-            normalized = _convert_literals_to_json_compatible(literal_result)
-
-            try:
-                return json.loads(json.dumps(normalized))
-            except (TypeError, ValueError) as serialization_error:
-                logger.debug(
-                    "Failed to serialise literal-evaluated payload %r: %s",
-                    literal_result,
-                    serialization_error,
-                )
-                raise json_error
-
-
-def _convert_literals_to_json_compatible(value: Any) -> Any:
-    """Convert Python literals to JSON-compatible structures."""
-    if isinstance(value, dict):
-        return {
-            key: _convert_literals_to_json_compatible(val) for key, val in value.items()
-        }
-    if isinstance(value, list):
-        return [_convert_literals_to_json_compatible(item) for item in value]
-    if isinstance(value, tuple):
-        return [_convert_literals_to_json_compatible(item) for item in value]
-    if isinstance(value, set):
-        return [
-            _convert_literals_to_json_compatible(item)
-            for item in sorted(value, key=repr)
-        ]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse JSON string: {json_str}")
+            logger.debug(f"Failed to parse JSON string: {json_str}")
+            raise e
 
 
 def optimization_context(
@@ -310,34 +273,13 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-def get_trial_compare_url(
-    *, dataset_id: str | None, optimization_id: str | None, trial_ids: list[str]
-) -> str:
-    if dataset_id is None or optimization_id is None:
-        raise ValueError("dataset_id and optimization_id are required")
-    if not trial_ids:
-        raise ValueError("trial_ids must be a non-empty list")
-
-    opik_config = opik.config.get_from_user_inputs()
-    url_override = opik_config.url_override
-    base = ensure_ending_slash(url_override)
-
-    trials_query = urllib.parse.quote(json.dumps(trial_ids))
-    compare_path = (
-        f"optimizations/{optimization_id}/{dataset_id}/compare?trials={trials_query}"
-    )
-    return urllib.parse.urljoin(base, compare_path)
-
-
-def create_litellm_agent_class(
-    prompt: "ChatPrompt", optimizer_ref: Any = None
-) -> type["OptimizableAgent"]:
+def create_litellm_agent_class(prompt: "ChatPrompt", optimizer=None) -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
-
+    
     Args:
-        prompt: The chat prompt to use
-        optimizer_ref: Optional optimizer instance to attach to the agent
+        prompt: The chat prompt to create agent for
+        optimizer: Optional optimizer instance for counter tracking
     """
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
@@ -346,15 +288,11 @@ def create_litellm_agent_class(
         class LiteLLMAgent(OptimizableAgent):
             model = prompt.model
             model_kwargs = prompt.model_kwargs
-            optimizer = optimizer_ref
+            project_name = prompt.project_name
 
-            def __init__(
-                self, prompt: "ChatPrompt", project_name: str | None = None
-            ) -> None:
-                # Get project_name from optimizer if available
-                if project_name is None and hasattr(self.optimizer, "project_name"):
-                    project_name = self.optimizer.project_name
-                super().__init__(prompt, project_name=project_name)
+            def __init__(self, prompt):
+                super().__init__(prompt)
+                self.optimizer = optimizer
 
             def invoke(
                 self, messages: list[dict[str, str]], seed: int | None = None
@@ -368,15 +306,11 @@ def create_litellm_agent_class(
         class LiteLLMAgent(OptimizableAgent):  # type: ignore[no-redef]
             model = prompt.model
             model_kwargs = prompt.model_kwargs
-            optimizer = optimizer_ref
+            project_name = prompt.project_name
 
-            def __init__(
-                self, prompt: "ChatPrompt", project_name: str | None = None
-            ) -> None:
-                # Get project_name from optimizer if available
-                if project_name is None and hasattr(self.optimizer, "project_name"):
-                    project_name = self.optimizer.project_name
-                super().__init__(prompt, project_name=project_name)
+            def __init__(self, prompt):
+                super().__init__(prompt)
+                self.optimizer = optimizer
 
     return LiteLLMAgent
 
@@ -431,14 +365,14 @@ def python_type_to_json_type(python_type: type) -> str:
         return "string"  # default fallback
 
 
-def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
+def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
     about a topic.
 
     Args:
         query: The search query string
-        use_api: (Optional) If True, directly use Wikipedia API instead of ColBERTv2.
+        use_api: If True, directly use Wikipedia API instead of ColBERTv2.
                 If False (default), try ColBERTv2 first with API fallback.
     """
     if use_api:
@@ -450,13 +384,16 @@ def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
+    from .colbert import ColBERTv2
+
     # Try ColBERTv2 first with a short timeout
     try:
         colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
         # Use a shorter timeout by modifying the max_retries parameter
         results = colbert(query, k=3, max_retries=1)
         return [str(item.text) for item in results if hasattr(item, "text")]
-    except Exception:
+    except Exception as e:
+        print(f"ColBERTv2 search failed: {e}")
         # Fallback to Wikipedia API
         try:
             return _search_wikipedia_api(query)
