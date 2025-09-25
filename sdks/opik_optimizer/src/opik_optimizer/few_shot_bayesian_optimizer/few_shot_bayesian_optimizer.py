@@ -16,7 +16,6 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
-from ..utils import create_litellm_agent_class
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
@@ -515,9 +514,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.validate_optimization_inputs(prompt, dataset, metric)
         self.configure_prompt_model(prompt)
         self.agent_class = self.setup_agent_class(prompt, agent_class)
-        
+
         # Extract n_trials from kwargs for backward compatibility
-        n_trials = kwargs.get('n_trials', 10)
+        n_trials = kwargs.get("n_trials", 10)
 
         optimization = None
         try:

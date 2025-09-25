@@ -11,12 +11,10 @@ import opik
 from litellm.caching import Cache
 from litellm.types.caching import LiteLLMCacheType
 from opik import Dataset
-from opik.api_objects import opik_client
 from opik.environment import get_tqdm_for_current_environment
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from opik_optimizer import task_evaluator
-from ..utils.core import create_litellm_agent_class
 
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound

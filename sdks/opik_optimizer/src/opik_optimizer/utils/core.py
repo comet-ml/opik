@@ -273,10 +273,12 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-def create_litellm_agent_class(prompt: "ChatPrompt", optimizer=None) -> type["OptimizableAgent"]:
+def create_litellm_agent_class(
+    prompt: "ChatPrompt", optimizer=None
+) -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
-    
+
     Args:
         prompt: The chat prompt to create agent for
         optimizer: Optional optimizer instance for counter tracking
