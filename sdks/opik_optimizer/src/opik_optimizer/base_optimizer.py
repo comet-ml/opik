@@ -92,17 +92,16 @@ class BaseOptimizer:
         """
         # Reset counters
         self.reset_counters()
-        
+
         # Clear history to free memory
         self._history.clear()
-        
+
         # Clear Opik client if it exists
         if self._opik_client is not None:
             # Note: Opik client doesn't have explicit cleanup, but we can clear the reference
             self._opik_client = None
-        
-        logger.debug(f"Cleaned up resources for {self.__class__.__name__}")
 
+        logger.debug(f"Cleaned up resources for {self.__class__.__name__}")
 
     def __del__(self) -> None:
         """Destructor to ensure cleanup is called."""

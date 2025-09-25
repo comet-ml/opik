@@ -11,14 +11,14 @@ from opik_optimizer.base_optimizer import BaseOptimizer
 class TestBaseOptimizer:
     """Test BaseOptimizer functionality."""
 
-    def test_base_optimizer_is_abstract(self):
+    def test_base_optimizer_is_abstract(self) -> None:
         """Test that BaseOptimizer is an abstract class."""
         # BaseOptimizer is not actually abstract in the current implementation
         # but it has abstract methods that must be implemented by subclasses
         assert hasattr(BaseOptimizer, "optimize_prompt")
         assert hasattr(BaseOptimizer, "optimize_mcp")
 
-    def test_base_optimizer_has_required_methods(self):
+    def test_base_optimizer_has_required_methods(self) -> None:
         """Test that BaseOptimizer has required abstract methods."""
         required_methods = ["optimize_prompt", "optimize_mcp"]
 
@@ -27,7 +27,7 @@ class TestBaseOptimizer:
             method = getattr(BaseOptimizer, method_name)
             assert callable(method)
 
-    def test_optimize_prompt_signature(self):
+    def test_optimize_prompt_signature(self) -> None:
         """Test that optimize_prompt has the correct signature."""
         import inspect
 
@@ -48,7 +48,7 @@ class TestBaseOptimizer:
 
         assert params == expected_params
 
-    def test_optimize_mcp_signature(self):
+    def test_optimize_mcp_signature(self) -> None:
         """Test that optimize_mcp has the correct signature."""
         import inspect
 
@@ -74,7 +74,7 @@ class TestBaseOptimizer:
 
         assert params == expected_params
 
-    def test_optimize_prompt_return_annotation(self):
+    def test_optimize_prompt_return_annotation(self) -> None:
         """Test that optimize_prompt has correct return annotation."""
         import inspect
         from opik_optimizer.optimization_result import OptimizationResult
@@ -84,7 +84,7 @@ class TestBaseOptimizer:
 
         assert return_annotation == OptimizationResult
 
-    def test_optimize_mcp_return_annotation(self):
+    def test_optimize_mcp_return_annotation(self) -> None:
         """Test that optimize_mcp has correct return annotation."""
         import inspect
         from opik_optimizer.optimization_result import OptimizationResult

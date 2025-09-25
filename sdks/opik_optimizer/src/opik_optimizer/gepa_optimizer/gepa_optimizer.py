@@ -12,14 +12,11 @@ from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
 from ..utils import optimization_context, create_litellm_agent_class
-from ..logging_config import setup_logging as _setup_logging
 from .. import task_evaluator
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
-
-_setup_logging()
-LOGGER = logging.getLogger("opik_optimizer.gepa.optimizer")
+logger = logging.getLogger(__name__)
 
 
 class GepaOptimizer(BaseOptimizer):
@@ -76,11 +73,11 @@ class GepaOptimizer(BaseOptimizer):
         """
         # Call parent cleanup
         super().cleanup()
-        
+
         # Clear GEPA-specific resources
         self._adapter = None
         self._gepa_live_metric_calls = 0
-        
+
         logger.debug("Cleaned up GEPA-specific resources")
 
     # ------------------------------------------------------------------
@@ -186,7 +183,6 @@ class GepaOptimizer(BaseOptimizer):
         """
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
-        
 
         # Extract GEPA-specific parameters from kwargs
         max_metric_calls: int | None = kwargs.get("max_metric_calls", 30)
@@ -294,7 +290,7 @@ class GepaOptimizer(BaseOptimizer):
                         )
                     baseline.set_score(initial_score)
                 except Exception:
-                    LOGGER.exception("Baseline evaluation failed")
+                    logger.exception("Baseline evaluation failed")
 
             adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
             adapter_prompt.project_name = self.project_name
@@ -399,7 +395,7 @@ class GepaOptimizer(BaseOptimizer):
             try:
                 score = float(self._evaluate_prompt_logged(**eval_kwargs))
             except Exception:
-                LOGGER.debug("Rescoring failed for candidate %s", idx, exc_info=True)
+                logger.debug("Rescoring failed for candidate %s", idx, exc_info=True)
                 score = 0.0
 
             rescored.append(score)
@@ -473,7 +469,7 @@ class GepaOptimizer(BaseOptimizer):
             try:
                 self._evaluate_prompt_logged(**final_eval_kwargs)
             except Exception:
-                LOGGER.debug("Final evaluation failed", exc_info=True)
+                logger.debug("Final evaluation failed", exc_info=True)
 
         per_item_scores: list[dict[str, Any]] = []
         try:
@@ -499,7 +495,7 @@ class GepaOptimizer(BaseOptimizer):
                     }
                 )
         except Exception:
-            LOGGER.debug("Per-item diagnostics failed", exc_info=True)
+            logger.debug("Per-item diagnostics failed", exc_info=True)
 
         details: dict[str, Any] = {
             "model": self.model,
@@ -537,16 +533,16 @@ class GepaOptimizer(BaseOptimizer):
                 best_prompt_text, best_score, verbose=self.verbose
             )
 
-        if LOGGER.isEnabledFor(logging.DEBUG):
+        if logger.isEnabledFor(logging.DEBUG):
             for idx, row in enumerate(candidate_rows):
-                LOGGER.debug(
+                logger.debug(
                     "candidate=%s source=%s gepa=%s opik=%s",
                     idx,
                     row.get("source"),
                     row.get("gepa_score"),
                     row.get("opik_score"),
                 )
-            LOGGER.debug(
+            logger.debug(
                 "selected candidate idx=%s gepa=%s opik=%.4f",
                 best_idx,
                 details.get("selected_candidate_gepa_score"),

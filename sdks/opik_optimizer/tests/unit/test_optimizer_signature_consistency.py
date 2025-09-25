@@ -26,7 +26,7 @@ class TestOptimizerSignatureConsistency:
     """Test that all optimizers have consistent method signatures."""
 
     @pytest.fixture
-    def all_optimizers(self):
+    def all_optimizers(self) -> list[tuple[str, type]]:
         """Get all optimizer classes."""
         return [
             ("BaseOptimizer", BaseOptimizer),
@@ -37,7 +37,7 @@ class TestOptimizerSignatureConsistency:
             ("MiproOptimizer", MiproOptimizer),
         ]
 
-    def test_optimize_prompt_return_types_consistency(self, all_optimizers):
+    def test_optimize_prompt_return_types_consistency(self, all_optimizers) -> None:
         """Test that all optimize_prompt methods return the same type."""
         from opik_optimizer.optimization_result import OptimizationResult
 
@@ -50,7 +50,7 @@ class TestOptimizerSignatureConsistency:
                 f"expected {OptimizationResult}"
             )
 
-    def test_optimize_mcp_return_types_consistency(self, all_optimizers):
+    def test_optimize_mcp_return_types_consistency(self, all_optimizers) -> None:
         """Test that all optimize_mcp methods return the same type."""
         from opik_optimizer.optimization_result import OptimizationResult
 
@@ -64,7 +64,7 @@ class TestOptimizerSignatureConsistency:
                     f"expected {OptimizationResult}"
                 )
 
-    def test_optimize_prompt_core_parameters_consistency(self, all_optimizers):
+    def test_optimize_prompt_core_parameters_consistency(self, all_optimizers) -> None:
         """Test that all optimize_prompt methods have the same core parameters."""
         # Define the expected core parameters (excluding self and kwargs)
         expected_core_params = ["prompt", "dataset", "metric", "experiment_config"]
@@ -80,7 +80,7 @@ class TestOptimizerSignatureConsistency:
                     f"Found parameters: {params}"
                 )
 
-    def test_optimize_prompt_parameter_order_consistency(self, all_optimizers):
+    def test_optimize_prompt_parameter_order_consistency(self, all_optimizers) -> None:
         """Test that all optimize_prompt methods have consistent parameter order."""
         # Define the expected parameter order (excluding self and kwargs)
         expected_order = ["prompt", "dataset", "metric", "experiment_config"]
@@ -100,7 +100,7 @@ class TestOptimizerSignatureConsistency:
                         f"expected '{expected_param}'. Full params: {params}"
                     )
 
-    def test_optimize_mcp_core_parameters_consistency(self, all_optimizers):
+    def test_optimize_mcp_core_parameters_consistency(self, all_optimizers) -> None:
         """Test that all optimize_mcp methods have the same core parameters."""
         # Define the expected core parameters for optimize_mcp
         expected_core_params = [
@@ -130,7 +130,7 @@ class TestOptimizerSignatureConsistency:
                         f"Found parameters: {params}"
                     )
 
-    def test_optimize_mcp_parameter_order_consistency(self, all_optimizers):
+    def test_optimize_mcp_parameter_order_consistency(self, all_optimizers) -> None:
         """Test that all optimize_mcp methods have consistent parameter order."""
         # Define the expected parameter order for optimize_mcp
         expected_order = [
@@ -158,7 +158,9 @@ class TestOptimizerSignatureConsistency:
                             f"expected '{expected_param}'. Full params: {params}"
                         )
 
-    def test_optimize_prompt_optional_parameters_consistency(self, all_optimizers):
+    def test_optimize_prompt_optional_parameters_consistency(
+        self, all_optimizers
+    ) -> None:
         """Test that all optimize_prompt methods have consistent optional parameters."""
         # Define the expected optional parameters
         expected_optional_params = ["n_samples", "auto_continue", "agent_class"]
@@ -177,7 +179,7 @@ class TestOptimizerSignatureConsistency:
                         f"(have a default value)"
                     )
 
-    def test_signature_inconsistencies_detected(self, all_optimizers):
+    def test_signature_inconsistencies_detected(self, all_optimizers) -> None:
         """Test that detects and reports signature inconsistencies."""
         inconsistencies = []
 
@@ -237,7 +239,7 @@ class TestOptimizerSignatureConsistency:
 
             pytest.fail(error_msg)
 
-    def test_all_optimizers_have_optimize_mcp(self, all_optimizers):
+    def test_all_optimizers_have_optimize_mcp(self, all_optimizers) -> None:
         """Test that all optimizers have the optimize_mcp method."""
         for name, optimizer_class in all_optimizers:
             assert hasattr(optimizer_class, "optimize_mcp"), (
