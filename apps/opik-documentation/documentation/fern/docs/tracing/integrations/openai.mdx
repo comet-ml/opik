@@ -174,6 +174,36 @@ Cost information is automatically captured and displayed in the Opik UI, includi
   View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
 </Tip>
 
+## Grouping traces into conversational threads using `thread_id`
+
+Threads in Opik are collections of traces that are grouped together using a unique `thread_id`.
+
+The `thread_id` can be passed to the OpenAI client as a parameter, which will be used to group all traces into a single thread.
+
+```python
+import openai
+
+from opik.integrations.openai import track_openai
+
+client = openai.OpenAI()
+wrapped_client = track_openai(
+    openai_client=client,
+    project_name="opik_args demo",
+)
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "What is Opik?"},
+]
+
+_ = wrapped_client.responses.create(
+    model="gpt-4o-mini",
+    input=messages,
+    opik_args={"trace": {"thread_id": "f174a"}}
+)
+```
+
+More information on logging chat conversations can be found in the [Log conversations](/tracing/log_chat_conversations) section.
+
 ## Supported OpenAI methods
 
 The `track_openai` wrapper supports the following OpenAI methods:
