@@ -34,7 +34,7 @@ def main() -> None:
     dataset = datasets.tiny_test()
 
     prompt = ChatPrompt(
-        name="GEPA_TinyTest",
+        project_name="GEPA_TinyTest",
         system=(
             "You are a helpful assistant. Use the `search_wikipedia` tool when needed and "
             "answer concisely with the exact answer string."
@@ -65,15 +65,17 @@ def main() -> None:
     )
 
     optimizer = GepaOptimizer(
-        model="openai/gpt-4o",  # model for GEPA reflection/reasoning
-        model_parameters={"temperature": 0.2, "max_tokens": 200},
+        model="openai/gpt-4o-mini",
+        reflection_model="openai/gpt-4o",  # stronger reflector, optional
+        temperature=0.2,
+        max_tokens=200,
     )
 
     result = optimizer.optimize_prompt(
         prompt=prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
-        max_trials=12,  # small budget for demo
+        max_metric_calls=12,  # small budget for demo
         reflection_minibatch_size=2,
         n_samples=5,
     )

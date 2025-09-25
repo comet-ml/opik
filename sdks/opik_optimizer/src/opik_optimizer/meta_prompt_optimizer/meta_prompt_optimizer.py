@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import textwrap
+import warnings
 from typing import Any, cast
 from collections.abc import Callable
 
@@ -156,8 +157,11 @@ class MetaPromptOptimizer(BaseOptimizer):
             **model_kwargs: Additional model parameters
         """
         if "project_name" in model_kwargs:
-            print(
-                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            warnings.warn(
+                "The 'project_name' parameter in optimizer constructor is deprecated. "
+                "Set project_name in the ChatPrompt instead.",
+                DeprecationWarning,
+                stacklevel=2
             )
             del model_kwargs["project_name"]
 
@@ -166,7 +170,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.rounds = rounds
         self.num_prompts_per_round = num_prompts_per_round
         if num_threads is not None:
-            print("num_threads is deprecated; use n_threads instead")
+            warnings.warn(
+                "The 'num_threads' parameter is deprecated and will be removed in a future version. "
+                "Use 'n_threads' instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
             n_threads = num_threads
         self.num_threads = n_threads
         self.dataset: Dataset | None = None

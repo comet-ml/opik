@@ -1,5 +1,6 @@
 from typing import Any
 from collections.abc import Callable
+import warnings
 
 import json
 import logging
@@ -94,8 +95,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **model_kwargs: Additional model parameters
         """
         if "project_name" in model_kwargs:
-            print(
-                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            warnings.warn(
+                "The 'project_name' parameter in optimizer constructor is deprecated. "
+                "Set project_name in the ChatPrompt instead.",
+                DeprecationWarning,
+                stacklevel=2
             )
             del model_kwargs["project_name"]
 

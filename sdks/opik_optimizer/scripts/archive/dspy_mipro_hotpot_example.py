@@ -86,7 +86,7 @@ with optimization_context(
         metric=metric_function,
         auto=None,
         num_candidates=experiment_config["num_candidates"],
-        num_threads=10,
+        n_threads=10,
         verbose=False,
         seed=42,
         # Add these if using Opik's MIPROv2:
