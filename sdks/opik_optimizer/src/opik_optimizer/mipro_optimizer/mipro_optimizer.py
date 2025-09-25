@@ -599,9 +599,13 @@ class MiproOptimizer(BaseOptimizer):
                 "get_best() called but no best_programs found. MIPRO compile might have failed or yielded no results."
             )
             # Get LLM call count from the optimizer if available
-            dspy_llm_calls = getattr(self.optimizer, "total_calls", 0) if hasattr(self, "optimizer") and self.optimizer else 0
+            dspy_llm_calls = (
+                getattr(self.optimizer, "total_calls", 0)
+                if hasattr(self, "optimizer") and self.optimizer
+                else 0
+            )
             actual_llm_calls = max(self.llm_call_counter, dspy_llm_calls)
-            
+
             return OptimizationResult(
                 optimizer="MiproOptimizer",
                 prompt=[
