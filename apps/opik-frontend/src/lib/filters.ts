@@ -38,19 +38,26 @@ export const createFilter = (filter?: Partial<Filter>) => {
   } as Filter;
 };
 
-export const generateSearchByIDFilters = (search?: string) => {
+export const generateSearchByFieldFilters = (
+  field: string,
+  search?: string,
+) => {
   if (!search) return undefined;
 
   return [
     {
       id: uniqid(),
-      field: "id",
+      field,
       type: COLUMN_TYPE.string,
       operator: "contains",
       key: "",
       value: search,
     },
   ] as Filter[];
+};
+
+export const generateSearchByIDFilters = (search?: string) => {
+  return generateSearchByFieldFilters("id", search);
 };
 
 export const generateVisibilityFilters = () => {
