@@ -47,7 +47,7 @@ opik configure
     </Tab>
     <Tab value="Jupyter Notebook" title="Jupyter Notebook">
 
-```python {pytest_codeblocks_skip=true}
+```python
 %pip install --quiet --upgrade opik
 
 # Configure the SDK
@@ -239,6 +239,7 @@ from openai import OpenAI
 client = OpenAI()
 client = track_openai(client)
 ```
+
 </Info>
 <Info>
     You can also specify custom `tags`, `metadata`, and/or a `thread_id` for each trace and/or span logged for the decorated function. For more information, see [Logging additional data using the opik_args parameter](#logging-additional-data-using-opik_args-parameter)
@@ -588,7 +589,7 @@ client.flush()
 You can copy traces between projects using the [`copy_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.copy_traces) method. This
 method allows you to move traces from one project to another without having to re-log them.
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 client = Opik(_use_batching=True)
