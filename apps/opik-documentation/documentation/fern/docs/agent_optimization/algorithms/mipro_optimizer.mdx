@@ -88,45 +88,6 @@ agent) should behave to accomplish a task.
   [Metrics Overview](/evaluation/metrics/overview)
 </Tip>
 
-## Configuration Parameters
-
-The `MiproOptimizer` accepts the following configuration parameters:
-
-### Core Parameters
-
-- **`model`** (str): The LLM model to use for optimization (e.g., "openai/gpt-4", "anthropic/claude-3-sonnet")
-- **`project_name`** (str, optional): Opik project name for tracking experiments
-- **`auto`** (Literal["light", "medium", "heavy"] | None, default: "light"): Optimization intensity level
-  - `"light"`: Fast optimization with minimal exploration
-  - `"medium"`: Balanced optimization with moderate exploration  
-  - `"heavy"`: Thorough optimization with extensive exploration
-- **`num_threads`** (int, default: 6): Number of parallel threads for evaluation
-- **`seed`** (int, default: 42): Random seed for reproducibility
-- **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
-
-### Model Parameters (via **kwargs)
-
-- **`temperature`** (float, default: 0.1): Sampling temperature for LLM calls
-- **`max_tokens`** (int, default: 5000): Maximum tokens per LLM response
-- **`top_p`** (float, optional): Top-p sampling parameter
-- **`frequency_penalty`** (float, optional): Frequency penalty for repetition
-- **`presence_penalty`** (float, optional): Presence penalty for repetition
-
-### Use Cases
-
-**Best for:**
-- Complex multi-step reasoning tasks
-- Agent workflows requiring tool usage
-- Tasks that benefit from programmatic prompt optimization
-- When you need to optimize both instructions and demonstrations
-- Multi-agent or interactive optimization scenarios
-
-**Parameter Tuning Guidelines:**
-- **Auto Level**: Start with "light" for quick results, use "heavy" for maximum optimization
-- **Model Selection**: Use more capable models (gpt-4, claude-3) for complex reasoning tasks
-- **Temperature**: Lower values (0.1-0.3) for consistent results, higher values (0.7-1.0) for creativity
-- **Max Tokens**: Set based on expected response length and task complexity
-
 ## Configuration Options
 
 ### Basic Configuration
@@ -139,7 +100,7 @@ optimizer = MiproOptimizer(
     project_name="my-project",
     temperature=0.1,
     max_tokens=5000,
-    auto="medium",  # Optimization intensity
+    num_threads=8,
     seed=42
 )
 ```
@@ -160,7 +121,7 @@ Key aspects passed to `optimize_prompt` that influence the DSPy optimization inc
   `MiproOptimizer` will attempt to build and optimize a DSPy agent that uses these tools.
 - `metric`: Defines how candidate DSPy programs (prompts/agents) are scored. The metric needs to be
   a function that accepts the parameters `dataset_item` and `llm_output`.
-- `n_samples`: This parameter from `optimize_prompt` controls how many different program
+- `num_candidates`: This parameter from `optimize_prompt` controls how many different program
   configurations are explored during optimization.
 
 ## Example Usage
@@ -209,7 +170,7 @@ results = optimizer.optimize_prompt(
     prompt=ChatPrompt(messages=[{"role": "user", "content": "Complete the task using the provided tools."}]),
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_samples=5,  # Number of different program configurations to explore
+    n_samples=1,  # Number of different program configurations to explore
     experiment_config={"task": "hotpot", "model": "gpt-4"}
 )
 
