@@ -42,7 +42,7 @@ In order to configure [PROVIDER_NAME], you will need to have your [PROVIDER_NAME
 
 You can set it as an environment variable:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 export [PROVIDER_API_KEY_NAME]="YOUR_API_KEY"
 ```
 

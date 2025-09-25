@@ -40,7 +40,7 @@ In order to configure Gemini, you will need to have your Gemini API Key. See the
 
 You can set it as an environment variable:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 export GOOGLE_API_KEY="YOUR_API_KEY"
 ```
 
@@ -101,7 +101,7 @@ os.environ["OPIK_PROJECT_NAME"] = "vertexai-integration-demo"
 
 # Use the wrapped client
 response = vertexai_client.models.generate_content(
-    model="gemini-2.0-flash-001", 
+    model="gemini-2.0-flash-001",
     contents="Write a short story about AI observability."
 )
 print(response.text)
