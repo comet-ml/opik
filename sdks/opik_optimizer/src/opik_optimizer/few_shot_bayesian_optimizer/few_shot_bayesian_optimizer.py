@@ -1,6 +1,5 @@
 from typing import Any
 from collections.abc import Callable
-import warnings
 
 import json
 import logging
@@ -17,6 +16,7 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
+from ..utils import create_litellm_agent_class
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
@@ -95,11 +95,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **model_kwargs: Additional model parameters
         """
         if "project_name" in model_kwargs:
-            warnings.warn(
-                "The 'project_name' parameter in optimizer constructor is deprecated. "
-                "Set project_name in the ChatPrompt instead.",
-                DeprecationWarning,
-                stacklevel=2,
+            print(
+                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
             )
             del model_kwargs["project_name"]
 
@@ -115,6 +112,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         elif self.verbose == 2:
             logger.setLevel(logging.DEBUG)
 
+        self._opik_client = opik.Opik()
+        self.llm_call_counter = 0
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
 
     @_throttle.rate_limited(_limiter)
@@ -135,7 +134,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             Dict containing the model's response
         """
-        self.increment_llm_counter()
+        self.llm_call_counter += 1
 
         current_model_kwargs = self.model_kwargs.copy()
         current_model_kwargs.update(model_kwargs)
@@ -482,7 +481,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
             optimization_id=optimization_id,
         )
@@ -514,17 +512,33 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
-        # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        if not isinstance(prompt, chat_prompt.ChatPrompt):
+            raise ValueError("Prompt must be a ChatPrompt object")
 
+        if not isinstance(dataset, Dataset):
+            raise ValueError("Dataset must be a Dataset object")
+
+        if not callable(metric):
+            raise ValueError(
+                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+            )
+        
         # Extract n_trials from kwargs for backward compatibility
-        n_trials = kwargs.get("n_trials", 10)
+        n_trials = kwargs.get('n_trials', 10)
+
+        if prompt.model is None:
+            prompt.model = self.model
+        if prompt.model_kwargs is None:
+            prompt.model_kwargs = self.model_kwargs
+
+        if agent_class is None:
+            self.agent_class = create_litellm_agent_class(prompt)
+        else:
+            self.agent_class = agent_class
 
         optimization = None
         try:
-            optimization = self.opik_client.create_optimization(
+            optimization = self._opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
