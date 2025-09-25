@@ -495,7 +495,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             experiment_config: Optional experiment configuration
             n_samples: Optional number of samples to use
             auto_continue: Whether to automatically continue optimization
-            **kwargs: Additional keyword arguments
+            agent_class: Optional agent class to use
+            **kwargs: Additional keyword arguments including:
+                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
         """
         if not isinstance(prompt, chat_prompt.ChatPrompt):
             raise ValueError("Prompt must be a ChatPrompt object")
@@ -507,6 +509,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             raise ValueError(
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
+
+        # Extract MCP config from kwargs
+        mcp_config = kwargs.pop("mcp_config", None)
 
         if prompt.model is None:
             prompt.model = self.model
