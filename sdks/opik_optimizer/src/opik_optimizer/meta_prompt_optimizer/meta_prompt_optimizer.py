@@ -353,7 +353,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
-            additional_metadata={"meta_prompt": meta_metadata} if meta_metadata else None,
+            additional_metadata={"meta_prompt": meta_metadata}
+            if meta_metadata
+            else None,
         )
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
