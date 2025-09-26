@@ -240,7 +240,7 @@ class MiproOptimizer(BaseOptimizer):
     def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
-        dataset: Dataset,
+        dataset: str | Dataset,
         metric: Callable,
         experiment_config: dict | None = None,
         n_samples: int | None = 10,
@@ -253,7 +253,7 @@ class MiproOptimizer(BaseOptimizer):
 
         Args:
             prompt: The chat prompt to optimize
-            dataset: Opik dataset containing evaluation data
+            dataset: Opik dataset (or dataset name) containing evaluation data
             metric: Evaluation function that takes (dataset_item, llm_output) and returns a score
             experiment_config: Optional configuration for the experiment
             n_samples: Number of samples to use for optimization (default: 10)
@@ -271,6 +271,12 @@ class MiproOptimizer(BaseOptimizer):
         Raises:
             ValueError: If task_config is not provided
         """
+        # Resolve dataset names to Dataset objects for validation compatibility
+        if isinstance(dataset, str):
+            dataset_name = dataset
+            client = opik.Opik(project_name=self.project_name)
+            dataset = client.get_dataset(dataset_name)
+
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
 

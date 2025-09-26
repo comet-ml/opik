@@ -71,6 +71,7 @@ class TestOptimizationResult:
             initial_score=0.7,  # Optional float
             details={"key": "value"},  # dict
             llm_calls=10,  # Optional int
+            tool_calls=5,
             demonstrations=[{"example": "data"}],  # Optional list
             mipro_prompt="test prompt",  # Optional str
             tool_prompts={"tool1": "prompt1"},  # Optional dict
@@ -81,6 +82,7 @@ class TestOptimizationResult:
         assert isinstance(result.score, float)
         assert isinstance(result.metric_name, str)
         assert isinstance(result.history, list)
+        assert result.tool_calls == 5
 
     def test_optimization_result_serialization(self) -> None:
         """Test that OptimizationResult can be serialized."""
@@ -116,6 +118,7 @@ class TestOptimizationResult:
         assert result.initial_prompt is None
         assert result.initial_score is None
         assert result.llm_calls is None
+        assert result.tool_calls is None
         assert result.demonstrations is None
         assert result.mipro_prompt is None
         assert result.tool_prompts is None
@@ -134,6 +137,7 @@ class TestOptimizationResult:
             details={"iterations": 5, "converged": True},
             history=[{"iteration": 1, "score": 0.7}, {"iteration": 2, "score": 0.8}],
             llm_calls=15,
+            tool_calls=7,
             demonstrations=[{"input": "test", "output": "result"}],
             mipro_prompt="MIPRO optimized prompt",
             tool_prompts={"tool1": "prompt1", "tool2": "prompt2"},
@@ -146,6 +150,7 @@ class TestOptimizationResult:
         assert result.details == {"iterations": 5, "converged": True}
         assert len(result.history) == 2
         assert result.llm_calls == 15
+        assert result.tool_calls == 7
         assert result.demonstrations is not None and len(result.demonstrations) == 1
         assert result.mipro_prompt == "MIPRO optimized prompt"
         assert result.tool_prompts == {"tool1": "prompt1", "tool2": "prompt2"}
