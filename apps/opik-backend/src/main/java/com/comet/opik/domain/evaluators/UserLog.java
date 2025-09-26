@@ -2,7 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 public enum UserLog {
     AUTOMATION_RULE_EVALUATOR,
-
+    WEBHOOK_EVENT_HANDLER, //TODO Add logs table
     ;
 
     public static final String MARKER = "user_log";
