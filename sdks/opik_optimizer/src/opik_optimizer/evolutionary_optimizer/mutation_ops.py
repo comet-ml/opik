@@ -30,21 +30,17 @@ class MutationOps:
         self, individual: Any, initial_prompt: chat_prompt.ChatPrompt
     ) -> Any:
         """Enhanced mutation operation with multiple strategies."""
-        prompt = chat_prompt.ChatPrompt(
-            messages=individual,
-            tools=initial_prompt.tools,
-            function_map=initial_prompt.function_map,
-        )
+        prompt = chat_prompt.ChatPrompt(messages=individual)
 
-        mcp_context = getattr(self, "_mcp_context", None)
-        if mcp_context is not None:
-            mutated_prompt = tool_description_mutation(self, prompt, mcp_context)
+        if getattr(self, "_mcp_context", None):
+            mutated_prompt = tool_description_mutation(self, prompt, self._mcp_context)
             if mutated_prompt is not None:
                 reporting.display_success(
                     "      Mutation successful, tool description updated (MCP mutation).",
                     verbose=self.verbose,
                 )
-                return self._update_individual_with_prompt(individual, mutated_prompt)
+                self._update_individual_with_prompt(individual, mutated_prompt)
+                return (individual,)
 
         # Choose mutation strategy based on current diversity
         diversity = self._calculate_population_diversity()
@@ -67,21 +63,24 @@ class MutationOps:
                 "      Mutation successful, prompt has been edited by randomizing words (word-level mutation).",
                 verbose=self.verbose,
             )
-            return self._update_individual_with_prompt(individual, mutated_prompt)
+            self._update_individual_with_prompt(individual, mutated_prompt)
+            return (individual,)
         elif mutation_choice > semantic_threshold:
             mutated_prompt = self._structural_mutation(prompt)
             reporting.display_success(
                 "      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
                 verbose=self.verbose,
             )
-            return self._update_individual_with_prompt(individual, mutated_prompt)
+            self._update_individual_with_prompt(individual, mutated_prompt)
+            return (individual,)
         else:
             mutated_prompt = self._semantic_mutation(prompt, initial_prompt)
             reporting.display_success(
                 "      Mutation successful, prompt has been edited using an LLM (semantic mutation).",
                 verbose=self.verbose,
             )
-            return self._update_individual_with_prompt(individual, mutated_prompt)
+            self._update_individual_with_prompt(individual, mutated_prompt)
+            return (individual,)
 
     def _semantic_mutation(
         self, prompt: chat_prompt.ChatPrompt, initial_prompt: chat_prompt.ChatPrompt
@@ -134,11 +133,7 @@ class MutationOps:
                     f"Error parsing semantic mutation response as JSON. "
                     f"Response: {response!r}\nOriginal error: {parse_exc}"
                 ) from parse_exc
-            return chat_prompt.ChatPrompt(
-                messages=messages,
-                tools=prompt.tools,
-                function_map=prompt.function_map,
-            )
+            return chat_prompt.ChatPrompt(messages=messages)
         except Exception as e:
             reporting.display_error(
                 f"      Error in semantic mutation, this is usually a parsing error: {e}",
@@ -195,11 +190,7 @@ class MutationOps:
                 else:
                     mutated_messages.append({"role": role, "content": content})
 
-        return chat_prompt.ChatPrompt(
-            messages=mutated_messages,
-            tools=prompt.tools,
-            function_map=prompt.function_map,
-        )
+        return chat_prompt.ChatPrompt(messages=mutated_messages)
 
     def _word_level_mutation_prompt(
         self, prompt: chat_prompt.ChatPrompt
@@ -212,11 +203,7 @@ class MutationOps:
                     "content": self._word_level_mutation(message["content"]),
                 }
             )
-        return chat_prompt.ChatPrompt(
-            messages=mutated_messages,
-            tools=prompt.tools,
-            function_map=prompt.function_map,
-        )
+        return chat_prompt.ChatPrompt(messages=mutated_messages)
 
     def _word_level_mutation(self, msg_content: str) -> str:
         """Perform word-level mutation."""
@@ -314,11 +301,7 @@ class MutationOps:
                     f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {new_prompt_str[:200]}. Error: {parse_exc}. Returning original."
                 )
                 return prompt
-            return chat_prompt.ChatPrompt(
-                messages=new_messages,
-                tools=prompt.tools,
-                function_map=prompt.function_map,
-            )
+            return chat_prompt.ChatPrompt(messages=new_messages)
         except Exception as e:
             logger.warning(
                 f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."

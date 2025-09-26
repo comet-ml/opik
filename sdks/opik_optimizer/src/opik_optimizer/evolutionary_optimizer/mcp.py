@@ -10,10 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from opik_optimizer.optimization_config import chat_prompt
-from opik_optimizer.utils.prompt_segments import (
-    apply_segment_updates,
-    extract_prompt_segments,
-)
+from opik_optimizer.utils.prompt_segments import apply_segment_updates, extract_prompt_segments
 
 from . import prompts as evo_prompts
 from . import reporting
@@ -33,10 +30,7 @@ class EvolutionaryMCPContext:
 def _tool_metadata_json(metadata: dict[str, Any]) -> str:
     try:
         return json.dumps(metadata, indent=2)
-    except (
-        TypeError,
-        ValueError,
-    ):  # pragma: no cover - defensive, shouldn't happen under normal circumstances
+    except Exception:  # pragma: no cover - defensive, shouldn't happen under normal circumstances
         return str(metadata)
 
 
@@ -113,9 +107,7 @@ def initialize_population_mcp(
     context: EvolutionaryMCPContext,
 ) -> list[chat_prompt.ChatPrompt]:
     population_size = getattr(optimizer, "population_size", 1)
-    with reporting.initializing_population(
-        verbose=getattr(optimizer, "verbose", 1)
-    ) as init_pop_report:
+    with reporting.initializing_population(verbose=getattr(optimizer, "verbose", 1)) as init_pop_report:
         init_pop_report.start(population_size)
 
         population = [prompt]
@@ -168,21 +160,12 @@ def finalize_mcp_result(
     result: Any,
     context: EvolutionaryMCPContext,
     panel_style: str,
-    optimizer: Any = None,
 ) -> None:
-    final_tools = (
-        result.details.get("final_tools") if isinstance(result.details, dict) else None
-    )
-    # Use optimizer's centralized method if available, otherwise inline
-    if optimizer and hasattr(optimizer, "_extract_tool_prompts"):
-        tool_prompts = optimizer._extract_tool_prompts(final_tools) or {}
-    else:
-        tool_prompts = {
-            (tool.get("function", {}).get("name") or tool.get("name")): tool.get(
-                "function", {}
-            ).get("description")
-            for tool in (final_tools or [])
-        }
+    final_tools = result.details.get("final_tools") if isinstance(result.details, dict) else None
+    tool_prompts = {
+        (tool.get("function", {}).get("name") or tool.get("name")): tool.get("function", {}).get("description")
+        for tool in (final_tools or [])
+    }
     if tool_prompts.get(context.tool_name):
         reporting.display_tool_description(
             tool_prompts[context.tool_name],
@@ -206,9 +189,7 @@ def _current_tool_description(
     prompt: chat_prompt.ChatPrompt,
     tool_segment_id: str,
 ) -> str:
-    segments = {
-        segment.segment_id: segment for segment in extract_prompt_segments(prompt)
-    }
+    segments = {segment.segment_id: segment for segment in extract_prompt_segments(prompt)}
     target = segments.get(tool_segment_id)
     return target.content if target else ""
 
