@@ -4,18 +4,15 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.attachment.AttachmentInfo;
-import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.EntityType;
-import com.comet.opik.api.attachment.MultipartUploadPart;
-import com.comet.opik.api.attachment.StartMultipartUploadRequest;
-import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.api.events.AttachmentUploadRequested;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.Singleton;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -29,13 +26,7 @@ import org.apache.tika.Tika;
 import org.apache.tika.mime.MimeTypeException;
 import org.apache.tika.mime.MimeTypes;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,14 +34,15 @@ import java.util.regex.Pattern;
 /**
  * Service responsible for detecting and stripping attachments from trace/span payloads.
  *
- * This service uses a simplified string-based approach:
+ * This service uses a simplified string-based approach with async upload processing:
  * 1. Convert JSON to string
  * 2. Find all base64 strings using regex
  * 3. Process each base64 string with Tika for MIME type detection
- * 4. Upload valid attachments to S3/MinIO (using multipart upload for S3, direct for MinIO)
- * 5. Replace base64 strings in the JSON with references to the uploaded attachments
+ * 4. Post attachment upload events to EventBus for async processing
+ * 5. Replace base64 strings in the JSON with references to the attachments
  *
  * Filenames are generated to include context (input, output, metadata) to prevent naming conflicts.
+ * Actual uploads are handled asynchronously by AttachmentUploadListener.
  */
 @Singleton
 @Slf4j
@@ -60,6 +52,7 @@ public class AttachmentStripperService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull S3Config s3Config;
+    private final @NonNull EventBus eventBus;
 
     // OpenTelemetry metrics for monitoring attachment processing
     private final LongCounter attachmentsProcessed;
@@ -80,11 +73,13 @@ public class AttachmentStripperService {
     public AttachmentStripperService(@NonNull AttachmentService attachmentService,
             @NonNull IdGenerator idGenerator,
             @NonNull ObjectMapper objectMapper,
-            @NonNull OpikConfiguration opikConfig) {
+            @NonNull OpikConfiguration opikConfig,
+            @NonNull EventBus eventBus) {
         this.attachmentService = attachmentService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.s3Config = opikConfig.getS3Config();
+        this.eventBus = eventBus;
 
         // Initialize OpenTelemetry metrics using global instance
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
@@ -330,9 +325,8 @@ public class AttachmentStripperService {
     /**
      * Processes a potential base64 attachment string.
      *
-     * Decodes the base64 data, uses Apache Tika to detect the MIME type, and uploads the attachment
-     * using either direct upload (MinIO) or multipart upload (S3) based on configuration.
-     * The generated filename includes the context prefix to avoid conflicts.
+     * Decodes the base64 data, uses Apache Tika to detect the MIME type, and posts an async upload event
+     * to the EventBus for background processing. The generated filename includes the context prefix to avoid conflicts.
      *
      * @param base64Data the base64 string to process
      * @param attachmentNumber the sequential attachment number for this request
@@ -369,23 +363,21 @@ public class AttachmentStripperService {
             String fileName = context + "-attachment-" + attachmentNumber + "-" + System.currentTimeMillis() + "."
                     + extension;
 
-            // Create AttachmentInfo for upload
-            AttachmentInfo attachmentInfo = AttachmentInfo.builder()
-                    .fileName(fileName)
-                    .mimeType(mimeType)
-                    .entityType(entityType)
-                    .entityId(entityId)
-                    .projectName(projectName)
-                    .build();
+            // Post event for async attachment upload
+            AttachmentUploadRequested uploadEvent = new AttachmentUploadRequested(
+                    fileName,
+                    mimeType,
+                    base64Data, // Keep original base64 data for async processing
+                    workspaceId,
+                    userName,
+                    projectName,
+                    entityId,
+                    entityType);
 
-            // Upload attachment using appropriate method based on configuration
-            if (s3Config.isMinIO()) {
-                // For MinIO, use direct upload
-                attachmentService.uploadAttachment(attachmentInfo, bytes, workspaceId, userName);
-            } else {
-                // For S3, use multipart upload
-                uploadAttachmentViaMultipart(attachmentInfo, bytes, workspaceId, userName);
-            }
+            // Post event to EventBus for async processing
+            eventBus.post(uploadEvent);
+
+            log.debug("Posted async upload event for attachment: {}", fileName);
 
             log.info("Successfully processed attachment: fileName='{}', type='{}', size='{}' bytes",
                     fileName, mimeType, bytes.length);
@@ -401,15 +393,9 @@ public class AttachmentStripperService {
             log.debug("String is not valid base64, skipping attachment processing: {}", e.getMessage());
             attachmentsSkipped.add(1);
             return null;
-        } catch (IOException | InterruptedException e) {
-            // Network/IO errors during upload - these are often transient
-            log.warn("Network error during attachment upload (attachment #{}), skipping: {}",
-                    attachmentNumber, e.getMessage());
-            attachmentErrors.add(1);
-            return null; // Graceful degradation - continue without this attachment
         } catch (Exception e) {
-            // Unexpected errors - log more details for debugging
-            log.error("Unexpected error processing attachment #{} in context '{}': {}",
+            // Unexpected errors during attachment processing
+            log.error("Error processing attachment #{} in context '{}': {}",
                     attachmentNumber, context, e.getMessage(), e);
             attachmentErrors.add(1);
             return null; // Graceful degradation - continue without this attachment
@@ -469,95 +455,4 @@ public class AttachmentStripperService {
         }
     }
 
-    /**
-     * Upload attachment via multipart upload flow for S3.
-     *
-     * This method implements the complete S3 multipart upload flow:
-     * 1. Starts a multipart upload to get presigned URLs
-     * 2. Uploads the data to the presigned URL using HTTP PUT
-     * 3. Completes the multipart upload with the ETag from the upload response
-     */
-    private void uploadAttachmentViaMultipart(AttachmentInfo attachmentInfo, byte[] bytes,
-            String workspaceId, String userName) throws IOException, InterruptedException {
-        try {
-            // Step 1: Start multipart upload
-            StartMultipartUploadRequest startRequest = StartMultipartUploadRequest.builder()
-                    .fileName(attachmentInfo.fileName())
-                    .mimeType(attachmentInfo.mimeType())
-                    .entityType(attachmentInfo.entityType())
-                    .entityId(attachmentInfo.entityId())
-                    .projectName(attachmentInfo.projectName())
-                    .numOfFileParts(1) // Single part since we have all data in memory
-                    .path("placeholder") // irrelevant; S3 doesn't use it and for Minio we did in another flow
-                    .build();
-
-            StartMultipartUploadResponse startResponse = attachmentService.startMultiPartUpload(startRequest,
-                    workspaceId,
-                    userName);
-
-            // Step 2: Upload the data to the presigned URL and get the ETag
-            String uploadUrl = startResponse.preSignUrls().get(0); // First (and only) URL
-            String eTag = uploadDataToPresignedUrl(uploadUrl, bytes);
-
-            // Step 3: Complete multipart upload with the actual ETag
-            MultipartUploadPart part = MultipartUploadPart.builder()
-                    .partNumber(1)
-                    .eTag(eTag) // Use the actual ETag from the upload response
-                    .build();
-
-            CompleteMultipartUploadRequest completeRequest = CompleteMultipartUploadRequest.builder()
-                    .fileName(attachmentInfo.fileName())
-                    .projectName(attachmentInfo.projectName())
-                    .entityType(attachmentInfo.entityType())
-                    .entityId(attachmentInfo.entityId())
-                    .fileSize((long) bytes.length)
-                    .mimeType(attachmentInfo.mimeType())
-                    .uploadId(startResponse.uploadId())
-                    .uploadedFileParts(Collections.singletonList(part))
-                    .build();
-
-            attachmentService.completeMultiPartUpload(completeRequest, workspaceId, userName);
-
-            log.debug("Completed multipart upload for attachment: {}", attachmentInfo.fileName());
-
-        } catch (IOException | InterruptedException e) {
-            log.error("Failed to upload attachment '{}' via multipart upload: {}",
-                    attachmentInfo.fileName(), e.getMessage());
-            throw e; // Re-throw for caller to handle
-        } catch (Exception e) {
-            log.error("Unexpected error during multipart upload for attachment '{}': {}",
-                    attachmentInfo.fileName(), e.getMessage(), e);
-            // Wrap unexpected exceptions in IOException for consistent error handling
-            throw new IOException("Multipart upload failed: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Upload data to a presigned URL using HTTP PUT.
-     *
-     * Performs a synchronous HTTP PUT request to upload binary data to the provided presigned URL.
-     * The ETag from the response headers is required for completing the multipart upload.
-     */
-    private String uploadDataToPresignedUrl(String presignedUrl, byte[] data) throws IOException, InterruptedException {
-        HttpClient client = HttpClient.newHttpClient();
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(presignedUrl))
-                .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new IOException(
-                    "Failed to upload data to presigned URL: " + response.statusCode() + " " + response.body());
-        }
-
-        // Extract and return the ETag from response headers
-        String eTag = response.headers().firstValue("ETag").orElseThrow(
-                () -> new IOException("ETag not found in upload response headers"));
-
-        log.debug("Successfully uploaded data to presigned URL, ETag: {}", eTag);
-        return eTag;
-    }
 }
