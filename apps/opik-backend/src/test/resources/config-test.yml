@@ -353,3 +353,36 @@ feedbackScores:
   # Default: false
   # Description: Whether to write feedback scores by their author or not
   writeToAuthored: false
+
+# Webhook configuration
+webhook:
+  # Default: false
+  # Description: Whether or not webhook functionality is enabled
+  enabled: false
+  # Default: webhook-events
+  # Description: Redis stream name for webhook events
+  streamName: webhook-events
+  # Default: webhook-consumers
+  # Description: Consumer group name for webhook event processing
+  consumerGroupName: webhook-consumers
+  # Default: 10
+  # Description: Maximum number of messages to consume in a single batch (1-100)
+  consumerBatchSize: 10
+  # Default: 1s
+  # Description: How often webhook consumer will check Redis for new messages
+  poolingInterval: 1s
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed webhooks (1-10)
+  maxRetries: 3
+  # Default: 100ms
+  # Description: Initial delay between retry attempts
+  initialRetryDelay: 100ms
+  # Default: 5s
+  # Description: Maximum delay between retry attempts
+  maxRetryDelay: 5s
+  # Default: 1s
+  # Description: HTTP request timeout for webhook calls
+  requestTimeout: 1s
+  # Default:1s
+  # Description: HTTP connection timeout for webhook calls
+  connectionTimeout: 1s
