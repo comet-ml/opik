@@ -70,7 +70,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
         **kwargs: Any,
     ) -> "schema.AIMessage":
         """
-        Do not use this method directly. It is intended to be used within `base_mode.get_provider_response()` method.
+        Do not use this method directly. It is intended to be used within `base_model.get_provider_response()` method.
 
         Generate a provider-specific response using the Langchain model.
 
@@ -125,7 +125,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
         self, messages: List[Dict[str, Any]], **kwargs: Any
     ) -> "schema.AIMessage":
         """
-        Do not use this method directly. It is intended to be used within `base_mode.aget_provider_response()` method.
+        Do not use this method directly. It is intended to be used within `base_model.aget_provider_response()` method.
 
         Generate a provider-specific response using the Langchain model. Async version.
 

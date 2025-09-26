@@ -168,7 +168,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         **kwargs: Any,
     ) -> "ModelResponse":
         """
-        Do not use this method directly. It is intended to be used within `base_mode.get_provider_response()` method.
+        Do not use this method directly. It is intended to be used within `base_model.get_provider_response()` method.
 
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
@@ -240,7 +240,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         self, messages: List[Dict[str, Any]], **kwargs: Any
     ) -> "ModelResponse":
         """
-        Do not use this method directly. It is intended to be used within `base_mode.aget_provider_response()` method.
+        Do not use this method directly. It is intended to be used within `base_model.aget_provider_response()` method.
 
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output. Async version.
