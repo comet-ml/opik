@@ -45,13 +45,22 @@ const PromptModelConfigs = ({
   configs,
   onChange,
 }: PromptModelConfigsProps) => {
+  const handleConfigChange = (changes: Partial<LLMPromptConfigsType>) => {
+    const nextConfigs = {
+      ...(configs ?? {}),
+      ...changes,
+    } as Partial<LLMPromptConfigsType>;
+
+    onChange(nextConfigs);
+  };
+
   const getProviderForm = () => {
     if (provider === PROVIDER_TYPE.OPEN_AI) {
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
           model={model}
-          onChange={onChange}
+          onChange={handleConfigChange}
         />
       );
     }
@@ -60,7 +69,7 @@ const PromptModelConfigs = ({
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
-          onChange={onChange}
+          onChange={handleConfigChange}
           model={model}
         />
       );
@@ -70,7 +79,7 @@ const PromptModelConfigs = ({
       return (
         <OpenRouterModelConfigs
           configs={configs as LLMOpenRouterConfigsType}
-          onChange={onChange}
+          onChange={handleConfigChange}
         />
       );
     }
@@ -79,7 +88,7 @@ const PromptModelConfigs = ({
       return (
         <GeminiModelConfigs
           configs={configs as LLMGeminiConfigsType}
-          onChange={onChange}
+          onChange={handleConfigChange}
         />
       );
     }
@@ -88,7 +97,7 @@ const PromptModelConfigs = ({
       return (
         <VertexAIModelConfigs
           configs={configs as LLMVertexAIConfigsType}
-          onChange={onChange}
+          onChange={handleConfigChange}
         />
       );
     }
@@ -97,7 +106,7 @@ const PromptModelConfigs = ({
       return (
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
-          onChange={onChange}
+          onChange={handleConfigChange}
         />
       );
     }
