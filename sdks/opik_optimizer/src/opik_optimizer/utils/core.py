@@ -386,7 +386,7 @@ def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
-    from .colbert import ColBERTv2
+    from ..colbert import ColBERTv2
 
     # Try ColBERTv2 first with a short timeout
     try:
