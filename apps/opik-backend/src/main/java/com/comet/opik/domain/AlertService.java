@@ -106,17 +106,15 @@ class AlertServiceImpl implements AlertService {
                 AlertTriggerDAO alertTriggerDAO = handle.attach(AlertTriggerDAO.class);
                 alertTriggerDAO.saveBatch(alert.triggers());
 
-                //                AlertTriggerConfigDAO alertTriggerConfigDAO = handle.attach(AlertTriggerConfigDAO.class);
-                //
-                //                for (AlertTrigger trigger : alert.triggers()) {
-                //
-                //
-                //                    if (trigger.triggerConfigs() != null && !trigger.triggerConfigs().isEmpty()) {
-                //                        for (AlertTriggerConfig config : trigger.triggerConfigs()) {
-                //                            alertTriggerConfigDAO.save(trigger.id(), config);
-                //                        }
-                //                    }
-                //                }
+                List<AlertTriggerConfig> triggerConfigs = alert.triggers().stream()
+                        .filter(trigger -> CollectionUtils.isNotEmpty(trigger.triggerConfigs()))
+                        .flatMap(trigger -> trigger.triggerConfigs().stream())
+                        .toList();
+
+                if (CollectionUtils.isNotEmpty(triggerConfigs)) {
+                    AlertTriggerConfigDAO alertTriggerConfigDAO = handle.attach(AlertTriggerConfigDAO.class);
+                    alertTriggerConfigDAO.saveBatch(triggerConfigs);
+                }
             }
 
             return null;
@@ -136,7 +134,7 @@ class AlertServiceImpl implements AlertService {
         Webhook webhook = alert.webhook()
                 .toBuilder()
                 .id(idGenerator.generateId())
-                .name("Webhook for alert " + alert.name()) // Not used by FE
+                .name("Webhook for alert " + alert.id()) // Not used by FE
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
