@@ -1,9 +1,14 @@
 import React from "react";
-import { Book } from "lucide-react";
+import { Book, ExternalLink } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import noData from "/images/no-data-annotation-queue.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
+import {
+  ANNOTATION_QUEUE_SCOPE,
+  AnnotationQueue,
+} from "@/types/annotation-queues";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 
 type NoDataWrapperProps = {
   title: string;
@@ -16,6 +21,7 @@ type NoDataWrapperProps = {
 
 type NoQueueItemsPageProps = {
   queueScope: ANNOTATION_QUEUE_SCOPE;
+  annotationQueue?: AnnotationQueue;
   openAddItemsDialog?: () => void;
   height?: number;
   Wrapper: React.FC<NoDataWrapperProps>;
@@ -24,10 +30,12 @@ type NoQueueItemsPageProps = {
 
 const NoQueueItemsPage: React.FC<NoQueueItemsPageProps> = ({
   queueScope,
+  annotationQueue,
   Wrapper,
   height,
   className,
 }) => {
+  const workspaceName = useActiveWorkspaceName();
   const isTraceQueue = queueScope === ANNOTATION_QUEUE_SCOPE.TRACE;
   const itemType = isTraceQueue ? "traces" : "threads";
 
@@ -40,9 +48,26 @@ const NoQueueItemsPage: React.FC<NoQueueItemsPageProps> = ({
       className={className}
       buttons={
         <>
+          {annotationQueue?.project_id && (
+            <Button variant="outline" asChild>
+              <Link
+                to="/$workspaceName/projects/$projectId/traces"
+                params={{
+                  workspaceName,
+                  projectId: annotationQueue.project_id,
+                }}
+              >
+                <ExternalLink className="mr-2 size-4" />
+                Go to project
+              </Link>
+            </Button>
+          )}
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/production/annotation-queues")}
+              href={buildDocsUrl(
+                "/evaluation/annotation_queues",
+                "#adding-content-to-your-queue",
+              )}
               target="_blank"
               rel="noreferrer"
             >

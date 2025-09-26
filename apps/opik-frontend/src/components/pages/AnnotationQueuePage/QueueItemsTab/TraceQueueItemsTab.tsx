@@ -531,6 +531,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     return (
       <NoQueueItemsPage
         queueScope={annotationQueue.scope}
+        annotationQueue={annotationQueue}
         Wrapper={NoDataPage}
         height={278}
         className="px-6"

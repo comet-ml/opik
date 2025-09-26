@@ -487,6 +487,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     return (
       <NoQueueItemsPage
         queueScope={annotationQueue.scope}
+        annotationQueue={annotationQueue}
         Wrapper={NoDataPage}
         height={278}
         className="px-6"
