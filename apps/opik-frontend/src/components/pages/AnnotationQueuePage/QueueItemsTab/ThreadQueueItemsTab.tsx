@@ -200,7 +200,11 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
 };
 
-const DEFAULT_SELECTED_COLUMNS: string[] = ["first_message", "last_message"];
+const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "first_message",
+  "last_message",
+  "comments",
+];
 
 const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns";
 const COLUMNS_WIDTH_KEY = "queue-thread-columns-width";

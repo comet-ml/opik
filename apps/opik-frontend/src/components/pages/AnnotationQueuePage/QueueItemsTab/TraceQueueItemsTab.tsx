@@ -229,7 +229,12 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
 };
 
-const DEFAULT_SELECTED_COLUMNS: string[] = ["name", "input", "output"];
+const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "name",
+  "input",
+  "output",
+  "comments",
+];
 
 const SELECTED_COLUMNS_KEY = "queue-trace-selected-columns";
 const COLUMNS_WIDTH_KEY = "queue-trace-columns-width";
