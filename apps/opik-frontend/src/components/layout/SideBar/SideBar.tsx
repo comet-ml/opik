@@ -42,8 +42,6 @@ import SidebarMenuItem, {
   MenuItem,
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 
 const HOME_PATH = "/$workspaceName/home";
 
