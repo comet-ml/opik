@@ -22,17 +22,20 @@ import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.resources.utils.AWSUtils;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RandomTestUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -53,6 +56,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.AttachmentPayloadUtilsTest;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
@@ -98,6 +102,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.com.google.common.collect.Lists;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -124,6 +129,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -219,13 +225,15 @@ class SpansResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
+        Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER, MINIO).join();
+        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -234,9 +242,17 @@ class SpansResourceTest {
 
         MigrationUtils.runMysqlDbMigration(MY_SQL_CONTAINER);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
+        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MY_SQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MY_SQL_CONTAINER.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .isMinIO(false)
+                        .modules(List.of(AWSUtils.testClients(minioUrl)))
+                        .build());
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -248,6 +264,7 @@ class SpansResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private AttachmentResourceClient attachmentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) throws SQLException {
@@ -261,6 +278,7 @@ class SpansResourceTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
+        this.attachmentResourceClient = new AttachmentResourceClient(this.client);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -5303,6 +5321,125 @@ class SpansResourceTest {
                 }
             }
         }
+
+        @Test
+        @DisplayName("when span contains real world base64 attachment, then attachment is stripped and stored")
+        void create__whenSpanContainsRealWorldBase64Attachment__thenAttachmentIsStrippedAndStored() throws Exception {
+            // Given - Load real world base64 payload from test resources
+            String realBase64ImageData;
+            try (var inputStream = getClass().getResourceAsStream("/real-world-image-base64.txt")) {
+                assertThat(inputStream).isNotNull();
+                realBase64ImageData = new String(inputStream.readAllBytes()).trim();
+            }
+
+            // Create input JSON similar to the Gemini API format from the terminal output
+            String inputJson = String.format("""
+                    {
+                        "contents": [
+                            {
+                                "parts": [
+                                    {
+                                        "text": "Tell a short fact about this image"
+                                    },
+                                    {
+                                        "inline_data": {
+                                            "data": "%s",
+                                            "mime_type": "image/jpeg"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                    """, realBase64ImageData);
+
+            // When - Create span using the standard pattern
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .name("generate_content: gemini-2.0-flash")
+                    .type(SpanType.llm)
+                    .input(JsonUtils.readTree(inputJson))
+                    .build();
+
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Then
+            assertThat(spanId).isNotNull();
+
+            // Wait for async processing and attachment stripping
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+                assertThat(retrievedSpan).isNotNull();
+
+                // Ensure the span is fully processed and base64 data is stripped
+                String inputString = retrievedSpan.input().toString();
+                assertThat(inputString).doesNotContain(realBase64ImageData);
+
+                // Should contain attachment reference instead of raw base64 data
+                assertThat(inputString).contains("\"data\": \"[input-attachment-1.jpg]\"");
+                // The attachment should be replaced with a reference like [attachment-name.jpg]
+                assertThat(inputString).containsPattern("\\[.*\\.(jpg|jpeg|png|gif)\\]");
+            });
+        }
+
+        @Test
+        @DisplayName("when span contains base64 attachments, then attachments are stripped and stored")
+        void create__whenSpanContainsBase64Attachments__thenAttachmentsAreStrippedAndStored() throws Exception {
+            // Given a span with base64 encoded attachments in its input
+            // Create longer base64 strings that exceed the 5000 character threshold using utility
+            String base64Png = AttachmentPayloadUtilsTest.createLargePngBase64();
+            String base64Gif = AttachmentPayloadUtilsTest.createLargeGifBase64();
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Images attached:\", " +
+                            "\"png_data\": \"%s\", " +
+                            "\"gif_data\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"session_id\": \"session456\", " +
+                            "\"timestamp\": \"2024-01-15T10:30:00Z\", " +
+                            "\"model_config\": {\"temperature\": 0.7, \"max_tokens\": 1000}, " +
+                            "\"prompt\": \"Please analyze these images and provide a detailed description\", " +
+                            "\"context\": [\"Previous conversation history\", \"User preferences\"], " +
+                            "\"metadata\": {\"source\": \"web_app\", \"version\": \"1.2.3\"}}",
+                    base64Png, base64Gif);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .feedbackScores(null)
+                    .build();
+
+            // When creating the span
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            assertThat(spanId).isNotNull();
+
+            // Then the span should have attachments stripped and replaced with references
+            // Wait for async processing and attachment stripping
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+                assertThat(retrievedSpan).isNotNull();
+                // Ensure span is retrieved successfully before proceeding with assertions
+            });
+
+            Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedSpan).isNotNull();
+
+            JsonNode retrievedInput = retrievedSpan.input();
+            assertThat(retrievedInput).isNotNull();
+
+            String retrievedInputString = retrievedInput.toString();
+
+            // Verify the base64 data is replaced by attachment references
+            assertThat(retrievedInputString).contains("attachment-1.png");
+            assertThat(retrievedInputString).contains("attachment-2.gif");
+            assertThat(retrievedInputString).doesNotContain(base64Png);
+            assertThat(retrievedInputString).doesNotContain(base64Gif);
+
+            // Note: Attachment verification would require proper API setup
+            // For now, we just verify that the base64 data was stripped from the input
+        }
     }
 
     private Stream<Arguments> getProjectNameModifierArg() {
@@ -6440,6 +6577,92 @@ class SpansResourceTest {
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, spanUpdate);
             expectedSpan = (expectedSpanBuilder.projectName(expectedSpan.projectName()).build());
             getAndAssert(expectedSpan, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when updating span with different attachments, then old attachments are deleted and new ones are stored")
+        void update__whenUpdatingSpanWithDifferentAttachments__thenOldAttachmentsAreDeletedAndNewOnesAreStored()
+                throws Exception {
+            // Step 1: Create a span with 3 JPG attachments
+            String base64Jpg1 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+            String base64Jpg2 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+            String base64Jpg3 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Original images:\", " +
+                            "\"jpg1_data\": \"%s\", " +
+                            "\"jpg2_data\": \"heres my image %s\", " +
+                            "\"jpg3_data\": \"%s this is a payload\", " +
+                            "\"analysis\": \"Please analyze these images\"}",
+                    base64Jpg1, base64Jpg2, base64Jpg3);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .build();
+
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            assertThat(spanId).isNotNull();
+
+            // Wait for async processing and attachment stripping
+            AtomicReference<UUID> traceIdRef = new AtomicReference<>();
+            AtomicReference<UUID> parentSpanIdRef = new AtomicReference<>();
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+                assertThat(retrievedSpan).isNotNull();
+                // Ensure the span is fully processed
+                String inputString = retrievedSpan.input().toString();
+                assertThat(inputString).doesNotContain(base64Jpg1);
+                assertThat(inputString).doesNotContain(base64Jpg2);
+                assertThat(inputString).doesNotContain(base64Jpg3);
+
+                traceIdRef.set(retrievedSpan.traceId());
+                parentSpanIdRef.set(retrievedSpan.parentSpanId());
+            });
+            UUID traceId = traceIdRef.get();
+            UUID parentSpanId = parentSpanIdRef.get();
+
+            // Step 3: Update the span with 2 PNG attachments (different type and count)
+            String base64Png1 = AttachmentPayloadUtilsTest.createLargePngBase64();
+            String base64Png2 = AttachmentPayloadUtilsTest.createLargePngBase64();
+
+            String updatedInputJson = String.format(
+                    "{\"message\": \"Updated images:\", " +
+                            "\"png1_data\": \"%s\", " +
+                            "\"png2_data\": \"%s my data\", " +
+                            "\"analysis\": \"Please analyze these new images\"}",
+                    base64Png1, base64Png2);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .traceId(traceId)
+                    .parentSpanId(parentSpanId)
+                    .input(JsonUtils.readTree(updatedInputJson))
+                    .build();
+
+            spanResourceClient.updateSpan(spanId, spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Wait for async processing and attachment stripping for the update
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                // Verify the updated span exists and was updated
+                Span finalSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+                assertThat(finalSpan).isNotNull();
+
+                String updatedInputString = finalSpan.input().toString();
+                assertThat(updatedInputString).contains("Updated images:");
+
+                // Verify neither original JPG base64 data is not present new PNG base64 data is not present (should be replaced by references)
+                assertThat(updatedInputString).doesNotContain(base64Jpg1);
+                assertThat(updatedInputString).doesNotContain(base64Jpg2);
+                assertThat(updatedInputString).doesNotContain(base64Jpg3);
+                assertThat(updatedInputString).doesNotContain(base64Png1);
+                assertThat(updatedInputString).doesNotContain(base64Png2);
+
+                // Verify PNG attachment references are present
+                assertThat(updatedInputString).contains("input-attachment-1.png");
+                assertThat(updatedInputString).contains("input-attachment-2.png");
+            });
         }
     }
 

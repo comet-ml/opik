@@ -11,6 +11,7 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -58,6 +59,7 @@ public class SpanService {
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
+    private final @NonNull AttachmentStripperService attachmentStripperService;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -88,6 +90,8 @@ public class SpanService {
 
     @WithSpan
     public Mono<UUID> create(@NonNull Span span) {
+        log.error("DEBUGGING: PUBLIC create(Span) called with span name: '{}', input size: {}",
+                span.name(), span.input() != null ? span.input().toString().length() : 0);
         var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return IdGenerator
@@ -99,9 +103,17 @@ public class SpanService {
     }
 
     private Mono<UUID> insertSpan(Span span, Project project, UUID id) {
+        log.error("DEBUGGING: insertSpan called with span id: '{}', name: '{}'", id, span.name());
         return spanDAO.getPartialById(id)
-                .flatMap(partialExistingSpan -> insertSpan(span, project, id, partialExistingSpan))
-                .switchIfEmpty(Mono.defer(() -> create(span, project, id)))
+                .flatMap(partialExistingSpan -> {
+                    log.error("DEBUGGING: Found existing partial span, calling insertSpan with existing data");
+                    return insertSpan(span, project, id, partialExistingSpan);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.error(
+                            "DEBUGGING: No existing span found, calling create(span, project, id) - THIS SHOULD STRIP ATTACHMENTS");
+                    return create(span, project, id);
+                }))
                 .onErrorResume(this::handleSpanDBError);
     }
 
@@ -117,10 +129,27 @@ public class SpanService {
     }
 
     private Mono<UUID> create(Span span, Project project, UUID id) {
-        span = span.toBuilder().id(id).projectId(project.id()).build();
-        log.info("Inserting span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
-                span.id(), span.projectId(), span.traceId(), span.parentSpanId());
-        return spanDAO.insert(span).thenReturn(span.id());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            log.error("DEBUGGING: BEFORE attachment stripping - span id '{}', input size: {}",
+                    id, span.input() != null ? span.input().toString().length() : 0);
+
+            // Strip attachments from the span with the generated ID and project ID
+            Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
+            Span processedSpan = attachmentStripperService.stripAttachmentsFromSpan(spanWithId, workspaceId,
+                    userName, projectName);
+
+            log.error("DEBUGGING: AFTER attachment stripping - span id '{}', input size: {}",
+                    id, processedSpan.input() != null ? processedSpan.input().toString().length() : 0);
+
+            log.info("Inserting span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
+                    processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
+                    processedSpan.parentSpanId());
+            return spanDAO.insert(processedSpan).thenReturn(processedSpan.id());
+        });
     }
 
     @WithSpan
@@ -140,9 +169,25 @@ public class SpanService {
                                 Mono.defer(() -> spanDAO.getOnlySpanDataById(id, project.id())
                                         .flatMap(span -> updateOrFail(spanUpdate, id, span, project))
                                         .switchIfEmpty(
-                                                Mono.defer(() -> spanDAO.partialInsert(id, project.id(), spanUpdate)))
+                                                Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
                                         .onErrorResume(this::handleSpanDBError)
                                         .then()))));
+    }
+
+    private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
+        return IdGenerator
+                .validateVersionAsync(id, SPAN_KEY)
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    String projectName = project.name();
+
+                    // Strip attachments from the new span data before inserting
+                    SpanUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                            spanUpdate, id, workspaceId, userName, projectName);
+
+                    return spanDAO.partialInsert(id, project.id(), processedUpdate);
+                }));
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {
@@ -192,7 +237,20 @@ public class SpanService {
             return failWithConflict(TRACE_ID_MISMATCH);
         }
 
-        return spanDAO.update(id, spanUpdate, existingSpan);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            // Step 1: Delete existing attachments for this span
+            return attachmentService.deleteByEntityIds(SPAN, Set.of(id))
+                    .then(Mono.fromCallable(() -> {
+                        // Step 2: Strip attachments from the updated span data
+                        return attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                                spanUpdate, id, workspaceId, userName, projectName);
+                    }))
+                    .flatMap(processedUpdate -> spanDAO.update(id, processedUpdate, existingSpan));
+        });
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -231,7 +289,25 @@ public class SpanService {
                 .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
         return resolveProjects
+                .flatMap(this::stripAttachmentsFromSpanBatch)
                 .flatMap(spanDAO::batchInsert);
+    }
+
+    private Mono<List<Span>> stripAttachmentsFromSpanBatch(List<Span> spans) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            List<Span> processedSpans = spans.stream()
+                    .map(span -> {
+                        String projectName = WorkspaceUtils.getProjectName(span.projectName());
+                        return attachmentStripperService.stripAttachmentsFromSpan(span, workspaceId, userName,
+                                projectName);
+                    })
+                    .toList();
+
+            return Mono.just(processedSpans);
+        });
     }
 
     private List<Span> dedupSpans(List<Span> initialSpans) {

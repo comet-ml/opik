@@ -3,6 +3,7 @@ package com.comet.opik.domain.attachment;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +38,9 @@ class AttachmentStripperServiceTest {
     @Mock
     private S3Config s3Config;
 
+    @Mock
+    private OpikConfiguration opikConfiguration;
+
     private ObjectMapper objectMapper;
     private AttachmentStripperService attachmentStripperService;
 
@@ -54,13 +58,16 @@ class AttachmentStripperServiceTest {
         when(s3Config.getStripAttachmentsMinSize()).thenReturn(5000);
         lenient().when(s3Config.isMinIO()).thenReturn(true); // Use MinIO mode for unit tests (direct upload)
 
+        // Mock OpikConfiguration to return the S3Config
+        when(opikConfiguration.getS3Config()).thenReturn(s3Config);
+
         // Mock direct upload for MinIO mode
         lenient().doNothing().when(attachmentService).uploadAttachment(any(AttachmentInfo.class), any(byte[].class),
                 anyString(), anyString());
 
         // Use OpenTelemetry no-op implementation - no mocking needed!
         attachmentStripperService = new AttachmentStripperService(
-                attachmentService, idGenerator, objectMapper, s3Config);
+                attachmentService, idGenerator, objectMapper, opikConfiguration);
     }
 
     @Test

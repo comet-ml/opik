@@ -11,6 +11,7 @@ import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -79,11 +80,11 @@ public class AttachmentStripperService {
     public AttachmentStripperService(@NonNull AttachmentService attachmentService,
             @NonNull IdGenerator idGenerator,
             @NonNull ObjectMapper objectMapper,
-            @NonNull S3Config s3Config) {
+            @NonNull OpikConfiguration opikConfig) {
         this.attachmentService = attachmentService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
-        this.s3Config = s3Config;
+        this.s3Config = opikConfig.getS3Config();
 
         // Initialize OpenTelemetry metrics using global instance
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
@@ -182,11 +183,16 @@ public class AttachmentStripperService {
      * we can make all these types to share the same interface (shouldn't they?)
      */
     public Span stripAttachmentsFromSpan(Span span, String workspaceId, String userName, String projectName) {
+        log.error("DEBUGGING: stripAttachmentsFromSpan called for span id '{}', input size: {}",
+                span.id(), span.input() != null ? span.input().toString().length() : 0);
+
         Span.SpanBuilder builder = span.toBuilder();
 
         if (span.input() != null) {
+            log.error("DEBUGGING: Processing input attachments for span id '{}'", span.id());
             JsonNode processedInput = stripAttachments(span.input(), span.id(), EntityType.SPAN,
                     workspaceId, userName, projectName, "input");
+            log.error("DEBUGGING: After processing input, size: {}", processedInput.toString().length());
             builder.input(processedInput);
         }
 
@@ -377,11 +383,15 @@ public class AttachmentStripperService {
                     .build();
 
             // Upload attachment using appropriate method based on configuration
+            log.error("DEBUGGING: s3Config.isMinIO() = {}, s3Config.getS3Url() = {}", s3Config.isMinIO(),
+                    s3Config.getS3Url());
             if (s3Config.isMinIO()) {
                 // For MinIO, use direct upload
+                log.error("DEBUGGING: Using MinIO direct upload path");
                 attachmentService.uploadAttachment(attachmentInfo, bytes, workspaceId, userName);
             } else {
                 // For S3, use multipart upload
+                log.error("DEBUGGING: Using S3 multipart upload path");
                 uploadAttachmentViaMultipart(attachmentInfo, bytes, workspaceId, userName);
             }
 
