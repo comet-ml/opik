@@ -366,7 +366,8 @@ public class AttachmentStripperService {
 
             // Generate attachment info with appropriate extension and context
             String extension = getFileExtension(mimeType);
-            String fileName = context + "-attachment-" + attachmentNumber + "." + extension;
+            String fileName = context + "-attachment-" + attachmentNumber + "-" + System.currentTimeMillis() + "."
+                    + extension;
 
             // Create AttachmentInfo for upload
             AttachmentInfo attachmentInfo = AttachmentInfo.builder()

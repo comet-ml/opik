@@ -7466,9 +7466,9 @@ class TracesResourceTest {
 
             String retrievedInputString = retrievedInput.toString();
 
-            // Verify the base64 data is replaced by attachment references
-            assertThat(retrievedInputString).contains("attachment-1.png");
-            assertThat(retrievedInputString).contains("attachment-2.gif");
+            // Verify the base64 data is replaced by attachment references (with timestamps)
+            assertThat(retrievedInputString).containsPattern("attachment-1-\\d+\\.png");
+            assertThat(retrievedInputString).containsPattern("attachment-2-\\d+\\.gif");
             assertThat(retrievedInputString).doesNotContain(base64Png);
             assertThat(retrievedInputString).doesNotContain(base64Gif);
 
@@ -7494,8 +7494,9 @@ class TracesResourceTest {
             var attachmentNames = attachmentPage.content().stream()
                     .map(attachment -> attachment.fileName())
                     .toList();
-            assertThat(attachmentNames).contains("input-attachment-1.png");
-            assertThat(attachmentNames).contains("input-attachment-2.gif");
+            // Verify attachment names contain our references with context prefixes (with timestamps)
+            assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.png"));
+            assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-2-\\d+\\.gif"));
         }
 
     }
@@ -7921,19 +7922,19 @@ class TracesResourceTest {
                 assertThat(metadataString).doesNotContain(base64Gif);
                 assertThat(metadataString).doesNotContain(base64Pdf);
 
-                // Verify attachment references are present based on trace content
+                // Verify attachment references are present based on trace content (with timestamps)
                 switch (i) {
                     case 0 : // First trace: PNG in input, GIF in output
-                        assertThat(inputString).contains("input-attachment-1.png");
-                        assertThat(outputString).contains("output-attachment-1.gif");
+                        assertThat(inputString).containsPattern("input-attachment-1-\\d+\\.png");
+                        assertThat(outputString).containsPattern("output-attachment-1-\\d+\\.gif");
                         break;
                     case 1 : // Second trace: PDF in input, PNG in metadata
-                        assertThat(inputString).contains("input-attachment-1.pdf");
-                        assertThat(metadataString).contains("metadata-attachment-1.png");
+                        assertThat(inputString).containsPattern("input-attachment-1-\\d+\\.pdf");
+                        assertThat(metadataString).containsPattern("metadata-attachment-1-\\d+\\.png");
                         break;
                     case 2 : // Third trace: GIF and PDF in input
-                        assertThat(inputString).contains("input-attachment-1.gif");
-                        assertThat(inputString).contains("input-attachment-2.pdf");
+                        assertThat(inputString).containsPattern("input-attachment-1-\\d+\\.gif");
+                        assertThat(inputString).containsPattern("input-attachment-2-\\d+\\.pdf");
                         break;
                 }
 
@@ -7958,18 +7959,18 @@ class TracesResourceTest {
                 switch (i) {
                     case 0 : // First trace should have 2 attachments (PNG + GIF)
                         assertThat(attachmentPage.content()).hasSize(2);
-                        assertThat(attachmentNames).contains("input-attachment-1.png");
-                        assertThat(attachmentNames).contains("output-attachment-1.gif");
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.png"));
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("output-attachment-1-\\d+\\.gif"));
                         break;
                     case 1 : // Second trace should have 2 attachments (PDF + PNG)
                         assertThat(attachmentPage.content()).hasSize(2);
-                        assertThat(attachmentNames).contains("input-attachment-1.pdf");
-                        assertThat(attachmentNames).contains("metadata-attachment-1.png");
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.pdf"));
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("metadata-attachment-1-\\d+\\.png"));
                         break;
                     case 2 : // Third trace should have 2 attachments (GIF + PDF)
                         assertThat(attachmentPage.content()).hasSize(2);
-                        assertThat(attachmentNames).contains("input-attachment-1.gif");
-                        assertThat(attachmentNames).contains("input-attachment-2.pdf");
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.gif"));
+                        assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-2-\\d+\\.pdf"));
                         break;
                 }
             }
@@ -8848,9 +8849,9 @@ class TracesResourceTest {
                 assertThat(updatedInputString).doesNotContain(base64Png1);
                 assertThat(updatedInputString).doesNotContain(base64Png2);
 
-                // Verify PNG attachment references are present
-                assertThat(updatedInputString).contains("input-attachment-1.png");
-                assertThat(updatedInputString).contains("input-attachment-2.png");
+                // Verify PNG attachment references are present (with timestamps)
+                assertThat(updatedInputString).containsPattern("input-attachment-1-\\d+\\.png");
+                assertThat(updatedInputString).containsPattern("input-attachment-2-\\d+\\.png");
             });
 
             // Step 4: Verify we now have 2 PNG attachments (old JPGs should be deleted)

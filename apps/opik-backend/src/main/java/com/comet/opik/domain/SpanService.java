@@ -226,14 +226,26 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
             String projectName = project.name();
 
-            // Step 1: Delete existing attachments for this span
-            return attachmentService.deleteByEntityIds(SPAN, Set.of(id))
-                    .then(Mono.fromCallable(() -> {
-                        // Step 2: Strip attachments from the updated span data
-                        return attachmentStripperService.stripAttachmentsFromSpanUpdate(
+            // Step 1: Get existing attachments using the new convenience method
+            return attachmentService.getAttachmentInfoByEntity(id, SPAN, existingSpan.projectId())
+                    .flatMap(existingAttachments -> {
+                        // Step 2: Strip attachments from the updated span data (creates new attachments with unique names)
+                        SpanUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromSpanUpdate(
                                 spanUpdate, id, workspaceId, userName, projectName);
-                    }))
-                    .flatMap(processedUpdate -> spanDAO.update(id, processedUpdate, existingSpan));
+
+                        // Step 3: Update the span with processed data first
+                        return spanDAO.update(id, processedUpdate, existingSpan)
+                                .flatMap(updateResult -> {
+                                    // Step 4: Delete only the old attachments by their specific filenames
+                                    // New attachments have unique timestamps, so no conflicts
+                                    if (!existingAttachments.isEmpty()) {
+                                        return attachmentService.deleteSpecificAttachments(existingAttachments,
+                                                id, SPAN, existingSpan.projectId())
+                                                .thenReturn(updateResult);
+                                    }
+                                    return Mono.just(updateResult);
+                                });
+                    });
         });
     }
 

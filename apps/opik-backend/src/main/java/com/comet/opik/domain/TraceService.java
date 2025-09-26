@@ -339,17 +339,26 @@ class TraceServiceImpl implements TraceService {
             String projectName = project.name();
 
             return template.nonTransaction(connection -> {
-                // Step 1: Delete existing attachments for this trace
-                return attachmentService.deleteByEntityIds(EntityType.TRACE, Set.of(id))
-                        .then(Mono.fromCallable(() -> {
-                            // Step 2: Strip attachments from the updated trace data
+                // Step 1: Get existing attachments using the new convenience method
+                return attachmentService.getAttachmentInfoByEntity(id, EntityType.TRACE, trace.projectId())
+                        .flatMap(existingAttachments -> {
+
+                            // Step 2: Strip attachments from the updated trace data (creates new attachments with unique names)
                             TraceUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromTraceUpdate(
                                     traceUpdate, id, workspaceId, userName, projectName);
 
-                            // Step 3: Update the trace with processed data
-                            return dao.update(processedUpdate, id, connection);
-                        }))
-                        .flatMap(Function.identity())
+                            // Step 3: Update the trace with processed data first
+                            return dao.update(processedUpdate, id, connection)
+                                    .then(Mono.defer(() -> {
+                                        // Step 4: Delete only the old attachments by their specific filenames
+                                        // New attachments have unique timestamps, so no conflicts
+                                        if (!existingAttachments.isEmpty()) {
+                                            return attachmentService.deleteSpecificAttachments(existingAttachments,
+                                                    id, EntityType.TRACE, trace.projectId());
+                                        }
+                                        return Mono.empty();
+                                    }));
+                        })
                         .then();
             });
         });

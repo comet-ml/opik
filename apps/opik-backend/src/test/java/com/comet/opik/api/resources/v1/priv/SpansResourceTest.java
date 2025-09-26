@@ -5371,9 +5371,9 @@ class SpansResourceTest {
 
             String retrievedInputString = retrievedInput.toString();
 
-            // Verify the base64 data is replaced by attachment references
-            assertThat(retrievedInputString).contains("attachment-1.png");
-            assertThat(retrievedInputString).contains("attachment-2.gif");
+            // Verify the base64 data is replaced by attachment references (with timestamps)
+            assertThat(retrievedInputString).containsPattern("attachment-1-\\d+\\.png");
+            assertThat(retrievedInputString).containsPattern("attachment-2-\\d+\\.gif");
             assertThat(retrievedInputString).doesNotContain(base64Png);
             assertThat(retrievedInputString).doesNotContain(base64Gif);
 
@@ -6599,9 +6599,9 @@ class SpansResourceTest {
                 assertThat(updatedInputString).doesNotContain(base64Png1);
                 assertThat(updatedInputString).doesNotContain(base64Png2);
 
-                // Verify PNG attachment references are present
-                assertThat(updatedInputString).contains("input-attachment-1.png");
-                assertThat(updatedInputString).contains("input-attachment-2.png");
+                // Verify PNG attachment references are present (with timestamps)
+                assertThat(updatedInputString).containsPattern("input-attachment-1-\\d+\\.png");
+                assertThat(updatedInputString).containsPattern("input-attachment-2-\\d+\\.png");
             });
         }
     }
