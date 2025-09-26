@@ -109,7 +109,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: UserPen,
         label: "Annotation queues",
         count: "annotation_queues",
-        featureFlag: FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED,
       },
     ],
   },
@@ -182,10 +181,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
-  );
-
-  const isAnnotationQueuesEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED,
   );
 
   const { data: projectData } = useProjectsList(
@@ -268,7 +263,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded && isAnnotationQueuesEnabled,
+      enabled: expanded,
     },
   );
 
