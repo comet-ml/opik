@@ -3,8 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -16,6 +16,7 @@ import org.jdbi.v3.sqlobject.statement.GetGeneratedKeys;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.io.UncheckedIOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
@@ -57,7 +58,6 @@ interface AlertDAO {
     @Slf4j
     class AlertWithWebhookRowMapper implements RowMapper<Alert> {
 
-        private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
         private static final TypeReference<Map<String, String>> MAP_TYPE_REF = new TypeReference<>() {
         };
 
@@ -68,8 +68,8 @@ interface AlertDAO {
             String headersJson = rs.getString("webhook_headers");
             if (headersJson != null && !headersJson.trim().isEmpty()) {
                 try {
-                    webhookHeaders = OBJECT_MAPPER.readValue(headersJson, MAP_TYPE_REF);
-                } catch (Exception e) {
+                    webhookHeaders = JsonUtils.readValue(headersJson, MAP_TYPE_REF);
+                } catch (UncheckedIOException e) {
                     log.warn("Failed to parse webhook headers JSON: '{}'", headersJson, e);
                     webhookHeaders = Map.of();
                 }
