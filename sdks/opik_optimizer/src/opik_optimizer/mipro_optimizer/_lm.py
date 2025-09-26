@@ -145,8 +145,15 @@ class LM(BaseLM):
         ):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
-        self.llm_call_counter += 1
+        self.increment_llm_counter()
         return results
+
+    def increment_llm_counter(self) -> None:
+        """Increment the LLM call counter."""
+        self.llm_call_counter += 1
+        parent = getattr(self, "parent_optimizer", None)
+        if parent is not None and hasattr(parent, "increment_llm_counter"):
+            parent.increment_llm_counter()
 
     def launch(self, launch_kwargs: dict[str, Any] | None = None):
         self.provider.launch(self, launch_kwargs)
@@ -302,7 +309,7 @@ def request_cache(maxsize: int | None = None):
     return decorator
 
 
-@request_cache(maxsize=None)
+@request_cache(maxsize=2000)
 def cached_litellm_completion(request: dict[str, Any], num_retries: int):
     return litellm_completion(
         request,
@@ -361,7 +368,7 @@ def litellm_completion(
     return stream_completion()
 
 
-@request_cache(maxsize=None)
+@request_cache(maxsize=2000)
 def cached_litellm_text_completion(request: dict[str, Any], num_retries: int):
     return litellm_text_completion(
         request,

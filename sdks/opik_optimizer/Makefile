@@ -32,7 +32,7 @@ install-dev:
 
 # Disable LiteLLM disk cache to avoid RO sqlite errors during tests.
 test:
-	PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest
+	PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest --cov=opik_optimizer --cov-report=term-missing --cov-report=xml --cov-report=html
 
 precommit:
 	PYTHONPATH=src $(PRECOMMIT) run --all-files

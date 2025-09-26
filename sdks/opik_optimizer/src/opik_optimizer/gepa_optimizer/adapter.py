@@ -12,7 +12,7 @@ from ..optimization_config import chat_prompt
 from ..utils import create_litellm_agent_class
 
 
-LOGGER = logging.getLogger("opik_optimizer.gepa.adapter")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -77,7 +77,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         system_text = _extract_system_text(candidate, self._system_fallback)
         prompt_variant = _apply_system_text(self._base_prompt, system_text)
 
-        agent_class = create_litellm_agent_class(prompt_variant)
+        agent_class = create_litellm_agent_class(
+            prompt_variant, optimizer=self._optimizer
+        )
         agent = agent_class(prompt_variant)
 
         outputs: list[dict[str, Any]] = []
@@ -144,7 +146,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         reflective_records = list(_records())
         if not reflective_records:
-            LOGGER.debug(
+            logger.debug(
                 "No trajectories captured for candidate; returning empty reflective dataset"
             )
             reflective_records = []

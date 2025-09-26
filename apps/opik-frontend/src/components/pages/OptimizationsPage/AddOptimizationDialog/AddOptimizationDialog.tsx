@@ -16,6 +16,7 @@ export enum OPTIMIZATION_ALGORITHMS {
   fewShotOptimizer = "FewShotBayesianOptimizer",
   metaPromptOptimizer = "MetaPromptOptimizer",
   evolutionaryOptimizer = "EvolutionaryOptimizer",
+  gepaOptimizer = "GepaOptimizer",
 }
 
 const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[] =
@@ -35,6 +36,11 @@ const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[]
       value: OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer,
       label: "Evolutionary optimizer",
       description: "Optimizes prompts using evolution.",
+    },
+    {
+      value: OPTIMIZATION_ALGORITHMS.gepaOptimizer,
+      label: "GEPA optimizer",
+      description: "Applies Genetic-Pareto search with reflection guidance.",
     },
   ];
 
@@ -71,14 +77,13 @@ def levenshtein_ratio(dataset_item, llm_output):
 
 # Run the optimization
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o",  # LiteLLM name
-    max_rounds=3,  # Number of optimization rounds
-    num_prompts_per_round=4,  # Number of prompts to generate per round
-    improvement_threshold=0.01,  # Minimum improvement required to continue
-    temperature=0.1,  # Lower temperature for more focused responses
-    max_completion_tokens=5000,  # Maximum tokens for model completion
-    n_threads=1,  # Number of threads for parallel evaluation
-    subsample_size=10,  # Fixed subsample size of 10 items
+    model="openai/gpt-4o-mini",  # Task model (LiteLLM name)
+    reasoning_model="openai/gpt-4o",  # Optional reasoning model
+    rounds=3,
+    num_prompts_per_round=4,
+    n_threads=8,
+    enable_context=True,
+    seed=42,
 )
 
 result = optimizer.optimize_prompt(
@@ -88,7 +93,9 @@ result = optimizer.optimize_prompt(
     n_samples=10,
 )
 
-result.display()`,
+result.display()
+# Optimizer metadata (prompt, tools, version) is logged automatically.
+`,
 
   [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: `# Configure the SDK
 import os
@@ -124,7 +131,7 @@ optimizer = FewShotBayesianOptimizer(
     model="openai/gpt-4o",  # LiteLLM name
     min_examples=3,
     max_examples=8,
-    n_threads=4,
+    n_threads=8,
     seed=42,
 )
 
@@ -136,7 +143,9 @@ result = optimizer.optimize_prompt(
     n_samples=50,
 )
 
-result.display()`,
+result.display()
+# Optimizer metadata (prompt, tools, version) is logged automatically.
+`,
 
   [OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer]: `# Configure the SDK
 import os
@@ -172,10 +181,13 @@ optimizer = EvolutionaryOptimizer(
     model="openai/gpt-4o",  # LiteLLM name
     population_size=10,
     num_generations=3,
+    mutation_rate=0.2,
+    crossover_rate=0.8,
     enable_moo=False,
     enable_llm_crossover=True,
     infer_output_style=True,
-    verbose=1,
+    n_threads=8,
+    seed=42,
 )
 
 result = optimizer.optimize_prompt(
@@ -185,7 +197,60 @@ result = optimizer.optimize_prompt(
     n_samples=10,
 )
 
-result.display()`,
+result.display()
+# Optimizer metadata (prompt, tools, version) is logged automatically.
+`,
+
+  [OPTIMIZATION_ALGORITHMS.gepaOptimizer]: `# Configure the SDK
+import os
+# INJECT_OPIK_CONFIGURATION
+
+import opik
+from opik_optimizer import (
+    ChatPrompt,
+    GepaOptimizer,
+)
+from opik.evaluation.metrics import LevenshteinRatio
+
+# Define the prompt to optimize
+prompt = ChatPrompt(
+    system="Answer the question.",
+    user="{question}",  # This must match dataset field
+)
+
+# Get the dataset to evaluate the prompt on
+client = opik.Opik()
+dataset = client.get_dataset(name="DATASET_NAME_PLACEHOLDER")
+
+# Define the metric to evaluate the prompt on
+def levenshtein_ratio(dataset_item, llm_output):
+    metric = LevenshteinRatio()
+    return metric.score(
+        reference=dataset_item["answer"],  # This must match dataset field
+        output=llm_output,
+    )
+
+# Run the optimization
+optimizer = GepaOptimizer(
+    model="openai/gpt-4o-mini",  # Task model (LiteLLM name)
+    reflection_model="openai/gpt-4o",  # Reflection model for re-ranking
+    temperature=0.0,
+    max_tokens=400,
+)
+
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    n_samples=12,
+    max_metric_calls=60,
+    reflection_minibatch_size=5,
+    candidate_selection_strategy="best",
+)
+
+result.display()
+# Optimizer metadata (prompt, tools, version) is logged automatically.
+`,
 };
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
