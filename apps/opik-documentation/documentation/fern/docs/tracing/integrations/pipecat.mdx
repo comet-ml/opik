@@ -64,7 +64,7 @@ if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
-Enable tracing in your Pipecat application by setting up OpenTelemetry instrumentation and configuring your pipeline task:
+Enable tracing in your Pipecat application by setting up OpenTelemetry instrumentation and configuring your pipeline task. For complete details on Pipecat's OpenTelemetry implementation, see the [official Pipecat OpenTelemetry documentation](https://docs.pipecat.ai/server/utilities/opentelemetry):
 
 ```python
 # Initialize OpenTelemetry with the http exporter
@@ -93,106 +93,49 @@ task = PipelineTask(
 
 ## Trace Structure
 
-Traces are organized hierarchically in Opik:
+Pipecat organizes traces hierarchically following the natural structure of conversations, as documented in their [OpenTelemetry guide](https://docs.pipecat.ai/server/utilities/opentelemetry):
 
 ```
-Pipeline Task (task-uuid)
-├── turn-1
-│   ├── llm_openaillmservice
-│   └── message_aggregation
-└── turn-2
-    ├── llm_openaillmservice
-    └── message_aggregation
+Conversation (conversation_id)
+├── turn
+│   ├── stt (Speech-to-Text)
+│   ├── llm (Language Model)
+│   └── tts (Text-to-Speech)
+└── turn
+    ├── stt
+    ├── llm
+    └── tts
 ```
 
-This organization helps you track pipeline execution and LLM interactions within your Pipecat application.
+This structure allows you to track the complete lifecycle of conversations and measure latency for individual turns and services.
 
 ## Understanding the Traces
 
-- **Pipeline Task Spans**: The top-level span representing the entire pipeline execution
-- **Turn Spans**: Child spans that represent each processing turn in the pipeline
-- **Service Spans**: Detailed service operations nested under turns
-- **Service Attributes**: Each service includes rich context about its operation:
-  - **LLM**: Messages, tokens used, model, service configuration
-  - **Aggregators**: Message processing and aggregation details
-- **Metrics**: Performance data and processing durations
+Based on Pipecat's [OpenTelemetry implementation](https://docs.pipecat.ai/server/utilities/opentelemetry), the traces include:
+
+- **Conversation Spans**: Top-level spans with conversation ID and type
+- **Turn Spans**: Individual conversation turns with turn number, duration, and interruption status
+- **Service Spans**: Detailed service operations with rich attributes:
+  - **LLM Services**: Model, input/output tokens, response text, tool configurations, TTFB metrics
+  - **TTS Services**: Voice ID, character count, synthesized text, TTFB metrics  
+  - **STT Services**: Transcribed text, language detection, voice activity detection
+- **Performance Metrics**: Time to first byte (TTFB) and processing durations for each service
 
 ## Results viewing
 
-Once your Pipecat applications are traced with Opik, you can view them in the Opik UI. Each pipeline execution will contain:
+Once your Pipecat applications are traced with Opik, you can view the OpenTelemetry traces in the Opik UI. You will see:
 
-- Complete pipeline flow with turns and service calls
-- Detailed service metrics and performance data
-- Token usage and cost tracking for LLM services
-- Message processing and aggregation details
-- Real-time pipeline monitoring
-
-## Advanced Configuration
-
-### Custom Service Tracing
-
-You can add custom tracing to your Pipecat services:
-
-```python
-from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
-
-tracer = trace.get_tracer(__name__)
-
-class CustomVoiceService:
-    @tracer.start_as_current_span("custom_voice_processing")
-    async def process_audio(self, audio_data):
-        with tracer.start_as_current_span("audio_analysis") as span:
-            # Your custom processing logic
-            span.set_attribute("audio.duration", len(audio_data))
-            span.set_attribute("audio.format", "wav")
-
-            result = await self.analyze_audio(audio_data)
-
-            span.set_attribute("analysis.confidence", result.confidence)
-            span.set_status(Status(StatusCode.OK))
-
-            return result
-```
-
-## Environment Variables
-
-Make sure to set the following environment variables for the example to work:
-
-```bash
-# Required for OpenAI LLM service
-export OPENAI_API_KEY="your-openai-api-key"
-
-# Required for Opik tracing (set based on your deployment type above)
-export OTEL_EXPORTER_OTLP_ENDPOINT="https://www.comet.com/opik/api/v1/private/otel"
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-opik-api-key>,Comet-Workspace=default"
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **OTEL 404 Error**: If you see "Failed to export span batch code: 404", check that:
-   - Your `OTEL_EXPORTER_OTLP_ENDPOINT` is correct for your deployment type
-   - For Opik Cloud: `https://www.comet.com/opik/api/v1/private/otel`
-   - For Self-hosted: `http://localhost:5173/api/v1/private/otel`
-   - The endpoint should end with `/otel` for trace exports
-2. **No Traces in Opik**: Ensure that your OTEL environment variables are correctly set and follow the [troubleshooting guide](/tracing/troubleshooting)
-3. **Missing Metrics**: Check that `enable_metrics=True` is set in PipelineParams
-4. **Connection Errors**: Verify network connectivity to Opik and that your API key is valid
-5. **OpenAI API Errors**: Ensure your `OPENAI_API_KEY` is correctly set and has sufficient credits
-6. **Tracing Not Working**: Verify that `enable_tracing=True` is set in your PipelineTask
-7. **Context Aggregator Errors**: If you see "missing 1 required positional argument: 'context'", use the OpenAI-specific aggregators:
-   - `OpenAIUserContextAggregator()` instead of `LLMUserContextAggregator()`
-   - `OpenAIAssistantContextAggregator()` instead of `LLMAssistantContextAggregator()`
-8. **Deprecation Warnings**: Update imports to use the latest Pipecat APIs as shown in the example above
+- Hierarchical conversation and turn structure as sent by Pipecat
+- Service-level spans with the attributes Pipecat includes (LLM tokens, TTS character counts, STT transcripts)
+- Performance metrics like processing durations and time-to-first-byte where provided by Pipecat
+- Standard OpenTelemetry trace visualization and search capabilities
 
 ### Getting Help
 
-- Check the [Pipecat Documentation](https://github.com/pipecat-ai/pipecat) for framework-specific issues
-- Review the [OpenTelemetry Python Documentation](https://opentelemetry.io/docs/instrumentation/python/) for tracing setup
-- Contact Pipecat support for framework-specific problems
-- Check Opik documentation for tracing features
+- Check the [Pipecat OpenTelemetry Documentation](https://docs.pipecat.ai/server/utilities/opentelemetry) for tracing setup and configuration
+- Review the [OpenTelemetry Python Documentation](https://opentelemetry.io/docs/instrumentation/python/) for general OTEL setup
+- Visit the [Pipecat GitHub repository](https://github.com/pipecat-ai/pipecat) for framework-specific issues
+- Check Opik documentation for trace viewing and OpenTelemetry endpoint configuration
 
 ## Further improvements
 
