@@ -49,6 +49,7 @@ class MiproOptimizer(BaseOptimizer):
         self.model_kwargs["model"] = self.model
         # FIXME: add mipro_optimizer=True - It does not count the LLM calls made internally by DSPy during MiproOptimizer.optimizer.compile().
         self.lm = LM(**self.model_kwargs)
+        setattr(self.lm, "parent_optimizer", self)
         opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=self.lm, callbacks=[opik_callback])
         logger.debug(f"Initialized MiproOptimizer with model: {model}")
