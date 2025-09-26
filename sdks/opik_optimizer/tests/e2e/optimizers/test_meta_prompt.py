@@ -30,9 +30,11 @@ def test_metaprompt_optimizer() -> None:
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = MetaPromptOptimizer(
         model="openai/gpt-4o",  # or "azure/gpt-4"
-        model_parameters={"temperature": 0.1, "max_tokens": 10000},
+        temperature=0.1,
+        max_tokens=10000,
         n_threads=1,
-        prompts_per_round=2,  # Reduced from 4
+        rounds=1,  # Reduced from 2
+        num_prompts_per_round=2,  # Reduced from 4
         seed=42,
     )
 
