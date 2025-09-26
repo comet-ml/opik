@@ -9,6 +9,11 @@
 .idea/
 *.iml
 
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
+
 # Maven
 target/
 **/dependency-reduced-pom.xml
