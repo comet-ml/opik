@@ -50,7 +50,7 @@ const CompareExperimentsConfigCell: React.FC<
                 "break-all text-blue-600 underline hover:text-blue-800",
               ignoreTags: ["script", "style"],
               validate: {
-                url: (value) => /^https?:\/\//.test(value),
+                url: (value: string) => /^https?:\/\//.test(value),
               },
             }}
           >

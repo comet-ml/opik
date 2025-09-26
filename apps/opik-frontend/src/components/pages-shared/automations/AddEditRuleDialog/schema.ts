@@ -14,6 +14,10 @@ import {
   ProviderMessageType,
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
+import {
+  getMessageContentTextSegments,
+  isMessageContentEmpty,
+} from "@/lib/llm";
 
 const RuleNameSchema = z
   .string({
@@ -31,6 +35,29 @@ const SamplingRateSchema = z.number();
 
 const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
 
+const TextMessageContentSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+
+const ImageMessageContentSchema = z.object({
+  type: z.literal("image_url"),
+  image_url: z.object({
+    url: z.string().min(1, { message: "Image URL is required" }),
+    detail: z.string().optional(),
+  }),
+});
+
+const StructuredMessageContentSchema = z.array(
+  z.union([TextMessageContentSchema, ImageMessageContentSchema]),
+);
+
+const MessageContentSchema = z
+  .union([z.string(), StructuredMessageContentSchema])
+  .refine((value) => !isMessageContentEmpty(value as never), {
+    message: "Message is required",
+  });
+
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
@@ -44,7 +71,7 @@ const LLMJudgeBaseSchema = z.object({
   messages: z.array(
     z.object({
       id: z.string(),
-      content: z.string().min(1, { message: "Message is required" }),
+      content: MessageContentSchema,
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
@@ -91,9 +118,10 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) =>
-    m.content.includes("{{context}}"),
-  ).length;
+  const contextCount = data.messages.filter((m) => {
+    const segments = getMessageContentTextSegments(m.content);
+    return segments.some((segment) => segment.includes("{{context}}"));
+  }).length;
 
   if (contextCount < 1) {
     ctx.addIssue({
@@ -112,8 +140,13 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   }
 
   data.messages.forEach((message, index) => {
-    const matches = message.content.match(/{{([^}]+)}}/g);
-    if (matches) {
+    const segments = getMessageContentTextSegments(message.content);
+    segments.forEach((segment) => {
+      const matches = segment.match(/{{([^}]+)}}/g);
+      if (!matches) {
+        return;
+      }
+
       matches.forEach((match) => {
         if (match !== "{{context}}") {
           ctx.addIssue({
@@ -123,7 +156,7 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
           });
         }
       });
-    }
+    });
   });
 });
 

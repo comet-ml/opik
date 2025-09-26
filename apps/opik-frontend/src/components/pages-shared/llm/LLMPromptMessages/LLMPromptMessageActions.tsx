@@ -20,6 +20,11 @@ import usePromptById from "@/api/prompts/usePromptById";
 import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
+import {
+  isMessageContentEmpty,
+  isStructuredMessageContent,
+  stringifyMessageContent,
+} from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
 
@@ -88,18 +93,23 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage],
   );
 
-  const resetDisabled =
-    !promptId ||
-    promptData?.id !== promptId ||
-    (promptData?.id === promptId &&
-      message.content === promptData?.latest_version?.template);
+  const latestTemplate = promptData?.latest_version?.template ?? "";
+  const contentAsString = stringifyMessageContent(message.content, {
+    includeImagePlaceholders: false,
+  });
+  const contentMatchesTemplate =
+    !isStructuredMessageContent(message.content) &&
+    message.content === latestTemplate;
 
-  const saveDisabled = message.content === "";
+  const resetDisabled =
+    !promptId || promptData?.id !== promptId || contentMatchesTemplate;
+
+  const saveDisabled = isMessageContentEmpty(message.content);
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      message.content !== promptData?.latest_version?.template,
+      contentAsString !== latestTemplate,
   );
   isPromptSaveWarningRef.current = saveWarning;
   const saveTooltip = saveWarning
@@ -165,7 +175,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           value={promptId}
           onValueChange={(id) => {
             if (id !== promptId) {
-              if (content === "" || isUndefined(id)) {
+              if (isMessageContentEmpty(content) || isUndefined(id)) {
                 handleUpdateExternalPromptId(id);
               } else {
                 setOpen("load");
@@ -219,7 +229,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         open={open === "save"}
         setOpen={setOpen}
         prompt={promptData}
-        template={content}
+        template={contentAsString}
         onSave={onSaveHandler}
       />
     </div>
