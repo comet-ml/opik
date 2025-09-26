@@ -433,7 +433,7 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
                 done = True
                 attempts = 0
             except Exception as e:
-                logger.error(f"Error closing thread {thread} attempt {attempts}: {e}")
+                logger.error(f"Error closing threads {threads} attempt {attempts}: {e}")
                 attempts += 1
                 time.sleep(0.5)
 
