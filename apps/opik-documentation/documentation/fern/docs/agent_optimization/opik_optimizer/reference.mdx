@@ -1,7 +1,6 @@
 ---
 title: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
-pytest_codeblocks_skip: true
 ---
 
 The Opik Agent Optimizer SDK provides a set of tools for optimizing LLM prompts. This reference
@@ -80,6 +79,30 @@ evaluate_prompt(
 ```python
 get_history()
 ```
+
+#### optimize_mcp
+
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    kwargs: Any
+)
+```
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="tool_name" type="str" />
+<ParamField path="second_pass" type="Any" />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
 
@@ -209,6 +232,42 @@ evaluate_prompt(
 get_history()
 ```
 
+#### optimize_mcp
+
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: MCPSecondPassCoordinator,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    fallback_invoker: Optional = None,
+    fallback_arguments: Optional = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
+)
+```
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="tool_name" type="str" />
+<ParamField path="second_pass" type="MCPSecondPassCoordinator" />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="n_samples" type="Optional" optional={true} />
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
+<ParamField path="agent_class" type="Optional" optional={true} />
+<ParamField path="fallback_invoker" type="Optional" optional={true} />
+<ParamField path="fallback_arguments" type="Optional" optional={true} />
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} defaultValue="False" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 
 ```python
@@ -228,20 +287,14 @@ optimize_prompt(
 
 <ParamField path="prompt" type="ChatPrompt" />
 <ParamField path="dataset" type="Dataset">
-  The dataset to evaluate against
+  Opik dataset name, or Opik dataset
 </ParamField>
 <ParamField path="metric" type="Callable">
-  The metric to use for evaluation
+  A metric function, this function should have two arguments:
 </ParamField>
-<ParamField path="experiment_config" type="Optional" optional={true}>
-  A dictionary to log with the experiments
-</ParamField>
-<ParamField path="n_samples" type="Optional" optional={true}>
-  The number of dataset items to use for evaluation
-</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">
-  If True, the algorithm may continue if goal not met
-</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="n_samples" type="Optional" optional={true} />
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
 <ParamField path="agent_class" type="Optional" optional={true} />
 <ParamField path="kwargs" type="Any" />
 
@@ -378,6 +431,30 @@ get_history()
 get_llm_crossover_system_prompt()
 ```
 
+#### optimize_mcp
+
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    kwargs: Any
+)
+```
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="tool_name" type="str" />
+<ParamField path="second_pass" type="Any" />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 
 ```python
@@ -414,6 +491,132 @@ optimize_prompt(
   Whether to automatically continue optimization
 </ParamField>
 <ParamField path="agent_class" type="Optional" optional={true} />
+<ParamField path="kwargs" type="Any" />
+
+#### update_optimization
+
+```python
+update_optimization(
+    optimization: Optimization,
+    status: str
+)
+```
+
+**Parameters:**
+
+<ParamField path="optimization" type="Optimization" />
+<ParamField path="status" type="str" />
+
+## GepaOptimizer
+
+```python
+GepaOptimizer(
+    model: str,
+    project_name: Optional = None,
+    reflection_model: Optional = None,
+    verbose: int = 1,
+    model_kwargs: Any
+)
+```
+
+**Parameters:**
+
+<ParamField path="model" type="str">
+  LiteLLM model name
+</ParamField>
+<ParamField path="project_name" type="Optional" optional={true} />
+<ParamField path="reflection_model" type="Optional" optional={true} />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">
+  Controls internal logging/progress bars (0=off, 1=on).
+</ParamField>
+<ParamField path="model_kwargs" type="Any">
+  additional args for model (eg, temperature)
+</ParamField>
+
+### Methods
+
+#### evaluate_prompt
+
+```python
+evaluate_prompt(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    n_threads: int,
+    verbose: int = 1,
+    dataset_item_ids: Optional = None,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    seed: Optional = None,
+    agent_class: Optional = None
+)
+```
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="n_threads" type="int" />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1" />
+<ParamField path="dataset_item_ids" type="Optional" optional={true} />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="n_samples" type="Optional" optional={true} />
+<ParamField path="seed" type="Optional" optional={true} />
+<ParamField path="agent_class" type="Optional" optional={true} />
+
+#### get_history
+
+```python
+get_history()
+```
+
+#### optimize_mcp
+
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    kwargs: Any
+)
+```
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="tool_name" type="str" />
+<ParamField path="second_pass" type="Any" />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="kwargs" type="Any" />
+
+#### optimize_prompt
+
+```python
+optimize_prompt(
+    prompt: ChatPrompt,
+    dataset: Union,
+    metric: Callable,
+    experiment_config: Optional = None,
+    kwargs: Any
+)
+```
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Union">
+  Opik dataset name, or Opik dataset
+</ParamField>
+<ParamField path="metric" type="Callable">
+  A metric function, this function should have two arguments:
+</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true} />
 <ParamField path="kwargs" type="Any" />
 
 #### update_optimization
@@ -497,6 +700,18 @@ set_messages(
 ```python
 to_dict()
 ```
+
+#### with_messages
+
+```python
+with_messages(
+    messages: List
+)
+```
+
+**Parameters:**
+
+<ParamField path="messages" type="List" />
 
 ## OptimizationResult
 

@@ -1,0 +1,386 @@
+---
+title: Observability for Pipecat with Opik
+description: Start here to integrate Opik into your Pipecat-based real-time voice agent application for end-to-end LLM observability, unit testing, and optimization.
+---
+
+[Pipecat](https://github.com/pipecat-ai/pipecat) is an open-source Python framework for building real-time voice and multimodal conversational AI agents. Developed by Daily, it enables fully programmable AI voice agents and supports multimodal interactions, positioning itself as a flexible solution for developers looking to build conversational AI systems.
+
+This guide explains how to integrate Opik with Pipecat for observability and tracing of real-time voice agents, enabling you to monitor, debug, and evaluate your Pipecat agents in the Opik dashboard.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=pipecat&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=pipecat&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=pipecat&utm_campaign=opik) for more information.
+
+## Key Features
+
+- **Hierarchical Tracing**: Track entire conversations, turns, and service calls
+- **Service Tracing**: Detailed spans for TTS, STT, and LLM services with rich context
+- **TTFB Metrics**: Capture Time To First Byte metrics for latency analysis
+- **Usage Statistics**: Track character counts for TTS and token usage for LLMs
+- **Real-time Monitoring**: Monitor voice agent performance and conversation quality
+
+## Getting Started
+
+### Installation
+
+To use Pipecat with Opik, you'll need to have both the `pipecat-ai` and `opik` packages installed:
+
+```bash
+pip install pipecat-ai opik opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring Pipecat
+
+In order to configure Pipecat, you will need to have your API keys for the services you're using (OpenAI, Deepgram, etc.). You can set them as environment variables:
+
+```bash
+export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+export DEEPGRAM_API_KEY="YOUR_DEEPGRAM_API_KEY"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "OPENAI_API_KEY" not in os.environ:
+    os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
+
+if "DEEPGRAM_API_KEY" not in os.environ:
+    os.environ["DEEPGRAM_API_KEY"] = getpass.getpass("Enter your Deepgram API key: ")
+
+# Set project name for organization
+os.environ["OPIK_PROJECT_NAME"] = "pipecat-voice-agent-demo"
+```
+
+## OpenTelemetry Integration
+
+Pipecat supports OpenTelemetry tracing, and Opik has an OpenTelemetry endpoint. By following these steps, you can enable Opik tracing for your Pipecat application.
+
+### Environment Configuration
+
+Create a `.env` file with your Opik API keys to enable tracing:
+
+```bash
+ENABLE_TRACING=true
+# OTLP endpoint for Opik Cloud
+OTEL_EXPORTER_OTLP_ENDPOINT="https://www.comet.com/opik/api/v1/private/otel"
+# OTLP headers with your Opik API key
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-opik-api-key>,Comet-Workspace=default"
+# Set to any value to enable console output for debugging
+# OTEL_CONSOLE_EXPORT=true
+```
+
+For self-hosted Opik instances:
+
+```bash
+ENABLE_TRACING=true
+# OTLP endpoint for self-hosted Opik
+OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:5173/api/v1/private/otel"
+# OTLP headers for self-hosted
+OTEL_EXPORTER_OTLP_HEADERS="projectName=your-project-name"
+```
+
+### Add OpenTelemetry to your Pipeline Task
+
+Enable tracing in your Pipecat application:
+
+```python
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineTask, PipelineParams
+from pipecat.services.openai import OpenAILLMService
+from pipecat.services.deepgram import DeepgramSTTService
+from pipecat.services.cartesi import CartesiTTSService
+from pipecat.transports.websocket import WebSocketTransport
+from pipecat.frames.frames import TextFrame
+import os
+
+# Initialize OpenTelemetry with the OTLP exporter
+def setup_tracing(service_name="pipecat-demo"):
+    # Create resource
+    resource = Resource.create({
+        "service.name": service_name,
+        "service.version": "1.0.0",
+    })
+
+    # Create tracer provider
+    tracer_provider = TracerProvider(resource=resource)
+    trace.set_tracer_provider(tracer_provider)
+
+    # Create OTLP exporter
+    exporter = OTLPSpanExporter(
+        endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+        headers=os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
+    )
+
+    # Add span processor
+    span_processor = BatchSpanProcessor(exporter)
+    tracer_provider.add_span_processor(span_processor)
+
+    return tracer_provider
+
+# Configure tracing
+setup_tracing("pipecat-voice-agent")
+
+# Create your Pipecat pipeline
+async def main():
+    # Create transport
+    transport = WebSocketTransport("ws://localhost:8765")
+
+    # Create services
+    llm = OpenAILLMService(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        model="gpt-4o-mini"
+    )
+
+    stt = DeepgramSTTService(
+        api_key=os.getenv("DEEPGRAM_API_KEY"),
+        model="nova-2"
+    )
+
+    tts = CartesiTTSService(
+        api_key=os.getenv("CARTESI_API_KEY"),
+        voice="samantha"
+    )
+
+    # Create pipeline
+    pipeline = Pipeline([
+        stt,
+        llm,
+        tts,
+        transport.output()
+    ])
+
+    # Enable tracing in your PipelineTask
+    task = PipelineTask(
+        pipeline,
+        params=PipelineParams(
+            allow_interruptions=True,
+            enable_metrics=True,  # Required for some service metrics
+        ),
+        enable_tracing=True,  # Enables both turn and conversation tracing
+        conversation_id="customer-123",  # Optional - will auto-generate if not provided
+    )
+
+    # Run the pipeline
+    runner = PipelineRunner()
+    await runner.run(task)
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
+```
+
+## Trace Structure
+
+Traces are organized hierarchically in Opik:
+
+```
+Conversation (conversation-uuid)
+├── turn-1
+│   ├── stt_deepgramsttservice
+│   ├── llm_openaillmservice
+│   └── tts_cartesiattsservice
+└── turn-2
+    ├── stt_deepgramsttservice
+    ├── llm_openaillmservice
+    └── tts_cartesiattsservice
+    turn-N
+    └── ...
+```
+
+This organization helps you track conversation-to-conversation and turn-to-turn interactions.
+
+## Using with @track decorator
+
+Use the `@track` decorator to create comprehensive traces when working with your Pipecat voice agents:
+
+```python
+from opik import track
+
+@track
+def process_voice_input(transcription: str, conversation_id: str):
+    """Process voice input and generate response."""
+
+    # Your custom logic here
+    response = f"Hello! I heard you say: {transcription}"
+
+    return {
+        "transcription": transcription,
+        "response": response,
+        "conversation_id": conversation_id,
+        "timestamp": time.time()
+    }
+
+# Use in your Pipecat pipeline
+async def handle_voice_input(frame):
+    if isinstance(frame, TextFrame):
+        result = process_voice_input(frame.text, conversation_id)
+        # Process the result...
+```
+
+## Understanding the Traces
+
+- **Conversation Spans**: The top-level span representing an entire conversation
+- **Turn Spans**: Child spans of conversations that represent each turn in the dialog
+- **Service Spans**: Detailed service operations nested under turns
+- **Service Attributes**: Each service includes rich context about its operation:
+  - **TTS**: Voice ID, character count, service type
+  - **STT**: Transcription text, language, model
+  - **LLM**: Messages, tokens used, model, service configuration
+- **Metrics**: Performance data like `metrics.ttfb_ms` and processing durations
+
+## Results viewing
+
+Once your Pipecat voice agents are traced with Opik, you can view them in the Opik UI. Each conversation will contain:
+
+- Complete conversation flow with turns and service calls
+- Detailed service metrics and performance data
+- Token usage and cost tracking for LLM services
+- Audio processing metrics for TTS and STT services
+- Real-time conversation monitoring
+
+## Feedback Scores and Evaluation
+
+Once your Pipecat voice agents are traced with Opik, you can evaluate your voice AI applications using Opik's evaluation framework:
+
+```python
+from opik.evaluation import evaluate
+from opik.evaluation.metrics import Hallucination
+
+# Define your evaluation task
+def evaluation_task(x):
+    return {
+        "message": x["transcription"],
+        "output": x["response"],
+        "reference": x["expected_response"]
+    }
+
+# Create the Hallucination metric
+hallucination_metric = Hallucination()
+
+# Run the evaluation
+evaluation_results = evaluate(
+    experiment_name="pipecat-voice-agent-evaluation",
+    dataset=conversation_data,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+```
+
+## Advanced Configuration
+
+### Custom Service Tracing
+
+You can add custom tracing to your Pipecat services:
+
+```python
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
+tracer = trace.get_tracer(__name__)
+
+class CustomVoiceService:
+    @tracer.start_as_current_span("custom_voice_processing")
+    async def process_audio(self, audio_data):
+        with tracer.start_as_current_span("audio_analysis") as span:
+            # Your custom processing logic
+            span.set_attribute("audio.duration", len(audio_data))
+            span.set_attribute("audio.format", "wav")
+
+            result = await self.analyze_audio(audio_data)
+
+            span.set_attribute("analysis.confidence", result.confidence)
+            span.set_status(Status(StatusCode.OK))
+
+            return result
+```
+
+### Conversation Context Tracking
+
+Track conversation context across turns:
+
+```python
+from opik import track
+
+@track
+def maintain_conversation_context(transcription: str, context: dict):
+    """Maintain conversation context across turns."""
+
+    # Update context with new information
+    context["last_user_input"] = transcription
+    context["turn_count"] = context.get("turn_count", 0) + 1
+
+    # Generate contextual response
+    response = generate_contextual_response(transcription, context)
+
+    return {
+        "response": response,
+        "updated_context": context,
+        "turn_number": context["turn_count"]
+    }
+```
+
+## Environment Variables
+
+Make sure to set the following environment variables:
+
+```bash
+# Pipecat Service Configuration
+export OPENAI_API_KEY="your-openai-api-key"
+export DEEPGRAM_API_KEY="your-deepgram-api-key"
+export CARTESI_API_KEY="your-cartesi-api-key"
+
+# Opik Configuration
+export OPIK_PROJECT_NAME="your-project-name"
+export OPIK_WORKSPACE="your-workspace-name"
+
+# OpenTelemetry Configuration
+export ENABLE_TRACING="true"
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://www.comet.com/opik/api/v1/private/otel"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-opik-api-key>,Comet-Workspace=default"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **No Traces in Opik**: Ensure that your credentials are correct and follow the [troubleshooting guide](/tracing/troubleshooting)
+2. **Missing Metrics**: Check that `enable_metrics=True` in PipelineParams
+3. **Connection Errors**: Verify network connectivity to Opik
+4. **Exporter Issues**: Try the Console exporter (`OTEL_CONSOLE_EXPORT=true`) to verify tracing works
+5. **Service Not Found**: Ensure all required services (STT, LLM, TTS) are properly configured
+
+### Getting Help
+
+- Check the [Pipecat Documentation](https://github.com/pipecat-ai/pipecat) for framework-specific issues
+- Review the [OpenTelemetry Python Documentation](https://opentelemetry.io/docs/instrumentation/python/) for tracing setup
+- Contact Pipecat support for framework-specific problems
+- Check Opik documentation for tracing and evaluation features
+
+## Next Steps
+
+Once you have Pipecat integrated with Opik, you can:
+
+- [Evaluate your voice AI applications](/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/datasets/overview) to test and improve your voice agents
+- [Set up feedback collection](/feedback/overview) to gather human evaluations
+- [Monitor performance](/tracing/overview) across different voice models and configurations

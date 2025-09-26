@@ -11,6 +11,7 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 * FewShotBayesianOptimizer
 * MetaPromptOptimizer
 * MiproOptimizer
+* GepaOptimizer
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
@@ -116,6 +117,84 @@ result.display()
 ```
 The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
 
+## Tool Optimization (MCP) - Beta
+
+The Opik Agent Optimizer supports **true tool optimization** for MCP (Model Context Protocol) tools. This feature is currently in **Beta** and supported by the **MetaPrompt Optimizer**.
+
+### Key Features
+
+- **MCP Tool Optimization** - Optimize MCP tool descriptions and usage patterns (Beta)
+- **Tool-Aware Analysis** - The optimizer understands MCP tool schemas and usage patterns
+- **Multi-step Workflow Support** - Optimize complex agent workflows involving MCP tools
+
+### Agent Function Calling (Not Tool Optimization)
+
+Many optimizers can optimize **agents that use function calling**, but this is different from true tool optimization. Here's an example with GEPA:
+
+```python
+from opik_optimizer import GepaOptimizer, ChatPrompt
+
+# GEPA example: optimizing an agent with function calling
+prompt = ChatPrompt(
+    system="You are a helpful assistant. Use the search_wikipedia tool when needed.",
+    user="{question}",
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "search_wikipedia",
+                "description": "This function searches Wikipedia abstracts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query"}
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+    ],
+    function_map={
+        "search_wikipedia": lambda query: search_wikipedia(query, use_api=True)
+    }
+)
+
+# GEPA optimizes the agent's prompt, not the tools themselves
+optimizer = GepaOptimizer(model="gpt-4o-mini")
+result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric)
+```
+
+### True Tool Optimization (MCP) - Beta
+
+```python
+from opik_optimizer import MetaPromptOptimizer
+
+# MCP tool optimization is currently in Beta
+# See scripts/litellm_metaprompt_context7_mcp_example.py for working examples
+optimizer = MetaPromptOptimizer(model="gpt-4")
+# MCP tools are configured through mcp.json manifests
+```
+
+For comprehensive documentation on tool optimization, see the [Tool Optimization Guide](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization).
+
+### MCP Integration (Beta)
+
+The optimizer includes utilities for MCP tool integration:
+
+```bash
+# Install MCP Python SDK
+pip install mcp
+
+# Run MCP examples (Beta)
+python scripts/litellm_metaprompt_context7_mcp_example.py
+```
+
+Underlying utilities are available in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`.
+
+<Note>
+  **Important:** True tool optimization (MCP) is currently in **Beta**. Most examples show **agent optimization** (optimizing prompts for agents that use tools), which is different from optimizing the tools themselves.
+</Note>
+
 ## Development
 
 To contribute or use the Opik Optimizer from source:
@@ -136,6 +215,6 @@ To contribute or use the Opik Optimizer from source:
 
 ## Requirements
 
-- Python `>=3.9,<3.13`
+- **Python `>=3.10,<3.13`** (see [Python version requirements](https://github.com/comet-ml/opik/pull/3373))
 - Opik API key (recommended for full functionality, configure via `opik configure`)
 - API key for your chosen LLM provider (e.g., OpenAI, Anthropic, Gemini), configured as per LiteLLM guidelines.

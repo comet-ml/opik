@@ -1,12 +1,17 @@
+import os
+import pytest
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
-from typing import Any, Dict
+from typing import Any
 
 from opik_optimizer import TaskConfig, datasets
 from opik_optimizer.mipro_optimizer import MiproOptimizer
 
 
 def test_mipro_optimizer() -> None:
+    # Ensure API key is available for e2e testing
+    if not os.getenv("OPENAI_API_KEY"):
+        pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
     optimizer = MiproOptimizer(
         model="openai/gpt-4o",
@@ -19,7 +24,7 @@ def test_mipro_optimizer() -> None:
     dataset = datasets.tiny_test()
 
     # Define metric and task configuration
-    def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+    def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         return LevenshteinRatio().score(
             reference=dataset_item["label"], output=llm_output
         )
@@ -57,20 +62,20 @@ def test_mipro_optimizer() -> None:
     # Enhanced OptimizationResult validation
 
     # Core fields validation - focus on values, not existence
-    assert (
-        results.optimizer == "MiproOptimizer"
-    ), f"Expected MiproOptimizer, got {results.optimizer}"
+    assert results.optimizer == "MiproOptimizer", (
+        f"Expected MiproOptimizer, got {results.optimizer}"
+    )
 
-    assert isinstance(
-        results.score, (int, float)
-    ), f"Score should be numeric, got {type(results.score)}"
-    assert (
-        0.0 <= results.score <= 1.0
-    ), f"Score should be between 0-1, got {results.score}"
+    assert isinstance(results.score, (int, float)), (
+        f"Score should be numeric, got {type(results.score)}"
+    )
+    assert 0.0 <= results.score <= 1.0, (
+        f"Score should be between 0-1, got {results.score}"
+    )
 
-    assert (
-        results.metric_name == "levenshtein_ratio"
-    ), f"Expected levenshtein_ratio, got {results.metric_name}"
+    assert results.metric_name == "levenshtein_ratio", (
+        f"Expected levenshtein_ratio, got {results.metric_name}"
+    )
 
     # Initial score validation - now a top-level field
     assert results.initial_score is None, "Initial score should be None"
@@ -79,16 +84,16 @@ def test_mipro_optimizer() -> None:
     assert results.initial_prompt is None, "Initial prompt should be empty"
 
     # Optimized prompt structure validation
-    assert isinstance(
-        results.prompt, list
-    ), f"Prompt should be a list, got {type(results.prompt)}"
+    assert isinstance(results.prompt, list), (
+        f"Prompt should be a list, got {type(results.prompt)}"
+    )
     assert len(results.prompt) > 0, "Prompt should not be empty"
 
     # Validate optimized prompt messages structure
     for msg in results.prompt:
-        assert isinstance(
-            msg, dict
-        ), f"Each prompt message should be a dict, got {type(msg)}"
+        assert isinstance(msg, dict), (
+            f"Each prompt message should be a dict, got {type(msg)}"
+        )
         assert "role" in msg, "Prompt message should have 'role' field"
         assert "content" in msg, "Prompt message should have 'content' field"
         assert msg["role"] in [
@@ -96,52 +101,52 @@ def test_mipro_optimizer() -> None:
             "user",
             "assistant",
         ], f"Invalid role: {msg['role']}"
-        assert isinstance(
-            msg["content"], str
-        ), f"Content should be string, got {type(msg['content'])}"
+        assert isinstance(msg["content"], str), (
+            f"Content should be string, got {type(msg['content'])}"
+        )
 
     # Details validation - Mipro specific
-    assert isinstance(
-        results.details, dict
-    ), f"Details should be a dict, got {type(results.details)}"
+    assert isinstance(results.details, dict), (
+        f"Details should be a dict, got {type(results.details)}"
+    )
 
     # Validate model configuration in details (if present)
     if "model" in results.details:
-        assert (
-            results.details["model"] == "openai/gpt-4"
-        ), f"Expected openai/gpt-4, got {results.details['model']}"
+        assert results.details["model"] == "openai/gpt-4", (
+            f"Expected openai/gpt-4, got {results.details['model']}"
+        )
 
     if "temperature" in results.details:
-        assert (
-            results.details["temperature"] == 0.1
-        ), f"Expected temperature 0.1, got {results.details['temperature']}"
+        assert results.details["temperature"] == 0.1, (
+            f"Expected temperature 0.1, got {results.details['temperature']}"
+        )
 
     # Mipro-specific validation - flexible checking for available fields
     if "mipro_prompt" in results.details:
         mipro_prompt = results.details["mipro_prompt"]
-        assert isinstance(
-            mipro_prompt, (str, dict, list)
-        ), f"Mipro prompt should be str/dict/list, got {type(mipro_prompt)}"
+        assert isinstance(mipro_prompt, (str, dict, list)), (
+            f"Mipro prompt should be str/dict/list, got {type(mipro_prompt)}"
+        )
 
     if "tool_prompts" in results.details:
         tool_prompts = results.details["tool_prompts"]
-        assert isinstance(
-            tool_prompts, (dict, list)
-        ), f"Tool prompts should be dict/list, got {type(tool_prompts)}"
+        assert isinstance(tool_prompts, (dict, list)), (
+            f"Tool prompts should be dict/list, got {type(tool_prompts)}"
+        )
 
     # History validation - Mipro uses history for optimization steps
-    assert isinstance(
-        results.history, list
-    ), f"History should be a list, got {type(results.history)}"
+    assert isinstance(results.history, list), (
+        f"History should be a list, got {type(results.history)}"
+    )
 
     # LLM calls validation
     if results.llm_calls is not None:
-        assert isinstance(
-            results.llm_calls, int
-        ), f"LLM calls should be int or None, got {type(results.llm_calls)}"
-        assert (
-            results.llm_calls > 0
-        ), f"LLM calls should be positive, got {results.llm_calls}"
+        assert isinstance(results.llm_calls, int), (
+            f"LLM calls should be int or None, got {type(results.llm_calls)}"
+        )
+        assert results.llm_calls > 0, (
+            f"LLM calls should be positive, got {results.llm_calls}"
+        )
 
     # Test result methods work correctly
     result_str = str(results)

@@ -1,5 +1,3 @@
-from typing import Optional, List, Dict
-
 from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
@@ -30,7 +28,7 @@ class PydanticAIAgent(OptimizableAgent):
         )
         self.agent.tool(track(type="tool")(search_wikipedia))
 
-    def invoke(self, messages: List[Dict[str, str]], seed: Optional[int] = None) -> str:
+    def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         message_history = []
         for message in messages:
             if message["role"] == "system":

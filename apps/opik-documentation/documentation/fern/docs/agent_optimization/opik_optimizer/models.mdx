@@ -2,7 +2,6 @@
 title: "Customizing models used in the Optimizer"
 subtitle: "LiteLLM Model Support for Optimizers (OpenAI, Azure, Local Models)"
 description: "Learn how to use any model with Opik Agent Optimizer, LiteLLMs supports various LLM providers including OpenAI, Azure, Anthropic, Google, and local models."
-pytest_codeblocks_skip: true
 ---
 
 `Opik Agent Optimizer` leverages [LiteLLM](https://litellm.ai/) under the hood to provide
@@ -125,7 +124,7 @@ When you initialize an optimizer (e.g., `MetaPromptOptimizer`, `FewShotBayesianO
 `MetaPromptOptimizer`) accepts a LiteLLM model string. LiteLLM then handles the communication with
 the specified model provider or local endpoint.
 
-This builds upon Opik's existing [tracing integration with LiteLLM](/tracing/integrations/litellm),
+This builds upon Opik's existing [tracing integration with LiteLLM](/integrations/litellm),
 ensuring that not only are your optimization processes flexible in model choice, but calls made
 during optimization can also be seamlessly tracked if you have the `OpikLogger` callback configured
 in LiteLLM.

@@ -1,0 +1,570 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Opik Development Runner Script
+
+# Variables
+DEBUG_MODE=${DEBUG_MODE:-false}
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
+BACKEND_DIR="$PROJECT_ROOT/apps/opik-backend"
+FRONTEND_DIR="$PROJECT_ROOT/apps/opik-frontend"
+BACKEND_PID_FILE="/tmp/opik-backend.pid"
+FRONTEND_PID_FILE="/tmp/opik-frontend.pid"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_debug() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        echo -e "${YELLOW}[DEBUG]${NC} $1"
+    fi
+}
+
+require_command() {
+    if ! command -v "$1" &>/dev/null; then
+        log_error "Required command '$1' not found. Please install it."
+        exit 1
+    fi
+}
+
+# Function to find JAR files in target directory
+find_jar_files() {
+    local jar_files=()
+    while IFS= read -r -d '' jar; do
+        jar_files+=("$jar")
+    done < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' ! -name '*sources*' ! -name '*javadoc*' -print0)
+    
+    if [ "${#jar_files[@]}" -eq 0 ]; then
+        return 1  # No JAR files found
+    elif [ "${#jar_files[@]}" -eq 1 ]; then
+        JAR_FILE="${jar_files[0]}"
+        log_info "Using JAR file: $JAR_FILE"
+    else
+        log_warning "Multiple backend JAR files found in target/:"
+        for jar in "${jar_files[@]}"; do
+            log_warning "  - $jar"
+        done
+        
+        # Sort JAR files by version (assuming semantic versioning in filename)
+        JAR_FILE=$(printf '%s\n' "${jar_files[@]}" | sort -V | tail -n 1)
+        log_warning "Automatically selected JAR with highest version: $JAR_FILE"
+        log_warning "To use a different JAR, clean up target/ directory and rebuild"
+    fi
+    
+    return 0  # JAR file found and selected
+}
+
+# Function to start infrastructure
+start_infrastructure() {
+    log_info "Starting infrastructure services (MySQL, Redis, ClickHouse, etc.)..."
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
+    
+    if ./opik.sh --infra --port-mapping; then
+        log_success "Infrastructure services started successfully"
+    else
+        log_error "Failed to start infrastructure services"
+        exit 1
+    fi
+}
+
+# Function to stop infrastructure
+stop_infrastructure() {
+    log_info "Stopping infrastructure services..."
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
+    
+    if ./opik.sh --infra --stop; then
+        log_success "Infrastructure services stopped"
+    else
+        log_warning "Failed to stop some infrastructure services"
+    fi
+}
+
+# Function to verify infrastructure
+verify_infrastructure() {
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
+    ./opik.sh --infra --verify >/dev/null 2>&1
+    return $?
+}
+
+# Function to build backend
+build_backend() {
+    require_command mvn
+    log_info "Building backend (skipping tests)..."
+    log_debug "Backend directory: $BACKEND_DIR"
+    cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
+
+    log_debug "Running: mvn clean install -DskipTests"
+    if mvn clean install -DskipTests; then
+        log_success "Backend build completed successfully"
+    else
+        log_error "Backend build failed"
+        exit 1
+    fi
+}
+
+# Function to build frontend
+build_frontend() {
+    require_command npm
+    log_info "Building frontend..."
+    cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
+
+    if npm install; then
+        log_success "Frontend build completed successfully"
+    else
+        log_error "Frontend build failed"
+        exit 1
+    fi
+}
+
+# Function to lint frontend
+lint_frontend() {
+    require_command npm
+    log_info "Linting frontend..."
+    cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
+
+    if npm run lint; then
+        log_success "Frontend linting completed successfully"
+    else
+        log_error "Frontend linting failed"
+        exit 1
+    fi
+}
+
+# Function to lint backend
+lint_backend() {
+    require_command mvn
+    log_info "Linting backend..."
+    cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
+
+    if mvn spotless:apply; then
+        log_success "Backend linting completed successfully"
+    else
+        log_error "Backend linting failed"
+        exit 1
+    fi
+}
+
+# Function to start backend
+start_backend() {
+    require_command java
+    log_info "Starting backend..."
+    log_debug "Backend directory: $BACKEND_DIR"
+    cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
+    
+    # Check if backend is already running
+    if [ -f "$BACKEND_PID_FILE" ]; then
+        BACKEND_PID=$(cat "$BACKEND_PID_FILE")
+        if kill -0 "$BACKEND_PID" 2>/dev/null; then
+            log_warning "Backend is already running (PID: $BACKEND_PID)"
+            return 0
+        else
+            log_warning "Removing stale backend PID file (process $BACKEND_PID no longer exists)"
+            rm -f "$BACKEND_PID_FILE"
+        fi
+    fi
+    
+    # Set environment variables
+    export CORS=true
+
+    # Set debug logging if debug mode is enabled
+    if [ "$DEBUG_MODE" = "true" ]; then
+        export GENERAL_LOG_LEVEL="DEBUG"
+        export OPIK_LOG_LEVEL="DEBUG"
+        log_debug "Debug logging enabled - GENERAL_LOG_LEVEL=DEBUG, OPIK_LOG_LEVEL=DEBUG"
+    fi
+
+    # Find and validate the JAR file
+    if ! find_jar_files; then
+        log_warning "No backend JAR file found in target/. Building backend automatically..."
+        build_backend
+
+        # Re-scan for JAR files after build
+        if ! find_jar_files; then
+            log_error "Backend build completed but no JAR file found. Build may have failed."
+            exit 1
+        fi
+    fi
+
+    log_debug "Starting backend with JAR: $JAR_FILE"
+    log_debug "Command: java -jar $JAR_FILE server config.yml"
+
+    # Start backend in background using the JAR file
+    nohup java -jar "$JAR_FILE" \
+        server config.yml \
+        > /tmp/opik-backend.log 2>&1 &
+
+    BACKEND_PID=$!
+    echo "$BACKEND_PID" > "$BACKEND_PID_FILE"
+
+    log_debug "Backend process started with PID: $BACKEND_PID"
+
+    # Wait a bit and check if process is still running
+    sleep 3
+    if kill -0 "$BACKEND_PID" 2>/dev/null; then
+        log_success "Backend started successfully (PID: $BACKEND_PID)"
+        log_info "Backend logs: tail -f /tmp/opik-backend.log"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_debug "Debug mode enabled - check logs for detailed output"
+        fi
+    else
+        log_error "Backend failed to start. Check logs: cat /tmp/opik-backend.log"
+        rm -f "$BACKEND_PID_FILE"
+        exit 1
+    fi
+}
+
+# Function to start frontend
+start_frontend() {
+    require_command npm
+    log_info "Starting frontend..."
+    log_debug "Frontend directory: $FRONTEND_DIR"
+    cd "$FRONTEND_DIR" || { log_error "Frontend directory not found"; exit 1; }
+    
+    # Check if frontend is already running
+    if [ -f "$FRONTEND_PID_FILE" ]; then
+        FRONTEND_PID=$(cat "$FRONTEND_PID_FILE")
+        if kill -0 "$FRONTEND_PID" 2>/dev/null; then
+            log_warning "Frontend is already running (PID: $FRONTEND_PID)"
+            return 0
+        else
+            log_warning "Removing stale frontend PID file (process $FRONTEND_PID no longer exists)"
+            rm -f "$FRONTEND_PID_FILE"
+        fi
+    fi
+
+    # Set debug logging for frontend if debug mode is enabled
+    if [ "$DEBUG_MODE" = "true" ]; then
+        export NODE_ENV="development"
+        log_debug "Frontend debug mode enabled - NODE_ENV=development"
+    fi
+
+    log_debug "Starting frontend with: npm run start"
+
+    # Start frontend in background with interactive mode disabled
+    CI=true nohup npm run start > /tmp/opik-frontend.log 2>&1 &
+    FRONTEND_PID=$!
+    echo "$FRONTEND_PID" > "$FRONTEND_PID_FILE"
+
+    log_debug "Frontend process started with PID: $FRONTEND_PID"
+
+    # Wait a bit and check if process is still running
+    sleep 3
+    if kill -0 "$FRONTEND_PID" 2>/dev/null; then
+        log_success "Frontend started successfully (PID: $FRONTEND_PID)"
+        log_info "Frontend logs: tail -f /tmp/opik-frontend.log"
+    else
+        log_error "Frontend failed to start. Check logs: cat /tmp/opik-frontend.log"
+        rm -f "$FRONTEND_PID_FILE"
+        exit 1
+    fi
+}
+
+# Function to stop backend
+stop_backend() {
+    if [ -f "$BACKEND_PID_FILE" ]; then
+        BACKEND_PID=$(cat "$BACKEND_PID_FILE")
+        if kill -0 "$BACKEND_PID" 2>/dev/null; then
+            log_info "Stopping backend (PID: $BACKEND_PID)..."
+            kill "$BACKEND_PID"
+
+            # Wait for graceful shutdown
+            for _ in {1..10}; do
+                if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+            
+            # Force kill if still running
+            if kill -0 "$BACKEND_PID" 2>/dev/null; then
+                log_warning "Force killing backend..."
+                kill -9 "$BACKEND_PID"
+            fi
+
+            log_success "Backend stopped"
+        else
+            log_warning "Backend PID file exists but process is not running (cleaning up stale PID file)"
+        fi
+        rm -f "$BACKEND_PID_FILE"
+    else
+        log_warning "Backend is not running"
+    fi
+}
+
+# Function to stop frontend
+stop_frontend() {
+    if [ -f "$FRONTEND_PID_FILE" ]; then
+        FRONTEND_PID=$(cat "$FRONTEND_PID_FILE")
+        if kill -0 "$FRONTEND_PID" 2>/dev/null; then
+            log_info "Stopping frontend (PID: $FRONTEND_PID)..."
+
+            # First try to kill just the main process
+            kill -TERM "$FRONTEND_PID" 2>/dev/null
+
+            # Wait for graceful shutdown
+            for _ in {1..10}; do
+                if ! kill -0 "$FRONTEND_PID" 2>/dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+            
+            # Force kill if still running (kill main process and find children)
+            if kill -0 "$FRONTEND_PID" 2>/dev/null; then
+                log_warning "Force killing frontend..."
+                kill -9 "$FRONTEND_PID" 2>/dev/null
+
+                # Also kill any child processes that may still be running
+                CHILD_PIDS=$(pgrep -P "$FRONTEND_PID" 2>/dev/null || true)
+                if [ -n "$CHILD_PIDS" ]; then
+                    log_warning "Killing remaining child processes (PIDs: $CHILD_PIDS)..."
+                    for PID in $CHILD_PIDS; do
+                        kill -9 "$PID" 2>/dev/null || true
+                    done
+                fi
+            fi
+
+            log_success "Frontend stopped"
+        else
+            log_warning "Frontend PID file exists but process is not running (cleaning up stale PID file)"
+        fi
+        rm -f "$FRONTEND_PID_FILE"
+    else
+        log_warning "Frontend is not running"
+    fi
+
+    # Clean up any orphaned processes by looking for processes with our frontend directory path
+    # This is safe and compatible across Unix systems
+    ORPHANED_PIDS=$(pgrep -f "$FRONTEND_DIR" 2>/dev/null || true)
+    
+    if [ -n "$ORPHANED_PIDS" ]; then
+        log_warning "Found potential orphaned processes related to $FRONTEND_DIR..."
+        for PID in $ORPHANED_PIDS; do
+            if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+                # Get process info to verify it's actually our frontend process
+                PROCESS_INFO=$(ps -p "$PID" -o comm,args --no-headers 2>/dev/null || true)
+                
+                # Only kill if it's an npm/node/vite process AND contains our directory path
+                if [[ "$PROCESS_INFO" =~ (npm|node|vite) ]] && [[ "$PROCESS_INFO" =~ $FRONTEND_DIR ]]; then
+                    log_warning "Cleaning up orphaned process: PID $PID - $PROCESS_INFO"
+                    kill -TERM "$PID" 2>/dev/null || true
+                    sleep 1
+                    # Force kill if still running
+                    if kill -0 "$PID" 2>/dev/null; then
+                        kill -9 "$PID" 2>/dev/null || true
+                    fi
+                fi
+            fi
+        done
+    fi
+}
+
+# Function to verify services
+verify_services() {
+    log_info "=== Opik Development Status ==="
+    
+    # Infrastructure status
+    local infra_running=false
+    if verify_infrastructure; then
+        echo -e "Infrastructure: ${GREEN}RUNNING${NC} (Docker containers)"
+        infra_running=true
+    else
+        echo -e "Infrastructure: ${RED}STOPPED${NC} (Docker containers)"
+    fi
+    
+    # Backend status
+    local backend_running=false
+    if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
+        echo -e "Backend: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
+        backend_running=true
+    else
+        echo -e "Backend: ${RED}STOPPED${NC}"
+    fi
+    
+    # Frontend status
+    local frontend_running=false
+    if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
+        echo -e "Frontend: ${GREEN}RUNNING${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
+        frontend_running=true
+    else
+        echo -e "Frontend: ${RED}STOPPED${NC}"
+    fi
+
+    # Show access information if all services are running
+    if [ "$infra_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
+        echo ""
+        echo -e "${GREEN}🚀 Opik Development Environment is Ready!${NC}"
+        echo -e "${BLUE}📊  Access the UI:     http://localhost:5174${NC}"
+        echo -e "${BLUE}🛠️  API ping Endpoint: http://localhost:8080/is-alive/ping${NC}"
+    fi
+
+    echo ""
+    echo "Logs:"
+    echo "  Backend:  tail -f /tmp/opik-backend.log"
+    echo "  Frontend: tail -f /tmp/opik-frontend.log"
+}
+
+# Function to restart services (stop, build, start)
+restart_services() {
+    log_info "=== Restarting Opik Development Environment ==="
+    log_info "Step 1/8: Stopping frontend..."
+    stop_frontend
+    log_info "Step 2/8: Stopping backend..."
+    stop_backend
+    log_info "Step 3/8: Stopping infrastructure..."
+    stop_infrastructure
+    log_info "Step 4/8: Starting infrastructure..."
+    start_infrastructure
+    log_info "Step 5/8: Building backend..."
+    build_backend
+    log_info "Step 6/8: Building frontend..."
+    build_frontend
+    log_info "Step 7/8: Starting backend..."
+    start_backend
+    log_info "Step 8/8: Starting frontend..."
+    start_frontend
+    log_success "=== Restart Complete ==="
+    verify_services
+}
+
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --build-be     - Build backend"
+    echo "  --build-fe     - Build frontend"
+    echo "  --start        - Start all services (without building)"
+    echo "  --stop         - Stop all services"
+    echo "  --restart      - Stop, build, and start all services (DEFAULT IF NO OPTIONS PROVIDED)"
+    echo "  --verify       - Verify status of all services"
+    echo "  --debug        - Enable debug mode (meant to be combined with other flags)"
+    echo "  --logs         - Show logs for backend and frontend services"
+    echo "  --lint-fe      - Lint frontend code"
+    echo "  --lint-be      - Lint backend code"
+    echo "  --help         - Show this help message"
+    echo ""
+    echo "Environment Variables:"
+    echo "  DEBUG_MODE=true  - Enable debug mode"
+}
+
+# Function to show logs
+show_logs() {
+    log_info "=== Recent Logs ==="
+
+    if [ -f "/tmp/opik-backend.log" ]; then
+        echo -e "\n${BLUE}Backend logs (last 20 lines):${NC}"
+        tail -20 /tmp/opik-backend.log
+    fi
+
+    if [ -f "/tmp/opik-frontend.log" ]; then
+        echo -e "\n${BLUE}Frontend logs (last 20 lines):${NC}"
+        tail -20 /tmp/opik-frontend.log
+    fi
+
+    echo -e "\n${BLUE}To follow logs in real-time:${NC}"
+    echo "  Backend:  tail -f /tmp/opik-backend.log"
+    echo "  Frontend: tail -f /tmp/opik-frontend.log"
+}
+
+# Parse arguments to handle debug flag
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --debug)
+      DEBUG_MODE=true
+      shift # Remove --debug from arguments
+      ;;
+    *)
+      ARGS+=("$1") # Keep other arguments
+      shift
+      ;;
+  esac
+done
+
+# Restore arguments without --debug
+if [ ${#ARGS[@]} -gt 0 ]; then
+  set -- "${ARGS[@]}"
+else
+  set --  # Clear all arguments
+fi
+
+# Show debug mode status
+if [ "$DEBUG_MODE" = "true" ]; then
+    log_debug "Debug mode is ENABLED"
+fi
+
+# Main script logic
+case "${1:-}" in
+    "--build-be")
+        build_backend
+        ;;
+    "--build-fe")
+        build_frontend
+        ;;
+    "--start")
+        start_infrastructure
+        start_backend
+        start_frontend
+        verify_services
+        ;;
+    "--stop")
+        stop_frontend
+        stop_backend
+        stop_infrastructure
+        log_success "All services stopped"
+        ;;
+    "--restart")
+        restart_services
+        ;;
+    "--verify")
+        verify_services
+        ;;
+    "--logs")
+        show_logs
+        ;;
+    "--lint-fe")
+        lint_frontend
+        ;;
+    "--lint-be")
+        lint_backend
+        ;;
+    "--help")
+        show_usage
+        ;;
+    "")
+        # Default action: restart
+        restart_services
+        ;;
+    *)
+        log_error "Unknown option: $1"
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac

@@ -1,6 +1,8 @@
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
+from collections.abc import Iterator
 
+from rich.panel import Panel
 from rich.text import Text
 
 from ..optimization_config import chat_prompt
@@ -136,6 +138,18 @@ class CandidateGenerationReporter:
         console.print(Text("│"))
 
 
+def display_tool_description(description: str, label: str, color: str) -> None:
+    if not description.strip():
+        return
+    console.print(
+        Panel(
+            description.strip(),
+            title=label,
+            border_style=color,
+        )
+    )
+
+
 @contextmanager
 def display_candidate_generation_report(
     num_prompts: int, verbose: int = 1
@@ -162,7 +176,7 @@ def display_prompt_candidate_scoring_report(verbose: int = 1) -> Any:
         ) -> None:
             if verbose >= 1:
                 console.print(
-                    Text(f"│    Evaluating candidate prompt {candidate_count+1}:")
+                    Text(f"│    Evaluating candidate prompt {candidate_count + 1}:")
                 )
                 display_messages(prompt.get_messages(), "│         ")
 

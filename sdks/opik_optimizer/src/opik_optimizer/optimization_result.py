@@ -1,6 +1,6 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pydantic
 import rich
@@ -13,25 +13,25 @@ class OptimizationResult(pydantic.BaseModel):
 
     optimizer: str = "Optimizer"
 
-    prompt: List[Dict[str, str]]
+    prompt: list[dict[str, str]]
     score: float
     metric_name: str
 
-    optimization_id: Optional[str] = None
-    dataset_id: Optional[str] = None
+    optimization_id: str | None = None
+    dataset_id: str | None = None
 
     # Initial score
-    initial_prompt: Optional[List[Dict[str, str]]] = None
-    initial_score: Optional[float] = None
+    initial_prompt: list[dict[str, str]] | None = None
+    initial_score: float | None = None
 
-    details: Dict[str, Any] = pydantic.Field(default_factory=dict)
-    history: List[Dict[str, Any]] = []
-    llm_calls: Optional[int] = None
+    details: dict[str, Any] = pydantic.Field(default_factory=dict)
+    history: list[dict[str, Any]] = []
+    llm_calls: int | None = None
 
     # MIPRO specific
-    demonstrations: Optional[List[Dict[str, Any]]] = None
-    mipro_prompt: Optional[str] = None
-    tool_prompts: Optional[Dict[str, str]] = None
+    demonstrations: list[dict[str, Any]] | None = None
+    mipro_prompt: str | None = None
+    tool_prompts: dict[str, str] | None = None
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
@@ -40,7 +40,7 @@ class OptimizationResult(pydantic.BaseModel):
             optimization_id=self.optimization_id, dataset_id=self.dataset_id
         )
 
-    def model_dump(self, *kargs: Any, **kwargs: Any) -> Dict[str, Any]:
+    def model_dump(self, *kargs: Any, **kwargs: Any) -> dict[str, Any]:
         return super().model_dump(*kargs, **kwargs)
 
     def _calculate_improvement_str(self) -> str:
@@ -205,4 +205,11 @@ class OptimizationResult(pydantic.BaseModel):
         """
         console = get_console()
         console.print(self)
-        print("Optimization run link:", self.get_run_link())
+        # Gracefully handle cases where optimization tracking isn't available
+        if self.dataset_id and self.optimization_id:
+            try:
+                print("Optimization run link:", self.get_run_link())
+            except Exception:
+                print("Optimization run link: No optimization run link available")
+        else:
+            print("Optimization run link: No optimization run link available")

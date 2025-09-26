@@ -5,4 +5,5 @@ export enum FeatureToggleKeys {
   GUARDRAILS_ENABLED = "guardrails_enabled",
   TOGGLE_OPIK_AI_ENABLED = "opik_aienabled",
   TOGGLE_ALERTS_ENABLED = "alerts_enabled",
+  TOGGLE_HUMAN_ANNOTATION_ENABLED = "human_annotation_enabled",
 }

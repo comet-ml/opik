@@ -38,19 +38,26 @@ export const createFilter = (filter?: Partial<Filter>) => {
   } as Filter;
 };
 
-export const generateSearchByIDFilters = (search?: string) => {
+export const generateSearchByFieldFilters = (
+  field: string,
+  search?: string,
+) => {
   if (!search) return undefined;
 
   return [
     {
       id: uniqid(),
-      field: "id",
+      field,
       type: COLUMN_TYPE.string,
       operator: "contains",
       key: "",
       value: search,
     },
   ] as Filter[];
+};
+
+export const generateSearchByIDFilters = (search?: string) => {
+  return generateSearchByFieldFilters("id", search);
 };
 
 export const generateVisibilityFilters = () => {
@@ -77,6 +84,21 @@ export const generatePromptFilters = (promptId?: string) => {
       operator: "contains",
       key: "",
       value: promptId,
+    },
+  ] as Filter[];
+};
+
+export const generateProjectFilters = (projectId?: string) => {
+  if (!projectId) return undefined;
+
+  return [
+    {
+      id: uniqid(),
+      field: "project_id",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: projectId,
     },
   ] as Filter[];
 };

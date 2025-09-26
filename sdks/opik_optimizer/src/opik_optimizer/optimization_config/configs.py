@@ -1,6 +1,6 @@
 """Module containing configuration classes for optimization."""
 
-from typing import Any, List
+from typing import Any
 
 import pydantic
 
@@ -12,6 +12,6 @@ class TaskConfig(pydantic.BaseModel):
 
     instruction_prompt: str
     use_chat_prompt: bool = False
-    input_dataset_fields: List[str]
+    input_dataset_fields: list[str]
     output_dataset_field: str
-    tools: List[Any] = []
+    tools: list[Any] = []

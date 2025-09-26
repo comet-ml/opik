@@ -19,13 +19,6 @@
 
 This guide explains how to integrate Opik with [INTEGRATION_NAME] using the OpenAI SDK. [INTEGRATION_NAME] provides [SPECIFIC_DESCRIPTION].
 
-<!--
-OPTIONAL: Include Colab notebook link only if a cookbook notebook exists.
-If no notebook exists, remove this entire section.
--->
-
-[OPTIONAL_COLAB_NOTEBOOK_SECTION]
-
 ## Getting started
 
 First, ensure you have both `opik` and `openai` packages installed:
@@ -199,4 +192,4 @@ Once you have [INTEGRATION_NAME] integrated with Opik, you can:
 - [Set up feedback collection](/feedback/overview) to gather human evaluations
 - [Monitor performance](/tracing/overview) across different models and configurations
 
-For more information about using Opik with OpenAI-compatible APIs, see the [OpenAI integration guide](/tracing/integrations/openai).
+For more information about using Opik with OpenAI-compatible APIs, see the [OpenAI integration guide](/integrations/openai).

@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any
+from collections.abc import Callable
 
 import logging
 import time
@@ -59,7 +60,7 @@ class BaseOptimizer:
         self.reasoning_model = model
         self.model_kwargs = model_kwargs
         self.verbose = verbose
-        self._history: List[OptimizationRound] = []
+        self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
 
@@ -72,7 +73,7 @@ class BaseOptimizer:
         prompt: "chat_prompt.ChatPrompt",
         dataset: Dataset,
         metric: Callable,
-        experiment_config: Optional[Dict] = None,
+        experiment_config: dict | None = None,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -90,7 +91,23 @@ class BaseOptimizer:
         """
         pass
 
-    def get_history(self) -> List[OptimizationRound]:
+    def optimize_mcp(
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: Dataset,
+        metric: Callable,
+        *,
+        tool_name: str,
+        second_pass: Any,
+        experiment_config: dict | None = None,
+        **kwargs: Any,
+    ) -> optimization_result.OptimizationResult:
+        """Optimize prompts that rely on MCP tooling."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement optimize_mcp yet."
+        )
+
+    def get_history(self) -> list[OptimizationRound]:
         """
         Get the optimization history.
 
@@ -133,11 +150,11 @@ class BaseOptimizer:
         metric: Callable,
         n_threads: int,
         verbose: int = 1,
-        dataset_item_ids: Optional[List[str]] = None,
-        experiment_config: Optional[Dict] = None,
-        n_samples: Optional[int] = None,
-        seed: Optional[int] = None,
-        agent_class: Optional[Type[OptimizableAgent]] = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        seed: int | None = None,
+        agent_class: type[OptimizableAgent] | None = None,
     ) -> float:
         random.seed(seed)
 
@@ -146,7 +163,7 @@ class BaseOptimizer:
         if prompt.model_kwargs is None:
             prompt.model_kwargs = self.model_kwargs
 
-        self.agent_class: Type[OptimizableAgent]
+        self.agent_class: type[OptimizableAgent]
 
         if agent_class is None:
             self.agent_class = create_litellm_agent_class(prompt)
@@ -155,7 +172,7 @@ class BaseOptimizer:
 
         agent = self.agent_class(prompt)
 
-        def llm_task(dataset_item: Dict[str, Any]) -> Dict[str, str]:
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
             raw_model_output = agent.invoke(messages)
             cleaned_model_output = raw_model_output.strip()
