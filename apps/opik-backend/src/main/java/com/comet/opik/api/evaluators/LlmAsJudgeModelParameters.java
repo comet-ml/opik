@@ -10,10 +10,12 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record LlmAsJudgeModelParameters(
-        @JsonView( {
-                AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) @NotNull String name,
-        @JsonView({AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) @NotNull Double temperature){
+    public record LlmAsJudgeModelParameters(
+            @JsonView( {
+                    AutomationRuleEvaluator.View.Public.class,
+                    AutomationRuleEvaluator.View.Write.class}) @NotNull String name,
+            @JsonView({AutomationRuleEvaluator.View.Public.class,
+                    AutomationRuleEvaluator.View.Write.class}) @NotNull Double temperature,
+            @JsonView({AutomationRuleEvaluator.View.Public.class,
+                    AutomationRuleEvaluator.View.Write.class}) Integer seed){
 }
