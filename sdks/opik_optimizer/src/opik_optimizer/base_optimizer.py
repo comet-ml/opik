@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 from collections.abc import Callable
 
 import copy
@@ -212,13 +212,15 @@ class BaseOptimizer(ABC):
 
     @staticmethod
     def _serialize_tools(prompt: "chat_prompt.ChatPrompt") -> list[dict[str, Any]]:
-        if getattr(prompt, "tools", None) is None:
+        tools_obj = getattr(prompt, "tools", None)
+        if not isinstance(tools_obj, list):
             return []
+
         try:
-            return copy.deepcopy(prompt.tools)
+            return copy.deepcopy(cast(list[dict[str, Any]], tools_obj))
         except Exception:  # pragma: no cover - defensive
             serialized_tools: list[dict[str, Any]] = []
-            for tool in prompt.tools:  # type: ignore[attr-defined]
+            for tool in tools_obj:
                 if isinstance(tool, dict):
                     serialized_tools.append({k: v for k, v in tool.items() if k})
             return serialized_tools
@@ -272,7 +274,7 @@ class BaseOptimizer(ABC):
         return signatures
 
     def _build_agent_config(self, prompt: "chat_prompt.ChatPrompt") -> dict[str, Any]:
-        agent_config = prompt.to_dict()
+        agent_config: dict[str, Any] = dict(prompt.to_dict())
         agent_config["project_name"] = getattr(prompt, "project_name", None)
         agent_config["model"] = getattr(prompt, "model", None) or self.model
         agent_config["tools"] = self._serialize_tools(prompt)

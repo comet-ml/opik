@@ -7,6 +7,9 @@ from ..optimization_config import mappers, chat_prompt
 import opik
 import copy
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from ..base_optimizer import BaseOptimizer
+
 
 class EvaluationOps:
     if TYPE_CHECKING:
@@ -32,15 +35,17 @@ class EvaluationOps:
         new_prompt = prompt.copy()
         new_prompt.set_messages(messages)
 
-        configuration_updates = self._drop_none({
-            "n_samples_for_eval": (
-                len(dataset_item_ids)
-                if dataset_item_ids is not None
-                else n_samples
-            ),
-            "total_dataset_items": total_items,
-        })
-        evaluation_details = self._drop_none(
+        optimizer = cast("BaseOptimizer", self)
+
+        configuration_updates = optimizer._drop_none(
+            {
+                "n_samples_for_eval": (
+                    len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+                ),
+                "total_dataset_items": total_items,
+            }
+        )
+        evaluation_details = optimizer._drop_none(
             {
                 "dataset_item_ids": dataset_item_ids,
                 "optimization_id": optimization_id,
@@ -50,7 +55,7 @@ class EvaluationOps:
             {"evaluation": evaluation_details} if evaluation_details else None
         )
 
-        experiment_config = self._prepare_experiment_config(
+        experiment_config = optimizer._prepare_experiment_config(
             prompt=new_prompt,
             dataset=dataset,
             metric=metric,
@@ -74,7 +79,7 @@ class EvaluationOps:
             metric=metric,
             evaluated_task=llm_task,
             num_threads=self.num_threads,
-            project_name=experiment_config["project_name"],
+            project_name=experiment_config.get("project_name"),
             n_samples=n_samples if dataset_item_ids is None else None,
             experiment_config=experiment_config,
             optimization_id=optimization_id,

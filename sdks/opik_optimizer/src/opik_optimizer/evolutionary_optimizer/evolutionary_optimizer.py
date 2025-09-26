@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import random
@@ -295,6 +296,21 @@ class EvolutionaryOptimizer(BaseOptimizer):
         # Style inference
         bind(StyleOps, ["_infer_output_style_from_dataset"])
 
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {
+            "population_size": self.population_size,
+            "num_generations": self.num_generations,
+            "mutation_rate": self.mutation_rate,
+            "crossover_rate": self.crossover_rate,
+            "tournament_size": self.tournament_size,
+            "elitism_size": self.elitism_size,
+            "adaptive_mutation": self.adaptive_mutation,
+            "enable_moo": self.enable_moo,
+            "enable_llm_crossover": self.enable_llm_crossover,
+            "infer_output_style": self.infer_output_style,
+            "output_style_guidance": self.output_style_guidance,
+        }
+
     def _get_adaptive_mutation_rate(self) -> float:
         """Calculate adaptive mutation rate based on population diversity and progress."""
         if not self.adaptive_mutation or len(self._best_fitness_history) < 2:
@@ -511,6 +527,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Extract MCP config from kwargs (for future use)
         kwargs.pop("mcp_config", None)
+        evaluation_kwargs: dict[str, Any] = {}
 
         self.project_name = self.agent_class.project_name
 
@@ -570,6 +587,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self._current_optimization_id,
                     verbose=0,
+                    **evaluation_kwargs,
                 )
                 prompt_length = float(len(str(json.dumps(messages))))
                 return (primary_fitness_score, prompt_length)
@@ -588,6 +606,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self._current_optimization_id,
                     verbose=0,
+                    **evaluation_kwargs,
                 )
                 return (fitness_score, 0.0)
 
