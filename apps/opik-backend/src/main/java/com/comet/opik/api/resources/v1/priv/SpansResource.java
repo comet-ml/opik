@@ -188,7 +188,7 @@ public class SpansResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        log.info("CREATING span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
+        log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
                 span.id(), span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
         var id = spanService.create(span)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))

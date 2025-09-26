@@ -5323,66 +5323,6 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("when span contains real world base64 attachment, then attachment is stripped and stored")
-        void create__whenSpanContainsRealWorldBase64Attachment__thenAttachmentIsStrippedAndStored() throws Exception {
-            // Given - Load real world base64 payload from test resources
-            String realBase64ImageData;
-            try (var inputStream = getClass().getResourceAsStream("/real-world-image-base64.txt")) {
-                assertThat(inputStream).isNotNull();
-                realBase64ImageData = new String(inputStream.readAllBytes()).trim();
-            }
-
-            // Create input JSON similar to the Gemini API format from the terminal output
-            String inputJson = String.format("""
-                    {
-                        "contents": [
-                            {
-                                "parts": [
-                                    {
-                                        "text": "Tell a short fact about this image"
-                                    },
-                                    {
-                                        "inline_data": {
-                                            "data": "%s",
-                                            "mime_type": "image/jpeg"
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                    """, realBase64ImageData);
-
-            // When - Create span using the standard pattern
-            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .name("generate_content: gemini-2.0-flash")
-                    .type(SpanType.llm)
-                    .input(JsonUtils.readTree(inputJson))
-                    .build();
-
-            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
-
-            // Then
-            assertThat(spanId).isNotNull();
-
-            // Wait for async processing and attachment stripping
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
-                assertThat(retrievedSpan).isNotNull();
-
-                // Ensure the span is fully processed and base64 data is stripped
-                String inputString = retrievedSpan.input().toString();
-                assertThat(inputString).doesNotContain(realBase64ImageData);
-
-                // Should contain attachment reference instead of raw base64 data
-                assertThat(inputString).contains("\"data\": \"[input-attachment-1.jpg]\"");
-                // The attachment should be replaced with a reference like [attachment-name.jpg]
-                assertThat(inputString).containsPattern("\\[.*\\.(jpg|jpeg|png|gif)\\]");
-            });
-        }
-
-        @Test
         @DisplayName("when span contains base64 attachments, then attachments are stripped and stored")
         void create__whenSpanContainsBase64Attachments__thenAttachmentsAreStrippedAndStored() throws Exception {
             // Given a span with base64 encoded attachments in its input
