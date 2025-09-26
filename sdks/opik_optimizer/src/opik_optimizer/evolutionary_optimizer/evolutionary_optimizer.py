@@ -138,7 +138,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "The 'project_name' parameter in optimizer constructor is deprecated. "
                 "Set project_name in the ChatPrompt instead.",
                 DeprecationWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             del model_kwargs["project_name"]
 
@@ -153,7 +153,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "The 'num_threads' parameter is deprecated and will be removed in a future version. "
                 "Use 'n_threads' instead.",
                 DeprecationWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             n_threads = num_threads
         self.num_threads = n_threads
