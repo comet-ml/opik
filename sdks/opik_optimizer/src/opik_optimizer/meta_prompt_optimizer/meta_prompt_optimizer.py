@@ -187,6 +187,14 @@ class MetaPromptOptimizer(BaseOptimizer):
             f"Optimization rounds: {rounds}, Prompts/round: {num_prompts_per_round}"
         )
 
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {
+            "rounds": self.rounds,
+            "num_prompts_per_round": self.num_prompts_per_round,
+            "reasoning_model": self.reasoning_model,
+            "enable_context": self.enable_context,
+        }
+
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
         self,
@@ -327,25 +335,26 @@ class MetaPromptOptimizer(BaseOptimizer):
             subset_size = None  # Use all items for final checks
             logger.debug("Using full dataset for evaluation")
 
-        experiment_config = experiment_config or {}
-        experiment_config = {
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "agent_class": self.agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": getattr(metric, "__name__", str(metric)),
-                "dataset": dataset.name,
-                "configuration": {
-                    "prompt": prompt.get_messages(),
-                    "tools": getattr(prompt, "tools", None),
-                    "n_samples": subset_size,
-                    "use_full_dataset": use_full_dataset,
-                },
-            },
-        }
-        if optimization_id:
-            experiment_config["optimization_id"] = optimization_id
+        configuration_updates = self._drop_none(
+            {
+                "n_samples": subset_size,
+                "use_full_dataset": use_full_dataset,
+            }
+        )
+        meta_metadata = self._drop_none(
+            {
+                "optimization_id": optimization_id,
+                "stage": "trial_evaluation" if not use_full_dataset else "final_eval",
+            }
+        )
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata={"meta_prompt": meta_metadata} if meta_metadata else None,
+        )
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             new_prompt = prompt.copy()
@@ -632,22 +641,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         initial_prompt = prompt
 
         current_prompt = prompt
-        experiment_config = experiment_config or {}
-        experiment_config = {
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "agent_class": self.agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": getattr(metric, "__name__", str(metric)),
-                "dataset": dataset.name,
-                "configuration": {
-                    "prompt": prompt.get_messages(),
-                    "rounds": self.rounds,
-                    "num_prompts_per_round": self.num_prompts_per_round,
-                },
-            },
-        }
+        configuration_updates = self._drop_none(
+            {
+                "rounds": self.rounds,
+                "num_prompts_per_round": self.num_prompts_per_round,
+            }
+        )
+        meta_metadata = {"stage": "initial"}
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata={"meta_prompt": meta_metadata},
+        )
 
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             initial_score = self._evaluate_prompt(

@@ -5,6 +5,7 @@ from collections.abc import Callable
 from .. import task_evaluator
 from ..optimization_config import mappers, chat_prompt
 import opik
+import copy
 
 
 class EvaluationOps:
@@ -31,23 +32,32 @@ class EvaluationOps:
         new_prompt = prompt.copy()
         new_prompt.set_messages(messages)
 
-        experiment_config = experiment_config or {}
-        experiment_config["project_name"] = self.agent_class.project_name
-        experiment_config = {
-            **experiment_config,
-            "optimizer": self.__class__.__name__,
-            "agent_class": self.agent_class.__name__,
-            "agent_config": new_prompt.to_dict(),
-            "metric": metric.__name__,
-            "dataset": dataset.name,
-            "configuration": {
-                "prompt": new_prompt.get_messages(),
-                "n_samples_for_eval": (
-                    len(dataset_item_ids) if dataset_item_ids is not None else n_samples
-                ),
-                "total_dataset_items": total_items,
-            },
-        }
+        configuration_updates = self._drop_none({
+            "n_samples_for_eval": (
+                len(dataset_item_ids)
+                if dataset_item_ids is not None
+                else n_samples
+            ),
+            "total_dataset_items": total_items,
+        })
+        evaluation_details = self._drop_none(
+            {
+                "dataset_item_ids": dataset_item_ids,
+                "optimization_id": optimization_id,
+            }
+        )
+        additional_metadata = (
+            {"evaluation": evaluation_details} if evaluation_details else None
+        )
+
+        experiment_config = self._prepare_experiment_config(
+            prompt=new_prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata=additional_metadata,
+        )
         try:
             agent = self.agent_class(new_prompt)
         except Exception:

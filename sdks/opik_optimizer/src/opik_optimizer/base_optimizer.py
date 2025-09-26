@@ -1,10 +1,13 @@
 from typing import Any
 from collections.abc import Callable
 
+import copy
+import inspect
 import logging
 import time
 from abc import ABC, abstractmethod
 import random
+import importlib.metadata
 
 
 import litellm
@@ -27,6 +30,12 @@ litellm.drop_params = True
 
 # Set up logging:
 logger = logging.getLogger(__name__)
+
+
+try:
+    _OPTIMIZER_VERSION = importlib.metadata.version("opik_optimizer")
+except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev installs
+    _OPTIMIZER_VERSION = "unknown"
 
 
 class OptimizationRound(BaseModel):
@@ -176,6 +185,180 @@ class BaseOptimizer(ABC):
                 prompt.model = self.model
             if prompt.model_kwargs is None:
                 prompt.model_kwargs = self.model_kwargs
+
+    # ------------------------------------------------------------------
+    # Experiment metadata helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _drop_none(metadata: dict[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in metadata.items() if v is not None}
+
+    @staticmethod
+    def _deep_merge_dicts(
+        base: dict[str, Any], overrides: dict[str, Any]
+    ) -> dict[str, Any]:
+        result = copy.deepcopy(base)
+        for key, value in overrides.items():
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
+                result[key] = BaseOptimizer._deep_merge_dicts(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    @staticmethod
+    def _serialize_tools(prompt: "chat_prompt.ChatPrompt") -> list[dict[str, Any]]:
+        if getattr(prompt, "tools", None) is None:
+            return []
+        try:
+            return copy.deepcopy(prompt.tools)
+        except Exception:  # pragma: no cover - defensive
+            serialized_tools: list[dict[str, Any]] = []
+            for tool in prompt.tools:  # type: ignore[attr-defined]
+                if isinstance(tool, dict):
+                    serialized_tools.append({k: v for k, v in tool.items() if k})
+            return serialized_tools
+
+    @staticmethod
+    def _describe_annotation(annotation: Any) -> str | None:
+        if annotation is inspect._empty:
+            return None
+        if isinstance(annotation, type):
+            return annotation.__name__
+        return str(annotation)
+
+    def _summarize_tool_signatures(
+        self, prompt: "chat_prompt.ChatPrompt"
+    ) -> list[dict[str, Any]]:
+        signatures: list[dict[str, Any]] = []
+        for name, func in getattr(prompt, "function_map", {}).items():
+            callable_obj = getattr(func, "__wrapped__", func)
+            try:
+                sig = inspect.signature(callable_obj)
+            except (TypeError, ValueError):  # pragma: no cover - defensive
+                signatures.append({"name": name, "signature": "unavailable"})
+                continue
+
+            params: list[dict[str, Any]] = []
+            for parameter in sig.parameters.values():
+                params.append(
+                    self._drop_none(
+                        {
+                            "name": parameter.name,
+                            "kind": parameter.kind.name,
+                            "annotation": self._describe_annotation(
+                                parameter.annotation
+                            ),
+                            "default": None
+                            if parameter.default is inspect._empty
+                            else parameter.default,
+                        }
+                    )
+                )
+
+            signatures.append(
+                self._drop_none(
+                    {
+                        "name": name,
+                        "parameters": params,
+                        "docstring": inspect.getdoc(callable_obj),
+                    }
+                )
+            )
+        return signatures
+
+    def _build_agent_config(
+        self, prompt: "chat_prompt.ChatPrompt"
+    ) -> dict[str, Any]:
+        agent_config = prompt.to_dict()
+        agent_config["project_name"] = getattr(prompt, "project_name", None)
+        agent_config["model"] = getattr(prompt, "model", None) or self.model
+        agent_config["tools"] = self._serialize_tools(prompt)
+        return self._drop_none(agent_config)
+
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        """Override in subclasses to expose optimizer-specific parameters."""
+        return {}
+
+    def _build_optimizer_metadata(self) -> dict[str, Any]:
+        metadata = {
+            "name": self.__class__.__name__,
+            "version": _OPTIMIZER_VERSION,
+            "model": self.model,
+            "model_kwargs": self.model_kwargs or None,
+            "seed": getattr(self, "seed", None),
+            "num_threads": getattr(self, "num_threads", None),
+        }
+
+        # n_threads is used by some optimizers instead of num_threads
+        if metadata["num_threads"] is None and hasattr(self, "n_threads"):
+            metadata["num_threads"] = getattr(self, "n_threads")
+
+        if hasattr(self, "reasoning_model"):
+            metadata["reasoning_model"] = getattr(self, "reasoning_model")
+
+        extra_parameters = self.get_optimizer_metadata()
+        if extra_parameters:
+            metadata["parameters"] = extra_parameters
+
+        return self._drop_none(metadata)
+
+    def _prepare_experiment_config(
+        self,
+        *,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: Dataset,
+        metric: Callable,
+        experiment_config: dict[str, Any] | None = None,
+        configuration_updates: dict[str, Any] | None = None,
+        additional_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        dataset_id = getattr(dataset, "id", None)
+        project_name = (
+            getattr(self.agent_class, "project_name", None)
+            if hasattr(self, "agent_class")
+            else None
+        )
+        if not project_name:
+            project_name = getattr(prompt, "project_name", None)
+        if not project_name:
+            project_name = self.__class__.__name__
+
+        base_config: dict[str, Any] = {
+            "project_name": project_name,
+            "agent_class": getattr(self.agent_class, "__name__", None)
+            if hasattr(self, "agent_class")
+            else None,
+            "agent_config": self._build_agent_config(prompt),
+            "metric": getattr(metric, "__name__", str(metric)),
+            "dataset": getattr(dataset, "name", None),
+            "dataset_id": dataset_id,
+            "optimizer_metadata": self._build_optimizer_metadata(),
+            "tool_signatures": self._summarize_tool_signatures(prompt),
+            "configuration": {
+                "prompt": prompt.get_messages(),
+                "prompt_name": getattr(prompt, "name", None),
+                "tools": self._serialize_tools(prompt),
+                "prompt_project_name": getattr(prompt, "project_name", None),
+            },
+        }
+
+        if configuration_updates:
+            base_config["configuration"] = self._deep_merge_dicts(
+                base_config["configuration"], configuration_updates
+            )
+
+        if additional_metadata:
+            base_config = self._deep_merge_dicts(base_config, additional_metadata)
+
+        if experiment_config:
+            base_config = self._deep_merge_dicts(base_config, experiment_config)
+
+        return self._drop_none(base_config)
 
     def create_optimization_context(
         self, dataset: "Dataset", metric: Callable, metadata: dict | None = None
@@ -357,18 +540,12 @@ class BaseOptimizer(ABC):
             }
             return result
 
-        experiment_config = experiment_config or {}
-        experiment_config["project_name"] = self.__class__.__name__
-        experiment_config = {
-            **experiment_config,
-            **{
-                "agent_class": self.agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": metric.__name__,
-                "dataset": dataset.name,
-                "configuration": {"prompt": (prompt.get_messages() if prompt else [])},
-            },
-        }
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+        )
 
         if n_samples is not None:
             if dataset_item_ids is not None:
@@ -383,7 +560,7 @@ class BaseOptimizer(ABC):
             metric=metric,
             evaluated_task=llm_task,
             num_threads=n_threads,
-            project_name=self.agent_class.project_name,
+            project_name=experiment_config.get("project_name"),
             experiment_config=experiment_config,
             optimization_id=None,
             verbose=verbose,

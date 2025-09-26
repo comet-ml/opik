@@ -68,7 +68,6 @@ optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    experiment_config={"task": "hotpot", "model": "gpt-4o-mini"},
     n_samples=10,
 )
 optimization_result.display()

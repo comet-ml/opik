@@ -95,11 +95,13 @@ Here's a step-by-step guide to get you up and running with Opik Agent Optimizer:
         prompt=prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
-        n_samples=100,  # Number of samples to evaluate
-        experiment_config={"task": "quickstart", "model": "gpt-4"}
+        n_samples=100  # Number of samples to evaluate
     )
     print("Optimization finished.")
     ```
+    The optimizer automatically records metadata such as the optimizer version, prompt messages,
+    tool schemas, and model parameters. Supply an `experiment_config` dictionary only if you need
+    to add custom tags on top of that default context.
   </Step>
   <Step title="9. View results in the CLI">
     After optimization completes, call `result.display()` to see a summary of the optimization,
