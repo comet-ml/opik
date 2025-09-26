@@ -422,38 +422,20 @@ def create_demo_chatbot_project(base_url: str, workspace_name, comet_api_key):
 
         client.flush()
 
-        # Process threads concurrently using ThreadPoolExecutor
-        def process_thread(thread):
-            if thread is None:
-                logger.warning("Skipping thread scoring because thread_id is None")
-                return
 
-            done = False
-            max_attempts = 10
-            attempts = 0
+        done = False
+        max_attempts = 10
+        attempts = 0
 
-            while not done and attempts < max_attempts:
-                try:
-                    client.rest_client.traces.close_trace_thread(thread_id=thread, project_name=project_name)
-                    done = True
-                    attempts = 0
-                except Exception as e:
-                    logger.error(f"Error closing thread {thread} attempt {attempts}: {e}")
-                    attempts += 1
-                    time.sleep(0.5)
-
-        # Process all threads concurrently using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=min(len(threads), 4)) as executor:
-            # Submit all thread processing tasks
-            future_to_thread = {executor.submit(process_thread, thread): thread for thread in threads}
-
-            # Wait for all tasks to complete
-            for future in as_completed(future_to_thread):
-                thread = future_to_thread[future]
-                try:
-                    future.result()  # This will raise any exceptions that occurred
-                except Exception as exc:
-                    logger.error(f"Thread processing failed for thread {thread}: {exc}")
+        while not done and attempts < max_attempts:
+            try:
+                client.rest_client.traces.close_trace_thread(project_name=project_name, thread_ids=threads)
+                done = True
+                attempts = 0
+            except Exception as e:
+                logger.error(f"Error closing thread {thread} attempt {attempts}: {e}")
+                attempts += 1
+                time.sleep(0.5)
 
         all_scores = []
 
