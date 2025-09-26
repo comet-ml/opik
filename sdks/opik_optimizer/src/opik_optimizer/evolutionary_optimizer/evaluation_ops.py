@@ -1,4 +1,4 @@
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 from collections.abc import Callable
 
 
