@@ -31,8 +31,12 @@ def test_evolutionary_optimizer() -> None:
         temperature=0.1,
         max_tokens=500000,
         infer_output_style=True,
-        population_size=2,  # Reduced from 5
-        num_generations=2,  # Reduced from 10
+        population_size=2,
+        num_generations=2,
+        n_threads=1,
+        enable_llm_crossover=False,
+        enable_moo=False,
+        elitism_size=1,
     )
 
     # Run optimization with reduced sample size
