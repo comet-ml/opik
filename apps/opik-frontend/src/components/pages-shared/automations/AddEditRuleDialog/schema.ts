@@ -6,6 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -241,7 +242,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
 ) => {
   const { temperature, seed } = data.config;
   const model: LLMJudgeObject["model"] = {
-    name: data.model,
+    name: data.model as PROVIDER_MODEL_TYPE,
     temperature,
   };
 

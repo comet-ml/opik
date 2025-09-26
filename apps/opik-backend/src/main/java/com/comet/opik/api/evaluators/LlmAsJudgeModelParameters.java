@@ -11,7 +11,7 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record LlmAsJudgeModelParameters(
-        @JsonView( {
+        @JsonView({
                 AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) @NotNull String name,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
