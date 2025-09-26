@@ -324,7 +324,12 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
 
   const search = useSearch({ strict: false }) as { queueId?: string };
   const { queueId } = search;
-  const currentUserName = useLoggedInUserName();
+
+  // If the user is not defined, use "admin" as the user name
+  // it happens for deployment without comet plugin, and BE automatically
+  // sets the user name to "admin", we need to mimic this behavior in FE
+  // to have correcly working feedback scores and comments
+  const currentUserName = useLoggedInUserName() ?? "admin";
 
   const { mutate: createTraceComment } = useCreateTraceCommentMutation();
   const { mutate: createThreadComment } = useCreateThreadCommentMutation();
