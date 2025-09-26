@@ -22,7 +22,7 @@ opik configure
 
 If you are self-hosting the platform, you can configure the SDK by running:
 
-```python {pytest_codeblocks_skip=true}
+```python
 import opik
 
 opik.configure(use_local=True)
@@ -30,7 +30,7 @@ opik.configure(use_local=True)
 
 or from the Command line:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 opik configure --use_local
 ```
 
@@ -113,7 +113,6 @@ Here is a list of the configuration values that you can set:
 | default_flush_timeout      | `OPIK_DEFAULT_FLUSH_TIMEOUT` | The default flush timeout to use - Defaults to no timeout                                    |
 | opik_check_tls_certificate | `OPIK_CHECK_TLS_CERTIFICATE` | Flag to check the TLS certificate of the Opik server - Defaults to `true`                    |
 
-
 ### The HTTP client advanced configuration
 
 The Opik Python SDK uses the [httpx](https://www.python-httpx.org/) library to make HTTP requests.
@@ -136,8 +135,7 @@ opik.hooks.add_httpx_client_hook(hook)
 
 ```
 
-<Icon icon="warning" color="#DB0030"/> Make sure to add the hook before using the Opik SDK.
-
+<Icon icon="warning" color="#DB0030" /> Make sure to add the hook before using the Opik SDK.
 
 ### Common error messages
 

@@ -38,7 +38,7 @@ In order to access private datasets on Hugging Face, you will need to have your 
 
 You can set it as an environment variable:
 
-```bash {pytest_codeblocks_skip=true}
+```bash
 export HUGGINGFACE_HUB_TOKEN="YOUR_TOKEN"
 ```
 
@@ -73,13 +73,13 @@ warnings.filterwarnings('ignore')
 
 class HuggingFaceToOpikConverter:
     """Utility class to convert Hugging Face datasets to Opik format."""
-    
+
     def __init__(self, opik_client: Opik):
         self.opik_client = opik_client
-    
+
     def load_hf_dataset(
-        self, 
-        dataset_name: str, 
+        self,
+        dataset_name: str,
         split: Optional[str] = None,
         config: Optional[str] = None,
         subset_size: Optional[int] = None,
@@ -87,14 +87,14 @@ class HuggingFaceToOpikConverter:
     ) -> HFDataset:
         """
         Load a dataset from Hugging Face Hub.
-        
+
         Args:
             dataset_name: Name of the dataset on HF Hub
             split: Specific split to load (train, validation, test)
             config: Configuration/subset of the dataset
             subset_size: Limit the number of samples
             **kwargs: Additional arguments for load_dataset
-        
+
         Returns:
             Loaded Hugging Face dataset
         """
@@ -103,23 +103,23 @@ class HuggingFaceToOpikConverter:
             print(f"   Config: {config}")
         if split:
             print(f"   Split: {split}")
-        
+
         # Load the dataset
         dataset = load_dataset(
-            dataset_name, 
+            dataset_name,
             name=config,
             split=split,
             **kwargs
         )
-        
+
         # Limit dataset size if specified
         if subset_size and len(dataset) > subset_size:
             dataset = dataset.select(range(subset_size))
             print(f"   Limited to {subset_size} samples")
-        
+
         print(f"   ✅ Loaded {len(dataset)} samples")
         print(f"   Features: {list(dataset.features.keys())}")
-        
+
         return dataset
 ```
 
@@ -170,7 +170,7 @@ def convert_to_opik_format(
 ) -> List[Dict[str, Any]]:
     """
     Convert a Hugging Face dataset to Opik format.
-    
+
     Args:
         dataset: Hugging Face dataset
         input_columns: List of column names to use as input
@@ -178,32 +178,32 @@ def convert_to_opik_format(
         metadata_columns: Optional list of columns to include as metadata
         dataset_name: Name for the Opik dataset
         description: Description for the Opik dataset
-    
+
     Returns:
         List of Opik dataset items
     """
     opik_items = []
-    
+
     for row in tqdm(dataset, desc="Converting to Opik format"):
         # Extract input data
         input_data = {}
         for col in input_columns:
             if col in dataset.features:
                 input_data[col] = self._extract_field_value(row, col)
-        
+
         # Extract expected output
         expected_output = {}
         for col in output_columns:
             if col in dataset.features:
                 expected_output[col] = self._extract_field_value(row, col)
-        
+
         # Extract metadata
         metadata = {}
         if metadata_columns:
             for col in metadata_columns:
                 if col in dataset.features:
                     metadata[col] = self._extract_field_value(row, col)
-        
+
         # Create Opik dataset item
         item = {
             "input": input_data,
@@ -211,7 +211,7 @@ def convert_to_opik_format(
             "metadata": metadata
         }
         opik_items.append(item)
-    
+
     return opik_items
 ```
 
@@ -226,7 +226,7 @@ from opik import track
 def evaluate_qa_model(dataset_item):
     """Evaluate a Q&A model using Hugging Face dataset."""
     question = dataset_item["input"]["question"]
-    
+
     # Your model logic here (replace with actual model)
     if 'what' in question.lower():
         response = "This is a question asking for information."
@@ -234,7 +234,7 @@ def evaluate_qa_model(dataset_item):
         response = "This is a question asking for a process or method."
     else:
         response = "This is a general question that requires analysis."
-    
+
     return {
         "question": question,
         "response": response,
@@ -321,13 +321,6 @@ Once your Hugging Face datasets are converted and uploaded to Opik, you can view
 - Expected output from specified columns
 - Metadata from additional columns
 - Source information (Hugging Face dataset name and split)
-
-{/* <Frame>
-  <img src="/img/tracing/huggingface_datasets_integration.png" />
-</Frame>
-
-Screenshot should be placed at: apps/opik-documentation/documentation/fern/img/tracing/huggingface_datasets_integration.png
-Documentation reference path: /img/tracing/huggingface_datasets_integration.png */}
 
 ## Feedback Scores and Evaluation
 
