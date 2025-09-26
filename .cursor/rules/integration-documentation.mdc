@@ -18,6 +18,41 @@ Use this matrix to determine which template to use:
 | **LiteLLM Integration** | • LLM provider supported by LiteLLM<br>• Uses OpikLogger callback<br>• Unified LiteLLM interface<br>• API key configuration required | `integration_template_litellm.md` | OpenAI, Anthropic, Groq, Fireworks AI, Cohere, Mistral AI, xAI Grok |
 | **OpenTelemetry Integration** | • Users configure OTEL endpoints<br>• No code changes required<br>• Configuration via env vars<br>• Works through OTEL instrumentations | `integration_template_otel.md` | Ruby SDK, Pydantic AI (via Logfire), Direct OTEL Python |
 
+## ⚠️ Integration Type Compatibility Rules
+
+### **CRITICAL: OpenTelemetry vs SDK Incompatibility**
+
+**OpenTelemetry integrations and Opik SDK features are fundamentally incompatible.** OpenTelemetry integrations send traces directly through OTEL exporters to Opik's OTEL endpoint, while SDK integrations use Opik's Python SDK to create traces through Opik's REST API.
+
+### **OpenTelemetry Integrations - NEVER Include:**
+- ❌ **"Using with @track decorator"** sections
+- ❌ **"Feedback Scores and Evaluation"** sections  
+- ❌ **Any code importing** `from opik import track`
+- ❌ **Any code using** `opik.evaluation` module
+- ❌ **Any code using** `opik_context` module
+- ❌ **SDK configuration** (`opik configure`, `opik.configure()`)
+- ❌ **"Next Steps" mentioning evaluation** framework
+
+### **OpenTelemetry Integrations - ONLY Include:**
+- ✅ **Environment variable configuration** (OTEL endpoints)
+- ✅ **Framework-specific OTEL instrumentation**
+- ✅ **Direct OTEL span creation** (when showing custom spans)
+- ✅ **Account setup** (for API keys)
+- ✅ **Further improvements** (GitHub link)
+
+### **Code Integrations - CORRECTLY Include:**
+- ✅ **`@track` decorator examples**
+- ✅ **Evaluation framework integration**
+- ✅ **`track_*()` wrapper functions**
+- ✅ **Opik SDK import patterns**
+- ✅ **SDK configuration** (`opik configure`)
+
+### **Why They're Incompatible:**
+- `@track` creates spans in Opik's internal context system
+- OTEL integrations create spans in OpenTelemetry's context system  
+- These don't automatically correlate or merge together
+- Evaluation frameworks require Opik SDK data structures, not OTEL spans
+
 ## 📝 Page Title and Description Standards
 
 ### Frontmatter Requirements
@@ -279,6 +314,13 @@ Before publishing integration documentation, verify:
 - [ ] Framework-specific instrumentation code is provided
 - [ ] Advanced usage section contains genuine framework-specific features (or is omitted entirely if no advanced features exist)
 - [ ] GitHub call-to-action is included
+
+### Integration Type Compatibility
+- [ ] **OpenTelemetry integrations** do NOT include SDK features (`@track`, evaluation, `opik.configure()`)
+- [ ] **Code integrations** do NOT include OTEL-only configuration patterns
+- [ ] **LiteLLM integrations** properly combine OpikLogger with `@track` decorator examples
+- [ ] Integration type matches the actual framework capabilities
+- [ ] "Next Steps" section is appropriate for integration type (evaluation only for SDK integrations)
 
 ### Advanced Usage Section Guidelines
 
