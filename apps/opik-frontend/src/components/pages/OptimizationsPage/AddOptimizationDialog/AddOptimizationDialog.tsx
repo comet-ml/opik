@@ -88,7 +88,8 @@ result = optimizer.optimize_prompt(
 )
 
 result.display()
-# Optimizer metadata (prompt, tools, version) is logged automatically.`,
+# Optimizer metadata (prompt, tools, version) is logged automatically.
+`,
 
   [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: `# Configure the SDK
 import os
@@ -137,7 +138,8 @@ result = optimizer.optimize_prompt(
 )
 
 result.display()
-# Optimizer metadata (prompt, tools, version) is logged automatically.`,
+# Optimizer metadata (prompt, tools, version) is logged automatically.
+`,
 
   [OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer]: `# Configure the SDK
 import os
@@ -190,6 +192,8 @@ result = optimizer.optimize_prompt(
 )
 
 result.display()
+# Optimizer metadata (prompt, tools, version) is logged automatically.
+`,
 };
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
