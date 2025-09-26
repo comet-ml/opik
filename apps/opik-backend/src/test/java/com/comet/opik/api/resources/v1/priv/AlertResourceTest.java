@@ -55,6 +55,11 @@ class AlertResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    private static final String[] ALERT_IGNORED_FIELDS = new String[]{
+            "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy", "webhook.id", "webhook.createdAt", "webhook.lastUpdatedAt", "webhook.createdBy",
+            "webhook.lastUpdatedBy"};
+
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
@@ -245,6 +250,42 @@ class AlertResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(actualResponse.hasEntity()).isTrue();
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Alert By ID:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetAlertById {
+
+        @Test
+        @DisplayName("Success: should get alert by id")
+        void getAlertById() {
+            var mock = prepareMockWorkspace();
+
+            // Create an alert first
+            var alert = factory.manufacturePojo(Alert.class);
+            var createdAlertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            assertThat(actualAlert)
+                    .usingRecursiveComparison()
+                    .ignoringFields(ALERT_IGNORED_FIELDS)
+                    .isEqualTo(alert);
+        }
+
+        @Test
+        @DisplayName("when alert does not exist, then return not found")
+        void getAlertById__whenAlertDoesNotExist__thenReturnNotFound() {
+            var mock = prepareMockWorkspace();
+
+            UUID nonExistentId = UUID.randomUUID();
+
+            alertResourceClient.getAlertById(nonExistentId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NOT_FOUND);
         }
     }
 
