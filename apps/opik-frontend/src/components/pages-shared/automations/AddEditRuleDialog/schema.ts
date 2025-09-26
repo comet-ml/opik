@@ -43,7 +43,7 @@ const LLMJudgeBaseSchema = z.object({
     seed: z
       .number()
       .int()
-      .min(0, { message: "Seed must be a positive integer" })
+      .min(0, { message: "Seed must be a non-negative integer" })
       .optional()
       .nullable(),
   }),
