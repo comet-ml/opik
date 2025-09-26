@@ -9,10 +9,6 @@ interface InstructionsSectionProps {
 const InstructionsSection: React.FunctionComponent<
   InstructionsSectionProps
 > = ({ annotationQueue }) => {
-  if (!annotationQueue.instructions) {
-    return null;
-  }
-
   return (
     <div>
       <h2 className="comet-title-s truncate break-words pb-3 pt-2">

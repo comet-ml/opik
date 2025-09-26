@@ -303,8 +303,6 @@ serviceToggles:
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: "false"
   # Default: false
-  # Description: Whether or not Human Annotation feature is enabled
-  humanAnnotationEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

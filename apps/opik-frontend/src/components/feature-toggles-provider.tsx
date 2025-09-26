@@ -19,7 +19,6 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_ALERTS_ENABLED]: false,
-  [FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {

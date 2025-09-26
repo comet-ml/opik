@@ -25,9 +25,6 @@ const TracesPage = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const isHumanAnnotationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED,
-  );
 
   const [type = TRACE_DATA_TYPE.traces, setType] = useQueryParam(
     "type",
@@ -101,11 +98,9 @@ const TracesPage = () => {
               <TabsTrigger variant="underline" value="rules">
                 Online evaluation
               </TabsTrigger>
-              {isHumanAnnotationEnabled && (
-                <TabsTrigger variant="underline" value="annotation-queues">
-                  Annotation queues
-                </TabsTrigger>
-              )}
+              <TabsTrigger variant="underline" value="annotation-queues">
+                Annotation queues
+              </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
           <TabsContent value={TRACE_DATA_TYPE.traces}>
@@ -131,11 +126,9 @@ const TracesPage = () => {
           <TabsContent value="rules">
             <RulesTab projectId={projectId} />
           </TabsContent>
-          {isHumanAnnotationEnabled && (
-            <TabsContent value="annotation-queues">
-              <AnnotationQueuesTab projectId={projectId} />
-            </TabsContent>
-          )}
+          <TabsContent value="annotation-queues">
+            <AnnotationQueuesTab projectId={projectId} />
+          </TabsContent>
         </Tabs>
       </PageBodyScrollContainer>
       {isGuardrailsEnabled && (
