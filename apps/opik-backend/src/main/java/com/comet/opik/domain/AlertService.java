@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -13,9 +15,11 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -61,6 +65,8 @@ class AlertServiceImpl implements AlertService {
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
+            AlertTriggerDAO alertTriggerDAO = handle.attach(AlertTriggerDAO.class);
+            AlertTriggerConfigDAO alertTriggerConfigDAO = handle.attach(AlertTriggerConfigDAO.class);
 
             Alert alert = alertDAO.findById(id, workspaceId);
 
@@ -68,7 +74,21 @@ class AlertServiceImpl implements AlertService {
                 throw new NotFoundException(ALERT_NOT_FOUND);
             }
 
-            return alert;
+            // Fetch triggers and their configs
+            List<AlertTrigger> triggers = alertTriggerDAO.findByAlertId(id);
+
+            List<AlertTrigger> triggersWithConfigs = triggers.stream()
+                    .map(trigger -> {
+                        List<AlertTriggerConfig> configs = alertTriggerConfigDAO.findByAlertTriggerId(trigger.id());
+                        return trigger.toBuilder()
+                                .triggerConfigs(configs.isEmpty() ? null : configs)
+                                .build();
+                    })
+                    .toList();
+
+            return alert.toBuilder()
+                    .triggers(triggersWithConfigs.isEmpty() ? null : triggersWithConfigs)
+                    .build();
         });
     }
 
@@ -80,6 +100,24 @@ class AlertServiceImpl implements AlertService {
 
             WebhookDAO webhookDAO = handle.attach(WebhookDAO.class);
             webhookDAO.save(workspaceId, alert.webhook());
+
+            // Save triggers and their configs
+            if (CollectionUtils.isNotEmpty(alert.triggers())) {
+                AlertTriggerDAO alertTriggerDAO = handle.attach(AlertTriggerDAO.class);
+                alertTriggerDAO.saveBatch(alert.triggers());
+
+                //                AlertTriggerConfigDAO alertTriggerConfigDAO = handle.attach(AlertTriggerConfigDAO.class);
+                //
+                //                for (AlertTrigger trigger : alert.triggers()) {
+                //
+                //
+                //                    if (trigger.triggerConfigs() != null && !trigger.triggerConfigs().isEmpty()) {
+                //                        for (AlertTriggerConfig config : trigger.triggerConfigs()) {
+                //                            alertTriggerConfigDAO.save(trigger.id(), config);
+                //                        }
+                //                    }
+                //                }
+            }
 
             return null;
         });
@@ -103,10 +141,47 @@ class AlertServiceImpl implements AlertService {
                 .lastUpdatedBy(userName)
                 .build();
 
+        // Prepare triggers with generated IDs
+        List<AlertTrigger> preparedTriggers = null;
+        if (alert.triggers() != null) {
+            preparedTriggers = alert.triggers().stream()
+                    .map(trigger -> prepareTrigger(trigger, userName, id))
+                    .toList();
+        }
+
         return alert.toBuilder()
                 .id(id)
                 .enabled(alert.enabled() != null ? alert.enabled() : true) // Set default to true only when not explicitly provided
                 .webhook(webhook)
+                .triggers(preparedTriggers)
+                .createdBy(userName)
+                .lastUpdatedBy(userName)
+                .build();
+    }
+
+    private AlertTrigger prepareTrigger(AlertTrigger trigger, String userName, UUID alertId) {
+        UUID triggerId = idGenerator.generateId();
+
+        List<AlertTriggerConfig> preparedConfigs = null;
+        if (trigger.triggerConfigs() != null) {
+            preparedConfigs = trigger.triggerConfigs().stream()
+                    .map(config -> prepareTriggerConfig(config, userName, triggerId))
+                    .toList();
+        }
+
+        return trigger.toBuilder()
+                .id(triggerId)
+                .alertId(alertId)
+                .triggerConfigs(preparedConfigs)
+                .createdBy(userName)
+                .build();
+    }
+
+    private AlertTriggerConfig prepareTriggerConfig(AlertTriggerConfig config, String userName, UUID triggerId) {
+
+        return config.toBuilder()
+                .id(idGenerator.generateId())
+                .alertTriggerId(triggerId)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
