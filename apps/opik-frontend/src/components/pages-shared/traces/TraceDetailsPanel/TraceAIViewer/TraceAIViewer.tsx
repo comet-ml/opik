@@ -218,7 +218,8 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
           Debug your trace with OpikAssist
         </div>
         <div className="comet-body-s mb-8 text-center text-muted-slate">
-          Get AI-powered help spotting issues, understanding behavior, or debugging problems. Start with a sample question or ask your own.
+          Get AI-powered help spotting issues, understanding behavior, or
+          debugging problems. Start with a sample question or ask your own.
         </div>
         {predefinedPrompts.map((prompt) => (
           <Button
