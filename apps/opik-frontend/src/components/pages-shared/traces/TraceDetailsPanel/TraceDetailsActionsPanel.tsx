@@ -330,7 +330,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           <Separator orientation="vertical" className="mx-1 h-4" />
         )}
         {isAIInspectorEnabled && (
-          <TooltipWrapper content="AI-powered trace analysis">
+          <TooltipWrapper content="Debug your trace with AI assistance (OpikAssist)">
             <Button
               variant="default"
               size={isSmall ? "icon-sm" : "sm"}
@@ -339,7 +339,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               }
             >
               <Sparkles className="size-3.5 shrink-0" />
-              {isSmall ? null : <span className="ml-1.5">Inspect trace</span>}
+              {isSmall ? null : <span className="ml-1.5">Debug with AI</span>}
             </Button>
           </TooltipWrapper>
         )}
