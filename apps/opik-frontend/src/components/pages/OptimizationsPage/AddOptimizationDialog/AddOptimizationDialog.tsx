@@ -16,7 +16,6 @@ export enum OPTIMIZATION_ALGORITHMS {
   fewShotOptimizer = "FewShotBayesianOptimizer",
   metaPromptOptimizer = "MetaPromptOptimizer",
   evolutionaryOptimizer = "EvolutionaryOptimizer",
-  gepaOptimizer = "GepaOptimizer",
 }
 
 const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[] =
@@ -36,11 +35,6 @@ const OPTIMIZATION_ALGORITHMS_OPTIONS: DropdownOption<OPTIMIZATION_ALGORITHMS>[]
       value: OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer,
       label: "Evolutionary optimizer",
       description: "Optimizes prompts using evolution.",
-    },
-    {
-      value: OPTIMIZATION_ALGORITHMS.gepaOptimizer,
-      label: "GEPA optimizer",
-      description: "Applies Genetic-Pareto search with reflection guidance.",
     },
   ];
 
@@ -77,13 +71,12 @@ def levenshtein_ratio(dataset_item, llm_output):
 
 # Run the optimization
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o-mini",  # Task model (LiteLLM name)
-    reasoning_model="openai/gpt-4o",  # Optional reasoning model
+    model="openai/gpt-4o",  # Task model (LiteLLM name)
+    reasoning_model="openai/gpt-4o-mini",  # Optional reasoning model
     rounds=3,
     num_prompts_per_round=4,
     n_threads=8,
     enable_context=True,
-    temperature=0.0,
     seed=42,
 )
 
@@ -95,8 +88,7 @@ result = optimizer.optimize_prompt(
 )
 
 result.display()
-# Optimizer metadata (prompt, tools, version) is logged automatically.
-`,
+# Optimizer metadata (prompt, tools, version) is logged automatically.`,
 
   [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: `# Configure the SDK
 import os
@@ -145,8 +137,7 @@ result = optimizer.optimize_prompt(
 )
 
 result.display()
-# Optimizer metadata (prompt, tools, version) is logged automatically.
-`,
+# Optimizer metadata (prompt, tools, version) is logged automatically.`,
 
   [OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer]: `# Configure the SDK
 import os
@@ -199,59 +190,6 @@ result = optimizer.optimize_prompt(
 )
 
 result.display()
-# Optimizer metadata (prompt, tools, version) is logged automatically.
-`,
-
-  [OPTIMIZATION_ALGORITHMS.gepaOptimizer]: `# Configure the SDK
-import os
-# INJECT_OPIK_CONFIGURATION
-
-import opik
-from opik_optimizer import (
-    ChatPrompt,
-    GepaOptimizer,
-)
-from opik.evaluation.metrics import LevenshteinRatio
-
-# Define the prompt to optimize
-prompt = ChatPrompt(
-    system="Answer the question.",
-    user="{question}",  # This must match dataset field
-)
-
-# Get the dataset to evaluate the prompt on
-client = opik.Opik()
-dataset = client.get_dataset(name="DATASET_NAME_PLACEHOLDER")
-
-# Define the metric to evaluate the prompt on
-def levenshtein_ratio(dataset_item, llm_output):
-    metric = LevenshteinRatio()
-    return metric.score(
-        reference=dataset_item["answer"],  # This must match dataset field
-        output=llm_output,
-    )
-
-# Run the optimization
-optimizer = GepaOptimizer(
-    model="openai/gpt-4o-mini",  # Task model (LiteLLM name)
-    reflection_model="openai/gpt-4o",  # Reflection model for re-ranking
-    temperature=0.0,
-    max_tokens=400,
-)
-
-result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=levenshtein_ratio,
-    n_samples=12,
-    max_metric_calls=60,
-    reflection_minibatch_size=5,
-    candidate_selection_strategy="best",
-)
-
-result.display()
-# Optimizer metadata (prompt, tools, version) is logged automatically.
-`,
 };
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
