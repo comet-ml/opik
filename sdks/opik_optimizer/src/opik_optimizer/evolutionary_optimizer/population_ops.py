@@ -41,9 +41,8 @@ class PopulationOps:
         including some 'fresh start' prompts based purely on task description.
         All generated prompts should aim to elicit answers matching self.output_style_guidance.
         """
-        mcp_context = getattr(self, "_mcp_context", None)
-        if mcp_context is not None:
-            return initialize_population_mcp(self, prompt, mcp_context)
+        if getattr(self, "_mcp_context", None):
+            return initialize_population_mcp(self, prompt, self._mcp_context)
         with reporting.initializing_population(verbose=self.verbose) as init_pop_report:
             init_pop_report.start(self.population_size)
 
@@ -88,21 +87,13 @@ class PopulationOps:
                             p.get("role") is not None for p in fresh_prompts
                         ):
                             population.append(
-                                chat_prompt.ChatPrompt(
-                                    messages=fresh_prompts,
-                                    tools=prompt.tools,
-                                    function_map=prompt.function_map,
-                                )
+                                chat_prompt.ChatPrompt(messages=fresh_prompts)
                             )
                             init_pop_report.success_fresh_prompts(1)
                         elif all(isinstance(p, list) for p in fresh_prompts):
                             population.extend(
                                 [
-                                    chat_prompt.ChatPrompt(
-                                        messages=p,
-                                        tools=prompt.tools,
-                                        function_map=prompt.function_map,
-                                    )
+                                    chat_prompt.ChatPrompt(messages=p)
                                     for p in fresh_prompts[:num_fresh_starts]
                                 ]
                             )
@@ -165,11 +156,7 @@ class PopulationOps:
                         )
                         population.extend(
                             [
-                                chat_prompt.ChatPrompt(
-                                    messages=p,
-                                    tools=prompt.tools,
-                                    function_map=prompt.function_map,
-                                )
+                                chat_prompt.ChatPrompt(messages=p)
                                 for p in generated_prompts_variations[
                                     :num_variations_on_initial
                                 ]
@@ -222,20 +209,16 @@ class PopulationOps:
         else:
             elites = tools.selBest(population, self.elitism_size)
 
-        if elites:
-            best_elite = max(elites, key=lambda x: x.fitness.values[0])
-            seed_prompt = chat_prompt.ChatPrompt(
-                messages=best_elite,
-                tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
-                function_map=getattr(
-                    best_elite, "function_map", best_prompt_so_far.function_map
-                ),
+        seed_prompt = (
+            chat_prompt.ChatPrompt(
+                messages=max(elites, key=lambda x: x.fitness.values[0])
             )
-        else:
-            seed_prompt = best_prompt_so_far
+            if elites
+            else best_prompt_so_far
+        )
 
         prompt_variants = self._initialize_population(seed_prompt)
-        new_pop = [self._create_individual_from_prompt(p) for p in prompt_variants]  # type: ignore[attr-defined]
+        new_pop = [creator.Individual(p.get_messages()) for p in prompt_variants]
 
         for ind, fit in zip(new_pop, map(self.toolbox.evaluate, new_pop)):
             ind.fitness.values = fit
