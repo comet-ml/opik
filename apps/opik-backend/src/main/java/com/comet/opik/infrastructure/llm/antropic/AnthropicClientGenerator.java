@@ -64,7 +64,6 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         }
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
         return builder.build();
     }
