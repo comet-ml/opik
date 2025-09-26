@@ -91,8 +91,7 @@ opt_result = optimizer.optimize_prompt(
   prompt=prompt,
   dataset=dataset,
   metric=levenshtein_ratio,
-  n_samples=100,
-  experiment_config={"task": "overview", "model": "gpt-4"}
+  n_samples=100
 )
 
 print(f"Optimized prompt: {opt_result.prompt}")

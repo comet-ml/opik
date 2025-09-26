@@ -67,6 +67,12 @@ class GepaOptimizer(BaseOptimizer):
         self._gepa_live_metric_calls = 0
         self._adapter = None  # Will be set during optimization
 
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {
+            "project_name": self.project_name,
+            "reflection_model": self.reflection_model,
+        }
+
     def cleanup(self) -> None:
         """
         Clean up GEPA-specific resources.
@@ -604,6 +610,7 @@ class GepaOptimizer(BaseOptimizer):
             prompt.model_kwargs = self.model_kwargs
 
         agent_class = create_litellm_agent_class(prompt, optimizer=self)
+        self.agent_class = agent_class
         agent = agent_class(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
@@ -611,22 +618,14 @@ class GepaOptimizer(BaseOptimizer):
             raw = agent.invoke(messages)
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: raw.strip()}
 
-        experiment_config = experiment_config or {}
-        experiment_config["project_name"] = agent_class.__name__
-        experiment_config = {
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "agent_class": agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": metric.__name__,
-                "dataset": dataset.name,
-                "configuration": {
-                    "prompt": prompt.get_messages(),
-                    "gepa": (extra_metadata or {}),
-                },
-            },
-        }
+        configuration_updates = self._drop_none({"gepa": extra_metadata})
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+        )
 
         score = task_evaluator.evaluate(
             dataset=dataset,
@@ -634,7 +633,7 @@ class GepaOptimizer(BaseOptimizer):
             metric=metric,
             evaluated_task=llm_task,
             num_threads=self.num_threads,
-            project_name=agent_class.project_name,
+            project_name=experiment_config.get("project_name"),
             experiment_config=experiment_config,
             optimization_id=optimization_id,
             n_samples=n_samples,

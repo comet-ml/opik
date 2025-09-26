@@ -54,6 +54,12 @@ class MiproOptimizer(BaseOptimizer):
         dspy.configure(lm=self.lm, callbacks=[opik_callback])
         logger.debug(f"Initialized MiproOptimizer with model: {model}")
 
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {
+            "project_name": self.project_name,
+            "num_threads": self.num_threads,
+        }
+
     def evaluate_prompt(
         self,
         dataset: str | Dataset,

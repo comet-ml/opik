@@ -153,14 +153,15 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=hot_pot_dataset,
     metric=levenshtein_ratio,
-    n_samples=150, # Number of dataset samples for evaluation per trial
-    experiment_config={"task": "hotpot", "model": "gpt-4o-mini"}
+    n_samples=150  # Number of dataset samples for evaluation per trial
 )
 
 # Display the best prompt and its score
 result.display()
 ```
 The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
+
+The optimizer automatically logs run metadata—including optimizer version, tool schemas, prompt messages, and the models used—so you get consistent experiment context without any additional arguments. If you still need custom tags (for example identifying the dataset or task), pass an `experiment_config` dictionary and your fields will be merged on top of the defaults.
 
 ## Tool Optimization (MCP) - Beta
 
