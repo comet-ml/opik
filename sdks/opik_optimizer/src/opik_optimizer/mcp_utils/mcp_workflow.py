@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import io
+import json
 import logging
 import os
 import textwrap
@@ -346,12 +347,19 @@ class MCPToolInvocation:
     preview_label: str | None = None
     preview_chars: int = 160
     rate_limit_sleep: float = DEFAULT_MCP_RATELIMIT_SLEEP
+    cache_enabled: bool = True
     _logger: logging.Logger = field(default_factory=lambda: logger)
+    _cache: dict[str, str] = field(default_factory=dict, init=False)
 
     def __call__(self, **arguments: Any) -> str:
         return self.invoke(arguments)
 
-    def invoke(self, arguments: Mapping[str, Any]) -> str:
+    def clear_cache(self) -> None:
+        self._cache.clear()
+
+    def invoke(
+        self, arguments: Mapping[str, Any], *, use_cache: bool | None = None
+    ) -> str:
         def call_tool(name: str, payload: dict[str, Any]) -> Any:
             if self.rate_limit_sleep > 0:
                 time.sleep(self.rate_limit_sleep)
@@ -366,6 +374,19 @@ class MCPToolInvocation:
         prepared = dict(arguments)
         if self.argument_adapter:
             prepared = self.argument_adapter(prepared, call_tool)
+
+        effective_cache = self.cache_enabled if use_cache is None else use_cache
+        cache_key: str | None = None
+        if effective_cache:
+            cache_key = self._make_cache_key(prepared)
+            cached_summary = self._cache.get(cache_key)
+            if cached_summary is not None:
+                if self.summary_handler:
+                    self.summary_handler.record_summary(cached_summary)
+                self._logger.debug(
+                    "MCP tool %s cache hit arguments=%s", self.tool_name, prepared
+                )
+                return cached_summary
 
         # TODO(opik-mcp): reuse a persistent MCP client so we avoid spawning a
         # new stdio subprocess for each call. This currently mirrors the
@@ -391,10 +412,19 @@ class MCPToolInvocation:
         if self.summary_handler:
             self.summary_handler.record_summary(summary)
 
+        if effective_cache and cache_key is not None:
+            self._cache[cache_key] = summary
+
         if os.getenv("OPIK_DEBUG_MCP"):
             self._logger.info("MCP %s raw response:\n%s", label, text)
 
         return summary
+
+    def _make_cache_key(self, payload: Mapping[str, Any]) -> str:
+        try:
+            return json.dumps(payload, sort_keys=True, default=str)
+        except TypeError:
+            return repr(tuple(sorted(payload.items())))
 
 
 def summarise_with_template(template: str) -> SummaryBuilder:
