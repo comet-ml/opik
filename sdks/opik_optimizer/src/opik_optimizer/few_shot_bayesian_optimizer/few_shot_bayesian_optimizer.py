@@ -99,7 +99,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "The 'project_name' parameter in optimizer constructor is deprecated. "
                 "Set project_name in the ChatPrompt instead.",
                 DeprecationWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             del model_kwargs["project_name"]
 
