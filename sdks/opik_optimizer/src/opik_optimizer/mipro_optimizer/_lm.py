@@ -151,6 +151,9 @@ class LM(BaseLM):
     def increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
         self.llm_call_counter += 1
+        parent = getattr(self, "parent_optimizer", None)
+        if parent is not None and hasattr(parent, "increment_llm_counter"):
+            parent.increment_llm_counter()
 
     def launch(self, launch_kwargs: dict[str, Any] | None = None):
         self.provider.launch(self, launch_kwargs)
