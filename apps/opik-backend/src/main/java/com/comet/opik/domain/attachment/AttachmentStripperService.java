@@ -409,11 +409,15 @@ public class AttachmentStripperService {
                     .build();
 
             // Upload attachment using appropriate method based on configuration
+            log.error("DEBUGGING: s3Config.isMinIO() = {}, s3Config.getS3Url() = {}", s3Config.isMinIO(),
+                    s3Config.getS3Url());
             if (s3Config.isMinIO()) {
                 // For MinIO, use direct upload
+                log.error("DEBUGGING: Using MinIO direct upload path");
                 attachmentService.uploadAttachment(attachmentInfo, bytes, workspaceId, userName);
             } else {
                 // For S3, use multipart upload
+                log.error("DEBUGGING: Using S3 multipart upload path");
                 uploadAttachmentViaMultipart(attachmentInfo, bytes, workspaceId, userName);
             }
 
