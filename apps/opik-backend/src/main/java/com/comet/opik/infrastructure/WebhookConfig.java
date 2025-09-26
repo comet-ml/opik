@@ -43,7 +43,7 @@ public class WebhookConfig implements StreamConfiguration {
 
     // Webhook-specific configuration
     @Valid @JsonProperty
-    @Min(1) @Max(10) private int maxRetries = 4;
+    @Min(1) @Max(10) private int maxRetries = 3;
 
     @Valid @JsonProperty
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
@@ -58,7 +58,7 @@ public class WebhookConfig implements StreamConfiguration {
     private Duration requestTimeout = Duration.seconds(10);
 
     @Valid @JsonProperty
-    @MinDuration(value = 5, unit = TimeUnit.SECONDS)
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration connectionTimeout = Duration.seconds(5);
 
     @Override

@@ -381,6 +381,6 @@ webhook:
   # Default: 1s
   # Description: HTTP request timeout for webhook calls
   requestTimeout: 1s
-  # Default:1s
+  # Default: 1s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: 1s
