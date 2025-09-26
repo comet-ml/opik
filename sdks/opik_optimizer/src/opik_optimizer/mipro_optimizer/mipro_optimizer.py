@@ -1,7 +1,7 @@
 import os
 import random
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from collections.abc import Callable
 import logging
 
@@ -55,10 +55,12 @@ class MiproOptimizer(BaseOptimizer):
         logger.debug(f"Initialized MiproOptimizer with model: {model}")
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
-        return {
-            "project_name": self.project_name,
-            "num_threads": self.num_threads,
-        }
+        return self._drop_none(
+            {
+                "project_name": self.project_name,
+                "num_threads": self.num_threads,
+            }
+        )
 
     def evaluate_prompt(
         self,
