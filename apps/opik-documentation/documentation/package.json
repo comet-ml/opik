@@ -5,6 +5,6 @@
     "nodemon": "^3.1.9"
   },
   "scripts": {
-    "dev": "sh dev_script.sh"
+    "dev": "fern docs dev"
   }
 }
