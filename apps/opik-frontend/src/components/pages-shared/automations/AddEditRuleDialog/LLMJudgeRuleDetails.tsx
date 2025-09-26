@@ -11,6 +11,7 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
@@ -152,6 +153,32 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             </FormItem>
           );
         }}
+      />
+      <FormField
+        control={form.control}
+        name="llmJudgeDetails.config.seed"
+        render={({ field }) => (
+          <FormItem>
+            <Label>Seed (optional)</Label>
+            <FormControl>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                value={field.value ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  field.onChange(value === "" ? null : Number(value));
+                }}
+              />
+            </FormControl>
+            <p className="text-xs text-muted-foreground">
+              Provide a seed to make judge responses deterministic. Leave blank
+              to let the provider choose.
+            </p>
+            <FormMessage />
+          </FormItem>
+        )}
       />
       <FormField
         control={form.control}

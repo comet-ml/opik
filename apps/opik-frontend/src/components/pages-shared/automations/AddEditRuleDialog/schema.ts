@@ -39,6 +39,12 @@ const LLMJudgeBaseSchema = z.object({
     .min(1, { message: "Model is required" }),
   config: z.object({
     temperature: z.number(),
+    seed: z
+      .number()
+      .int()
+      .min(0, { message: "Seed must be a positive integer" })
+      .optional()
+      .nullable(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -220,6 +226,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     model: data.model?.name ?? "",
     config: {
       temperature: data.model?.temperature ?? 0,
+      seed: data.model?.seed ?? null,
     },
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
@@ -232,11 +239,18 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
 export const convertLLMJudgeDataToLLMJudgeObject = (
   data: LLMJudgeDetailsTraceFormType | LLMJudgeDetailsThreadFormType,
 ) => {
+  const { temperature, seed } = data.config;
+  const model: LLMJudgeObject["model"] = {
+    name: data.model,
+    temperature,
+  };
+
+  if (seed !== undefined && seed !== null && !Number.isNaN(seed)) {
+    model.seed = seed;
+  }
+
   return {
-    model: {
-      name: data.model,
-      temperature: data.config.temperature,
-    },
+    model,
     messages: convertLLMToProviderMessages(data.messages),
     variables: data.variables,
     schema: data.schema,
