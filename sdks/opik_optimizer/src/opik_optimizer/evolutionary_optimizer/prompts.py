@@ -206,6 +206,53 @@ def mutation_strategy_prompts(output_style_guidance: str | None) -> dict[str, st
     }
 
 
+# ---------------------------------------------------------------------------
+# MCP prompts
+# ---------------------------------------------------------------------------
+
+
+def mcp_tool_rewrite_system_prompt() -> str:
+    return (
+        "You are an expert prompt engineer tasked with refining MCP tool descriptions. "
+        "Always respond with strictly valid JSON matching the requested schema."
+    )
+
+
+def mcp_tool_rewrite_user_prompt(
+    *,
+    tool_name: str,
+    current_description: str,
+    tool_metadata_json: str,
+    num_variations: int,
+) -> str:
+    current_description = current_description.strip() or "(no description provided)"
+    return f"""You are improving the description of the MCP tool `{tool_name}`.
+
+Current description:
+---
+{current_description}
+---
+
+Tool metadata (JSON):
+{tool_metadata_json}
+
+Generate {num_variations} improved descriptions for this tool. Each description should:
+- Clarify expected arguments and their semantics.
+- Explain how the tool output should be used in the final response.
+- Avoid changing the tool name or introducing unsupported behaviour.
+
+Respond strictly as JSON of the form:
+{{
+  "prompts": [
+    {{
+      "tool_description": "...",
+      "improvement_focus": "..."
+    }}
+  ]
+}}
+"""
+
+
 def semantic_mutation_user_prompt(
     prompt_messages: list[dict[str, str]],
     task_description: str,
