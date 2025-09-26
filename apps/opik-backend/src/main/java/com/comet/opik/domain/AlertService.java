@@ -98,16 +98,17 @@ class AlertServiceImpl implements AlertService {
         Webhook webhook = alert.webhook()
                 .toBuilder()
                 .id(idGenerator.generateId())
+                .name("Webhook for alert " + alert.name()) // Not used by FE
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
 
         return alert.toBuilder()
                 .id(id)
+                .enabled(alert.enabled() != null ? alert.enabled() : true) // Set default to true only when not explicitly provided
                 .webhook(webhook)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
-                .enabled(alert.enabled() != null ? alert.enabled() : true)
                 .build();
     }
 }

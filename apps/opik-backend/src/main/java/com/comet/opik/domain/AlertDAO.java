@@ -33,26 +33,27 @@ interface AlertDAO {
     Alert save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
             @Bind("webhookId") UUID webhookId);
 
-    @SqlQuery("SELECT " +
-            "a.id as alert_id, " +
-            "a.name as alert_name, " +
-            "a.enabled as alert_enabled, " +
-            "a.created_at as alert_created_at, " +
-            "a.created_by as alert_created_by, " +
-            "a.last_updated_at as alert_last_updated_at, " +
-            "a.last_updated_by as alert_last_updated_by, " +
-            "w.id as webhook_id, " +
-            "w.name as webhook_name, " +
-            "w.url as webhook_url, " +
-            "w.secret_token as webhook_secret_token, " +
-            "w.headers as webhook_headers, " +
-            "w.created_at as webhook_created_at, " +
-            "w.created_by as webhook_created_by, " +
-            "w.last_updated_at as webhook_last_updated_at, " +
-            "w.last_updated_by as webhook_last_updated_by " +
-            "FROM alerts a " +
-            "JOIN webhooks w ON a.webhook_id = w.id " +
-            "WHERE a.id = :id AND a.workspace_id = :workspaceId")
+    @SqlQuery("""
+            SELECT
+            a.id as alert_id,
+            a.name as alert_name,
+            a.enabled as alert_enabled,
+            a.created_at as alert_created_at,
+            a.created_by as alert_created_by,
+            a.last_updated_at as alert_last_updated_at,
+            a.last_updated_by as alert_last_updated_by,
+            w.id as webhook_id,
+            w.url as webhook_url,
+            w.secret_token as webhook_secret_token,
+            w.headers as webhook_headers,
+            w.created_at as webhook_created_at,
+            w.created_by as webhook_created_by,
+            w.last_updated_at as webhook_last_updated_at,
+            w.last_updated_by as webhook_last_updated_by
+            FROM alerts a
+            JOIN webhooks w ON a.webhook_id = w.id
+            WHERE a.id = :id AND a.workspace_id = :workspaceId
+            """)
     Alert findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
     @Slf4j
@@ -78,7 +79,6 @@ interface AlertDAO {
             // Build Webhook object
             Webhook webhook = Webhook.builder()
                     .id(UUID.fromString(rs.getString("webhook_id")))
-                    .name(rs.getString("webhook_name"))
                     .url(rs.getString("webhook_url"))
                     .secretToken(rs.getString("webhook_secret_token"))
                     .headers(webhookHeaders)

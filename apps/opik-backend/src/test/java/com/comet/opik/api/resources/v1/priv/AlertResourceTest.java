@@ -182,13 +182,10 @@ class AlertResourceTest {
         void createAlert__whenAlertIsInvalid__thenReturnValidationError(Alert alert, int expectedStatusCode,
                 Object expectedBody, Class<?> expectedResponseClass) {
 
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
+            var mock = prepareMockWorkspace();
 
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            try (var actualResponse = alertResourceClient.createAlertWithResponse(alert, apiKey, workspaceName)) {
+            try (var actualResponse = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatusCode);
                 assertThat(actualResponse.hasEntity()).isTrue();
 
@@ -239,16 +236,12 @@ class AlertResourceTest {
         @Test
         @DisplayName("when malformed JSON, then return bad request")
         void createAlert__whenMalformedJson__thenReturnBadRequest() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            var mock = prepareMockWorkspace();
 
             String malformedJson = "{ \"name\": \"test\", \"invalid\": }";
 
-            try (var actualResponse = alertResourceClient.createAlertWithResponse(malformedJson, apiKey,
-                    workspaceName)) {
+            try (var actualResponse = alertResourceClient.createAlertWithResponse(malformedJson, mock.getLeft(),
+                    mock.getRight())) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(actualResponse.hasEntity()).isTrue();
             }

@@ -21,7 +21,7 @@ public record Webhook(
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) @NotBlank @Size(max = 255) String name,
+                Alert.View.Write.class}) String name,
 
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) @NotBlank String url,
@@ -30,7 +30,7 @@ public record Webhook(
                 Alert.View.Write.class}) @NotBlank @Size(max = 250) String secretToken,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) Map<String, String> headers,
+                Alert.View.Write.class}) Map<@NotBlank String, @NotBlank String> headers,
 
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,

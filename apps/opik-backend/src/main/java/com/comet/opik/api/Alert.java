@@ -1,6 +1,7 @@
 package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -25,7 +26,7 @@ public record Alert(
                 Alert.View.Write.class}) @NotBlank @Size(max = 255) String name,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) Boolean enabled,
+                Alert.View.Write.class}) @JsonProperty(defaultValue = "true") Boolean enabled,
 
         @JsonView({
                 Alert.View.Public.class, Alert.View.Write.class}) @NotNull Webhook webhook,
