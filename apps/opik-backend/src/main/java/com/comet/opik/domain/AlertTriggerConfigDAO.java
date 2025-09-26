@@ -8,13 +8,12 @@ import com.comet.opik.utils.JsonUtils;
 import org.jdbi.v3.core.argument.AbstractArgumentFactory;
 import org.jdbi.v3.core.argument.Argument;
 import org.jdbi.v3.core.config.ConfigRegistry;
-import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
-import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -30,7 +29,6 @@ import java.util.UUID;
 @RegisterArgumentFactory(MapFlatArgumentFactory.class)
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 @RegisterArgumentFactory(AlertTriggerConfigDAO.AlertTriggerConfigTypeArgumentFactory.class)
-@RegisterColumnMapper(AlertTriggerConfigDAO.AlertTriggerConfigTypeColumnMapper.class)
 interface AlertTriggerConfigDAO {
 
     @SqlBatch("INSERT INTO alert_trigger_configs (id, alert_trigger_id, config_type, config_value, created_by, last_updated_by) "
@@ -40,8 +38,8 @@ interface AlertTriggerConfigDAO {
 
     @SqlQuery("SELECT id, alert_trigger_id, config_type, config_value, created_by, last_updated_by, created_at, last_updated_at "
             +
-            "FROM alert_trigger_configs WHERE alert_trigger_id = :alertTriggerId")
-    List<AlertTriggerConfig> findByAlertTriggerId(@Bind("alertTriggerId") UUID alertTriggerId);
+            "FROM alert_trigger_configs WHERE alert_trigger_id IN (<alertTriggerIds>)")
+    List<AlertTriggerConfig> findByAlertTriggerIds(@BindList("alertTriggerIds") List<UUID> alertTriggerIds);
 
     class AlertTriggerConfigTypeArgumentFactory extends AbstractArgumentFactory<AlertTriggerConfigType> {
         public AlertTriggerConfigTypeArgumentFactory() {
@@ -57,20 +55,6 @@ interface AlertTriggerConfigDAO {
                     statement.setString(position, value.getValue());
                 }
             };
-        }
-    }
-
-    class AlertTriggerConfigTypeColumnMapper implements ColumnMapper<AlertTriggerConfigType> {
-        @Override
-        public AlertTriggerConfigType map(ResultSet r, int columnNumber, StatementContext ctx) throws SQLException {
-            String value = r.getString(columnNumber);
-            return value != null ? AlertTriggerConfigType.fromString(value) : null;
-        }
-
-        @Override
-        public AlertTriggerConfigType map(ResultSet r, String columnLabel, StatementContext ctx) throws SQLException {
-            String value = r.getString(columnLabel);
-            return value != null ? AlertTriggerConfigType.fromString(value) : null;
         }
     }
 

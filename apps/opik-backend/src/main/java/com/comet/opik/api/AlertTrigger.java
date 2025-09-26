@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import javax.annotation.Nullable;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -25,7 +27,7 @@ public record AlertTrigger(
                 Alert.View.Write.class}) @NotNull AlertEventType eventType,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) List<AlertTriggerConfig> triggerConfigs,
+                Alert.View.Write.class}) @Nullable List<AlertTriggerConfig> triggerConfigs,
 
         @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
 

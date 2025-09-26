@@ -6,10 +6,10 @@ import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.core.argument.AbstractArgumentFactory;
 import org.jdbi.v3.core.argument.Argument;
 import org.jdbi.v3.core.config.ConfigRegistry;
-import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
@@ -21,10 +21,9 @@ import java.sql.Types;
 import java.util.List;
 import java.util.UUID;
 
-//@RegisterRowMapper(AlertTriggerDAO.AlertTriggerRowMapper.class)
+@RegisterRowMapper(AlertTriggerDAO.AlertTriggerRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(AlertTriggerDAO.AlertEventTypeArgumentFactory.class)
-//@RegisterColumnMapper(AlertTriggerDAO.AlertEventTypeColumnMapper.class)
 interface AlertTriggerDAO {
 
     @SqlBatch("""
@@ -51,20 +50,6 @@ interface AlertTriggerDAO {
                     statement.setString(position, value.getValue());
                 }
             };
-        }
-    }
-
-    class AlertEventTypeColumnMapper implements ColumnMapper<AlertEventType> {
-        @Override
-        public AlertEventType map(ResultSet r, int columnNumber, StatementContext ctx) throws SQLException {
-            String value = r.getString(columnNumber);
-            return value != null ? AlertEventType.fromString(value) : null;
-        }
-
-        @Override
-        public AlertEventType map(ResultSet r, String columnLabel, StatementContext ctx) throws SQLException {
-            String value = r.getString(columnLabel);
-            return value != null ? AlertEventType.fromString(value) : null;
         }
     }
 
