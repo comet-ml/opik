@@ -246,7 +246,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     temperature,
   };
 
-  if (seed !== undefined && seed !== null && !Number.isNaN(seed)) {
+  if (seed != null) {
     model.seed = seed;
   }
 
