@@ -11,6 +11,7 @@ import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
@@ -19,6 +20,8 @@ import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -118,6 +121,8 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull EventBus eventBus;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull TraceSortingFactory traceSortingFactory;
+    private final @NonNull AttachmentStripperService attachmentStripperService;
+    private final @NonNull AttachmentService attachmentService;
 
     @Override
     @WithSpan
@@ -129,16 +134,25 @@ class TraceServiceImpl implements TraceService {
         return Mono.deferContextual(ctx -> IdGenerator
                 .validateVersionAsync(id, TRACE_KEY)
                 .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
-                .flatMap(project -> lockService.executeWithLock(
-                        new LockService.Lock(id, TRACE_KEY),
-                        Mono.defer(() -> insertTrace(trace, project, id)))
-                        .doOnSuccess(__ -> {
-                            var savedTrace = trace.toBuilder().projectId(project.id()).projectName(projectName).build();
-                            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                            String userName = ctx.get(RequestContext.USER_NAME);
+                .flatMap(project -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
 
-                            eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                        })));
+                    // Strip attachments from the trace with the generated ID and project ID
+                    Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
+                    Trace processedTrace = attachmentStripperService.stripAttachmentsFromTrace(traceWithId, workspaceId,
+                            userName,
+                            projectName);
+
+                    return lockService.executeWithLock(
+                            new LockService.Lock(id, TRACE_KEY),
+                            Mono.defer(() -> insertTrace(processedTrace, project, id)))
+                            .doOnSuccess(__ -> {
+                                var savedTrace = processedTrace.toBuilder().projectId(project.id())
+                                        .projectName(projectName).build();
+                                eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                            });
+                }));
     }
 
     @WithSpan
@@ -156,14 +170,18 @@ class TraceServiceImpl implements TraceService {
                 .toList();
 
         return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
             Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
                     .flatMap(projectService::getOrCreate)
                     .collectList()
                     .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
+                    .flatMapMany(Flux::fromIterable)
+                    .map(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId, userName,
+                            trace.projectName()))
+                    .collectList()
                     .subscribeOn(Schedulers.boundedElastic());
-
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
 
             return resolveProjects
                     .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection))
@@ -295,16 +313,55 @@ class TraceServiceImpl implements TraceService {
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
         return IdGenerator
                 .validateVersionAsync(id, TRACE_KEY)
-                .then(Mono.defer(() -> template.nonTransaction(
-                        connection -> dao.partialInsert(project.id(), traceUpdate, id, connection))));
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    String projectName = project.name();
+
+                    return template.nonTransaction(connection -> {
+                        // Strip attachments from the new trace data before inserting
+                        TraceUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                                traceUpdate, id, workspaceId, userName, projectName);
+
+                        return dao.partialInsert(project.id(), processedUpdate, id, connection);
+                    });
+                }));
     }
 
     private Mono<Void> updateOrFail(TraceUpdate traceUpdate, UUID id, Trace trace, Project project) {
-        if (project.id().equals(trace.projectId())) {
-            return template.nonTransaction(connection -> dao.update(traceUpdate, id, connection));
+        if (!project.id().equals(trace.projectId())) {
+            return failWithConflict(PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
-        return failWithConflict(PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            return template.nonTransaction(connection -> {
+                // Step 1: Get existing attachments using the new convenience method
+                return attachmentService.getAttachmentInfoByEntity(id, EntityType.TRACE, trace.projectId())
+                        .flatMap(existingAttachments -> {
+
+                            // Step 2: Strip attachments from the updated trace data (creates new attachments with unique names)
+                            TraceUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                                    traceUpdate, id, workspaceId, userName, projectName);
+
+                            // Step 3: Update the trace with processed data first
+                            return dao.update(processedUpdate, id, connection)
+                                    .then(Mono.defer(() -> {
+                                        // Step 4: Delete only the old attachments by their specific filenames
+                                        // New attachments have unique timestamps, so no conflicts
+                                        if (!existingAttachments.isEmpty()) {
+                                            return attachmentService.deleteSpecificAttachments(existingAttachments,
+                                                    id, EntityType.TRACE, trace.projectId());
+                                        }
+                                        return Mono.empty();
+                                    }));
+                        })
+                        .then();
+            });
+        });
     }
 
     private Mono<Project> getProjectByName(String projectName) {

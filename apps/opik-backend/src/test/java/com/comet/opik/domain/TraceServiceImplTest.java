@@ -4,6 +4,8 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -34,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -56,12 +59,22 @@ class TraceServiceImplTest {
     @Mock
     private EventBus eventBus;
 
+    @Mock
+    private AttachmentStripperService attachmentStripperService;
+
+    @Mock
+    private AttachmentService attachmentService;
+
     private final PodamFactory factory = new PodamFactoryImpl();
     private final TraceThreadSortingFactory traceThreadSortingFactory = new TraceThreadSortingFactory();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
 
     @BeforeEach
     void setUp() {
+        // Mock AttachmentStripperService to return JsonNode unchanged (no stripping for tests)
+        lenient().when(attachmentStripperService.stripAttachments(any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0)); // Return first argument (JsonNode) unchanged
+
         traceService = new TraceServiceImpl(
                 traceDao,
                 template,
@@ -70,7 +83,9 @@ class TraceServiceImplTest {
                 DUMMY_LOCK_SERVICE,
                 eventBus,
                 traceThreadSortingFactory,
-                traceSortingFactory);
+                traceSortingFactory,
+                attachmentStripperService,
+                attachmentService);
     }
 
     @Nested
@@ -91,6 +106,8 @@ class TraceServiceImplTest {
                     .projectName(projectName)
                     .startTime(Instant.now())
                     .build())
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, UUID.randomUUID().toString()))
                     .block());
         }
 
