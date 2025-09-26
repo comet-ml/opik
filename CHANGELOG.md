@@ -40,13 +40,13 @@ If you would like to migrate previous dataset items to the new format, please se
 ### Release 1.0.0, 2024-11-25
 
 #### Backward Incompatible Change
-- Updated OpenAI integration to track structured output calls using `beta.chat.completions.parse` - This may affect existing OpenAI integration code. See [OpenAI Integration Documentation](https://www.comet.com/docs/opik/tracing/integrations/openai) for details.
+- Updated OpenAI integration to track structured output calls using `beta.chat.completions.parse` - This may affect existing OpenAI integration code. See [OpenAI Integration Documentation](https://www.comet.com/docs/opik/integrations/openai) for details.
 - Fixed issue with `update_current_span` and `update_current_trace` that did not support updating the `output` field - This may affect existing trace update code. See [Tracing Documentation](https://www.comet.com/docs/opik/tracing/overview) for details.
 
 ### Release 1.0.0, 2025-03-17
 
 #### Backward Incompatible Change
-- Added support for images in google.genai calls - This may affect existing Gemini integration code. See [Gemini Integration Documentation](https://www.comet.com/docs/opik/tracing/integrations/gemini) for details.
+- Added support for images in google.genai calls - This may affect existing Gemini integration code. See [Gemini Integration Documentation](https://www.comet.com/docs/opik/integrations/gemini) for details.
 - [LangFlow integration](https://github.com/langflow-ai/langflow/pull/6928) has been merged - This may affect existing LangFlow deployments
 
 

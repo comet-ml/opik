@@ -60,7 +60,7 @@ To log your first trace, you can use the `track` decorator::
 
 **Note:** The `track` decorator supports nested functions, if you track multiple functions, each functionc call will be associated with the parent trace.
 
-**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <https://www.comet.com/docs/opik/tracing/integrations/langchain>`_ for these libraries.
+**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <https://www.comet.com/docs/opik/integrations/langchain>`_ for these libraries.
 
 ----------------------------
 Using LLM evaluation metrics

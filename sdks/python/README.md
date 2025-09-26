@@ -107,7 +107,7 @@ def my_llm_function(user_question: str) -> str:
 
 my_llm_function("Hello, Opik!")
 ```
-Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/tracing/integrations/overview/) for popular LLM frameworks.
+Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/integrations/overview/) for popular LLM frameworks.
 
 ## Development & Contribution Guidelines
 
