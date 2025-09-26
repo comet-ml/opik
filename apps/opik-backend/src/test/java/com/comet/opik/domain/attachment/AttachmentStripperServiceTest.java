@@ -1,12 +1,13 @@
 package com.comet.opik.domain.attachment;
 
-import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
+import com.comet.opik.api.events.AttachmentUploadRequested;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.eventbus.EventBus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,6 @@ import java.util.UUID;
 import static com.comet.opik.utils.AttachmentPayloadUtilsTest.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -41,6 +41,9 @@ class AttachmentStripperServiceTest {
     @Mock
     private OpikConfiguration opikConfiguration;
 
+    @Mock
+    private EventBus eventBus;
+
     private ObjectMapper objectMapper;
     private AttachmentStripperService attachmentStripperService;
 
@@ -61,13 +64,11 @@ class AttachmentStripperServiceTest {
         // Mock OpikConfiguration to return the S3Config
         when(opikConfiguration.getS3Config()).thenReturn(s3Config);
 
-        // Mock direct upload for MinIO mode
-        lenient().doNothing().when(attachmentService).uploadAttachment(any(AttachmentInfo.class), any(byte[].class),
-                anyString(), anyString());
+        // Mock EventBus - no setup needed, just verify posts
 
         // Use OpenTelemetry no-op implementation - no mocking needed!
         attachmentStripperService = new AttachmentStripperService(
-                attachmentService, idGenerator, objectMapper, opikConfiguration);
+                attachmentService, idGenerator, objectMapper, opikConfiguration, eventBus);
     }
 
     @Test
@@ -79,7 +80,8 @@ class AttachmentStripperServiceTest {
 
         // Then
         assertThat(result).isNull();
-        verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
+        // Should not have posted any events to EventBus (null input)
+        verify(eventBus, never()).post(any(AttachmentUploadRequested.class));
     }
 
     @Test
@@ -108,7 +110,8 @@ class AttachmentStripperServiceTest {
 
         // Then
         assertThat(result).isEqualTo(input); // Should be unchanged
-        verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
+        // Should not have posted any events to EventBus (small data below threshold)
+        verify(eventBus, never()).post(any(AttachmentUploadRequested.class));
     }
 
     @Test
@@ -128,8 +131,8 @@ class AttachmentStripperServiceTest {
         String replacedValue = result.get("data").asText();
         assertThat(replacedValue).matches("\\[metadata-attachment-1-\\d+\\.png\\]");
 
-        verify(attachmentService, times(1)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Should have posted one event to EventBus
+        verify(eventBus, times(1)).post(any(AttachmentUploadRequested.class));
     }
 
     @Test
@@ -151,20 +154,19 @@ class AttachmentStripperServiceTest {
                 "output");
 
         // Then
-        // First attachment should be replaced
+        // First attachment should be replaced (with timestamp)
         String firstAttachment = result.get("first_attachment").asText();
         assertThat(firstAttachment).matches("\\[output-attachment-1-\\d+\\.png\\]");
 
         // Regular text should be unchanged
         assertThat(result.get("regular_text").asText()).isEqualTo("just some text");
 
-        // Second attachment should be replaced with different number
+        // Second attachment should be replaced with different number (with timestamp)
         String secondAttachment = result.get("second_attachment").asText();
         assertThat(secondAttachment).matches("\\[output-attachment-2-\\d+\\.pdf\\]");
 
-        // Should have called upload service twice
-        verify(attachmentService, times(2)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Should have posted two events to EventBus (one for each attachment)
+        verify(eventBus, times(2)).post(any(AttachmentUploadRequested.class));
     }
 
     @Test
@@ -201,7 +203,7 @@ class AttachmentStripperServiceTest {
                 "metadata");
 
         // Then
-        // Navigate to the data field and verify it was replaced
+        // Navigate to the data field and verify it was replaced (with timestamp)
         JsonNode dataField = result.at("/messages/0/content/1/inline_data/data");
 
         assertThat(dataField.asText()).matches("\\[metadata-attachment-1-\\d+\\.png\\]");
@@ -210,8 +212,8 @@ class AttachmentStripperServiceTest {
         assertThat(result.at("/messages/0/content/0/text").asText()).isEqualTo("What's in this image?");
         assertThat(result.at("/messages/0/content/1/inline_data/mime_type").asText()).isEqualTo("image/png");
 
-        verify(attachmentService, times(1)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Should have posted one event to EventBus
+        verify(eventBus, times(1)).post(any(AttachmentUploadRequested.class));
     }
 
     @Test
@@ -232,7 +234,8 @@ class AttachmentStripperServiceTest {
         // Then
         // Should be unchanged since Tika will detect this as text/plain
         assertThat(result).isEqualTo(output);
-        verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
+        // Should not have posted any events to EventBus (text/plain content)
+        verify(eventBus, never()).post(any(AttachmentUploadRequested.class));
     }
 
     @Test
@@ -259,8 +262,56 @@ class AttachmentStripperServiceTest {
         assertThat(outputResult.get("image").asText()).matches("\\[output-attachment-1-\\d+\\.gif\\]");
         assertThat(metadataResult.get("image").asText()).matches("\\[metadata-attachment-1-\\d+\\.gif\\]");
 
-        // Should have called upload service three times (once for each context)
-        verify(attachmentService, times(3)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Should have posted three events to EventBus (once for each context)
+        verify(eventBus, times(3)).post(any(AttachmentUploadRequested.class));
+    }
+
+    // Helper methods to create test data
+    private String createLargePngBase64() {
+        // Create a large base64 string representing a PNG image (> 5000 chars)
+        // This is a minimal PNG header + data to make it detectable as image/png by Tika
+        byte[] pngHeader = new byte[]{
+                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk header
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1 pixel
+                0x08, 0x02, 0x00, 0x00, 0x00, (byte) 0x90, 0x77, 0x53, (byte) 0xDE // IHDR data + CRC
+        };
+
+        // Pad with additional data to exceed the minimum length
+        byte[] paddedData = new byte[4000];
+        System.arraycopy(pngHeader, 0, paddedData, 0, pngHeader.length);
+
+        return java.util.Base64.getEncoder().encodeToString(paddedData);
+    }
+
+    private String createLargeGifBase64() {
+        // Create a large base64 string representing a GIF image
+        byte[] gifHeader = new byte[]{
+                0x47, 0x49, 0x46, 0x38, 0x39, 0x61, // GIF89a signature
+                0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 // minimal GIF data
+        };
+
+        // Pad with additional data to exceed the minimum length
+        byte[] paddedData = new byte[4000];
+        System.arraycopy(gifHeader, 0, paddedData, 0, gifHeader.length);
+
+        return java.util.Base64.getEncoder().encodeToString(paddedData);
+    }
+
+    private String createLargePdfBase64() {
+        // Create a large base64 string representing a PDF
+        byte[] pdfHeader = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj xref 0 4 0000000000 65535 f 0000000010 00000 n 0000000053 00000 n 0000000100 00000 n trailer<</Size 4/Root 1 0 R>>startxref 149 %%EOF"
+                .getBytes();
+
+        // Pad with additional data to exceed the minimum length
+        byte[] paddedData = new byte[4000];
+        System.arraycopy(pdfHeader, 0, paddedData, 0, Math.min(pdfHeader.length, paddedData.length));
+
+        return java.util.Base64.getEncoder().encodeToString(paddedData);
+    }
+
+    private String createShortBase64() {
+        // Create a short base64 string (< 5000 chars) that should not be processed
+        return java.util.Base64.getEncoder().encodeToString("short content".getBytes());
     }
 }
