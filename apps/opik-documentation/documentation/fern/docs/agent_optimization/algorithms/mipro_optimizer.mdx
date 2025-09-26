@@ -209,8 +209,7 @@ results = optimizer.optimize_prompt(
     prompt=ChatPrompt(messages=[{"role": "user", "content": "Complete the task using the provided tools."}]),
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_samples=5,  # Number of different program configurations to explore
-    experiment_config={"task": "hotpot", "model": "gpt-4"}
+    n_samples=5  # Number of different program configurations to explore
 )
 
 # Access results

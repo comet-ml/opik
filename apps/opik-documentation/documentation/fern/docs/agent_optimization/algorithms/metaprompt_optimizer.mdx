@@ -130,8 +130,7 @@ results = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_samples=100,
-    experiment_config={"task": "hotpot", "model": "gpt-4"}
+    n_samples=100
 )
 
 # Access results

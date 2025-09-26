@@ -271,9 +271,7 @@ class BaseOptimizer(ABC):
             )
         return signatures
 
-    def _build_agent_config(
-        self, prompt: "chat_prompt.ChatPrompt"
-    ) -> dict[str, Any]:
+    def _build_agent_config(self, prompt: "chat_prompt.ChatPrompt") -> dict[str, Any]:
         agent_config = prompt.to_dict()
         agent_config["project_name"] = getattr(prompt, "project_name", None)
         agent_config["model"] = getattr(prompt, "model", None) or self.model
