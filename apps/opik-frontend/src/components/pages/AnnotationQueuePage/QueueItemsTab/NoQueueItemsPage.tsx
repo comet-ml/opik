@@ -48,20 +48,6 @@ const NoQueueItemsPage: React.FC<NoQueueItemsPageProps> = ({
       className={className}
       buttons={
         <>
-          {annotationQueue?.project_id && (
-            <Button variant="outline" asChild>
-              <Link
-                to="/$workspaceName/projects/$projectId/traces"
-                params={{
-                  workspaceName,
-                  projectId: annotationQueue.project_id,
-                }}
-              >
-                <ExternalLink className="mr-2 size-4" />
-                Go to project
-              </Link>
-            </Button>
-          )}
           <Button variant="secondary" asChild>
             <a
               href={buildDocsUrl(
