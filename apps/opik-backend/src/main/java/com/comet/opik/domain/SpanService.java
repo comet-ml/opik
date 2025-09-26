@@ -90,8 +90,6 @@ public class SpanService {
 
     @WithSpan
     public Mono<UUID> create(@NonNull Span span) {
-        log.error("DEBUGGING: PUBLIC create(Span) called with span name: '{}', input size: {}",
-                span.name(), span.input() != null ? span.input().toString().length() : 0);
         var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return IdGenerator
@@ -103,17 +101,9 @@ public class SpanService {
     }
 
     private Mono<UUID> insertSpan(Span span, Project project, UUID id) {
-        log.error("DEBUGGING: insertSpan called with span id: '{}', name: '{}'", id, span.name());
         return spanDAO.getPartialById(id)
-                .flatMap(partialExistingSpan -> {
-                    log.error("DEBUGGING: Found existing partial span, calling insertSpan with existing data");
-                    return insertSpan(span, project, id, partialExistingSpan);
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    log.error(
-                            "DEBUGGING: No existing span found, calling create(span, project, id) - THIS SHOULD STRIP ATTACHMENTS");
-                    return create(span, project, id);
-                }))
+                .flatMap(partialExistingSpan -> insertSpan(span, project, id, partialExistingSpan))
+                .switchIfEmpty(Mono.defer(() -> create(span, project, id)))
                 .onErrorResume(this::handleSpanDBError);
     }
 
@@ -134,16 +124,10 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
             String projectName = project.name();
 
-            log.error("DEBUGGING: BEFORE attachment stripping - span id '{}', input size: {}",
-                    id, span.input() != null ? span.input().toString().length() : 0);
-
             // Strip attachments from the span with the generated ID and project ID
             Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
             Span processedSpan = attachmentStripperService.stripAttachmentsFromSpan(spanWithId, workspaceId,
                     userName, projectName);
-
-            log.error("DEBUGGING: AFTER attachment stripping - span id '{}', input size: {}",
-                    id, processedSpan.input() != null ? processedSpan.input().toString().length() : 0);
 
             log.info("Inserting span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
                     processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
