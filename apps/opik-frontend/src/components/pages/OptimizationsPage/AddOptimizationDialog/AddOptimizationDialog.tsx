@@ -71,14 +71,13 @@ def levenshtein_ratio(dataset_item, llm_output):
 
 # Run the optimization
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o",  # LiteLLM name
-    max_rounds=3,  # Number of optimization rounds
-    num_prompts_per_round=4,  # Number of prompts to generate per round
-    improvement_threshold=0.01,  # Minimum improvement required to continue
-    temperature=0.1,  # Lower temperature for more focused responses
-    max_completion_tokens=5000,  # Maximum tokens for model completion
-    n_threads=1,  # Number of threads for parallel evaluation
-    subsample_size=10,  # Fixed subsample size of 10 items
+    model="openai/gpt-4o",  # Task model (LiteLLM name)
+    reasoning_model="openai/gpt-4o-mini",  # Optional reasoning model
+    rounds=3,
+    num_prompts_per_round=4,
+    n_threads=8,
+    enable_context=True,
+    seed=42,
 )
 
 result = optimizer.optimize_prompt(
@@ -88,7 +87,8 @@ result = optimizer.optimize_prompt(
     n_samples=10,
 )
 
-result.display()`,
+result.display()
+# Optimizer metadata (prompt, tools, version) is logged automatically.`,
 
   [OPTIMIZATION_ALGORITHMS.fewShotOptimizer]: `# Configure the SDK
 import os
@@ -124,7 +124,7 @@ optimizer = FewShotBayesianOptimizer(
     model="openai/gpt-4o",  # LiteLLM name
     min_examples=3,
     max_examples=8,
-    n_threads=4,
+    n_threads=8,
     seed=42,
 )
 
@@ -136,7 +136,8 @@ result = optimizer.optimize_prompt(
     n_samples=50,
 )
 
-result.display()`,
+result.display()
+# Optimizer metadata (prompt, tools, version) is logged automatically.`,
 
   [OPTIMIZATION_ALGORITHMS.evolutionaryOptimizer]: `# Configure the SDK
 import os
@@ -172,10 +173,13 @@ optimizer = EvolutionaryOptimizer(
     model="openai/gpt-4o",  # LiteLLM name
     population_size=10,
     num_generations=3,
+    mutation_rate=0.2,
+    crossover_rate=0.8,
     enable_moo=False,
     enable_llm_crossover=True,
     infer_output_style=True,
-    verbose=1,
+    n_threads=8,
+    seed=42,
 )
 
 result = optimizer.optimize_prompt(
@@ -185,7 +189,7 @@ result = optimizer.optimize_prompt(
     n_samples=10,
 )
 
-result.display()`,
+result.display()
 };
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
