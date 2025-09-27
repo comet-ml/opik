@@ -6,14 +6,18 @@ from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers, error_info_collector
 import functools
 import openai
+from openai._response import ResponseContextManager
 import openai.lib.streaming.chat
-
 
 LOGGER = logging.getLogger(__name__)
 
 # Raw low-level stream methods
 original_stream_iter_method = openai.Stream.__iter__
 original_async_stream_aiter_method = openai.AsyncStream.__aiter__
+if hasattr(ResponseContextManager, "__enter__"):
+    original_sync_context_manager_enter_method = ResponseContextManager.__enter__
+if hasattr(ResponseContextManager, "__aenter__"):
+    original_async_context_manager_aenter_method = ResponseContextManager.__aenter__
 
 # Stream manager (factory object) methods
 original_chat_completion_stream_manager_enter_method = (
@@ -43,6 +47,31 @@ def patch_sync_stream(
     ```
 
     """
+    if isinstance(stream, ResponseContextManager):
+
+        def ContextManager__enter__decorator(dunder_enter_func: Callable) -> Callable:
+            @functools.wraps(dunder_enter_func)
+            def wrapper(
+                self: ResponseContextManager,
+            ) -> Iterator[StreamItem]:
+                response = dunder_enter_func(self)
+                return patch_sync_stream(
+                    response,
+                    self.span_to_end,
+                    self.trace_to_end,
+                    generations_aggregator,
+                    finally_callback,
+                )
+
+            return wrapper
+
+        ResponseContextManager.__enter__ = ContextManager__enter__decorator(
+            original_sync_context_manager_enter_method
+        )
+        stream.opik_tracked_instance = True
+        stream.span_to_end = span_to_end
+        stream.trace_to_end = trace_to_end
+        return stream
 
     def Stream__iter__decorator(dunder_iter_func: Callable) -> Callable:
         @functools.wraps(dunder_iter_func)
@@ -52,7 +81,14 @@ def patch_sync_stream(
             try:
                 accumulated_items: List[StreamItem] = []
                 error_info: Optional[ErrorInfoDict] = None
-                for item in dunder_iter_func(self):
+                # HACK: a bit ugly, but for openai audio speech, the stream object is not an iterator
+                # but an object with `iter_bytes` method
+                items_iterator = (
+                    dunder_iter_func(self)
+                    if not hasattr(self, "iter_bytes")
+                    else self.iter_bytes()
+                )
+                for item in items_iterator:
                     accumulated_items.append(item)
                     yield item
             except Exception as exception:
