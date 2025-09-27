@@ -19,6 +19,10 @@ from opik.evaluation.metrics.heuristics.blonde import BLONDE
 from opik.evaluation.metrics.heuristics.meteor import METEOR
 from opik.evaluation.metrics.heuristics.gleu import GLEU
 from opik.evaluation.metrics.heuristics.bertscore import BERTScore
+from opik.evaluation.metrics.heuristics.ribes import RIBES
+from opik.evaluation.metrics.heuristics.chrf import ChrF
+from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
+from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
 from opik.evaluation.metrics.heuristics.readability import ReadabilityGuard
 from opik.evaluation.metrics.heuristics.tone import ToneGuard
 from opik.evaluation.metrics.conversation.rouge_c.metric import RougeCMetric
@@ -390,9 +394,57 @@ def test_bertscore_rejects_empty_candidate():
         metric.score(output="   ", reference="ref")
 
 
-def test_readability_guard_pass_and_fail():
-    guard = ReadabilityGuard(min_grade=None, max_grade=14, track=False)
+def test_ribes_metric_uses_custom_fn():
+    calls = {}
 
+    def ribes_fn(hypothesis, references):
+        calls["hypothesis"] = hypothesis
+        calls["references"] = references
+        return 0.84
+
+    metric = RIBES(ribes_fn=ribes_fn, track=False)
+    result = metric.score(output="hello world", reference="hello world")
+
+    assert result.value == pytest.approx(0.84)
+    assert calls["hypothesis"] == ["hello", "world"]
+    assert calls["references"] == [["hello", "world"]]
+
+
+def test_chrf_metric_uses_custom_fn():
+    def chrf_fn(candidate, references):
+        assert candidate == "hello world"
+        assert references == ["hello world"]
+        return 0.72
+
+    metric = ChrF(chrf_fn=chrf_fn, track=False)
+    result = metric.score(output="hello world", reference="hello world")
+
+    assert result.value == pytest.approx(0.72)
+
+
+def test_spearman_ranking_metric():
+    metric = SpearmanRanking(track=False)
+    result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])
+
+    assert result.metadata["rho"] == pytest.approx(0.5)
+    assert result.value == pytest.approx((0.5 + 1) / 2)
+
+
+def test_vader_sentiment_metric_uses_custom_analyzer():
+    class StubAnalyzer:
+        def polarity_scores(self, text: str) -> dict[str, float]:
+            assert text == "hello"
+            return {"compound": -0.4, "pos": 0.2}
+
+    metric = VADERSentiment(analyzer=StubAnalyzer(), track=False)
+    result = metric.score(output="hello")
+
+    assert result.value == pytest.approx(( -0.4 + 1) / 2)
+    assert result.metadata["vader"]["compound"] == -0.4
+
+
+def test_readability_guard_pass_and_fail():
+    baseline_guard = ReadabilityGuard(track=False)
     easy_text = (
         "We processed your insurance claim and scheduled an adjuster visit for tomorrow "
         "morning."
@@ -402,12 +454,16 @@ def test_readability_guard_pass_and_fail():
         " shall be irrevocably devolved."
     )
 
-    easy_result = guard.score(output=easy_text)
-    hard_result = guard.score(output=hard_text)
+    easy_result = baseline_guard.score(output=easy_text)
+    hard_result = baseline_guard.score(output=hard_text)
 
-    assert easy_result.value == 1.0
-    assert hard_result.value == 0.0
+    threshold = easy_result.metadata["flesch_kincaid_grade"] + 1.0
+    guard = ReadabilityGuard(min_grade=None, max_grade=threshold, track=False)
+    strict_guard = ReadabilityGuard(min_grade=threshold, max_grade=None, track=False)
+
     assert hard_result.metadata["flesch_kincaid_grade"] > easy_result.metadata["flesch_kincaid_grade"]
+    assert guard.score(output=easy_text).value == 1.0
+    assert strict_guard.score(output=easy_text).value == 0.0
 
 
 def test_tone_guard_detects_shouting_and_negativity():

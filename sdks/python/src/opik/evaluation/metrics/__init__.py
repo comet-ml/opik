@@ -11,6 +11,8 @@ from .heuristics.blonde import BLONDE
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.gleu import GLEU
+from .heuristics.ribes import RIBES
+from .heuristics.chrf import ChrF
 from .heuristics.is_json import IsJson
 from .heuristics.distribution_metrics import (
     JSDivergence,
@@ -20,12 +22,14 @@ from .heuristics.distribution_metrics import (
 from .heuristics.levenshtein_ratio import LevenshteinRatio
 from .heuristics.meteor import METEOR
 from .heuristics.bertscore import BERTScore
+from .heuristics.spearman import SpearmanRanking
 from .heuristics.readability import ReadabilityGuard
 from .heuristics.tone import ToneGuard
 from .heuristics.regex_match import RegexMatch
 from .heuristics.bleu import SentenceBLEU, CorpusBLEU
 from .heuristics.rouge import ROUGE
 from .heuristics.sentiment import Sentiment
+from .heuristics.vader_sentiment import VADERSentiment
 from .llm_judges.answer_relevance.metric import AnswerRelevance
 from .llm_judges.agent_assessment.metric import (
     AgentTaskCompletionJudge,
@@ -92,12 +96,16 @@ __all__ = [
     "LevenshteinRatio",
     "BERTScore",
     "METEOR",
+    "RIBES",
+    "ChrF",
     "ReadabilityGuard",
     "PoliticalBiasJudge",
     "PromptPerplexityJudge",
     "PromptUncertaintyJudge",
+    "SpearmanRanking",
     "ReligiousBiasJudge",
     "RegionalBiasJudge",
+    "VADERSentiment",
     "ToneGuard",
     "RougeCMetric",
     "BleuCMetric",
