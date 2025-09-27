@@ -164,7 +164,7 @@ GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
             " interpret (higher perplexity = harder). Provide a short justification."
         ),
         evaluation_criteria=(
-            "Score from 1 (simple and unambiguous) to 5 (highly complex or confusing)."
+            "Return a score between 0.0 (simple, low perplexity) and 1.0 (high perplexity)."
             " Consider vocabulary complexity, nested objectives, conflicting constraints,"
             " or missing context that forces the model to guess."
         ),
@@ -176,7 +176,7 @@ GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
             " Describe what aspects create ambiguity before scoring."
         ),
         evaluation_criteria=(
-            "Score from 1 (clear expectations) to 5 (high uncertainty)."
+            "Return a score between 0.0 (clear expectations) and 1.0 (high uncertainty)."
             " Look for ambiguous instructions, undefined terms, missing acceptance"
             " criteria, or multiple plausible interpretations."
         ),
@@ -189,7 +189,7 @@ GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
             " claims you detect before scoring."
         ),
         evaluation_criteria=(
-            "Score from 1 (fully factual & compliant) to 5 (high regulatory risk)."
+            "Return a score between 0.0 (fully compliant & factual) and 1.0 (high regulatory risk)."
             " Focus on unverifiable promises, misleading financial/medical claims,"
             " guarantees, or advice that breaches policy or regulation."
         ),

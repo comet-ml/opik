@@ -439,7 +439,7 @@ def test_vader_sentiment_metric_uses_custom_analyzer():
     metric = VADERSentiment(analyzer=StubAnalyzer(), track=False)
     result = metric.score(output="hello")
 
-    assert result.value == pytest.approx(( -0.4 + 1) / 2)
+    assert result.value == pytest.approx((-0.4 + 1) / 2)
     assert result.metadata["vader"]["compound"] == -0.4
 
 

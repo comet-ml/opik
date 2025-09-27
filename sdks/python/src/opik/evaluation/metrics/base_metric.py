@@ -1,5 +1,5 @@
 import abc
-from typing import Any, List, Union, Optional
+from typing import Any, Callable, List, Optional, Union
 
 import opik
 import opik.config as opik_config
@@ -39,9 +39,11 @@ class BaseMetric(abc.ABC):
         name: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
+        preprocessor: Optional[Callable[[str], str]] = None,
     ) -> None:
         self.name = name if name is not None else self.__class__.__name__
         self.track = track
+        self._preprocessor = preprocessor
 
         config = opik_config.OpikConfig()
 
@@ -69,3 +71,8 @@ class BaseMetric(abc.ABC):
         Async public method that can be called independently.
         """
         return self.score(*args, **kwargs)
+
+    def _preprocess(self, text: str) -> str:
+        if self._preprocessor is None:
+            return text
+        return self._preprocessor(text)

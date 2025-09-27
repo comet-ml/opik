@@ -1,0 +1,94 @@
+"""Heuristic metric for knowledge retention across conversation turns."""
+
+from __future__ import annotations
+
+from typing import Dict, List, Optional, Sequence, Set
+
+from opik.evaluation.metrics.base_metric import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.preprocessing import normalize_text
+
+_MIN_TOKEN_LENGTH = 4
+_STOPWORDS = {
+    "the",
+    "this",
+    "that",
+    "with",
+    "have",
+    "from",
+    "about",
+    "there",
+    "which",
+    "would",
+    "could",
+    "should",
+}
+
+
+class KnowledgeRetentionMetric(BaseMetric):
+    """Checks whether final assistant replies retain earlier user-provided facts."""
+
+    def __init__(
+        self,
+        name: str = "knowledge_retention_metric",
+        track: bool = True,
+        project_name: Optional[str] = None,
+        turns_to_consider: int = 5,
+    ) -> None:
+        super().__init__(name=name, track=track, project_name=project_name)
+        self._turns_to_consider = turns_to_consider
+
+    def score(
+        self,
+        conversation: conversation_types.Conversation,
+        **ignored_kwargs: object,
+    ) -> ScoreResult:
+        user_turns: List[str] = []
+        assistant_turns: List[str] = []
+        for message in conversation:
+            content = message.get("content")
+            role = message.get("role")
+            if not content or not role:
+                continue
+            processed = self._preprocess(content)
+            if role == "user":
+                user_turns.append(processed)
+            elif role == "assistant":
+                assistant_turns.append(processed)
+
+        if not assistant_turns:
+            return ScoreResult(value=0.0, name=self.name, reason="No assistant turns", metadata={})
+
+        reference_facts = self._extract_terms(user_turns[: self._turns_to_consider])
+        if not reference_facts:
+            return ScoreResult(value=1.0, name=self.name, reason="No facts to retain", metadata={})
+
+        final_response = assistant_turns[-1]
+        final_terms = self._extract_terms([final_response])
+
+        retained = reference_facts & final_terms
+        score = len(retained) / len(reference_facts)
+
+        metadata = {
+            "reference_terms": sorted(reference_facts),
+            "retained_terms": sorted(retained),
+        }
+
+        return ScoreResult(
+            value=score,
+            name=self.name,
+            reason=f"Retained {len(retained)} of {len(reference_facts)} reference terms",
+            metadata=metadata,
+        )
+
+    def _extract_terms(self, texts: Sequence[str]) -> Set[str]:
+        tokens: Set[str] = set()
+        for text in texts:
+            normalized = normalize_text(text, keep_emoji=False)
+            for token in normalized.split():
+                token = token.strip()
+                if len(token) < _MIN_TOKEN_LENGTH or token in _STOPWORDS:
+                    continue
+                tokens.add(token)
+        return tokens
