@@ -15,6 +15,8 @@ def _default_tokenizer(text: str) -> Iterable[str]:
 
 
 class _DistributionMetricBase(base_metric.BaseMetric):
+    """Base class shared by histogram-based text distribution metrics."""
+
     def __init__(
         self,
         tokenizer: Optional[TokenizeFn],

@@ -15,7 +15,7 @@ BlondeFn = Callable[[str, Sequence[str]], BlondeResult]
 
 
 class BLONDE(base_metric.BaseMetric):
-    """BLONDE summarization metric wrapper."""
+    """Compute the BLONDE factual consistency score via the evaluate implementation."""
 
     def __init__(
         self,

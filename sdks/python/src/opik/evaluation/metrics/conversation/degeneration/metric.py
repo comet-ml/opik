@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.conversation import types as conversation_types
+from .phrases import DEFAULT_FALLBACK_PHRASES
 
 
 def _tokenize(text: str) -> List[str]:
@@ -38,17 +39,8 @@ class ConversationDegenerationMetric(BaseMetric):
         if ngram_size < 2:
             raise ValueError("ngram_size must be >= 2")
         self._ngram_size = ngram_size
-        self._fallback_phrases = (
-            [
-                "i'm sorry",
-                "as an ai",
-                "i cannot",
-                "i'm unable",
-                "please provide",
-            ]
-            if fallback_phrases is None
-            else [phrase.lower() for phrase in fallback_phrases]
-        )
+        phrases = fallback_phrases if fallback_phrases is not None else DEFAULT_FALLBACK_PHRASES
+        self._fallback_phrases = [phrase.lower() for phrase in phrases]
 
     def score(
         self,

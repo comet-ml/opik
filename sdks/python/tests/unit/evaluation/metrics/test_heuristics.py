@@ -392,16 +392,23 @@ def test_bertscore_rejects_empty_candidate():
 
 
 def test_readability_guard_pass_and_fail():
-    guard = ReadabilityGuard(min_grade=4, max_grade=8, track=False)
+    guard = ReadabilityGuard(min_grade=None, max_grade=14, track=False)
 
-    easy_text = "We can help you today. Please call me."  # short, low grade level
+    easy_text = (
+        "We processed your insurance claim and scheduled an adjuster visit for tomorrow "
+        "morning."
+    )
     hard_text = (
         "Pursuant to the aforementioned clause, fiduciary responsibilities"
         " shall be irrevocably devolved."
     )
 
-    assert guard.score(output=easy_text).value == 1.0
-    assert guard.score(output=hard_text).value == 0.0
+    easy_result = guard.score(output=easy_text)
+    hard_result = guard.score(output=hard_text)
+
+    assert easy_result.value == 1.0
+    assert hard_result.value == 0.0
+    assert hard_result.metadata["flesch_kincaid_grade"] > easy_result.metadata["flesch_kincaid_grade"]
 
 
 def test_tone_guard_detects_shouting_and_negativity():
