@@ -2,23 +2,62 @@ from .aggregated_metric import AggregatedMetric
 from .conversation.session_completeness.metric import SessionCompletenessQuality
 from .conversation.conversational_coherence.metric import ConversationalCoherenceMetric
 from .conversation.user_frustration.metric import UserFrustrationMetric
+from .conversation.rouge_c.metric import RougeCMetric
+from .conversation.bleu_c.metric import BleuCMetric
+from .conversation.meteor_c.metric import MeteorCMetric
+from .conversation.degeneration.metric import ConversationDegenerationMetric
+from .heuristics.blanc import BLANC
+from .heuristics.blonde import BLONDE
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
+from .heuristics.gleu import GLEU
 from .heuristics.is_json import IsJson
+from .heuristics.distribution_metrics import (
+    JSDivergence,
+    JSDistance,
+    KLDivergence,
+)
 from .heuristics.levenshtein_ratio import LevenshteinRatio
+from .heuristics.meteor import METEOR
+from .heuristics.bertscore import BERTScore
+from .heuristics.readability import ReadabilityGuard
+from .heuristics.tone import ToneGuard
 from .heuristics.regex_match import RegexMatch
 from .heuristics.bleu import SentenceBLEU, CorpusBLEU
 from .heuristics.rouge import ROUGE
 from .heuristics.sentiment import Sentiment
+from .heuristics.supert import SUPERT
 from .llm_judges.answer_relevance.metric import AnswerRelevance
+from .llm_judges.agent_assessment.metric import (
+    AgentTaskCompletionJudge,
+    AgentToolCorrectnessJudge,
+)
+from .llm_judges.bias_classifier.metric import (
+    DemographicBiasJudge,
+    PoliticalBiasJudge,
+    GenderBiasJudge,
+    ReligiousBiasJudge,
+    RegionalBiasJudge,
+)
 from .llm_judges.context_precision.metric import ContextPrecision
 from .llm_judges.context_recall.metric import ContextRecall
-from .llm_judges.g_eval.metric import GEval
+from .llm_judges.g_eval.metric import GEval, GEvalPreset
 from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
+from .llm_judges.prompt_diagnostics.metric import (
+    PromptPerplexityJudge,
+    PromptUncertaintyJudge,
+)
+from .llm_judges.compliance_risk.metric import ComplianceRiskJudge
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
 from .llm_judges.usefulness.metric import Usefulness
 from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
+from .llm_judges.uni_eval import (
+    UniEvalDialogueHelpfulness,
+    UniEvalQARelevance,
+    UniEvalSummarizationCoherence,
+    UniEvalSummarizationConsistency,
+)
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
 from opik.exceptions import MetricComputationError
@@ -28,17 +67,43 @@ from opik.exceptions import MetricComputationError
 __all__ = [
     "AggregatedMetric",
     "AnswerRelevance",
+    "AgentTaskCompletionJudge",
+    "AgentToolCorrectnessJudge",
     "BaseMetric",
+    "BLANC",
+    "BLONDE",
+    "ConversationDegenerationMetric",
+    "ComplianceRiskJudge",
     "Contains",
     "ContextPrecision",
     "ContextRecall",
     "ConversationalCoherenceMetric",
     "CorpusBLEU",
+    "DemographicBiasJudge",
     "Equals",
     "GEval",
+    "GEvalPreset",
+    "GLEU",
+    "GenderBiasJudge",
     "Hallucination",
     "IsJson",
+    "JSDivergence",
+    "JSDistance",
+    "KLDivergence",
     "LevenshteinRatio",
+    "BERTScore",
+    "METEOR",
+    "ReadabilityGuard",
+    "PoliticalBiasJudge",
+    "PromptPerplexityJudge",
+    "PromptUncertaintyJudge",
+    "ReligiousBiasJudge",
+    "RegionalBiasJudge",
+    "ToneGuard",
+    "RougeCMetric",
+    "BleuCMetric",
+    "MeteorCMetric",
+    "SUPERT",
     "StructuredOutputCompliance",
     "MetricComputationError",
     "Moderation",
@@ -51,5 +116,9 @@ __all__ = [
     "Usefulness",
     "UserFrustrationMetric",
     "TrajectoryAccuracy",
+    "UniEvalDialogueHelpfulness",
+    "UniEvalQARelevance",
+    "UniEvalSummarizationCoherence",
+    "UniEvalSummarizationConsistency",
     # "Factuality",
 ]
