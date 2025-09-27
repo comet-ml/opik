@@ -35,6 +35,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroup;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -1327,6 +1329,61 @@ class SpanDAO {
     // 1.1 - Added cached tokens for OpenAI
     private static final String ESTIMATED_COST_VERSION = "1.1";
 
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString BULK_INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(items) ::= <<" +
+                    BULK_INSERT +
+                    ">>");
+
+    private static final STGroupString INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(end_time) ::= <<" +
+                    INSERT +
+                    ">>");
+
+    private static final STGroupString UPDATE_TEMPLATE_GROUP = new STGroupString(
+            "main(name, input, output, tags, metadata, model, provider, end_time, error_info, total_estimated_cost, total_estimated_cost_version, usage, type) ::= <<"
+                    +
+                    UPDATE +
+                    ">>");
+
+    private static final STGroupString PARTIAL_INSERT_TEMPLATE_GROUP = new STGroupString(
+            "main(name, type, input, output, tags, metadata, provider, model, end_time, usage, error_info, total_estimated_cost, total_estimated_cost_version) ::= <<"
+                    +
+                    PARTIAL_INSERT +
+                    ">>");
+
+    private static final STGroupString SELECT_BY_PROJECT_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(filters, span_aggregation_filters, trace_aggregation_filters, feedback_scores_empty_filters, feedback_scores_filters, offset, exclude_input, exclude_output, exclude_metadata, exclude_feedback_scores, exclude_comments, stream, sort_fields, truncationSize, truncate, exclude_comments, trace_id, exclude_fields, sort_has_feedback_scores, last_received_span_id, type) ::= <<"
+                    +
+                    SELECT_BY_PROJECT_ID +
+                    ">>");
+
+    private static final STGroupString COUNT_BY_PROJECT_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(filters, span_aggregation_filters, trace_aggregation_filters, feedback_scores_empty_filters, feedback_scores_filters, trace_id, type) ::= <<"
+                    +
+                    COUNT_BY_PROJECT_ID +
+                    ">>");
+
+    private static final STGroupString DELETE_BY_TRACE_IDS_TEMPLATE_GROUP = new STGroupString(
+            "main(project_id) ::= <<" +
+                    DELETE_BY_TRACE_IDS +
+                    ">>");
+
+    private static final STGroupString SELECT_SPANS_STATS_TEMPLATE_GROUP = new STGroupString(
+            "main(filters, feedback_scores_empty_filters, feedback_scores_filters, trace_id, type) ::= <<" +
+                    SELECT_SPANS_STATS +
+                    ">>");
+
+    private static final STGroupString SPAN_COUNT_BY_WORKSPACE_ID_TEMPLATE_GROUP = new STGroupString(
+            "main(excluded_project_ids, demo_data_created_at) ::= <<" +
+                    SPAN_COUNT_BY_WORKSPACE_ID +
+                    ">>");
+
+    private static final STGroupString SPAN_DAILY_BI_INFORMATION_TEMPLATE_GROUP = new STGroupString(
+            "main(excluded_project_ids, demo_data_created_at) ::= <<" +
+                    SPAN_DAILY_BI_INFORMATION +
+                    ">>");
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SpanSortingFactory sortingFactory;
@@ -1356,7 +1413,7 @@ class SpanDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(spans.size());
 
-            var template = new ST(BULK_INSERT)
+            var template = BULK_INSERT_TEMPLATE_GROUP.getInstanceOf("main")
                     .add("items", queryItems);
 
             Statement statement = connection.createStatement(template.render());
@@ -1492,7 +1549,7 @@ class SpanDAO {
     }
 
     private ST newInsertTemplate(Span span) {
-        var template = new ST(INSERT);
+        var template = INSERT_TEMPLATE_GROUP.getInstanceOf("main");
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
 
@@ -1511,7 +1568,7 @@ class SpanDAO {
     public Mono<Long> partialInsert(@NonNull UUID id, @NonNull UUID projectId, @NonNull SpanUpdate spanUpdate) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT, false);
+                    ST template = newUpdateTemplate(spanUpdate, PARTIAL_INSERT_TEMPLATE_GROUP, false);
 
                     var statement = connection.createStatement(template.render());
 
@@ -1546,7 +1603,7 @@ class SpanDAO {
                     .build();
         }
 
-        var template = newUpdateTemplate(spanUpdate, UPDATE, isManualCost(existingSpan));
+        var template = newUpdateTemplate(spanUpdate, UPDATE_TEMPLATE_GROUP, isManualCost(existingSpan));
         var statement = connection.createStatement(template.render());
         statement.bind("id", id);
 
@@ -1611,8 +1668,8 @@ class SpanDAO {
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
-    private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
-        var template = new ST(sql);
+    private ST newUpdateTemplate(SpanUpdate spanUpdate, STGroup templateGroup, boolean isManualCostExist) {
+        var template = templateGroup.getInstanceOf("main");
         if (StringUtils.isNotBlank(spanUpdate.name())) {
             template.add("name", spanUpdate.name());
         }
@@ -1710,7 +1767,7 @@ class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = new ST(DELETE_BY_TRACE_IDS);
+                    var template = DELETE_BY_TRACE_IDS_TEMPLATE_GROUP.getInstanceOf("main");
                     Optional.ofNullable(projectId)
                             .ifPresent(id -> template.add("project_id", id));
 
@@ -1855,7 +1912,7 @@ class SpanDAO {
 
     private Flux<? extends Result> findSpanStream(int limit, SpanSearchCriteria criteria, Connection connection) {
         log.info("Searching spans by '{}'", criteria);
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID_TEMPLATE_GROUP, criteria);
 
         template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
         template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
@@ -1879,7 +1936,7 @@ class SpanDAO {
     private Publisher<? extends Result> find(Integer page, int size, SpanSearchCriteria spanSearchCriteria,
             Connection connection) {
 
-        var template = newFindTemplate(SELECT_BY_PROJECT_ID, spanSearchCriteria);
+        var template = newFindTemplate(SELECT_BY_PROJECT_ID_TEMPLATE_GROUP, spanSearchCriteria);
         template.add("offset", (page - 1) * size);
 
         template = ImageUtils.addTruncateToTemplate(template, spanSearchCriteria.truncate());
@@ -1964,7 +2021,7 @@ class SpanDAO {
     }
 
     private Publisher<? extends Result> countTotal(SpanSearchCriteria spanSearchCriteria, Connection connection) {
-        var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria);
+        var template = newFindTemplate(COUNT_BY_PROJECT_ID_TEMPLATE_GROUP, spanSearchCriteria);
         var statement = connection.createStatement(template.render())
                 .bind("project_id", spanSearchCriteria.projectId());
 
@@ -1976,8 +2033,8 @@ class SpanDAO {
                 .doFinally(signalType -> endSegment(segment));
     }
 
-    private ST newFindTemplate(String query, SpanSearchCriteria spanSearchCriteria) {
-        var template = new ST(query);
+    private ST newFindTemplate(STGroup templateGroup, SpanSearchCriteria spanSearchCriteria) {
+        var template = templateGroup.getInstanceOf("main");
         Optional.ofNullable(spanSearchCriteria.traceId())
                 .ifPresent(traceId -> template.add("trace_id", traceId));
         Optional.ofNullable(spanSearchCriteria.type())
@@ -2052,7 +2109,7 @@ class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = newFindTemplate(SELECT_SPANS_STATS, searchCriteria);
+                    var template = newFindTemplate(SELECT_SPANS_STATS_TEMPLATE_GROUP, searchCriteria);
 
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", searchCriteria.projectId());
@@ -2091,7 +2148,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(SPAN_COUNT_BY_WORKSPACE_ID);
+        ST template = SPAN_COUNT_BY_WORKSPACE_ID_TEMPLATE_GROUP.getInstanceOf("main");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
@@ -2127,7 +2184,7 @@ class SpanDAO {
 
         Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
 
-        ST template = new ST(SPAN_DAILY_BI_INFORMATION);
+        ST template = SPAN_DAILY_BI_INFORMATION_TEMPLATE_GROUP.getInstanceOf("main");
 
         if (!excludedProjectIds.isEmpty()) {
             template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));

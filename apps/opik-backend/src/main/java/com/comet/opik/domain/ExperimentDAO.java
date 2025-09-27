@@ -33,6 +33,8 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
+import org.stringtemplate.v4.STGroup;
+import org.stringtemplate.v4.STGroupString;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
@@ -644,6 +646,36 @@ class ExperimentDAO {
             ;
             """;
 
+    // Pre-compiled static template groups to prevent memory leaks
+    private static final STGroupString FIND_TEMPLATE_GROUP = new STGroupString(
+            "main(dataset_id, optimization_id, types, name, dataset_ids, id, lastRetrievedId, prompt_ids, filters, limit, offset, sort_fields) ::= <<"
+                    +
+                    FIND +
+                    ">>");
+
+    private static final STGroupString FIND_COUNT_TEMPLATE_GROUP = new STGroupString(
+            "main(dataset_id, optimization_id, types, name, dataset_ids, id, lastRetrievedId, prompt_ids, filters) ::= <<"
+                    +
+                    FIND_COUNT +
+                    ">>");
+
+    private static final STGroupString FIND_GROUPS_TEMPLATE_GROUP = new STGroupString(
+            "main(types, name, filters, groupBy, groupSelects) ::= <<"
+                    +
+                    FIND_GROUPS +
+                    ">>");
+
+    private static final STGroupString FIND_GROUPS_AGGREGATIONS_TEMPLATE_GROUP = new STGroupString(
+            "main(types, name, filters, groupBy, groupSelects) ::= <<"
+                    +
+                    FIND_GROUPS_AGGREGATIONS +
+                    ">>");
+
+    private static final STGroupString FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS_TEMPLATE_GROUP = new STGroupString(
+            "main(experiment_ids) ::= <<" +
+                    FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS +
+                    ">>");
+
     private static final String EXPERIMENT_DAILY_BI_INFORMATION = """
             SELECT
                  workspace_id,
@@ -722,9 +754,9 @@ class ExperimentDAO {
     Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         var limit = 1;
-        var template = new ST(FIND);
-        template.add("id", id.toString());
-        template.add("limit", limit);
+        var template = FIND_TEMPLATE_GROUP.getInstanceOf("main")
+                .add("id", id.toString())
+                .add("limit", limit);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> get(
                         template.render(), connection,
@@ -736,8 +768,8 @@ class ExperimentDAO {
     @WithSpan
     Flux<Experiment> get(@NonNull ExperimentStreamRequest request) {
         log.info("Getting experiment by '{}'", request);
-        var template = new ST(FIND);
-        template.add("name", request.name());
+        var template = FIND_TEMPLATE_GROUP.getInstanceOf("main")
+                .add("name", request.name());
         if (request.lastRetrievedId() != null) {
             template.add("lastRetrievedId", request.lastRetrievedId());
         }
@@ -887,7 +919,7 @@ class ExperimentDAO {
 
         int offset = (page - 1) * size;
 
-        var template = newFindTemplate(FIND, experimentSearchCriteria);
+        var template = newFindTemplate(FIND_TEMPLATE_GROUP, experimentSearchCriteria);
 
         template.add("sort_fields", sorting);
         template.add("limit", size);
@@ -915,14 +947,14 @@ class ExperimentDAO {
     private Publisher<? extends Result> countTotal(
             ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
         log.info("Counting experiments by '{}'", experimentSearchCriteria);
-        var template = newFindTemplate(FIND_COUNT, experimentSearchCriteria);
+        var template = newFindTemplate(FIND_COUNT_TEMPLATE_GROUP, experimentSearchCriteria);
         var statement = connection.createStatement(template.render());
         bindSearchCriteria(statement, experimentSearchCriteria, true);
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    private ST newFindTemplate(String query, ExperimentSearchCriteria criteria) {
-        var template = new ST(query);
+    private ST newFindTemplate(STGroup templateGroup, ExperimentSearchCriteria criteria) {
+        var template = templateGroup.getInstanceOf("main");
         Optional.ofNullable(criteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
         Optional.ofNullable(criteria.name())
@@ -1058,8 +1090,8 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
-                    template.add("experiment_ids", ids);
+                    ST template = FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS_TEMPLATE_GROUP.getInstanceOf("main")
+                            .add("experiment_ids", ids);
                     var statement = connection.createStatement(template.render());
                     statement.bind("experiment_ids", ids.toArray(UUID[]::new));
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
@@ -1072,7 +1104,7 @@ class ExperimentDAO {
     public Mono<List<DatasetEventInfoHolder>> findAllDatasetIds(@NonNull DatasetCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    ST template = new ST(FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS);
+                    ST template = FIND_EXPERIMENT_DATASET_ID_EXPERIMENT_IDS_TEMPLATE_GROUP.getInstanceOf("main");
 
                     bindFindAllDatasetIdsTemplateParams(criteria, template);
 
@@ -1118,7 +1150,7 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = newGroupTemplate(FIND_GROUPS, criteria);
+                    var template = newGroupTemplate(FIND_GROUPS_TEMPLATE_GROUP, criteria);
                     var statement = connection.createStatement(template.render());
                     bindGroupCriteria(statement, criteria);
 
@@ -1133,7 +1165,7 @@ class ExperimentDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS, criteria);
+                    var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS_TEMPLATE_GROUP, criteria);
                     var statement = connection.createStatement(template.render());
                     bindGroupCriteria(statement, criteria);
 
@@ -1142,8 +1174,8 @@ class ExperimentDAO {
                 .flatMap(result -> mapExperimentGroupAggregationItem(result, criteria.groups().size()));
     }
 
-    private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria) {
-        var template = new ST(query);
+    private ST newGroupTemplate(STGroup templateGroup, ExperimentGroupCriteria criteria) {
+        var template = templateGroup.getInstanceOf("main");
 
         Optional.ofNullable(criteria.name())
                 .ifPresent(name -> template.add("name", name));
