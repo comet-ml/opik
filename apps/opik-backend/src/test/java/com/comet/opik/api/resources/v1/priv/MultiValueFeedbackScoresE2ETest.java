@@ -620,7 +620,7 @@ public class MultiValueFeedbackScoresE2ETest {
                 .source(DatasetItemSource.TRACE)
                 .build();
 
-        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, List.of(datasetItem)),
+        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, List.of(datasetItem), false),
                 TEST_WORKSPACE, API_KEY1);
 
         // define the feedback scores for the same trace from different users
@@ -664,7 +664,7 @@ public class MultiValueFeedbackScoresE2ETest {
                         .datasetId(datasetId)
                         .build())
                 .toList();
-        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, datasetItems),
+        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, datasetItems, false),
                 TEST_WORKSPACE, API_KEY1);
 
         // create an optimization

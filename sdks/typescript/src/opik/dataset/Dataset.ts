@@ -44,8 +44,9 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * Insert new items into the dataset.
    *
    * @param items List of objects to add to the dataset
+   * @param includeTraceMetadata Whether to include trace metadata (tags, comments, feedback scores, etc.) in dataset items
    */
-  public async insert(items: T[]): Promise<void> {
+  public async insert(items: T[], includeTraceMetadata: boolean = false): Promise<void> {
     if (!items || items.length === 0) {
       return;
     }
@@ -62,6 +63,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
         await this.opik.api.datasets.createOrUpdateDatasetItems({
           datasetId: this.id,
           items: batch,
+          includeTraceMetadata,
         });
         totalInserted += batch.length;
         logger.info(

@@ -9,6 +9,7 @@ type UseDatasetItemBatchMutationParams = {
   datasetId: string;
   datasetItems: Partial<DatasetItem>[];
   workspaceName: string;
+  includeTraceMetadata?: boolean;
 };
 
 const useDatasetItemBatchMutation = () => {
@@ -20,11 +21,13 @@ const useDatasetItemBatchMutation = () => {
       datasetId,
       datasetItems,
       workspaceName,
+      includeTraceMetadata,
     }: UseDatasetItemBatchMutationParams) => {
       const { data } = await api.put(`${DATASETS_REST_ENDPOINT}items`, {
         dataset_id: datasetId,
         items: datasetItems,
         workspace_name: workspaceName,
+        include_trace_metadata: includeTraceMetadata,
       });
       return data;
     },
