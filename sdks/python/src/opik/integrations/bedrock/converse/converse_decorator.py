@@ -2,23 +2,25 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from typing_extensions import override
 
+import opik
 import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
-from . import helpers
-from .converse import stream_wrappers as converse_stream_wrappers
+from . import stream_wrappers
+from .. import helpers
 
 LOGGER = logging.getLogger(__name__)
 
-KWARGS_KEYS_TO_LOG_AS_INPUTS = ["inputText"]
+KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "system", "toolConfig", "guardrailConfig"]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUTS = ["output"]
 
 
-class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
+class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
     """
     An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of AWS bedrock client `invoke_agent` function.
+    calls of AWS bedrock client `converse` and `converse_stream` function.
 
     Besides special processing for input arguments and response content, it
     overrides _generators_handler() method to work correctly with bedrock's streams
@@ -34,7 +36,7 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.StartSpanParameters:
         assert (
             kwargs is not None
-        ), "Expected kwargs to be not None in BedrockRuntime.Client.invoke_agent(**kwargs)"
+        ), "Expected kwargs to be not None in BedrockRuntime.Client.converse(**kwargs)"
 
         name = track_options.name if track_options.name is not None else func.__name__
         input, metadata = dict_utils.split_dict_by_keys(
@@ -50,6 +52,8 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
             tags=tags,
             metadata=metadata,
             project_name=track_options.project_name,
+            model=kwargs.get("modelId", None),
+            provider=opik.LLMProvider.BEDROCK,
         )
 
         return result
@@ -61,11 +65,21 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
+        usage = output.get("usage", {})
+
+        usage_in_openai_format = llm_usage.try_build_opik_usage_or_log_error(
+            provider=opik.LLMProvider.BEDROCK,
+            usage=usage,
+            logger=LOGGER,
+            error_message="Failed to log token usage from bedrock LLM call",
+        )
+
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
         )
         result = arguments_helpers.EndSpanParameters(
             output=output,
+            usage=usage_in_openai_format,
             metadata=metadata,
         )
 
@@ -90,11 +104,11 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
 
         assert generations_aggregator is not None
 
-        if isinstance(output, dict) and "completion" in output:
+        if isinstance(output, dict) and "stream" in output:
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
 
-            wrapped_stream = converse_stream_wrappers.wrap_stream(
-                stream=output["completion"],
+            wrapped_stream = stream_wrappers.wrap_stream(
+                stream=output["stream"],
                 capture_output=capture_output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
@@ -103,7 +117,7 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
                 finally_callback=self._after_call,
             )
 
-            output["completion"] = wrapped_stream
+            output["stream"] = wrapped_stream
             return cast(helpers.ConverseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
