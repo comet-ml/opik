@@ -60,7 +60,7 @@ const FiltersButton = <TColumnData,>({
   }, [initialFilters, open]);
 
   useEffect(() => {
-    return onChange(validFilters);
+    onChange(validFilters);
   }, [validFilters, onChange]);
 
   const clearHandler = useCallback(() => {

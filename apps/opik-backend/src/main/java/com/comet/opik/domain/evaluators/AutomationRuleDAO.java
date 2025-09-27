@@ -24,15 +24,17 @@ import java.util.UUID;
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 interface AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate, enabled) " +
-            "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled)")
+    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate, enabled, filters) "
+            +
+            "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled, :rule.filters)")
     void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             UPDATE automation_rules
             SET name = :name,
                 sampling_rate = :samplingRate,
-                enabled = :enabled
+                enabled = :enabled,
+                filters = :filters
             WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId
             """)
     int updateBaseRule(@Bind("id") UUID id,
@@ -40,7 +42,8 @@ interface AutomationRuleDAO {
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
             @Bind("samplingRate") float samplingRate,
-            @Bind("enabled") boolean enabled);
+            @Bind("enabled") boolean enabled,
+            @Bind("filters") String filters);
 
     @SqlUpdate("""
             DELETE FROM automation_rules
