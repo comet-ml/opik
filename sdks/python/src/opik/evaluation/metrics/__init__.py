@@ -26,7 +26,6 @@ from .heuristics.regex_match import RegexMatch
 from .heuristics.bleu import SentenceBLEU, CorpusBLEU
 from .heuristics.rouge import ROUGE
 from .heuristics.sentiment import Sentiment
-from .heuristics.supert import SUPERT
 from .llm_judges.answer_relevance.metric import AnswerRelevance
 from .llm_judges.agent_assessment.metric import (
     AgentTaskCompletionJudge,
@@ -103,7 +102,6 @@ __all__ = [
     "RougeCMetric",
     "BleuCMetric",
     "MeteorCMetric",
-    "SUPERT",
     "StructuredOutputCompliance",
     "MetricComputationError",
     "Moderation",

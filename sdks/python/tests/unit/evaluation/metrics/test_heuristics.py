@@ -21,7 +21,6 @@ from opik.evaluation.metrics.heuristics.gleu import GLEU
 from opik.evaluation.metrics.heuristics.bertscore import BERTScore
 from opik.evaluation.metrics.heuristics.readability import ReadabilityGuard
 from opik.evaluation.metrics.heuristics.tone import ToneGuard
-from opik.evaluation.metrics.heuristics.supert import SUPERT
 from opik.evaluation.metrics.conversation.rouge_c.metric import RougeCMetric
 from opik.evaluation.metrics.conversation.bleu_c.metric import BleuCMetric
 from opik.evaluation.metrics.conversation.meteor_c.metric import MeteorCMetric
@@ -419,51 +418,6 @@ def test_tone_guard_detects_shouting_and_negativity():
 
     assert guard.score(output=polite).value == 1.0
     assert guard.score(output=rude).value == 0.0
-
-class _StubSupertModel:
-    def __init__(self, value: float = 0.35):
-        self._value = value
-        self.calls = []
-
-    def score(self, *, summary: str, document: str) -> float:
-        self.calls.append((summary, document))
-        return self._value
-
-
-def test_supert_score_uses_backend():
-    stub = _StubSupertModel(value=0.73)
-    metric = SUPERT(supert_model=stub, track=False)
-
-    result = metric.score(output="summary", reference="document")
-
-    assert isinstance(result, ScoreResult)
-    assert result.value == pytest.approx(0.73)
-    assert stub.calls == [("summary", "document")]
-
-
-def test_supert_backend_callable():
-    calls = []
-
-    def scorer(*, summary: str, document: str) -> float:
-        calls.append((summary, document))
-        return 0.55
-
-    metric = SUPERT(supert_model=scorer, track=False)
-    res = metric.score(output="summ", reference="doc")
-
-    assert res.value == pytest.approx(0.55)
-    assert calls == [("summ", "doc")]
-
-
-def test_supert_rejects_empty_inputs():
-    metric = SUPERT(supert_model=_StubSupertModel(), track=False)
-
-    with pytest.raises(MetricComputationError):
-        metric.score(output="", reference="doc")
-
-    with pytest.raises(MetricComputationError):
-        metric.score(output="summary", reference="   ")
-
 
 class _StubRougeMetric:
     def __init__(self, scores):
