@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.filter.ExperimentFilter;
@@ -41,6 +42,7 @@ import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.dropwizard.jersey.PATCH;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -483,5 +485,18 @@ public class ExperimentsResource {
                 feedbackScoreNames.scores().size(), experimentIds, workspaceId);
 
         return Response.ok(feedbackScoreNames).build();
+    }
+
+    @PATCH
+    @Path("/{id}")
+    public Response update(
+            @PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @NotNull ExperimentUpdate experimentUpdate) {
+
+        experimentService.update(id, experimentUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.noContent().build();
     }
 }
