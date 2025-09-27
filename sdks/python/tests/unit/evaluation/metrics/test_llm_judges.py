@@ -40,4 +40,3 @@ def test_mmad_judge_average_scores():
     mmad = MMADJudge(judges=[ConstantJudge(0.2), ConstantJudge(0.8)], track=False)
     result = mmad.score("dummy output")
     assert result.value == pytest.approx(0.5)
-*** End Patch
