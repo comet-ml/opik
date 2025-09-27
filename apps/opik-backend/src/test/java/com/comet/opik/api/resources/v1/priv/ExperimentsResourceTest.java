@@ -12,8 +12,10 @@ import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -5192,6 +5194,122 @@ class ExperimentsResourceTest {
 
             assertThat(experimentResourceClient.getExperimentItems(anotherExperimentName, API_KEY, TEST_WORKSPACE))
                     .isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Update Experiments:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdateExperiments {
+
+        @ParameterizedTest
+        @MethodSource("updateExperimentTestCases")
+        @DisplayName("when updating experiment with valid data, then experiment is updated correctly")
+        void updateExperiment_whenValidUpdate_thenExperimentUpdatedCorrectly(
+                ExperimentUpdate updateRequest,
+                Function<Experiment, Experiment> experimentSetter) {
+            // given
+            var originalMetadata = JsonUtils.getJsonNodeFromString("{\"original\": \"value\"}");
+            var initialExperiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .metadata(originalMetadata)
+                    .type(ExperimentType.REGULAR)
+                    .build();
+            var experimentId = experimentResourceClient.create(initialExperiment, API_KEY, TEST_WORKSPACE);
+
+            // when
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then
+            getAndAssert(experimentId, experimentSetter.apply(initialExperiment), TEST_WORKSPACE, API_KEY);
+        }
+
+        Stream<Arguments> updateExperimentTestCases() {
+            var updatedMetadata = JsonUtils.getJsonNodeFromString("{\"temperature\": 0.7, \"max_tokens\": 100}");
+
+            return Stream.of(
+                    // Update all fields
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .name("Updated Experiment")
+                                    .metadata(updatedMetadata)
+                                    .type(ExperimentType.TRIAL)
+                                    .status(ExperimentStatus.RUNNING)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .name("Updated Experiment")
+                                    .metadata(updatedMetadata)
+                                    .type(ExperimentType.TRIAL)
+                                    .status(ExperimentStatus.RUNNING)
+                                    .build()),
+                    // Update only name
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .name("New Name Only")
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .name("New Name Only")
+                                    .build()),
+                    // Update only metadata
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .metadata(updatedMetadata)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .metadata(updatedMetadata)
+                                    .build()),
+                    // Update only type
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .type(ExperimentType.MINI_BATCH)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .type(ExperimentType.MINI_BATCH)
+                                    .build()),
+                    // Update only status
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .status(ExperimentStatus.COMPLETED)
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .status(ExperimentStatus.COMPLETED)
+                                    .build()),
+                    // Empty update
+                    arguments(ExperimentUpdate.builder().build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment));
+        }
+
+        @Test
+        @DisplayName("when updating non-existent experiment, then return 404")
+        void updateExperiment_whenNonExistentExperiment_thenReturn404() {
+            // given
+            var nonExistentId = UUID.randomUUID();
+            var experimentUpdate = ExperimentUpdate.builder()
+                    .name("Non-existent")
+                    .build();
+
+            // when & then
+            experimentResourceClient.updateExperiment(nonExistentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with invalid name, then return 400")
+        void updateExperiment_whenInvalidName_thenReturn400() {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Original Name")
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var experimentUpdate = ExperimentUpdate.builder()
+                    .name("   ") // blank name should be invalid
+                    .build();
+
+            // when & then
+            experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
 }
