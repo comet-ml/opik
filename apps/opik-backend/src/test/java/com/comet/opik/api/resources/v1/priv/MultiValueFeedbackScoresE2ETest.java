@@ -884,6 +884,76 @@ public class MultiValueFeedbackScoresE2ETest {
                 .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
     }
 
+    @Test
+    @DisplayName("test score thread with multiple empty reasons")
+    void testScoreThreadWithMultipleEmptyReasons() {
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        UUID projectId = projectResourceClient.createProject(projectName, API_KEY1, TEST_WORKSPACE);
+
+        // create thread identifiers
+        var threadId = randomUUID().toString();
+
+        // open thread first
+        traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        // create trace within thread
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .threadId(threadId)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY1, TEST_WORKSPACE);
+
+        // close thread to ensure it is written to the trace_threads table
+        traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        // wait for thread to be created and get its ID
+        Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            TraceThread thread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY1, TEST_WORKSPACE);
+            assertThat(thread.threadModelId()).isNotNull();
+        });
+
+        // score the thread
+        var score1 = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .reason(null)
+                .build();
+        traceResourceClient.threadFeedbackScores(
+                List.of(createScoreBatchItemThread(threadId, projectName, score1)), API_KEY1, TEST_WORKSPACE);
+
+        // assert feedback score reason is empty for backwards compatibility
+        var actualSingleScoreById = traceResourceClient.getTraceThread(threadId, projectId, API_KEY2, TEST_WORKSPACE);
+        assertThat(getThreadScore(actualSingleScoreById).reason()).isNull();
+
+        var actualSingleScoreByFind = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY2,
+                TEST_WORKSPACE, null, null, Map.of()).content().stream()
+                .filter(t -> t.id().equals(threadId)).findFirst()
+                .orElseThrow(() -> new AssertionError("Thread with id " + threadId + " not found"));
+        assertThat(getThreadScore(actualSingleScoreByFind).reason()).isNull();
+
+        var score2 = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(score1.name())
+                .reason(null)
+                .build();
+        traceResourceClient.threadFeedbackScores(
+                List.of(createScoreBatchItemThread(threadId, projectName, score2)), API_KEY2, TEST_WORKSPACE);
+
+        // assert feedback score reason has placeholders
+        var actualMultiScoresById = traceResourceClient.getTraceThread(threadId, projectId, API_KEY2, TEST_WORKSPACE);
+        assertThat(getThreadScore(actualMultiScoresById).reason())
+                .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
+
+        var actualMultiScoresByFind = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY2,
+                TEST_WORKSPACE, null, null, Map.of()).content().stream()
+                .filter(t -> t.id().equals(threadId)).findFirst()
+                .orElseThrow(() -> new AssertionError("Thread with id " + threadId + " not found"));
+        assertThat(getThreadScore(actualMultiScoresByFind).reason())
+                .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
+    }
+
     private FeedbackScore getTraceScore(Trace trace) {
         assertThat(trace.feedbackScores()).hasSize(1);
         return trace.feedbackScores().getFirst();
@@ -892,6 +962,11 @@ public class MultiValueFeedbackScoresE2ETest {
     private FeedbackScore getSpanScore(Span span) {
         assertThat(span.feedbackScores()).hasSize(1);
         return span.feedbackScores().getFirst();
+    }
+
+    private FeedbackScore getThreadScore(TraceThread thread) {
+        assertThat(thread.feedbackScores()).hasSize(1);
+        return thread.feedbackScores().getFirst();
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
