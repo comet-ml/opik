@@ -5,9 +5,9 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudg
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
@@ -19,22 +19,16 @@ interface AutomationModelEvaluatorMapper {
 
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
 
-    ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    @Mapping(target = "filters", source = "filters")
     AutomationRuleEvaluatorLlmAsJudge map(LlmAsJudgeAutomationRuleEvaluatorModel model);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    @Mapping(target = "filters", source = "filters")
     AutomationRuleEvaluatorTraceThreadLlmAsJudge map(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel model);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    @Mapping(target = "filters", source = "filters")
     AutomationRuleEvaluatorUserDefinedMetricPython map(UserDefinedMetricPythonAutomationRuleEvaluatorModel model);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    @Mapping(target = "filters", source = "filters")
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython map(
             TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel model);
 
@@ -70,12 +64,11 @@ interface AutomationModelEvaluatorMapper {
             AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode code);
 
     default List<TraceFilter> map(String filtersJson) {
-        if (filtersJson == null || filtersJson.isEmpty()) {
+        if (StringUtils.isBlank(filtersJson)) {
             return List.of();
         }
         try {
-            return OBJECT_MAPPER.readValue(filtersJson, new TypeReference<List<TraceFilter>>() {
-            });
+            return JsonUtils.MAPPER.readValue(filtersJson, TraceFilter.LIST_TYPE_REFERENCE);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to parse filters JSON", e);
         }
@@ -86,7 +79,7 @@ interface AutomationModelEvaluatorMapper {
             return null;
         }
         try {
-            return OBJECT_MAPPER.writeValueAsString(filters);
+            return JsonUtils.MAPPER.writeValueAsString(filters);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize filters to JSON", e);
         }
