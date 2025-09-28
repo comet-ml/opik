@@ -81,7 +81,6 @@ import java.util.concurrent.TimeUnit;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.domain.FeedbackScoreMapper.EMPTY_REASON_PLACEHOLDER;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
@@ -96,6 +95,7 @@ public class MultiValueFeedbackScoresE2ETest {
     private static final String USER2 = randomUUID().toString();
     private static final String WORKSPACE_ID = randomUUID().toString();
     private static final String TEST_WORKSPACE = randomUUID().toString();
+    private static final String EMPTY_REASON_PLACEHOLDER = "<no reason>";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
