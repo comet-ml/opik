@@ -20,12 +20,10 @@ import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
-import static java.util.stream.Collectors.groupingBy;
 
 @ImplementedBy(AlertServiceImpl.class)
 public interface AlertService {
@@ -76,24 +74,7 @@ class AlertServiceImpl implements AlertService {
                 throw new NotFoundException(ALERT_NOT_FOUND);
             }
 
-            // Fetch triggers and their configs
-            List<AlertTrigger> triggers = alertTriggerDAO.findByAlertId(id);
-
-            List<AlertTrigger> triggersWithConfigs = null;
-
-            if (CollectionUtils.isNotEmpty(triggers)) {
-                var triggerConfigMap = findAlertTriggerConfigMap(alertTriggerConfigDAO, triggers);
-
-                triggersWithConfigs = triggers.stream()
-                        .map(trigger -> trigger.toBuilder()
-                                .triggerConfigs(triggerConfigMap.get(trigger.id()))
-                                .build())
-                        .toList();
-            }
-
-            return alert.toBuilder()
-                    .triggers(triggersWithConfigs)
-                    .build();
+            return alert;
         });
     }
 
@@ -188,13 +169,5 @@ class AlertServiceImpl implements AlertService {
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
-    }
-
-    private Map<UUID, List<AlertTriggerConfig>> findAlertTriggerConfigMap(AlertTriggerConfigDAO alertTriggerConfigDAO,
-            List<AlertTrigger> triggers) {
-        var triggerIds = triggers.stream().map(AlertTrigger::id).toList();
-        var configs = alertTriggerConfigDAO.findByAlertTriggerIds(triggerIds);
-
-        return configs.stream().collect(groupingBy(AlertTriggerConfig::alertTriggerId));
     }
 }

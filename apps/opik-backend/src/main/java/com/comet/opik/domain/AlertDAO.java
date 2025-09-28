@@ -1,10 +1,15 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -16,10 +21,13 @@ import org.jdbi.v3.sqlobject.statement.GetGeneratedKeys;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
-import java.io.UncheckedIOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @RegisterRowMapper(AlertDAO.AlertWithWebhookRowMapper.class)
@@ -119,51 +127,173 @@ interface AlertDAO {
         private static final TypeReference<Map<String, String>> MAP_TYPE_REF = new TypeReference<>() {
         };
 
+        private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS")
+                .withZone(java.time.ZoneOffset.UTC);
+
         @Override
         public Alert map(ResultSet rs, StatementContext ctx) throws SQLException {
-            // Parse webhook headers JSON to Map
-            Map<String, String> webhookHeaders = null;
-            String headersJson = rs.getString("webhook_headers");
-            if (headersJson != null && !headersJson.trim().isEmpty()) {
-                try {
-                    webhookHeaders = JsonUtils.readValue(headersJson, MAP_TYPE_REF);
-                } catch (UncheckedIOException e) {
-                    log.warn("Failed to parse webhook headers JSON: '{}'", headersJson, e);
-                    webhookHeaders = Map.of();
-                }
-            }
+            // Parse webhook JSON object
+            Webhook webhook = Optional.ofNullable(rs.getString("webhook"))
+                    .map(JsonUtils::getJsonNodeFromString)
+                    .map(this::mapWebhook)
+                    .orElse(null);
 
-            // Build Webhook object
-            Webhook webhook = Webhook.builder()
-                    .id(UUID.fromString(rs.getString("webhook_id")))
-                    .url(rs.getString("webhook_url"))
-                    .secretToken(rs.getString("webhook_secret_token"))
-                    .headers(webhookHeaders)
-                    .createdAt(rs.getTimestamp("webhook_created_at") != null
-                            ? rs.getTimestamp("webhook_created_at").toInstant()
-                            : null)
-                    .createdBy(rs.getString("webhook_created_by"))
-                    .lastUpdatedAt(rs.getTimestamp("webhook_last_updated_at") != null
-                            ? rs.getTimestamp("webhook_last_updated_at").toInstant()
-                            : null)
-                    .lastUpdatedBy(rs.getString("webhook_last_updated_by"))
-                    .build();
+            // Parse triggers JSON array
+            List<AlertTrigger> triggers = Optional.ofNullable(rs.getString("triggers_json"))
+                    .map(JsonUtils::getJsonNodeFromString)
+                    .map(this::mapTriggers)
+                    .orElse(null);
 
-            // Build Alert object with embedded Webhook
+            // Build Alert object with embedded Webhook and Triggers
             return Alert.builder()
-                    .id(UUID.fromString(rs.getString("alert_id")))
-                    .name(rs.getString("alert_name"))
-                    .enabled(rs.getBoolean("alert_enabled"))
+                    .id(UUID.fromString(rs.getString("id")))
+                    .name(rs.getString("name"))
+                    .enabled(rs.getBoolean("enabled"))
                     .webhook(webhook)
-                    .createdAt(rs.getTimestamp("alert_created_at") != null
-                            ? rs.getTimestamp("alert_created_at").toInstant()
+                    .triggers(triggers)
+                    .createdAt(rs.getTimestamp("created_at") != null
+                            ? rs.getTimestamp("created_at").toInstant()
                             : null)
-                    .createdBy(rs.getString("alert_created_by"))
-                    .lastUpdatedAt(rs.getTimestamp("alert_last_updated_at") != null
-                            ? rs.getTimestamp("alert_last_updated_at").toInstant()
+                    .createdBy(rs.getString("created_by"))
+                    .lastUpdatedAt(rs.getTimestamp("last_updated_at") != null
+                            ? rs.getTimestamp("last_updated_at").toInstant()
                             : null)
-                    .lastUpdatedBy(rs.getString("alert_last_updated_by"))
+                    .lastUpdatedBy(rs.getString("last_updated_by"))
                     .build();
+        }
+
+        private Webhook mapWebhook(JsonNode webhookNode) {
+            try {
+                // Parse webhook headers if present
+                Map<String, String> webhookHeaders = Optional.ofNullable(webhookNode.get("headers"))
+                        .map(this::parseHeaders)
+                        .orElse(null);
+
+                return Webhook.builder()
+                        .id(UUID.fromString(webhookNode.get("id").asText()))
+                        .url(webhookNode.get("url").asText())
+                        .secretToken(webhookNode.get("secret_token").asText())
+                        .headers(webhookHeaders)
+                        .createdAt(Instant.from(FORMATTER.parse(webhookNode.get("created_at").asText())))
+                        .createdBy(webhookNode.get("created_by").asText())
+                        .lastUpdatedAt(Instant.from(FORMATTER.parse(webhookNode.get("last_updated_at").asText())))
+                        .lastUpdatedBy(webhookNode.get("last_updated_by").asText())
+                        .build();
+            } catch (Exception e) {
+                log.warn("Failed to parse webhook JSON: '{}'", webhookNode, e);
+                return null;
+            }
+        }
+
+        private Map<String, String> parseHeaders(JsonNode headersNode) {
+            try {
+                if (headersNode.isTextual()) {
+                    String headersStr = headersNode.asText();
+                    if (!headersStr.trim().isEmpty()) {
+                        return JsonUtils.readValue(headersStr, MAP_TYPE_REF);
+                    }
+                } else if (headersNode.isObject()) {
+                    return JsonUtils.MAPPER.convertValue(headersNode, MAP_TYPE_REF);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse webhook headers: '{}'", headersNode, e);
+            }
+            return Map.of();
+        }
+
+        private List<AlertTrigger> mapTriggers(JsonNode triggersNode) {
+            try {
+                if (triggersNode.isArray()) {
+                    java.util.List<AlertTrigger> triggers = new java.util.ArrayList<>();
+                    for (JsonNode triggerNode : triggersNode) {
+                        AlertTrigger trigger = mapTrigger(triggerNode);
+                        if (trigger != null) {
+                            triggers.add(trigger);
+                        }
+                    }
+                    return triggers;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse triggers JSON: '{}'", triggersNode, e);
+            }
+            return null;
+        }
+
+        private AlertTrigger mapTrigger(JsonNode triggerNode) {
+            try {
+                // Parse trigger configs if present
+                List<AlertTriggerConfig> triggerConfigs = Optional.ofNullable(triggerNode.get("trigger_configs"))
+                        .map(this::mapTriggerConfigs)
+                        .orElse(null);
+
+                return AlertTrigger.builder()
+                        .id(UUID.fromString(triggerNode.get("id").asText()))
+                        .alertId(UUID.fromString(triggerNode.get("alert_id").asText()))
+                        .eventType(AlertEventType.fromString(triggerNode.get("event_type").asText()))
+                        .triggerConfigs(triggerConfigs)
+                        .createdAt(Instant.from(FORMATTER.parse(triggerNode.get("created_at").asText())))
+                        .createdBy(triggerNode.get("created_by").asText())
+                        .build();
+            } catch (Exception e) {
+                log.warn("Failed to parse trigger: '{}'", triggerNode, e);
+                return null;
+            }
+        }
+
+        private List<AlertTriggerConfig> mapTriggerConfigs(JsonNode configsNode) {
+            try {
+                if (configsNode.isArray()) {
+                    java.util.List<AlertTriggerConfig> configs = new java.util.ArrayList<>();
+                    for (JsonNode configNode : configsNode) {
+                        AlertTriggerConfig config = mapTriggerConfig(configNode);
+                        if (config != null) {
+                            configs.add(config);
+                        }
+                    }
+                    return configs;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse trigger configs: '{}'", configsNode, e);
+            }
+            return null;
+        }
+
+        private AlertTriggerConfig mapTriggerConfig(JsonNode configNode) {
+            try {
+                Map<String, String> configValue = Optional.ofNullable(configNode.get("config_value"))
+                        .map(this::parseConfigValue)
+                        .orElse(null);
+
+                return AlertTriggerConfig.builder()
+                        .id(UUID.fromString(configNode.get("id").asText()))
+                        .alertTriggerId(UUID.fromString(configNode.get("alert_trigger_id").asText()))
+                        .type(AlertTriggerConfigType.fromString(configNode.get("config_type").asText()))
+                        .configValue(configValue)
+                        .createdAt(Instant.from(FORMATTER.parse(configNode.get("created_at").asText())))
+                        .createdBy(configNode.get("created_by").asText())
+                        .lastUpdatedAt(Instant.from(FORMATTER.parse(configNode.get("last_updated_at").asText())))
+                        .lastUpdatedBy(configNode.get("last_updated_by").asText())
+                        .build();
+            } catch (Exception e) {
+                log.warn("Failed to parse trigger config: '{}'", configNode, e);
+                return null;
+            }
+        }
+
+        private Map<String, String> parseConfigValue(JsonNode configValueNode) {
+            try {
+                if (configValueNode.isTextual()) {
+                    String configStr = configValueNode.asText();
+                    if (!configStr.trim().isEmpty()) {
+                        return JsonUtils.readValue(configStr, MAP_TYPE_REF);
+                    }
+                } else if (configValueNode.isObject()) {
+                    return JsonUtils.MAPPER.convertValue(configValueNode, MAP_TYPE_REF);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse config value: '{}'", configValueNode, e);
+            }
+            return Map.of();
         }
     }
 }
