@@ -836,9 +836,62 @@ public class MultiValueFeedbackScoresE2ETest {
                 .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
     }
 
+    @Test
+    @DisplayName("test score span with multiple empty reasons")
+    void testScoreSpanWithMultipleEmptyReasons() {
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .id(null)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+        var spanId = spanResourceClient.createSpan(span, API_KEY1, TEST_WORKSPACE);
+
+        // score the span
+        var score1 = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .reason(null)
+                .build();
+        spanResourceClient.feedbackScore(spanId, score1, TEST_WORKSPACE, API_KEY1);
+
+        // assert feedback score reason is empty for backwards compatibility
+        var actualSingleScoreById = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY2);
+        assertThat(getSpanScore(actualSingleScoreById).reason()).isNull();
+
+        var actualSingleScoreByFind = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, projectName, null,
+                null, 5, null, null, null, null, null).content()
+                .stream().filter(t -> t.id().equals(spanId)).findFirst()
+                .orElseThrow(() -> new AssertionError("Span with id " + spanId + " not found"));
+        assertThat(getSpanScore(actualSingleScoreByFind).reason()).isNull();
+
+        var score2 = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(score1.name())
+                .reason(null)
+                .build();
+        spanResourceClient.feedbackScore(spanId, score2, TEST_WORKSPACE, API_KEY2);
+
+        // assert feedback score reason has placeholders
+        var actualMultiScoresById = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY2);
+        assertThat(getSpanScore(actualMultiScoresById).reason())
+                .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
+
+        var actualMultiScoresByFind = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY2, projectName, null,
+                null, 5, null, null, null, null, null).content()
+                .stream().filter(t -> t.id().equals(spanId)).findFirst()
+                .orElseThrow(() -> new AssertionError("Span with id " + spanId + " not found"));
+        assertThat(getSpanScore(actualMultiScoresByFind).reason())
+                .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
+    }
+
     private FeedbackScore getTraceScore(Trace trace) {
         assertThat(trace.feedbackScores()).hasSize(1);
         return trace.feedbackScores().getFirst();
+    }
+
+    private FeedbackScore getSpanScore(Span span) {
+        assertThat(span.feedbackScores()).hasSize(1);
+        return span.feedbackScores().getFirst();
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
