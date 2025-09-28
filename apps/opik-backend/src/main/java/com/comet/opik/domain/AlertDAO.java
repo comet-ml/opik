@@ -34,25 +34,82 @@ interface AlertDAO {
             @Bind("webhookId") UUID webhookId);
 
     @SqlQuery("""
-            SELECT
-            a.id as alert_id,
-            a.name as alert_name,
-            a.enabled as alert_enabled,
-            a.created_at as alert_created_at,
-            a.created_by as alert_created_by,
-            a.last_updated_at as alert_last_updated_at,
-            a.last_updated_by as alert_last_updated_by,
-            w.id as webhook_id,
-            w.url as webhook_url,
-            w.secret_token as webhook_secret_token,
-            w.headers as webhook_headers,
-            w.created_at as webhook_created_at,
-            w.created_by as webhook_created_by,
-            w.last_updated_at as webhook_last_updated_at,
-            w.last_updated_by as webhook_last_updated_by
-            FROM alerts a
-            JOIN webhooks w ON a.webhook_id = w.id
-            WHERE a.id = :id AND a.workspace_id = :workspaceId
+            WITH target_alerts AS (
+                SELECT *
+                FROM alerts
+                WHERE id = :id AND workspace_id = :workspaceId
+            ),
+            target_webhooks AS (
+                SELECT
+                    JSON_OBJECT(
+                        'id', id,
+                        'url', url,
+                        'secret_token', secret_token,
+                        'headers', headers,
+                        'created_at', created_at,
+                        'created_by', created_by,
+                        'last_updated_at', last_updated_at,
+                        'last_updated_by', last_updated_by
+                    ) AS webhook,
+                    id
+                FROM webhooks
+                WHERE workspace_id = :workspaceId
+            ),
+            trigger_ids AS (
+                SELECT id
+                FROM alert_triggers
+                WHERE alert_id IN (SELECT id FROM target_alerts)
+            ),
+            trigger_configs AS (
+                SELECT
+                    tc.alert_trigger_id AS alert_trigger_id,
+                    JSON_ARRAYAGG(tc.trigger_config_json) AS trigger_config_json
+                FROM (
+                    SELECT
+                        JSON_OBJECT(
+                            'id', id,
+                            'alert_trigger_id', alert_trigger_id,
+                            'config_type', config_type,
+                            'config_value', config_value,
+                            'created_at', created_at,
+                            'created_by', created_by,
+                            'last_updated_at', last_updated_at,
+                            'last_updated_by', last_updated_by
+                        ) AS trigger_config_json,
+                        alert_trigger_id
+                    FROM alert_trigger_configs
+                    WHERE alert_trigger_id IN (SELECT id FROM trigger_ids)
+                ) AS tc
+                GROUP BY tc.alert_trigger_id
+            ),
+            target_triggers AS (
+                SELECT
+                    tj.alert_id AS alert_id,
+                    JSON_ARRAYAGG(tj.trigger_json) AS triggers_json
+                FROM (
+                    SELECT
+                        JSON_OBJECT(
+                            'id', at.id,
+                            'alert_id', at.alert_id,
+                            'event_type', at.event_type,
+                            'trigger_configs', tc.trigger_config_json,
+                            'created_at', at.created_at,
+                            'created_by', at.created_by
+                        ) AS trigger_json,
+                        at.alert_id AS alert_id
+                    FROM alert_triggers at
+                    LEFT JOIN trigger_configs tc
+                        ON at.id = tc.alert_trigger_id
+                    WHERE at.id IN (SELECT id FROM trigger_ids)
+                ) AS tj
+                GROUP BY tj.alert_id
+            )
+            SELECT *
+            FROM target_alerts a
+            JOIN target_webhooks w
+                ON a.webhook_id = w.id
+            LEFT JOIN target_triggers t
+                ON a.id = t.alert_id;;
             """)
     Alert findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
