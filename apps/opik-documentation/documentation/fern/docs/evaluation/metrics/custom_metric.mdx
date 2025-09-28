@@ -5,33 +5,20 @@ toc_max_heading_level: 4
 
 # Custom Metric
 
-Opik allows you to define your own metrics. This is useful if you have a specific metric that is not already implemented.
+Opik allows you to define your own custom metrics, which is especially important when the metrics you need are not already available out of the box.
+
+## When to Create Custom Metrics
+
+It is specially relevant to define your own metrics when:
+
+- You have domain-specific goals
+- Standard metrics don't capture the nuance you need
+- You want to align with business KPIs
+- You're experimenting with new evaluation approaches
 
 If you want to write an LLM as a Judge metric, you can use either the [G-Eval metric](/evaluation/metrics/g_eval) or create your own from scratch.
 
-## Custom LLM as a Judge metric
-
-### Creating a custom metric using G-Eval
-
-[G-eval](/evaluation/metrics/g_eval) allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.
-
-To use G-Eval, you will need to specify a task introduction and evaluation criteria:
-
-```python
-from opik.evaluation.metrics import GEval
-
-metric = GEval(
-    task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
-    evaluation_criteria="""
-        The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.
-        The OUTPUT must not contradict any information given in the CONTEXT.
-
-        Return only a score between 0 and 1.
-    """,
-)
-```
-
-### Writing your own custom metric
+## Writing your own custom metrics
 
 To define a custom metric, you need to subclass the `BaseMetric` class and implement the `score` method and an optional `ascore` method:
 
@@ -71,6 +58,7 @@ metric.score(input="What is the capital of France?", output="Paris")
 ```
 
 Also, this metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm).
+
 
 #### Example: Creating a metric with OpenAI model
 
@@ -309,3 +297,30 @@ metric = LLMJudgeMetric()
 
 metric.score(output="Paris is the capital of France")
 ```
+
+## Creating a custom metric using G-Eval
+
+[G-eval](/evaluation/metrics/g_eval) allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.
+You can read more about this advanced metric [here](/evaluation/metrics/g_eval). 
+
+To use G-Eval, you will need to specify a task introduction and evaluation criteria:
+
+```python
+from opik.evaluation.metrics import GEval
+
+metric = GEval(
+    task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
+    evaluation_criteria="""
+        The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.
+        The OUTPUT must not contradict any information given in the CONTEXT.
+
+        Return only a score between 0 and 1.
+    """,
+)
+```
+
+## What's next
+
+Creating custom metrics is just the beginning of building a comprehensive evaluation system for your LLM applications. In this guide, you've learned how to create custom metrics using different approaches, from simple metrics to sophisticated LLM-as-a-judge implementations.
+
+But this is just the beginning. From here, you might want to evaluate your LLM application with your custom metrics following the **[Evaluate your LLM application](/evaluation/evaluate_your_llm)** guide to run comprehensive evaluations using these custom metrics on your datasets.
