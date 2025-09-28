@@ -808,8 +808,14 @@ public class MultiValueFeedbackScoresE2ETest {
         traceResourceClient.feedbackScore(traceId, score1, TEST_WORKSPACE, API_KEY1);
 
         // assert feedback score reason is empty for backwards compatibility
-        var actualSingleScore = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY2);
-        assertThat(getTraceScore(actualSingleScore).reason()).isNull();
+        var actualSingleScoreById = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY2);
+        assertThat(getTraceScore(actualSingleScoreById).reason()).isNull();
+
+        var actualSingleScoreByFind = traceResourceClient.getTraces(projectName, null, API_KEY2,
+                TEST_WORKSPACE, null, null, 5, Map.of()).content().stream()
+                .filter(t -> t.id().equals(traceId)).findFirst()
+                .orElseThrow(() -> new AssertionError("Trace with id " + traceId + " not found"));
+        assertThat(getTraceScore(actualSingleScoreByFind).reason()).isNull();
 
         var score2 = factory.manufacturePojo(FeedbackScore.class).toBuilder()
                 .name(score1.name())
@@ -818,8 +824,15 @@ public class MultiValueFeedbackScoresE2ETest {
         traceResourceClient.feedbackScore(traceId, score2, TEST_WORKSPACE, API_KEY2);
 
         // assert feedback score reason has placeholders
-        var actualMultiScores = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY2);
-        assertThat(getTraceScore(actualMultiScores).reason())
+        var actualMultiScoresById = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY2);
+        assertThat(getTraceScore(actualMultiScoresById).reason())
+                .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
+
+        var actualMultiScoresByFind = traceResourceClient.getTraces(projectName, null, API_KEY2,
+                TEST_WORKSPACE, null, null, 5, Map.of()).content().stream()
+                .filter(t -> t.id().equals(traceId)).findFirst()
+                .orElseThrow(() -> new AssertionError("Trace with id " + traceId + " not found"));
+        assertThat(getTraceScore(actualMultiScoresByFind).reason())
                 .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
     }
 
