@@ -23,6 +23,8 @@ import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
 
+from .colbert import ColBERTv2
+
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
 
@@ -386,8 +388,6 @@ def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
-    from ..colbert import ColBERTv2
-
     # Try ColBERTv2 first with a short timeout
     try:
         colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
