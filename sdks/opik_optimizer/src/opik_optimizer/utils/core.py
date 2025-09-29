@@ -280,9 +280,15 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-def create_litellm_agent_class(prompt: "ChatPrompt") -> type["OptimizableAgent"]:
+def create_litellm_agent_class(
+    prompt: "ChatPrompt", optimizer_ref: Any = None
+) -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
+
+    Args:
+        prompt: The chat prompt to use
+        optimizer_ref: Optional optimizer instance to attach to the agent
     """
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
@@ -292,6 +298,7 @@ def create_litellm_agent_class(prompt: "ChatPrompt") -> type["OptimizableAgent"]
             model = prompt.model
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
+            optimizer = optimizer_ref
 
             def invoke(
                 self, messages: list[dict[str, str]], seed: int | None = None
@@ -306,6 +313,7 @@ def create_litellm_agent_class(prompt: "ChatPrompt") -> type["OptimizableAgent"]
             model = prompt.model
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
+            optimizer = optimizer_ref
 
     return LiteLLMAgent
 
