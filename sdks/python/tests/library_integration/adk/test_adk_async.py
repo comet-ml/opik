@@ -1,5 +1,6 @@
 from typing import Optional, AsyncIterator
 
+import google
 import pytest
 from google.adk import agents as adk_agents
 from google.adk import events as adk_events
@@ -9,6 +10,7 @@ from google.adk.agents import LlmAgent
 from google.genai import types as genai_types
 
 import opik
+from opik import semantic_version
 from opik.integrations.adk import OpikTracer
 from opik.integrations.adk import helpers as opik_adk_helpers
 from . import agent_tools
@@ -334,6 +336,10 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
     assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
+    reason="Test only applies to ADK versions > 1.3.0",
+)
 @pytest.mark.asyncio
 async def test_adk__transfer_to_agent__tracked_and_span_created(
     fake_backend,
