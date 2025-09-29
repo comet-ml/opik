@@ -420,12 +420,14 @@ export interface LLMOpenAIConfigsType {
   frequencyPenalty: number;
   presencePenalty: number;
   reasoningEffort?: ReasoningEffort;
+  seed?: number | null;
 }
 
 export interface LLMAnthropicConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
+  seed?: number | null;
 }
 
 export interface LLMOpenRouterConfigsType {
@@ -438,18 +440,21 @@ export interface LLMOpenRouterConfigsType {
   repetitionPenalty: number;
   minP: number;
   topA: number;
+  seed?: number | null;
 }
 
 export interface LLMGeminiConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
+  seed?: number | null;
 }
 
 export interface LLMVertexAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
+  seed?: number | null;
 }
 
 export interface LLMCustomConfigsType {
@@ -458,6 +463,7 @@ export interface LLMCustomConfigsType {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
+  seed?: number | null;
 }
 
 export type LLMPromptConfigsType =

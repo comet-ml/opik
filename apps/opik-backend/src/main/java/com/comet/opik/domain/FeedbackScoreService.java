@@ -9,7 +9,6 @@ import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.domain.threads.TraceThreadCriteria;
 import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
-import com.comet.opik.infrastructure.FeedbackScoresConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
@@ -82,7 +81,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
-    private final @NonNull FeedbackScoresConfig feedbackScoresConfig;
 
     @Builder(toBuilder = true)
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
@@ -277,10 +275,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     private Mono<Optional<String>> getAuthor() {
-        if (!feedbackScoresConfig.isWriteToAuthored()) {
-            return Mono.just(Optional.empty());
-        }
-
         return Mono.deferContextual(context -> {
             try {
                 String userName = context.get(RequestContext.USER_NAME);

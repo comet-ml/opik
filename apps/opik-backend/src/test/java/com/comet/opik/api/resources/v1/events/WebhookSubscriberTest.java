@@ -34,6 +34,7 @@ import static org.mockito.Mockito.mockStatic;
 class WebhookSubscriberTest {
 
     public static final int MAX_RETRIES = 4;
+  
     @Mock
     private RedissonReactiveClient redisson;
 
