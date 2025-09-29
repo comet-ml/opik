@@ -376,6 +376,9 @@ navigation:
       - page: Advanced clickhouse backup
         path: docs/self-host/backup.mdx
         slug: backup
+      - page: Scaling
+        path: docs/self-host/scaling.mdx
+        slug: scaling
       - section: Configuration
         slug: /configure
         contents:
