@@ -1,4 +1,4 @@
-from playwright.sync_api import Page, expect, has_text
+from playwright.sync_api import Page, expect
 import logging
 
 logger = logging.getLogger(__name__)
