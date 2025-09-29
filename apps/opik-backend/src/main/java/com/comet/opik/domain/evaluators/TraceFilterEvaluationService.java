@@ -59,7 +59,20 @@ public class TraceFilterEvaluationService {
         try {
             TraceField traceField = (TraceField) filter.field();
             Object fieldValue = extractFieldValue(traceField, filter.key(), trace);
-            return evaluateOperator(filter.operator(), fieldValue, filter.value());
+
+            String filterValue = filter.value();
+
+            // Convert duration values from seconds to milliseconds for proper comparison
+            if (traceField == TraceField.DURATION && filterValue != null) {
+                try {
+                    double seconds = Double.parseDouble(filterValue);
+                    filterValue = String.valueOf((long) (seconds * 1000));
+                } catch (NumberFormatException e) {
+                    log.warn("Invalid duration value '{}' for trace filter evaluation", filterValue);
+                }
+            }
+
+            return evaluateOperator(filter.operator(), fieldValue, filterValue);
         } catch (Exception e) {
             log.warn("Error evaluating filter '{}' against trace '{}': '{}'", filter, trace.id(), e.getMessage());
             return false; // If we can't evaluate the filter, consider it a non-match

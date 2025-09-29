@@ -62,6 +62,7 @@ import {
   EvaluationRuleFormType,
 } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import { LLM_JUDGE } from "@/types/llm";
+import { ColumnData } from "@/types/shared";
 import {
   DEFAULT_PYTHON_CODE_THREAD_DATA,
   DEFAULT_PYTHON_CODE_TRACE_DATA,
@@ -174,7 +175,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       enabled: defaultRule?.enabled ?? true,
         filters: normalizeFilters(
           defaultRule?.filters ?? [],
-          formScope === EVALUATORS_RULE_SCOPE.thread ? THREAD_FILTER_COLUMNS : TRACE_FILTER_COLUMNS,
+          (formScope === EVALUATORS_RULE_SCOPE.thread ? THREAD_FILTER_COLUMNS : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
         ),
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)

@@ -79,20 +79,20 @@ export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
   },
-  {
-    id: COLUMN_CUSTOM_ID,
-    label: "Custom filter",
-    type: COLUMN_TYPE.dictionary,
-  },
+  // {
+  //   id: COLUMN_CUSTOM_ID,
+  //   label: "Custom filter",
+  //   type: COLUMN_TYPE.dictionary,
+  // },
 ];
 
 // Thread-specific columns for automation rule filtering
 export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
+  // {
+  //   id: "id",
+  //   label: "ID",
+  //   type: COLUMN_TYPE.string,
+  // },
   {
     id: "status",
     label: "Status",
@@ -108,16 +108,16 @@ export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     label: "Last updated at",
     type: COLUMN_TYPE.time,
   },
-  {
-    id: "start_time",
-    label: "Start time",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "end_time",
-    label: "End time", 
-    type: COLUMN_TYPE.time,
-  },
+  // {
+  //   id: "start_time",
+  //   label: "Start time",
+  //   type: COLUMN_TYPE.time,
+  // },
+  // {
+  //   id: "end_time",
+  //   label: "End time", 
+  //   type: COLUMN_TYPE.time,
+  // },
   {
     id: "duration",
     label: "Duration",
@@ -260,7 +260,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
         <AccordionTrigger className="px-3 py-2 hover:no-underline">
           <div className="flex items-center gap-1">
             <Label className="text-sm font-medium">
-              {isTraceScope ? "Filtering & Sampling" : "Sampling"}
+              Filtering & Sampling
             </Label>
             <ExplainerIcon
               className="mt-0.5"

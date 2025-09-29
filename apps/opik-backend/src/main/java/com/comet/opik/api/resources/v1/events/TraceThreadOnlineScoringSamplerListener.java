@@ -8,6 +8,7 @@ import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.TraceThreadFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -54,6 +55,7 @@ public class TraceThreadOnlineScoringSamplerListener {
     private final TraceThreadFilterEvaluationService filterEvaluationService;
     private final Logger userFacingLogger;
     private final TraceThreadService traceThreadService;
+    private final TraceService traceService;
 
     /**
      * Initializes a SecureRandom instance for trace thread processing.
@@ -63,10 +65,12 @@ public class TraceThreadOnlineScoringSamplerListener {
     public TraceThreadOnlineScoringSamplerListener(
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull TraceThreadFilterEvaluationService filterEvaluationService,
-            @NonNull TraceThreadService traceThreadService) {
+            @NonNull TraceThreadService traceThreadService,
+            @NonNull TraceService traceService) {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.traceThreadService = traceThreadService;
+        this.traceService = traceService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(TraceThreadOnlineScoringSamplerListener.class);
         try {
             this.secureRandom = SecureRandom.getInstanceStrong();
@@ -245,11 +249,25 @@ public class TraceThreadOnlineScoringSamplerListener {
             return null;
         }
 
+        String value = traceFilter.value();
+
+        // Convert duration values from seconds to milliseconds for proper comparison
+        if (threadField == DURATION && value != null) {
+            try {
+                double seconds = Double.parseDouble(value);
+                long milliseconds = (long) (seconds * 1000);
+                log.info("Converting duration filter from {} seconds to {} milliseconds", seconds, milliseconds);
+                value = String.valueOf(milliseconds);
+            } catch (NumberFormatException e) {
+                log.warn("Invalid duration value '{}' for thread filter conversion", value);
+            }
+        }
+
         return TraceThreadFilter.builder()
                 .field(threadField)
                 .operator(traceFilter.operator())
                 .key(traceFilter.key())
-                .value(traceFilter.value())
+                .value(value)
                 .build();
     }
 
