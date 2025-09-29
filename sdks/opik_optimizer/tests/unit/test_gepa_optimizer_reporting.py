@@ -4,7 +4,7 @@ from typing import Any
 
 if "gepa" not in sys.modules:
     dummy_gepa = types.ModuleType("gepa")
-    dummy_gepa.optimize = lambda **kwargs: None
+    dummy_gepa.optimize = lambda **kwargs: None  # type: ignore[attr-defined]
     sys.modules["gepa"] = dummy_gepa
 
 import pytest
@@ -23,7 +23,9 @@ class DummyDataset:
     name = "dummy"
     id = "ds-123"
 
-    def get_items(self, count: int | None = None, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+    def get_items(
+        self, count: int | None = None, *args: Any, **kwargs: Any
+    ) -> list[dict[str, Any]]:
         data = [
             {"id": "1", "question": "Q1", "answer": "A1"},
             {"id": "2", "question": "Q2", "answer": "A2"},
@@ -66,7 +68,7 @@ class DummyGepaResult:
         self.best_idx = 0
         self.num_candidates = 1
         self.total_metric_calls = 1
-        self.parents = []
+        self.parents: list[Any] = []
 
 
 class DummyAgent:
@@ -88,7 +90,9 @@ def _patch_gepa_optimize(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_optimize_prompt_disables_experiment_reporting(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_optimize_prompt_disables_experiment_reporting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     call_order: list[str] = []
 
     def fake_disable() -> None:
@@ -116,7 +120,9 @@ def test_optimize_prompt_disables_experiment_reporting(monkeypatch: pytest.Monke
         lambda **kwargs: object(),
     )
 
-    def fake_agent_factory(prompt: ChatPrompt, optimizer: Any | None = None) -> type[DummyAgent]:
+    def fake_agent_factory(
+        prompt: ChatPrompt, optimizer: Any | None = None
+    ) -> type[DummyAgent]:
         return DummyAgent
 
     monkeypatch.setattr(
@@ -148,7 +154,9 @@ def test_optimize_prompt_disables_experiment_reporting(monkeypatch: pytest.Monke
     def metric(dataset_item: dict[str, Any], llm_output: str) -> DummyScore:
         return DummyScore(0.5)
 
-    optimizer = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o")
+    optimizer = GepaOptimizer(
+        model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o"
+    )
     result = optimizer.optimize_prompt(
         prompt=prompt,
         dataset=dataset,
