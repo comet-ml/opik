@@ -4,13 +4,15 @@ from opik_optimizer.evolutionary_optimizer.mutation_ops import MutationOps
 from opik_optimizer.optimization_config import chat_prompt
 
 
-def test_semantic_mutation_invalid_json_response(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_semantic_mutation_invalid_json_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     mutation_ops = MutationOps()
     mutation_ops.verbose = 1
     mutation_ops.output_style_guidance = "Keep answers brief."
     mutation_ops._get_task_description_for_llm = lambda initial_prompt: "Summarize task"
 
-    def fake_call_model(*, messages, is_reasoning):
+    def fake_call_model(*, messages: list[dict[str, str]], is_reasoning: bool) -> str:
         # Model responded with a Python repr instead of strict JSON
         return "[{'role': 'system', 'content': 'Provide a brief and direct answer to the question.'}, {'role': 'user', 'content': '{question}'}]"
 
