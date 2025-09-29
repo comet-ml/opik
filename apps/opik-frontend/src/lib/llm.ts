@@ -242,3 +242,44 @@ export const renderMessageContent = (
     return item;
   });
 };
+
+const IMAGE_MODEL_KEYWORDS = ["gpt-4o", "gpt-4.1", "gpt-5", "o1", "o3", "o4"];
+
+const IMAGE_MODEL_EXACT = new Set(
+  [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4o-2024-08-06",
+    "gpt-4o-2024-05-13",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4-turbo",
+    "gpt-4-turbo-preview",
+    "gpt-4-turbo-2024-04-09",
+    "gpt-4o-mini-2024-07-18",
+    "gpt-4o-mini",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-chat-latest",
+    "o1",
+    "o1-mini",
+    "o3",
+    "o3-mini",
+    "o4-mini",
+  ].map((model) => model.toLowerCase()),
+);
+
+export const supportsImageInput = (model?: string | null): boolean => {
+  if (!model) {
+    return false;
+  }
+
+  const normalized = model.toLowerCase();
+
+  if (IMAGE_MODEL_EXACT.has(normalized)) {
+    return true;
+  }
+
+  return IMAGE_MODEL_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};

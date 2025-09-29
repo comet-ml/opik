@@ -11,9 +11,7 @@ import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStre
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import {
   getMessageContentMustacheTags,
-  isStructuredMessageContent,
   renderMessageContent,
-  stringifyMessageContent,
 } from "@/lib/llm";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
@@ -53,18 +51,9 @@ const transformMessageIntoProviderMessage = (
     throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
 
-  const renderedContent = renderMessageContent(
-    message.content,
-    serializedDatasetItem,
-  );
-
-  const normalizedContent = isStructuredMessageContent(renderedContent)
-    ? stringifyMessageContent(renderedContent, { includeImagePlaceholders: true })
-    : renderedContent;
-
   return {
     role: message.role,
-    content: normalizedContent,
+    content: renderMessageContent(message.content, serializedDatasetItem),
   };
 };
 

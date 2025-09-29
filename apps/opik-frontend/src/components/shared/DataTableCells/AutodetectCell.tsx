@@ -28,24 +28,16 @@ const getImagesFromValue = (value: unknown) => {
 
 const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
   const value = context.getValue();
-  type ProcessedRow = {
-    data?: Record<string, unknown>;
-    __processedImages?: ReturnType<typeof processInputData>;
-  };
-
-  const row = context.row.original as ProcessedRow | undefined;
+  const row = context.row.original as { data?: unknown } | undefined;
 
   const rowImages = (() => {
     if (!row || !isPlainObject(row)) {
       return [] as ReturnType<typeof processInputData>["images"];
     }
 
-    if (!row.__processedImages) {
-      const data = row.data ?? {};
-      row.__processedImages = processInputData(data);
-    }
+    const rowData = isPlainObject(row.data) ? (row.data as object) : {};
 
-    return row.__processedImages?.images ?? [];
+    return processInputData(rowData).images ?? [];
   })();
 
   const valueImages = getImagesFromValue(value);
@@ -55,10 +47,12 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
 
   const combinedImages = [...valueImages];
 
-  if (typeof value === "string") {
-    const markdownRegex = /!\[image\]\((.+?)\)/gi;
+  let foundMarkdown = false;
+  const markdownRegex = typeof value === "string" ? /!\[image\]\((.+?)\)/gi : null;
+  if (markdownRegex) {
+    const stringValue = value as string;
     let match: RegExpExecArray | null;
-    while ((match = markdownRegex.exec(value))) {
+    while ((match = markdownRegex.exec(stringValue))) {
       const url = match[1];
       if (url && !combinedImages.find((image) => image.url === url)) {
         combinedImages.push({
@@ -66,15 +60,29 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
           name: placeholderLabel ?? "Markdown image",
         });
       }
+      foundMarkdown = true;
     }
   }
 
-  if (rowImages.length && (!placeholderLabel || combinedImages.length === 0)) {
+  const looksLikeImageString =
+    typeof value === "string" &&
+    (/^data:image\//i.test(value) ||
+      foundMarkdown ||
+      /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(value));
+
+  const shouldMergeRowImages =
+    (placeholderLabel !== undefined || combinedImages.length > 0 || looksLikeImageString) &&
+    rowImages.length > 0;
+
+  if (shouldMergeRowImages && rowImages.length) {
     const matches = placeholderLabel
       ? rowImages.filter((image) => {
           if (!image.name) return false;
           if (image.name === placeholderLabel) return true;
-          return image.name.endsWith(placeholderLabel);
+          if (placeholderLabel && image.name.endsWith(placeholderLabel)) {
+            return true;
+          }
+          return false;
         })
       : rowImages;
 
@@ -86,9 +94,13 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
   }
 
   if (combinedImages.length > 0) {
+    const isImagePlaceholder =
+      typeof value === "string" &&
+      (/[\[]image.*?\]/i.test(value) || /!\[image\]/i.test(value));
+
     const fallbackText =
       typeof value === "string"
-        ? /!\[image\]/i.test(value) || /\[image.*\]/i.test(value)
+        ? isImagePlaceholder
           ? "Image"
           : value
         : combinedImages[0]?.name ?? "";
