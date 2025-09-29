@@ -9657,7 +9657,6 @@ components:
     ServiceTogglesConfig:
       required:
       - guardrailsEnabled
-      - humanAnnotationEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
@@ -9670,8 +9669,6 @@ components:
         guardrailsEnabled:
           type: boolean
         opikAIEnabled:
-          type: boolean
-        humanAnnotationEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
