@@ -119,15 +119,7 @@ public class MultiValueFeedbackScoresE2ETest {
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
-                        .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
-                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
-                        .runtimeInfo(wireMock.runtimeInfo())
-                        .redisUrl(REDIS.getRedisURI())
-                        .customConfigs(List.of(
-                                new TestDropwizardAppExtensionUtils.CustomConfig("feedbackScores.writeToAuthored",
-                                        "true")))
-                        .build());
+                MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
