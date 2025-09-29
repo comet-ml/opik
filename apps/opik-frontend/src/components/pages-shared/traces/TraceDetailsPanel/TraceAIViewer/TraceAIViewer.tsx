@@ -106,10 +106,10 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
 
   const predefinedPrompts = useMemo(
     () => [
-      "Analyze this trace and identify any anomalies",
-      "Explain the cause of slowness in this trace and recommend improvements",
-      "Diagnose the reason for this trace failure and suggest potential fixes",
       "Give me a summary of this trace",
+      "What went wrong or looks suspicious here?",
+      "Where did errors or unexpected behavior occur?",
+      "How can I reduce costs?",
     ],
     [],
   );
@@ -215,10 +215,11 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
     return (
       <div className="flex min-h-full flex-col items-center justify-center gap-3 py-2">
         <div className="comet-title-m text-center text-foreground">
-          Ready to dig into your trace?
+          Debug your trace with OpikAssist
         </div>
         <div className="comet-body-s mb-8 text-center text-muted-slate">
-          Start with the sample query or enter your own below
+          Get AI-powered help spotting issues, understanding behavior, or
+          debugging problems. Start with a sample question or ask your own.
         </div>
         {predefinedPrompts.map((prompt) => (
           <Button
@@ -237,8 +238,8 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
 
   return (
     <DetailsActionSectionLayout
-      title="Inspect trace"
-      closeTooltipContent="Close inspect trace"
+      title="OpikAssist"
+      closeTooltipContent="Close OpikAssist"
       setActiveSection={setActiveSection}
       activeSection={activeSection}
       tag={<Tag variant="green">Beta</Tag>}

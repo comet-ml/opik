@@ -491,14 +491,41 @@ jobTimeout:
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: ${OPIK_TRACE_THREADS_CLOSING_JOB_TIMEOUT:-30}
 
-# Configuration for feedback scores
-feedbackScores:
-  # Default: false
-  # Description: Whether to write feedback scores by their author or not
-  writeToAuthored: ${OPIK_FEEDBACK_SCORES_WRITE_TO_AUTHORED:-false}
-
 # Response formatting configuration
 responseFormatting:
   # Default: 10001
   # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
   truncationSize: ${OPIK_RESPONSE_TRUNCATION_CHAR_LIMIT:-10001}
+
+# Webhook configuration
+webhook:
+  # Default: false
+  # Description: Whether or not webhook functionality is enabled
+  enabled: ${WEBHOOK_ENABLED:-false}
+  # Default: webhook-events
+  # Description: Redis stream name for webhook events
+  streamName: ${WEBHOOK_STREAM_NAME:-webhook-events}
+  # Default: webhook-consumers
+  # Description: Consumer group name for webhook event processing
+  consumerGroupName: ${WEBHOOK_CONSUMER_GROUP_NAME:-webhook-consumers}
+  # Default: 10
+  # Description: Maximum number of messages to consume in a single batch (1-100)
+  consumerBatchSize: ${WEBHOOK_CONSUMER_BATCH_SIZE:-10}
+  # Default: 1s
+  # Description: How often webhook consumer will check Redis for new messages
+  poolingInterval: ${WEBHOOK_POOLING_INTERVAL:-1s}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed webhooks (1-10)
+  maxRetries: ${WEBHOOK_MAX_RETRIES:-3}
+  # Default: 500ms
+  # Description: Initial delay between retry attempts
+  initialRetryDelay: ${WEBHOOK_INITIAL_RETRY_DELAY:-500ms}
+  # Default: 30s
+  # Description: Maximum delay between retry attempts
+  maxRetryDelay: ${WEBHOOK_MAX_RETRY_DELAY:-30s}
+  # Default: 10s
+  # Description: HTTP request timeout for webhook calls
+  requestTimeout: ${WEBHOOK_REQUEST_TIMEOUT:-10s}
+  # Default: 5s
+  # Description: HTTP connection timeout for webhook calls
+  connectionTimeout: ${WEBHOOK_CONNECTION_TIMEOUT:-5s}

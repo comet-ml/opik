@@ -85,7 +85,7 @@ After verifying language compatibility, perform a full codebase scan with the fo
 
 ### Step 3: Discover Available Integrations
 
-After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/tracing/integrations/overview.md
+After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/integrations/overview.md
 
 ### Step 4: Deep Analysis Confirmed files for LLM Frameworks & SDKs
 

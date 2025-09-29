@@ -11,6 +11,7 @@ import {
   JsonParseError,
 } from "@/errors/common/errors";
 import { serialization } from "@/rest_api";
+import { OpikApiError } from "@/rest_api/errors";
 import stringify from "fast-json-stable-stringify";
 
 export interface DatasetData {
@@ -51,6 +52,8 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     }
 
     await this.opik.datasetBatchQueue.flush();
+
+    await this.syncHashes();
 
     const reqItems = await this.getDeduplicatedItems(items);
 
@@ -111,7 +114,10 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     const batches = splitIntoBatches(itemIds, { maxBatchSize: 100 });
 
     for await (const batch of batches) {
-      console.debug(`Deleting dataset items batch: ${batch}`);
+      logger.debug("Deleting dataset items batch", {
+        batchSize: batch.length,
+        datasetId: this.id,
+      });
       await this.opik.api.datasets.deleteDatasetItems({
         itemIds: batch,
       });
@@ -274,9 +280,10 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       const contentHash = await datasetItem.contentHash();
 
       if (this.hashes.has(contentHash)) {
-        console.debug(
-          `Duplicate item found with hash: ${contentHash} - ignored the event`
-        );
+        logger.debug("Duplicate item found - skipping", {
+          contentHash,
+          datasetId: this.id,
+        });
         continue;
       }
 
@@ -288,17 +295,41 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     return deduplicatedItems;
   }
 
-  public async syncHashes(): Promise<void> {
-    console.debug("Start hash sync in dataset");
-    const allItems = await this.getItemsAsDataclasses();
-
+  /**
+   * Clears both hash tracking data structures
+   */
+  private clearHashState(): void {
     this.idToHash.clear();
     this.hashes.clear();
+  }
 
-    for (const item of allItems) {
-      const itemHash = await item.contentHash();
-      this.idToHash.set(item.id, itemHash);
-      this.hashes.add(itemHash);
+  public async syncHashes(): Promise<void> {
+    logger.debug("Syncing dataset hashes with backend", { datasetId: this.id });
+
+    try {
+      const allItems = await this.getItemsAsDataclasses();
+
+      this.clearHashState();
+
+      for (const item of allItems) {
+        const itemHash = await item.contentHash();
+        this.idToHash.set(item.id, itemHash);
+        this.hashes.add(itemHash);
+      }
+
+      logger.debug("Dataset hash sync completed", {
+        datasetId: this.id,
+        itemCount: allItems.length,
+      });
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        logger.debug("Dataset not found - starting with empty hash state", {
+          datasetId: this.id,
+        });
+        this.clearHashState();
+        return;
+      }
+      throw error;
     }
   }
 }
