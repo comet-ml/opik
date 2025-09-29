@@ -101,9 +101,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           ) : (
             <>
               {hasText ? (
-                <MarkdownPreview className="py-1">
-                  {mergedText}
-                </MarkdownPreview>
+                <MarkdownPreview className="py-1">{mergedText}</MarkdownPreview>
               ) : null}
               {hasImages ? (
                 <div className="mt-2 flex flex-wrap gap-2">

@@ -38,6 +38,7 @@ import LLMPromptMessageActions from "@/components/pages-shared/llm/LLMPromptMess
 import { Input } from "@/components/ui/input";
 import {
   getMessageContentTextSegments,
+  getMessageContentImageSegments,
   isStructuredMessageContent,
 } from "@/lib/llm";
 
@@ -55,6 +56,8 @@ const MESSAGE_TYPE_OPTIONS = [
     value: LLM_MESSAGE_ROLE.user,
   },
 ];
+
+const MAX_IMAGE_PARTS = 4;
 
 const theme = EditorView.theme({
   "&": {
@@ -110,6 +113,11 @@ const LLMPromptMessage = ({
     () => (isStructured ? content : []),
     [content, isStructured],
   );
+  const imagePartsCount = useMemo(
+    () => getMessageContentImageSegments(content).length,
+    [content],
+  );
+  const canAddMoreImages = imagePartsCount < MAX_IMAGE_PARTS;
 
   const canConvertToText = useMemo(
     () =>
@@ -134,6 +142,10 @@ const LLMPromptMessage = ({
   };
 
   const handleAddImagePart = () => {
+    if (!canAddMoreImages) {
+      return;
+    }
+
     if (isStructured) {
       setStructuredContent([
         ...structuredContent,
@@ -155,14 +167,106 @@ const LLMPromptMessage = ({
 
   const handleAddTextPart = () => {
     if (isStructured) {
-      setStructuredContent([
-        ...structuredContent,
-        { type: "text", text: "" },
-      ]);
+      setStructuredContent([...structuredContent, { type: "text", text: "" }]);
       return;
     }
 
     onChangeMessage({ content: `${content ?? ""}` });
+  };
+
+  const renderAddImageButton = () => {
+    const button = (
+      <Button
+        variant="outline"
+        size="sm"
+        type="button"
+        onClick={handleAddImagePart}
+        disabled={!canAddMoreImages}
+      >
+        <ImageIcon className="mr-2 size-4" /> Add image
+      </Button>
+    );
+
+    if (canAddMoreImages) {
+      return button;
+    }
+
+    return (
+      <TooltipWrapper
+        content={`Maximum of ${MAX_IMAGE_PARTS} images per message`}
+      >
+        <span className="inline-flex">{button}</span>
+      </TooltipWrapper>
+    );
+  };
+
+  const renderStructuredParts = () => {
+    let textPartOrdinal = 0;
+    let imagePartOrdinal = 0;
+
+    return structuredContent.map((item, index) => {
+      const isText = item.type === "text";
+      const ordinal = isText ? ++textPartOrdinal : ++imagePartOrdinal;
+      const label = isText ? `Text block ${ordinal}` : `Image ${ordinal}`;
+
+      let partContent: React.ReactNode = null;
+
+      if (isText) {
+        partContent = (
+          <CodeMirror
+            onCreateEditor={(view) => {
+              if (index === 0) {
+                editorViewRef.current = view;
+              }
+            }}
+            theme={theme}
+            value={item.text}
+            onChange={(value) => handleStructuredTextChange(index, value)}
+            placeholder="Type your message"
+            basicSetup={{
+              foldGutter: false,
+              allowMultipleSelections: false,
+              lineNumbers: false,
+              highlightActiveLine: false,
+            }}
+            extensions={[EditorView.lineWrapping, mustachePlugin]}
+          />
+        );
+      } else {
+        partContent = (
+          <Input
+            value={item.image_url.url}
+            onChange={(event) =>
+              handleStructuredImageUrlChange(index, event.target.value)
+            }
+            placeholder="Image URL or {{input.image_url}}"
+            aria-label={`Image URL for message part ${ordinal}`}
+          />
+        );
+      }
+
+      return (
+        <div
+          key={`${id}-structured-${index}`}
+          className="rounded-md border border-border p-3"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="comet-body-s text-muted-slate">{label}</span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => handleRemovePart(index)}
+              type="button"
+              aria-label="Remove content part"
+            >
+              <Trash />
+            </Button>
+          </div>
+
+          {partContent}
+        </div>
+      );
+    });
   };
 
   const handleStructuredTextChange = (index: number, value: string) => {
@@ -215,9 +319,8 @@ const LLMPromptMessage = ({
   const handleConvertToText = () => {
     if (!isStructured) return;
 
-    const textValue = getMessageContentTextSegments(structuredContent).join(
-      "\n\n",
-    );
+    const textValue =
+      getMessageContentTextSegments(structuredContent).join("\n\n");
 
     onChangeMessage({ content: textValue });
   };
@@ -287,15 +390,15 @@ const LLMPromptMessage = ({
               )}
               {!hideRemoveButton && (
                 <TooltipWrapper content="Delete a message">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={onRemoveMessage}
-                  type="button"
-                  aria-label="Delete message"
-                >
-                  <Trash />
-                </Button>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={onRemoveMessage}
+                    type="button"
+                    aria-label="Delete message"
+                  >
+                    <Trash />
+                  </Button>
                 </TooltipWrapper>
               )}
               <TooltipWrapper content="Duplicate a message">
@@ -333,77 +436,7 @@ const LLMPromptMessage = ({
                   No content. Add a text or image part below.
                 </div>
               ) : null}
-              {structuredContent.map((item, index) => {
-                const label =
-                  item.type === "text"
-                    ? `Text block ${index + 1}`
-                    : `Image ${index + 1}`;
-
-                let partContent: React.ReactNode = null;
-
-                if (item.type === "text") {
-                  partContent = (
-                    <CodeMirror
-                      onCreateEditor={(view) => {
-                        if (index === 0) {
-                          editorViewRef.current = view;
-                        }
-                      }}
-                      theme={theme}
-                      value={item.text}
-                      onChange={(value) =>
-                        handleStructuredTextChange(index, value)
-                      }
-                      placeholder="Type your message"
-                      basicSetup={{
-                        foldGutter: false,
-                        allowMultipleSelections: false,
-                        lineNumbers: false,
-                        highlightActiveLine: false,
-                      }}
-                      extensions={[EditorView.lineWrapping, mustachePlugin]}
-                    />
-                  );
-                } else if (item.type === "image_url") {
-                  partContent = (
-                    <Input
-                      value={item.image_url.url}
-                      onChange={(event) =>
-                        handleStructuredImageUrlChange(
-                          index,
-                          event.target.value,
-                        )
-                      }
-                      placeholder="Image URL or {{input.image_url}}"
-                      aria-label={`Image URL for message part ${index + 1}`}
-                    />
-                  );
-                }
-
-                return (
-                  <div
-                    key={`${id}-structured-${index}`}
-                    className="rounded-md border border-border p-3"
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="comet-body-s text-muted-slate">
-                        {label}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleRemovePart(index)}
-                        type="button"
-                        aria-label="Remove content part"
-                      >
-                        <Trash />
-                      </Button>
-                    </div>
-
-                    {partContent}
-                  </div>
-                );
-              })}
+              {renderStructuredParts()}
 
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -414,14 +447,7 @@ const LLMPromptMessage = ({
                 >
                   <Type className="mr-2 size-4" /> Add text
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={handleAddImagePart}
-                >
-                  <ImageIcon className="mr-2 size-4" /> Add image
-                </Button>
+                {renderAddImageButton()}
                 {canConvertToText ? (
                   <Button
                     variant="ghost"
@@ -453,14 +479,7 @@ const LLMPromptMessage = ({
                 extensions={[EditorView.lineWrapping, mustachePlugin]}
               />
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={handleAddImagePart}
-                >
-                  <ImageIcon className="mr-2 size-4" /> Add image
-                </Button>
+                {renderAddImageButton()}
               </div>
             </>
           )}

@@ -22,8 +22,8 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import {
   isMessageContentEmpty,
-  isStructuredMessageContent,
   stringifyMessageContent,
+  tryDeserializeMessageContent,
 } from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
@@ -77,7 +77,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
   const resetHandler = useCallback(() => {
     onChangeMessage({
-      content: promptData!.latest_version?.template ?? "",
+      content: tryDeserializeMessageContent(
+        promptData!.latest_version?.template ?? "",
+      ),
       promptVersionId: promptData!.latest_version?.id,
     });
   }, [onChangeMessage, promptData]);
@@ -86,20 +88,34 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     (version: PromptVersion) => {
       onChangeMessage({
         promptId: version.prompt_id,
-        content: version.template ?? "",
         promptVersionId: version.id,
       });
     },
     [onChangeMessage],
   );
 
-  const latestTemplate = promptData?.latest_version?.template ?? "";
-  const contentAsString = stringifyMessageContent(message.content, {
-    includeImagePlaceholders: false,
-  });
-  const contentMatchesTemplate =
-    !isStructuredMessageContent(message.content) &&
-    message.content === latestTemplate;
+  const latestTemplateContent = useMemo(
+    () =>
+      tryDeserializeMessageContent(
+        promptData?.latest_version?.template ?? "",
+      ),
+    [promptData?.latest_version?.template],
+  );
+  const latestTemplate = useMemo(
+    () =>
+      stringifyMessageContent(latestTemplateContent, {
+        includeImagePlaceholders: true,
+      }),
+    [latestTemplateContent],
+  );
+  const contentAsString = useMemo(
+    () =>
+      stringifyMessageContent(message.content, {
+        includeImagePlaceholders: true,
+      }),
+    [message.content],
+  );
+  const contentMatchesTemplate = contentAsString === latestTemplate;
 
   const resetDisabled =
     !promptId || promptData?.id !== promptId || contentMatchesTemplate;
@@ -161,7 +177,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     ) {
       selectedPromptIdRef.current = undefined;
       onChangeMessage({
-        content: promptData.latest_version?.template ?? "",
+        content: latestTemplateContent,
         promptVersionId: promptData.latest_version?.id,
       });
       setIsLoading(false);
