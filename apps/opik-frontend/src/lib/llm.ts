@@ -72,9 +72,70 @@ export const getMessageContentImageSegments = (
   );
 };
 
-export const stringifyMessageContent = (content: LLMMessage["content"], {
-  includeImagePlaceholders = true,
-}: { includeImagePlaceholders?: boolean } = {}) => {
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+};
+
+const isMessageContentTextItem = (
+  value: unknown,
+): value is LLMMessageContentItem & { type: "text" } => {
+  return isPlainObject(value) && value.type === "text" && isString(value.text);
+};
+
+const isMessageContentImageUrlItem = (
+  value: unknown,
+): value is LLMMessageContentImageUrl => {
+  if (!isPlainObject(value) || value.type !== "image_url") {
+    return false;
+  }
+
+  const imageUrl = value.image_url;
+
+  if (!isPlainObject(imageUrl)) {
+    return false;
+  }
+
+  const { url, detail } = imageUrl;
+
+  return (
+    isString(url) &&
+    (detail === undefined || isString(detail))
+  );
+};
+
+const isMessageContentItemArray = (
+  value: unknown,
+): value is LLMMessageContentItem[] => {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        isMessageContentTextItem(item) || isMessageContentImageUrlItem(item),
+    )
+  );
+};
+
+export const tryDeserializeMessageContent = (
+  template: string,
+): LLMMessage["content"] => {
+  try {
+    const parsed = JSON.parse(template);
+    if (isMessageContentItemArray(parsed)) {
+      return parsed;
+    }
+  } catch (error) {
+    return template;
+  }
+
+  return template;
+};
+
+export const stringifyMessageContent = (
+  content: LLMMessage["content"],
+  {
+    includeImagePlaceholders = true,
+  }: { includeImagePlaceholders?: boolean } = {},
+) => {
   const textSegments = getMessageContentTextSegments(content);
   const imageSegments = getMessageContentImageSegments(content);
 
