@@ -377,3 +377,86 @@ def test_bedrock_converse__stream_called_2_times__generator_tracked_correctly(
 
     assert_equal(expected_trace1, fake_backend.trace_trees[0])
     assert_equal(expected_trace2, fake_backend.trace_trees[1])
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, "Default Project"),
+        ("bedrock-integration-test", "bedrock-integration-test"),
+    ],
+)
+def test_bedrock_converse__opik_args__happyflow(
+    fake_backend, project_name, expected_project_name
+):
+    """Test basic converse functionality with Bedrock client."""
+    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    tracked_client = track_bedrock(client, project_name=project_name)
+
+    messages = [{"role": "user", "content": [{"text": "Hello, how are you?"}]}]
+
+    system_prompt = [
+        {
+            "text": "You are a helpful AI assistant. Provide concise and accurate responses."
+        }
+    ]
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    _ = tracked_client.converse(
+        modelId=BEDROCK_MODEL_FOR_TESTS,
+        messages=messages,
+        system=system_prompt,
+        inferenceConfig={
+            "maxTokens": 50,
+            "temperature": 0.1,
+        },
+        opik_args=args_dict,
+    )
+
+    opik.flush_tracker()
+
+    expected_trace = TraceModel(
+        id=ANY_BUT_NONE,
+        name="bedrock_converse",
+        input={"messages": messages, "system": system_prompt},
+        output={"output": ANY_DICT},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        tags=["bedrock", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        last_updated_at=ANY_BUT_NONE,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="bedrock_converse",
+                type="llm",
+                input={"messages": messages, "system": system_prompt},
+                output={"output": ANY_DICT},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                tags=["bedrock", "span_tag"],
+                metadata=ANY_DICT.containing(
+                    {"created_from": "bedrock", "span_key": "span_value"}
+                ),
+                last_updated_at=ANY_BUT_NONE,
+                model=BEDROCK_MODEL_FOR_TESTS,
+                usage=ANY_DICT.containing(EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT),
+                provider="bedrock",
+                spans=[],
+            )
+        ],
+    )
+    assert len(fake_backend.trace_trees) == 1
+
+    trace_tree = fake_backend.trace_trees[0]
+    assert_equal(expected_trace, trace_tree)

@@ -102,11 +102,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         type={type}
         onSuccess={onClearSelection}
       />
-      <AddToDropdown
-        rows={rows}
-        disabled={disabled}
-        scope={["trace", "span"]}
-      />
+      <AddToDropdown rows={rows} disabled={disabled} />
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
