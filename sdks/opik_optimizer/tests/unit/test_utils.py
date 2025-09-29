@@ -1,9 +1,10 @@
-import pytest
 import base64
+import pytest
 from pytest import MonkeyPatch
 
 from opik_optimizer.utils import (
     format_prompt,
+    json_to_dict,
     validate_prompt,
     get_random_seed,
     setup_logging,
@@ -87,3 +88,45 @@ def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
         url
         == f"{URL_OVERRIDE}/v1/session/redirect/optimizations/?optimization_id={OPTIMIZATION_ID}&dataset_id={DATASET_ID}&path={ENCODED_URL}"
     )
+
+
+def test_json_to_dict_parses_raw_json_list() -> None:
+    """Ensure json_to_dict handles plain JSON arrays of chat messages."""
+    payload = """[
+        {"role": "system", "content": "Be concise."},
+        {"role": "user", "content": "Question"}
+    ]"""
+
+    result = json_to_dict(payload)
+
+    assert result == [
+        {"role": "system", "content": "Be concise."},
+        {"role": "user", "content": "Question"},
+    ]
+
+
+def test_json_to_dict_strips_json_code_block() -> None:
+    """Ensure json_to_dict trims ```json fenced responses before parsing."""
+    payload = """```json
+    [
+        {"role": "assistant", "content": "Sure"}
+    ]
+    ```"""
+
+    result = json_to_dict(payload)
+
+    assert result == [{"role": "assistant", "content": "Sure"}]
+
+
+def test_json_to_dict_handles_python_literal(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Ensure python-style reprs are parsed via literal_eval fallback."""
+    payload = """[{'role': 'system', 'content': 'Do not forget to cite sources.'}]"""
+
+    result = json_to_dict(payload)
+
+    assert result == [{"role": "system", "content": "Do not forget to cite sources."}]
+
+    captured = capsys.readouterr()
+    assert captured.out == ""

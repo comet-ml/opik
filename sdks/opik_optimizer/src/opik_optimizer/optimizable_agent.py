@@ -147,6 +147,11 @@ class OptimizableAgent:
                                 "content": str(tool_result),
                             }
                         )
+                        # Increment tool call counter if we have access to the optimizer
+                        if hasattr(self, "optimizer") and hasattr(
+                            self.optimizer, "increment_tool_counter"
+                        ):
+                            self.optimizer.increment_tool_counter()
                 else:
                     final_response = msg["content"]
                     break

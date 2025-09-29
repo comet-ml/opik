@@ -19,8 +19,6 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
     """
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
-    metric = LevenshteinRatio()
-    return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
 dataset = hotpot_300()
