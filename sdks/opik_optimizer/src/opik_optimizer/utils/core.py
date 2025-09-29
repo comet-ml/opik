@@ -385,8 +385,7 @@ def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
         # Use a shorter timeout by modifying the max_retries parameter
         results = colbert(query, k=3, max_retries=1)
         return [str(item.text) for item in results if hasattr(item, "text")]
-    except Exception as e:
-        print(f"ColBERTv2 search failed: {e}")
+    except Exception:
         # Fallback to Wikipedia API
         try:
             return _search_wikipedia_api(query)
