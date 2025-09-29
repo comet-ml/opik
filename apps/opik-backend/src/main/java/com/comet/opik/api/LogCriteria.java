@@ -13,6 +13,7 @@ public record LogCriteria(
         @NonNull String workspaceId,
         UUID entityId,
         LogLevel level,
-        Integer size,
+        int size,
+        int page,
         Map<String, String> markers) {
 }
