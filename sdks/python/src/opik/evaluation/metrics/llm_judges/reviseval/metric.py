@@ -32,10 +32,18 @@ class RevisEvalJudge(BaseMetric):
         self._init_model(model)
 
     def _init_model(self, model: Optional[Union[str, base_model.OpikBaseModel]]) -> None:
+        if model is None or isinstance(model, str):
+            self._model = models_factory.get(model_name=model)
+            return
+
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
-        else:
-            self._model = models_factory.get(model_name=model)
+            return
+
+        if not hasattr(model, "generate_string"):
+            raise ValueError("Provided model must expose a 'generate_string' method.")
+
+        self._model = model  # type: ignore[assignment]
 
     def score(
         self,

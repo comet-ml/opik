@@ -23,6 +23,30 @@ _STOPWORDS = {
     "would",
     "could",
     "should",
+    "name",
+    "number",
+}
+
+_REQUEST_KEYWORDS = {
+    "need",
+    "please",
+    "help",
+    "can",
+    "could",
+    "would",
+    "should",
+    "shall",
+    "may",
+    "might",
+    "want",
+    "tell",
+    "explain",
+    "show",
+    "give",
+    "provide",
+    "let",
+    "allow",
+    "request",
 }
 
 
@@ -36,7 +60,16 @@ class KnowledgeRetentionMetric(BaseMetric):
         project_name: Optional[str] = None,
         turns_to_consider: int = 5,
     ) -> None:
-        super().__init__(name=name, track=track, project_name=project_name)
+        super().__init__(
+            name=name,
+            track=track,
+            project_name=project_name,
+            preprocessor=lambda text: normalize_text(
+                text,
+                keep_emoji=False,
+                remove_punctuation=True,
+            ),
+        )
         self._turns_to_consider = turns_to_consider
 
     def score(
@@ -53,6 +86,8 @@ class KnowledgeRetentionMetric(BaseMetric):
                 continue
             processed = self._preprocess(content)
             if role == "user":
+                if self._is_user_request(content):
+                    continue
                 user_turns.append(processed)
             elif role == "assistant":
                 assistant_turns.append(processed)
@@ -85,10 +120,26 @@ class KnowledgeRetentionMetric(BaseMetric):
     def _extract_terms(self, texts: Sequence[str]) -> Set[str]:
         tokens: Set[str] = set()
         for text in texts:
-            normalized = normalize_text(text, keep_emoji=False)
+            normalized = normalize_text(
+                text,
+                keep_emoji=False,
+                remove_punctuation=True,
+            )
             for token in normalized.split():
                 token = token.strip()
                 if len(token) < _MIN_TOKEN_LENGTH or token in _STOPWORDS:
                     continue
                 tokens.add(token)
         return tokens
+
+    def _is_user_request(self, text: str) -> bool:
+        if "?" in text:
+            return True
+
+        normalized = normalize_text(
+            text,
+            keep_emoji=False,
+            remove_punctuation=True,
+        )
+        tokens = set(normalized.split())
+        return any(token in _REQUEST_KEYWORDS for token in tokens)

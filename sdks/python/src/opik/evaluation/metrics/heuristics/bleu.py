@@ -1,3 +1,4 @@
+import warnings
 from typing import Any, List, Optional, Tuple, Union
 
 from opik.exceptions import MetricComputationError
@@ -151,12 +152,19 @@ class SentenceBLEU(BaseBLEU):
         smoothing_func = self._get_smoothing_func()
 
         try:
-            bleu_val = nltk_bleu_score.sentence_bleu(
-                ref_lists,
-                candidate_tokens,
-                weights=used_weights,
-                smoothing_function=smoothing_func,
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"The hypothesis contains 0 counts of 2-gram overlaps\.",
+                    category=UserWarning,
+                    module="nltk\\.translate\\.bleu_score",
+                )
+                bleu_val = nltk_bleu_score.sentence_bleu(
+                    ref_lists,
+                    candidate_tokens,
+                    weights=used_weights,
+                    smoothing_function=smoothing_func,
+                )
         except ZeroDivisionError:
             bleu_val = 0.0
 
