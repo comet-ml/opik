@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -37,6 +39,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -57,16 +60,32 @@ class AlertResourceTest {
 
     private static final String[] ALERT_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "webhook.id", "webhook.name", "webhook.createdAt", "webhook.lastUpdatedAt", "webhook.createdBy",
-            "webhook.lastUpdatedBy", "triggers"};
+            "lastUpdatedBy", "webhook.name", "webhook.createdAt", "webhook.lastUpdatedAt",
+            "webhook.createdBy", "webhook.lastUpdatedBy"};
 
     private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
-            "id", "alertId", "createdAt", "lastUpdatedAt", "createdBy",
+            "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
 
     private static final String[] TRIGGER_CONFIG_IGNORED_FIELDS = new String[]{
-            "id", "alertTriggerId", "createdAt", "lastUpdatedAt", "createdBy",
+            "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
+
+    private static String[] combineIgnoredFields() {
+        return Stream.of(
+                // Alert level fields
+                Stream.of(ALERT_IGNORED_FIELDS),
+
+                // AlertTrigger fields (with triggers[*]. prefix)
+                Stream.of(TRIGGER_IGNORED_FIELDS)
+                        .map(field -> "triggers[*]." + field),
+
+                // AlertTriggerConfig fields (with triggers[*].triggerConfigs[*]. prefix)
+                Stream.of(TRIGGER_CONFIG_IGNORED_FIELDS)
+                        .map(field -> "triggers[*].triggerConfigs[*]." + field))
+                .flatMap(stream -> stream)
+                .toArray(String[]::new);
+    }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -279,16 +298,11 @@ class AlertResourceTest {
             var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            assertThat(actualAlert)
+            assertThat(prepareForComparison(actualAlert))
                     .usingRecursiveComparison()
-                    .ignoringFields(ALERT_IGNORED_FIELDS)
-                    .isEqualTo(alert);
-
-            assertThat(actualAlert.triggers())
-                    .usingRecursiveComparison()
-                    .ignoringFields(TRIGGER_IGNORED_FIELDS)
+                    .ignoringFields(combineIgnoredFields())
                     .ignoringCollectionOrder()
-                    .isEqualTo(alert.triggers());
+                    .isEqualTo(prepareForComparison(alert));
         }
 
         @Test
@@ -311,5 +325,24 @@ class AlertResourceTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         return Pair.of(apiKey, workspaceName);
+    }
+
+    private Alert prepareForComparison(Alert alert) {
+        var sortedTriggers = alert.triggers().stream()
+                .map(trigger -> {
+                    var sortedConfigs = trigger.triggerConfigs().stream()
+                            .sorted(Comparator.comparing(AlertTriggerConfig::id))
+                            .toList();
+                    return trigger.toBuilder()
+                            .triggerConfigs(sortedConfigs)
+                            .alertId(alert.id())
+                            .build();
+                })
+                .sorted(Comparator.comparing(AlertTrigger::id))
+                .toList();
+
+        return alert.toBuilder()
+                .triggers(sortedTriggers)
+                .build();
     }
 }
