@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertTrigger;
-import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -61,31 +60,15 @@ class AlertResourceTest {
     private static final String[] ALERT_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "webhook.name", "webhook.createdAt", "webhook.lastUpdatedAt",
-            "webhook.createdBy", "webhook.lastUpdatedBy"};
+            "webhook.createdBy", "webhook.lastUpdatedBy", "triggers"};
 
     private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy"};
+            "lastUpdatedBy", "triggerConfigs"};
 
     private static final String[] TRIGGER_CONFIG_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
-
-    private static String[] combineIgnoredFields() {
-        return Stream.of(
-                // Alert level fields
-                Stream.of(ALERT_IGNORED_FIELDS),
-
-                // AlertTrigger fields (with triggers[*]. prefix)
-                Stream.of(TRIGGER_IGNORED_FIELDS)
-                        .map(field -> "triggers[*]." + field),
-
-                // AlertTriggerConfig fields (with triggers[*].triggerConfigs[*]. prefix)
-                Stream.of(TRIGGER_CONFIG_IGNORED_FIELDS)
-                        .map(field -> "triggers[*].triggerConfigs[*]." + field))
-                .flatMap(stream -> stream)
-                .toArray(String[]::new);
-    }
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -298,11 +281,7 @@ class AlertResourceTest {
             var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            assertThat(prepareForComparison(actualAlert))
-                    .usingRecursiveComparison()
-                    .ignoringFields(combineIgnoredFields())
-                    .ignoringCollectionOrder()
-                    .isEqualTo(prepareForComparison(alert));
+            compareAlerts(alert, actualAlert);
         }
 
         @Test
@@ -327,15 +306,45 @@ class AlertResourceTest {
         return Pair.of(apiKey, workspaceName);
     }
 
-    private Alert prepareForComparison(Alert alert) {
+    private void compareAlerts(Alert expected, Alert actual) {
+        var preparedExpected = prepareForComparison(expected, true);
+        var preparedActual = prepareForComparison(actual, false);
+
+        assertThat(preparedActual)
+                .usingRecursiveComparison()
+                .ignoringFields(ALERT_IGNORED_FIELDS)
+                .ignoringCollectionOrder()
+                .isEqualTo(preparedExpected);
+
+        assertThat(preparedActual.triggers())
+                .usingRecursiveComparison()
+                .ignoringFields(TRIGGER_IGNORED_FIELDS)
+                .ignoringCollectionOrder()
+                .isEqualTo(preparedExpected.triggers());
+
+        for (int i = 0; i < preparedActual.triggers().size(); i++) {
+            var actualTrigger = preparedActual.triggers().get(i);
+            var expectedTrigger = preparedExpected.triggers().get(i);
+
+            assertThat(actualTrigger.triggerConfigs())
+                    .usingRecursiveComparison()
+                    .ignoringFields(TRIGGER_CONFIG_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedTrigger.triggerConfigs());
+        }
+    }
+
+    private Alert prepareForComparison(Alert alert, boolean isExpected) {
         var sortedTriggers = alert.triggers().stream()
                 .map(trigger -> {
-                    var sortedConfigs = trigger.triggerConfigs().stream()
-                            .sorted(Comparator.comparing(AlertTriggerConfig::id))
+                    var configs = trigger.triggerConfigs().stream()
+                            .map(config -> config.toBuilder()
+                                    .alertTriggerId(isExpected ? trigger.id() : config.alertTriggerId())
+                                    .build())
                             .toList();
                     return trigger.toBuilder()
-                            .triggerConfigs(sortedConfigs)
-                            .alertId(alert.id())
+                            .triggerConfigs(configs)
+                            .alertId(isExpected ? alert.id() : trigger.alertId())
                             .build();
                 })
                 .sorted(Comparator.comparing(AlertTrigger::id))
