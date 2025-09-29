@@ -1,5 +1,5 @@
 import pytest
-from playwright.sync_api import Page, expect, has_text
+from playwright.sync_api import Page, expect
 from page_objects.TracesPage import TracesPage
 from page_objects.ProjectsPage import ProjectsPage
 from tests.sdk_helpers import wait_for_number_of_traces_to_be_visible
