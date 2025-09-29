@@ -35,7 +35,7 @@ const NoDataPage: React.FC<NoDataPageProps> = ({
         <div className="comet-body-s max-w-[570px] px-4 pb-8 pt-4 text-center text-muted-slate">
           {description}
         </div>
-        <div className="flex w-full flex-auto overflow-hidden">
+        <div className="flex max-h-[450px] w-full flex-auto overflow-hidden">
           <img
             className="m-auto max-h-full max-w-full rounded-md border object-cover"
             src={imageUrl}
