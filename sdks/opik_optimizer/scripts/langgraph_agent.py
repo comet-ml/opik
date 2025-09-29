@@ -15,7 +15,17 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import Tool, create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 
-search_wikipedia = track(type="tool")(search_wikipedia)
+
+# Create a wrapper function without optional parameters for LangChain compatibility
+def search_wikipedia_tool(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    return search_wikipedia(query, use_api=False)
+
+
+search_wikipedia_tool = track(type="tool")(search_wikipedia_tool)
 
 
 class InputState(TypedDict):
@@ -38,7 +48,7 @@ def create_graph(project_name: str, prompt_template: str) -> Any:
     agent_tools = [
         Tool(
             name="search_wikipedia",
-            func=search_wikipedia,
+            func=search_wikipedia_tool,
             description="""This agent is used to search wikipedia. It can retrieve additional details about a topic.""",
         )
     ]
