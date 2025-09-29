@@ -5,8 +5,6 @@ export const initPosthog = (key?: string, host?: string) => {
 
   posthog.init(key, {
     api_host: host,
-    capture_pageview: false,
-    capture_pageleave: true,
     defaults: "2025-05-24",
   });
 };
