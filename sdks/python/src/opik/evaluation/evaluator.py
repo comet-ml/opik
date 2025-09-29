@@ -17,6 +17,7 @@ from . import (
 )
 from .metrics import base_metric
 from .models import base_model, models_factory
+from ..message_processing import image_support
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
 
@@ -294,20 +295,78 @@ def evaluate_experiment(
     return evaluation_result_
 
 
+def _render_message_content(
+    content: Any,
+    variables: Dict[str, Any],
+    allow_structured: bool,
+) -> Any:
+    if isinstance(content, list):
+        rendered_parts: List[Dict[str, Any]] = []
+
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+
+            part_type = str(part.get("type", "")).lower()
+
+            if part_type == "text":
+                text_template = str(part.get("text", ""))
+                rendered_parts.append(
+                    {
+                        "type": "text",
+                        "text": prompt_template.PromptTemplate(
+                            text_template,
+                            validate_placeholders=False,
+                            type=variables.get("type", "mustache"),
+                        ).format(**variables),
+                    }
+                )
+            elif part_type == "image_url":
+                image_dict = part.get("image_url", {}) if isinstance(part.get("image_url"), dict) else {}
+                url_template = str(image_dict.get("url", ""))
+                rendered_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                          "url": prompt_template.PromptTemplate(
+                              url_template,
+                              validate_placeholders=False,
+                              type=variables.get("type", "mustache"),
+                          ).format(**variables)
+                        },
+                    }
+                )
+
+        if allow_structured:
+            return rendered_parts
+
+        return image_support.flatten_multimodal_content(rendered_parts)
+
+    # Fallback to plain string formatting
+    return prompt_template.PromptTemplate(
+        str(content),
+        validate_placeholders=False,
+        type=variables.get("type", "mustache"),
+    ).format(**variables)
+
+
 def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
+        allow_structured = image_support.supports_image_input(
+            getattr(model, "model_name", None)
+        )
         processed_messages = []
         for message in messages:
             processed_messages.append(
                 {
                     "role": message["role"],
-                    "content": prompt_template.PromptTemplate(
+                    "content": _render_message_content(
                         message["content"],
-                        validate_placeholders=False,
-                        type=prompt_variables.get("type", "mustache"),
-                    ).format(**prompt_variables),
+                        prompt_variables,
+                        allow_structured,
+                    ),
                 }
             )
 
