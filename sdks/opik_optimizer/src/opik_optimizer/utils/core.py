@@ -8,6 +8,7 @@ from typing import (
 )
 from collections.abc import Callable
 
+import ast
 import inspect
 import base64
 import json
@@ -199,27 +200,52 @@ def enable_experiment_reporting() -> None:
         pass
 
 
+def _strip_code_fence(candidate: str) -> str:
+    stripped = candidate
+    if stripped.startswith("```json"):
+        stripped = stripped[7:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+    elif stripped.startswith("```"):
+        stripped = stripped[3:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+    return stripped.strip()
+
+
 def json_to_dict(json_str: str) -> Any:
     cleaned_json_string = json_str.strip()
 
     try:
         return json.loads(cleaned_json_string)
     except json.JSONDecodeError:
-        if cleaned_json_string.startswith("```json"):
-            cleaned_json_string = cleaned_json_string[7:]
-            if cleaned_json_string.endswith("```"):
-                cleaned_json_string = cleaned_json_string[:-3]
-        elif cleaned_json_string.startswith("```"):
-            cleaned_json_string = cleaned_json_string[3:]
-            if cleaned_json_string.endswith("```"):
-                cleaned_json_string = cleaned_json_string[:-3]
+        cleaned_json_string = _strip_code_fence(cleaned_json_string)
 
         try:
             return json.loads(cleaned_json_string)
-        except json.JSONDecodeError as e:
-            print(f"Failed to parse JSON string: {json_str}")
-            logger.debug(f"Failed to parse JSON string: {json_str}")
-            raise e
+        except json.JSONDecodeError as json_error:
+            try:
+                python_literal = ast.literal_eval(cleaned_json_string)
+            except (ValueError, SyntaxError):
+                print(f"Failed to parse JSON string: {json_str}")
+                logger.debug(f"Failed to parse JSON string: {json_str}")
+                raise json_error
+
+            if isinstance(python_literal, tuple):
+                python_literal = list(python_literal)
+
+            if isinstance(
+                python_literal,
+                (dict, list, str, int, float, bool, type(None)),
+            ):
+                return python_literal
+
+            try:
+                return json.loads(json.dumps(python_literal))
+            except (TypeError, ValueError):
+                print(f"Failed to parse JSON string: {json_str}")
+                logger.debug(f"Failed to parse JSON string: {json_str}")
+                raise json_error
 
 
 def optimization_context(
