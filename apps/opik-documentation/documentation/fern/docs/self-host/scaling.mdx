@@ -26,10 +26,12 @@ Opik is engineered to handle demanding, production-grade workloads. The followin
 
 A deployment of this scale is fully supported using:
 
-**Opik Services** - running on c7i.2xlarge instances with 3 replicas each:
-- Opik Backend
-- Opik Python Backend  
-- Opik Frontend
+**Opik Services** - 
+  These Opik Services run on r7i.2xlarge instances with 2 replicas:
+  - Opik Backend
+  - Opik Frontend
+  
+  The Opik Python Backend service runs on c7i.2xlarge instances with 3 replicas:
 
 **ClickHouse** - running on m7i.8xlarge instances with 2 replicas.
 
