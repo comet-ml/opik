@@ -1,17 +1,10 @@
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+import React, { useCallback } from "react";
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
-import uniqid from "uniqid";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
-import {
-  Info,
-  MessageCircleWarning,
-  Plus,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
+import { Info, MessageCircleWarning } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,30 +43,15 @@ import {
   PythonCodeObject,
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import {
-  COLUMN_ID_ID,
-  COLUMN_METADATA_ID,
-  COLUMN_FEEDBACK_SCORES_ID,
-  COLUMN_CUSTOM_ID,
-  COLUMN_TYPE,
-  ColumnData,
-} from "@/types/shared";
-import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { Filter } from "@/types/filters";
-import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { createFilter } from "@/lib/filters";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
-import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
-import FilterRow from "@/components/shared/FiltersButton/FilterRow";
-import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
-import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import RuleFilteringSection from "@/components/pages-shared/automations/AddEditRuleDialog/RuleFilteringSection";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
@@ -94,11 +72,14 @@ import { Description } from "@/components/ui/description";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "@tanstack/react-router";
-import { getBackendRuleType, getUIRuleScope, getUIRuleType } from "./helpers";
+import {
+  getBackendRuleType,
+  getUIRuleScope,
+  getUIRuleType,
+  normalizeFilters,
+} from "./helpers";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
-
-export const DEFAULT_SAMPLING_RATE = 1;
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: {
@@ -130,69 +111,6 @@ const DEFAULT_PYTHON_CODE_DATA: Record<
   [EVALUATORS_RULE_SCOPE.trace]: DEFAULT_PYTHON_CODE_TRACE_DATA,
   [EVALUATORS_RULE_SCOPE.thread]: DEFAULT_PYTHON_CODE_THREAD_DATA,
 };
-
-const AUTOMATION_RULE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "name",
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "start_time",
-    label: "Start time",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "end_time",
-    label: "End time",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "input",
-    label: "Input",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "output",
-    label: "Output",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "duration",
-    label: "Duration",
-    type: COLUMN_TYPE.duration,
-  },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Metadata",
-    type: COLUMN_TYPE.dictionary,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-  },
-  {
-    id: "thread_id",
-    label: "Thread ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-  },
-  {
-    id: COLUMN_CUSTOM_ID,
-    label: "Custom filter",
-    type: COLUMN_TYPE.dictionary,
-  },
-];
 
 type AddEditRuleDialogProps = {
   open: boolean;
@@ -237,29 +155,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     ? getUIRuleScope(defaultRule.type)
     : EVALUATORS_RULE_SCOPE.trace;
 
-  // Normalize filters from backend to ensure they have the correct structure
-  const normalizeFilters = useCallback((filters?: Filter[]) => {
-    if (!filters || filters.length === 0) return [];
-
-    return filters.map((filter) => {
-      // Find the column type for this field
-      const column = AUTOMATION_RULE_FILTER_COLUMNS.find(
-        (col) => col.id === filter.field,
-      );
-      const columnType = column?.type || COLUMN_TYPE.string;
-
-      return {
-        id: filter.id || uniqid(),
-        field: filter.field || "",
-        type: columnType,
-        operator: filter.operator || "",
-        key: filter.key || "",
-        value: filter.value || "",
-        error: filter.error || "",
-      } as Filter;
-    });
-  }, []);
-
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
   >({
@@ -267,7 +162,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     defaultValues: {
       ruleName: defaultRule?.name || "",
       projectId: defaultRule?.project_id || projectId || "",
-      samplingRate: defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
+      samplingRate: defaultRule?.sampling_rate ?? 1,
       uiType: formUIRuleType,
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
@@ -286,137 +181,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     },
   });
 
-  // Re-initialize form when defaultRule changes
-  useEffect(() => {
-    if (defaultRule) {
-      const formData = {
-        ruleName: defaultRule.name || "",
-        projectId: defaultRule.project_id || projectId || "",
-        samplingRate: defaultRule.sampling_rate ?? DEFAULT_SAMPLING_RATE,
-        uiType: formUIRuleType,
-        scope: formScope,
-        type: getBackendRuleType(formScope, formUIRuleType),
-        enabled: defaultRule.enabled ?? true,
-        filters: normalizeFilters(defaultRule.filters),
-        pythonCodeDetails: isPythonCodeRule(defaultRule)
-          ? (defaultRule.code as PythonCodeObject)
-          : cloneDeep(DEFAULT_PYTHON_CODE_DATA[formScope]),
-        llmJudgeDetails: isLLMJudgeRule(defaultRule)
-          ? convertLLMJudgeObjectToLLMJudgeData(
-              defaultRule.code as LLMJudgeObject,
-            )
-          : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
-      };
-      form.reset(formData as EvaluationRuleFormType);
-    }
-  }, [
-    defaultRule,
-    form,
-    formUIRuleType,
-    formScope,
-    projectId,
-    normalizeFilters,
-  ]);
-
   const isLLMJudge =
     form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
   const scope = form.getValues("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
 
-  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
-
   const formProjectId = form.watch("projectId");
-
-  const automationRuleFiltersConfig = useMemo(
-    () => ({
-      rowsMap: {
-        [COLUMN_METADATA_ID]: {
-          keyComponent: TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
-            placeholder: string;
-            value: string;
-            onValueChange: (value: string) => void;
-          },
-          keyComponentProps: {
-            rootKeys: ["metadata"],
-            projectId: formProjectId,
-            type: TRACE_DATA_TYPE.traces,
-            placeholder: "key",
-            excludeRoot: true,
-          },
-        },
-        [COLUMN_CUSTOM_ID]: {
-          keyComponent: TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
-            placeholder: string;
-            value: string;
-            onValueChange: (value: string) => void;
-          },
-          keyComponentProps: {
-            rootKeys: ["input", "output"],
-            projectId: formProjectId,
-            type: TRACE_DATA_TYPE.traces,
-            placeholder: "key",
-            excludeRoot: false,
-          },
-          validateFilter: (filter: Filter) => {
-            if (
-              filter.key &&
-              filter.value &&
-              !CUSTOM_FILTER_VALIDATION_REGEXP.test(filter.key)
-            ) {
-              return `Key is invalid, it should begin with "input", or "output" and follow this format: "input.[PATH]" For example: "input.message" `;
-            }
-          },
-        },
-        [COLUMN_FEEDBACK_SCORES_ID]: {
-          keyComponent:
-            TracesOrSpansFeedbackScoresSelect as React.FC<unknown> & {
-              placeholder: string;
-              value: string;
-              onValueChange: (value: string) => void;
-            },
-          keyComponentProps: {
-            projectId: formProjectId,
-            type: TRACE_DATA_TYPE.traces,
-            placeholder: "Select score",
-          },
-        },
-      },
-    }),
-    [formProjectId],
-  );
-
-  const handleAddFilter = useCallback(() => {
-    const currentFilters = form.getValues("filters");
-    form.setValue("filters", [...currentFilters, createFilter()]);
-  }, [form]);
-
-  const handleRemoveFilter = useCallback(
-    (filterId: string) => {
-      const currentFilters = form.getValues("filters");
-      const updatedFilters = currentFilters.filter((f) => f.id !== filterId);
-      form.setValue("filters", updatedFilters);
-    },
-    [form],
-  );
-
-  const handleFilterChange = useCallback(
-    (updatedFilter: Filter) => {
-      const currentFilters = form.getValues("filters");
-      const updatedFilters = currentFilters.map((f) =>
-        f.id === updatedFilter.id ? updatedFilter : f,
-      );
-      form.setValue("filters", updatedFilters);
-    },
-    [form],
-  );
-
-  const getFilterConfig = useCallback(
-    (field: string) =>
-      automationRuleFiltersConfig.rowsMap[
-        field as keyof typeof automationRuleFiltersConfig.rowsMap
-      ],
-    [automationRuleFiltersConfig],
-  );
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -584,7 +354,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
             )}
             <Form {...form}>
               <form
-                className="flex flex-col gap-4 pb-4"
+                className="flex flex-col gap-4"
                 onSubmit={form.handleSubmit(onSubmit)}
               >
                 <FormField
@@ -781,108 +551,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 )}
 
                 {/* Filtering Section */}
-                <div className="rounded-md border bg-background p-3">
-                  {/* Expandable Header */}
-                  <div
-                    className="flex cursor-pointer items-center gap-2"
-                    onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
-                  >
-                    {isFiltersExpanded ? (
-                      <ChevronDown className="size-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="size-4 text-muted-foreground" />
-                    )}
-                    <Label className="cursor-pointer text-sm font-medium">
-                      Filtering
-                    </Label>
-                    <TooltipWrapper content="Apply filters to select which traces will be evaluated by this rule">
-                      <Info className="size-3.5 text-muted-foreground" />
-                    </TooltipWrapper>
-                  </div>
-
-                  {/* Collapsible Content */}
-                  {isFiltersExpanded && (
-                    <div className="mt-4 space-y-4">
-                      {/* Description */}
-                      <div className="text-sm text-muted-foreground">
-                        Use filters and sampling rate to control which traces
-                        this rule applies to. If nothing is defined, the rule
-                        will evaluate all traces.
-                      </div>
-
-                      {/* Filters */}
-                      <FormField
-                        control={form.control}
-                        name="filters"
-                        render={({ field }) => (
-                          <FormItem>
-                            <div className="space-y-3">
-                              <Label className="text-sm font-medium">
-                                Filters
-                              </Label>
-
-                              {/* Filter rows */}
-                              {field.value.length > 0 && (
-                                <div className="space-y-2">
-                                  <table className="w-full">
-                                    <tbody>
-                                      {field.value.map((filter, index) => (
-                                        <FilterRow
-                                          key={filter.id}
-                                          filter={filter}
-                                          columns={
-                                            AUTOMATION_RULE_FILTER_COLUMNS
-                                          }
-                                          prefix={index === 0 ? "Where" : "And"}
-                                          getConfig={getFilterConfig}
-                                          onRemove={handleRemoveFilter}
-                                          onChange={handleFilterChange}
-                                        />
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-
-                              {/* Add filter button on new line */}
-                              <div className="pt-1">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handleAddFilter}
-                                  className="w-fit"
-                                >
-                                  <Plus className="mr-1 size-3.5" />
-                                  Add filter
-                                </Button>
-                              </div>
-                            </div>
-                          </FormItem>
-                        )}
-                      />
-
-                      {/* Sampling Rate */}
-                      <FormField
-                        control={form.control}
-                        name="samplingRate"
-                        render={({ field }) => (
-                          <SliderInputControl
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            defaultValue={DEFAULT_SAMPLING_RATE}
-                            value={field.value}
-                            onChange={field.onChange}
-                            id="sampling_rate"
-                            label="Sampling rate"
-                            tooltip="Percentage of traces to evaluate"
-                          />
-                        )}
-                      />
-                    </div>
-                  )}
-                </div>
+                <RuleFilteringSection form={form} projectId={formProjectId} />
               </form>
             </Form>
           </DialogAutoScrollBody>

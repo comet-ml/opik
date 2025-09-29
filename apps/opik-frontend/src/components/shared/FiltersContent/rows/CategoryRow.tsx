@@ -1,6 +1,6 @@
 import React from "react";
 import { Filter, FilterRowConfig } from "@/types/filters";
-import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
+import OperatorSelector from "@/components/shared/FiltersContent/OperatorSelector";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { COLUMN_TYPE } from "@/types/shared";
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
