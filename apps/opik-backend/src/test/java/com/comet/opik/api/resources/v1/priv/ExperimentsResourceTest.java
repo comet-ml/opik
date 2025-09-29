@@ -65,6 +65,7 @@ import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -77,6 +78,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import io.r2dbc.spi.Statement;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -109,6 +111,8 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -245,13 +249,16 @@ class ExperimentsResourceTest {
     private DatasetResourceClient datasetResourceClient;
     private SpanResourceClient spanResourceClient;
     private TraceDeletedListener traceDeletedListener;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, TraceDeletedListener traceDeletedListener) {
+    void beforeAll(ClientSupport client, TraceDeletedListener traceDeletedListener,
+            TransactionTemplateAsync clickHouseTemplate) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.traceDeletedListener = traceDeletedListener;
+        this.clickHouseTemplate = clickHouseTemplate;
 
         ClientSupportUtils.config(client);
         defaultEventBus = contextConfig.mockEventBus();
@@ -2033,6 +2040,67 @@ class ExperimentsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("legacy experiments with unknown status should show up as completed")
+        void testUnknownStatusExperimentCanBeRetrieved() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+
+            // simulate legacy experiment insertion with 'unknown' status directly in ClickHouse
+            Mono<Void> insertResult = clickHouseTemplate.nonTransaction(connection -> {
+                String insertSql = """
+                        INSERT INTO experiments (
+                            id,
+                            dataset_id,
+                            name,
+                            workspace_id,
+                            metadata,
+                            created_by,
+                            last_updated_by,
+                            prompt_version_id,
+                            prompt_id,
+                            prompt_versions,
+                            type,
+                            optimization_id,
+                            status
+                        ) VALUES (
+                            :id, :dataset_id, :name, :workspace_id, :metadata, :created_by, :last_updated_by,
+                            :prompt_version_id, :prompt_id, :prompt_versions, :type, :optimization_id, 'unknown'
+                        )
+                        """;
+
+                Statement statement = connection.createStatement(insertSql)
+                        .bind("id", experiment.id())
+                        .bind("dataset_id", experiment.datasetId())
+                        .bind("name", experiment.name())
+                        .bind("workspace_id", workspaceId)
+                        .bind("metadata", experiment.metadata().toString())
+                        .bind("created_by", USER)
+                        .bind("last_updated_by", USER)
+                        .bindNull("prompt_version_id", UUID.class)
+                        .bindNull("prompt_id", UUID.class)
+                        .bind("prompt_versions", new UUID[]{})
+                        .bind("type", ExperimentType.REGULAR)
+                        .bind("optimization_id", "");
+
+                return Mono.from(statement.execute())
+                        .then();
+            });
+
+            // Execute the insertion
+            StepVerifier.create(insertResult)
+                    .verifyComplete();
+
+            var actual = experimentResourceClient.streamExperiments(ExperimentStreamRequest.builder()
+                    .limit(5).name(experiment.name()).build(), apiKey, workspaceName);
+            assertThat(actual).hasSize(1);
+            assertThat(actual.getFirst().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        }
     }
 
     @Nested

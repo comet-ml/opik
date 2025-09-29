@@ -22,6 +22,6 @@ public enum ExperimentStatus {
         return Arrays.stream(values())
                 .filter(status -> status.value.equals(value))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unknown Experiment Status '%s'".formatted(value)));
+                .orElse(COMPLETED);
     }
 }
