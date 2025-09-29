@@ -156,10 +156,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Sonnet 4.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_LATEST,
-      label: "Claude Sonnet 4 (Latest)",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
       label: "Claude Sonnet 4",
     },

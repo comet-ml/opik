@@ -42,7 +42,6 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
-  CLAUDE_SONNET_4_LATEST = "claude-sonnet-4-latest",
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
   CLAUDE_HAIKU_3_5 = "claude-3-5-haiku-20241022",
   CLAUDE_HAIKU_3 = "claude-3-haiku-20240307",
