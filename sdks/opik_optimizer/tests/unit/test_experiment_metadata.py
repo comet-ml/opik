@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import pytest
 
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.optimizable_agent import OptimizableAgent
 from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
-from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
+from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import (
+    EvolutionaryOptimizer,
+)
 from opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import (
     FewShotBayesianOptimizer,
 )
@@ -105,7 +108,10 @@ def test_prepare_experiment_config_merges_metadata(dummy_prompt: ChatPrompt) -> 
 
     configuration_updates = {"custom": "value"}
     additional_metadata = {"extra": {"flag": True}}
-    user_config = {"tracking": {"run_id": "123"}, "optimizer_metadata": {"custom": "override"}}
+    user_config = {
+        "tracking": {"run_id": "123"},
+        "optimizer_metadata": {"custom": "override"},
+    }
 
     config = optimizer._prepare_experiment_config(
         prompt=dummy_prompt,
