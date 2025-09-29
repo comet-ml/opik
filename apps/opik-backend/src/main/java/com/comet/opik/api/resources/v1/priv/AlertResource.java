@@ -19,8 +19,10 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -29,6 +31,8 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.UUID;
 
 @Path("/v1/private/alerts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -69,4 +73,23 @@ public class AlertResource {
         return Response.created(uri).build();
     }
 
+    @GET
+    @Path("/{id}")
+    @Operation(operationId = "getAlertById", summary = "Get Alert by id", description = "Get Alert by id", responses = {
+            @ApiResponse(responseCode = "200", description = "Alert resource", content = @Content(schema = @Schema(implementation = Alert.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @JsonView(Alert.View.Public.class)
+    public Response getAlertById(@PathParam("id") UUID id) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding Alert by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        var alert = alertService.getById(id);
+
+        log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        return Response.ok().entity(alert).build();
+    }
 }

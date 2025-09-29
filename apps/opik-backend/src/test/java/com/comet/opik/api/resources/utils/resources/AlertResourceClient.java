@@ -65,4 +65,22 @@ public class AlertResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.entity(body, ContentType.APPLICATION_JSON.toString()));
     }
+
+    public Alert getAlertById(UUID id, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Alert.class);
+            }
+
+            return null;
+        }
+    }
 }

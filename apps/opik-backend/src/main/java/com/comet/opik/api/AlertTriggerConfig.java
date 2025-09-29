@@ -17,7 +17,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AlertTriggerConfig(
         @JsonView( {
-                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+                Alert.View.Public.class, Alert.View.Write.class}) UUID id,
 
         @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID alertTriggerId,
 
