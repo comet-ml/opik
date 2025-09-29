@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
@@ -52,31 +53,33 @@ public class WebhookHttpClient {
     public Mono<Void> sendWebhook(@NonNull WebhookEvent<?> event) {
         log.info("Sending webhook event '{}' to URL: '{}'", event.getId(), event.getUrl());
 
-        return Mono.defer(() -> performWebhookRequest(event))
+        return Mono.deferContextual(ctx -> performWebhookRequest(event)
                 .doOnSuccess(response -> {
-                    logInfo(event, "Webhook '{}' sent successfully. Status: '{}'", event.getId(), response.getStatus());
+                    logInfo(event, ctx.get(RequestContext.WORKSPACE_ID), "Webhook '{}' sent successfully. Status: '{}'",
+                            event.getId(), response.getStatus());
                     response.close(); // Ensure response is closed to free resources
                 })
-                .retryWhen(createRetrySpec())
+                .retryWhen(createRetrySpec(event.getMaxRetries()))
                 .doOnError(throwable -> logError(event,
+                        ctx.get(RequestContext.WORKSPACE_ID),
                         "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable))
-                .then();
+                .then());
     }
 
-    private void logInfo(WebhookEvent<?> event, String message, Object... args) {
+    private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {
         try (var logContext = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.WEBHOOK_EVENT_HANDLER.name(),
-                UserLog.WORKSPACE_ID, event.getWorkspaceId(),
+                UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.EVENT_ID, event.getId(),
                 UserLog.ALERT_ID, event.getAlertId().toString()))) {
             userFacingLog.info(message, args);
         }
     }
 
-    private void logError(WebhookEvent<?> event, String message, Throwable throwable) {
+    private void logError(WebhookEvent<?> event, String workspaceId, String message, Throwable throwable) {
         try (var logContext = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.WEBHOOK_EVENT_HANDLER.name(),
-                UserLog.WORKSPACE_ID, event.getWorkspaceId(),
+                UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.EVENT_ID, event.getId(),
                 UserLog.ALERT_ID, event.getAlertId().toString()))) {
             userFacingLog.error(message, throwable);
@@ -148,9 +151,9 @@ public class WebhookHttpClient {
         }
     }
 
-    private Retry createRetrySpec() {
+    private Retry createRetrySpec(int maxRetries) {
         return RetryUtils.handleHttpErrors(
-                webhookConfig.getMaxRetries(),
+                maxRetries,
                 webhookConfig.getInitialRetryDelay().toJavaDuration(),
                 webhookConfig.getMaxRetryDelay().toJavaDuration());
     }

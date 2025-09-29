@@ -24,7 +24,9 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
@@ -87,8 +89,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
                     bindParameters(criteria, statement);
 
-                    return statement.execute();
-
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)))
                 .collectList()
@@ -122,7 +123,6 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
-        statement.bind("workspace_id", criteria.workspaceId());
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));

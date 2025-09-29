@@ -34,7 +34,9 @@ import static org.mockito.Mockito.mockStatic;
 class WebhookSubscriberTest {
 
     public static final int MAX_RETRIES = 4;
-  
+    public static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    public static final String USER_NAME = UUID.randomUUID().toString();
+
     @Mock
     private RedissonReactiveClient redisson;
 
@@ -185,7 +187,8 @@ class WebhookSubscriberTest {
                 .id("webhook-" + System.currentTimeMillis())
                 .eventType(WebhookEventTypes.TRACE_CREATED)
                 .alertId(UUID.randomUUID())
-                .workspaceId("workspace-123")
+                .workspaceId(WORKSPACE_ID)
+                .userName(USER_NAME)
                 .url(url)
                 .payload(Map.of("message", "test payload", "timestamp", Instant.now().toString()))
                 .createdAt(Instant.now())

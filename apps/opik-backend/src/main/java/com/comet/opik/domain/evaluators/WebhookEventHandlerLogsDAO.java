@@ -23,7 +23,9 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
@@ -89,8 +91,7 @@ class WebhookEventHandlerLogsDAOImpl implements WebhookEventHandlerLogsDAO {
 
                     bindParameters(criteria, statement);
 
-                    return statement.execute();
-
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)))
                 .collectList()
@@ -113,15 +114,33 @@ class WebhookEventHandlerLogsDAOImpl implements WebhookEventHandlerLogsDAO {
                 .workspaceId(row.get("workspace_id", String.class))
                 .ruleId(null) // Webhook logs don't have rule IDs
                 .message(row.get("message", String.class))
-                .markers((Map<String, String>) row.get("markers", Map.class)) // Cast required for ClickHouse Map type
+                .markers(getStringStringMap(row.get("markers", Map.class)))
                 .build();
+    }
+
+    /**
+     * Safely converts a Map<?, ?> to a Map<String, String>, or returns null if input is null.
+     * Throws IllegalArgumentException if any key or value is not convertible to String.
+     */
+    private Map<String, String> getStringStringMap(Object mapObj) {
+        if (mapObj == null) {
+            return null;
+        }
+        if (!(mapObj instanceof Map<?, ?>)) {
+            throw new IllegalArgumentException("Expected a Map for markers, got: " + mapObj.getClass());
+        }
+        Map<?, ?> rawMap = (Map<?, ?>) mapObj;
+        return rawMap.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> String.valueOf(e.getKey()),
+                        e -> String.valueOf(e.getValue())));
     }
 
     private void bindTemplateParameters(LogCriteria criteria, ST template) {
         // Always add level to template, even if null, so the template condition works
-        template.add("level", criteria.level());
-        Optional.of(criteria.size()).ifPresent(limit -> template.add("limit", limit));
-        Optional.of(criteria.page()).ifPresent(page -> template.add("offset", (page - 1) * criteria.size()));
+        Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
+        Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
+        Optional.ofNullable(criteria.page()).ifPresent(page -> template.add("offset", (page - 1) * criteria.size()));
 
         Optional.ofNullable(criteria.markers())
                 .filter(markers -> !markers.isEmpty())
@@ -132,10 +151,9 @@ class WebhookEventHandlerLogsDAOImpl implements WebhookEventHandlerLogsDAO {
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
-        statement.bind("workspace_id", criteria.workspaceId());
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
-        Optional.of(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
-        Optional.of(criteria.page()).ifPresent(page -> statement.bind("offset", (page - 1) * criteria.size()));
+        Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
+        Optional.ofNullable(criteria.page()).ifPresent(page -> statement.bind("offset", (page - 1) * criteria.size()));
 
         Optional.ofNullable(criteria.markers())
                 .filter(markers -> !markers.isEmpty())

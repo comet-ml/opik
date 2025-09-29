@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiaghora:create_logs_table_to_store_webhook_logs
+--changeset thiaghora:000043_create_logs_table_to_store_webhook_logs
 --comment: Create logs table for tracking webhook processing logs
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.logs ON CLUSTER '{cluster}'

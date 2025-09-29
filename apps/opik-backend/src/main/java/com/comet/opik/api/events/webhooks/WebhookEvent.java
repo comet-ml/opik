@@ -3,7 +3,6 @@ package com.comet.opik.api.events.webhooks;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -34,12 +33,14 @@ public class WebhookEvent<T> {
 
     @NotBlank private String workspaceId;
 
+    @NotBlank private String userName;
+
     @NotNull private T payload;
 
     @NotNull private Instant createdAt;
 
     @Builder.Default
-    @Min(1) @Max(10) private int maxRetries = 3;
+    @Min(1) private int maxRetries = 3;
 
     @NotBlank @URL
     private String url;

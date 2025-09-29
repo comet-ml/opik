@@ -15,6 +15,7 @@ import com.comet.opik.domain.evaluators.WebhookEventHandlerLogsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.tables.UserLogTableFactory;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.redis.testcontainers.RedisContainer;
@@ -24,8 +25,10 @@ import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.jetty.http.HttpHeader;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +39,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.test.StepVerifier;
+import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.time.Instant;
@@ -56,8 +60,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WebhookSubscriberLoggingTest {
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final int MAX_RETRIES = 4;
+    private static final int MAX_RETRIES = 3;
     public static final String USER_AGENT = "Opik-Webhook/1.0";
+    public static final String USER_NAME = "test-user-" + UUID.randomUUID();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -124,6 +129,11 @@ class WebhookSubscriberLoggingTest {
         }
     }
 
+    @BeforeEach
+    void setUp() {
+        externalWebhookServer.resetAll();
+    }
+
     @Test
     void processEvent_whenSuccessfulWebhook_shouldSendRequestAndCreateLogs() {
         // Given
@@ -154,13 +164,14 @@ class WebhookSubscriberLoggingTest {
                 .pollInterval(500, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
                     var criteria = LogCriteria.builder()
-                            .workspaceId(WORKSPACE_ID)
                             .markers(Map.of("alert_id", alertId.toString(), "event_id", eventId))
                             .page(1)
                             .size(10)
                             .build();
 
-                    StepVerifier.create(webhookEventHandlerLogsDAO.findLogs(criteria))
+                    StepVerifier.create(
+                            webhookEventHandlerLogsDAO.findLogs(criteria)
+                                    .contextWrite(ctx -> setContent(ctx)))
                             .assertNext(logPage -> {
                                 assertThat(logPage.content()).isNotEmpty();
 
@@ -172,6 +183,11 @@ class WebhookSubscriberLoggingTest {
                             })
                             .verifyComplete();
                 });
+    }
+
+    private static @NotNull Context setContent(Context ctx) {
+        return ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                .put(RequestContext.USER_NAME, USER_NAME);
     }
 
     @Test
@@ -192,7 +208,7 @@ class WebhookSubscriberLoggingTest {
                 .verifyComplete();
 
         // Then - verify HTTP call was made with retries (1 initial + retries)
-        externalWebhookServer.verify(MAX_RETRIES, // 1 initial + 3 retries
+        externalWebhookServer.verify(MAX_RETRIES + 1, // 1 initial + MAX_RETRIES
                 postRequestedFor(urlEqualTo("/webhook")));
 
         // And verify error logs were created in the database
@@ -201,13 +217,13 @@ class WebhookSubscriberLoggingTest {
                 .pollInterval(500, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
                     var criteria = LogCriteria.builder()
-                            .workspaceId(WORKSPACE_ID)
                             .markers(Map.of("alert_id", alertId.toString(), "event_id", eventId))
                             .page(1)
                             .size(10)
                             .build();
 
-                    StepVerifier.create(webhookEventHandlerLogsDAO.findLogs(criteria))
+                    StepVerifier.create(webhookEventHandlerLogsDAO.findLogs(criteria)
+                            .contextWrite(ctx -> setContent(ctx)))
                             .assertNext(logPage -> {
                                 assertThat(logPage.content()).isNotEmpty();
 
@@ -240,6 +256,7 @@ class WebhookSubscriberLoggingTest {
                 .eventType(WebhookEventTypes.TRACE_CREATED)
                 .alertId(alertId)
                 .workspaceId(WORKSPACE_ID)
+                .userName(USER_NAME)
                 .url(url)
                 .payload(Map.of("message", "test payload", "timestamp", Instant.now().toString()))
                 .createdAt(Instant.now())
