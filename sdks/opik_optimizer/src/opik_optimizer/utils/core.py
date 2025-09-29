@@ -8,6 +8,7 @@ from typing import (
 )
 from collections.abc import Callable
 
+import ast
 import inspect
 import base64
 import json
@@ -216,10 +217,14 @@ def json_to_dict(json_str: str) -> Any:
 
         try:
             return json.loads(cleaned_json_string)
-        except json.JSONDecodeError as e:
-            print(f"Failed to parse JSON string: {json_str}")
-            logger.debug(f"Failed to parse JSON string: {json_str}")
-            raise e
+        except json.JSONDecodeError:
+            # Try Python literal evaluation as fallback
+            try:
+                return ast.literal_eval(cleaned_json_string)
+            except (ValueError, SyntaxError) as e:
+                print(f"Failed to parse JSON string: {json_str}")
+                logger.debug(f"Failed to parse JSON string: {json_str}")
+                raise e
 
 
 def optimization_context(
