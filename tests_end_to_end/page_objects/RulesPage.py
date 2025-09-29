@@ -95,7 +95,9 @@ class RulesPage:
         logger.info(f"Successfully created moderation rule: {rule_name}")
         return rule_name
 
-    def create_moderation_rule_with_filters(self, rule_name: str, provider_config, model_config, filters=None):
+    def create_moderation_rule_with_filters(
+        self, rule_name: str, provider_config, model_config, filters=None
+    ):
         """
         Create a new moderation rule with filters.
 
@@ -164,28 +166,34 @@ class RulesPage:
         # Add filters if provided
         if filters:
             logger.info(f"Adding {len(filters)} filters to the rule")
-            
+
             # Expand the filtering section by clicking the header
             self.page.get_by_role("button", name="Filtering").click()
-            
+
             for i, filter_config in enumerate(filters):
-                logger.info(f"Adding filter {i+1}: {filter_config}")
-                
+                logger.info(f"Adding filter {i + 1}: {filter_config}")
+
                 # Click Add Filter button
                 self.page.get_by_role("button", name="Add filter").click()
-                
+
                 # Select field
-                field_selectors = self.page.get_by_role("combobox").filter(has_text="name")
-                current_field_selector = field_selectors.nth(i)  # Get the selector for this filter
+                field_selectors = self.page.get_by_role("combobox").filter(
+                    has_text="name"
+                )
+                current_field_selector = field_selectors.nth(
+                    i
+                )  # Get the selector for this filter
                 current_field_selector.click()
                 self.page.get_by_role("option", name=filter_config["field"]).click()
-                
+
                 # Select operator
-                operator_selectors = self.page.get_by_role("combobox").filter(has_text="contains")
+                operator_selectors = self.page.get_by_role("combobox").filter(
+                    has_text="contains"
+                )
                 current_operator_selector = operator_selectors.nth(i)
                 current_operator_selector.click()
                 self.page.get_by_role("option", name=filter_config["operator"]).click()
-                
+
                 # Fill value
                 value_inputs = self.page.get_by_placeholder("Enter value")
                 current_value_input = value_inputs.nth(i)

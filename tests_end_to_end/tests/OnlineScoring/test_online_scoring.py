@@ -158,7 +158,7 @@ class TestOnlineScoring:
                     continue
                 raise AssertionError(
                     f"Failed to find Moderation cell after {max_retries} attempts.\n"
-                    f"Project name: {os.environ["OPIK_PROJECT_NAME"]}\n"
+                    f"Project name: {os.environ['OPIK_PROJECT_NAME']}\n"
                     f"Last error: {str(e)}"
                 ) from e
 
@@ -272,26 +272,18 @@ class TestOnlineScoring:
         # Create automation rule with filters
         rules_page = RulesPage(page)
         rules_page.navigate_to_rules_tab()
-        
+
         rule_name = f"Test Filtered Rule - {model_cfg.name}"
-        
+
         # Create rule using the existing method but with additional filter steps
         rules_page.create_moderation_rule_with_filters(
-            rule_name, 
-            provider_cfg, 
+            rule_name,
+            provider_cfg,
             model_cfg,
             filters=[
-                {
-                    "field": "name",
-                    "operator": "contains", 
-                    "value": "ML_Training"
-                },
-                {
-                    "field": "tags",
-                    "operator": "contains",
-                    "value": "ml"
-                }
-            ]
+                {"field": "name", "operator": "contains", "value": "ML_Training"},
+                {"field": "tags", "operator": "contains", "value": "ml"},
+            ],
         )
 
         # Verify rule was created
@@ -314,15 +306,23 @@ class TestOnlineScoring:
         # Verify that only ML traces have moderation scores
         for i in range(3):
             # Check ML traces have scores
-            ml_trace_row = page.get_by_role("row").filter(has_text=f"ML_Training_trace_{i}")
-            expect(ml_trace_row.get_by_role("cell", name="0", exact=True)).to_be_visible()
+            ml_trace_row = page.get_by_role("row").filter(
+                has_text=f"ML_Training_trace_{i}"
+            )
+            expect(
+                ml_trace_row.get_by_role("cell", name="0", exact=True)
+            ).to_be_visible()
 
         # Verify that database traces do NOT have moderation scores
         for i in range(3):
             # Database traces should not have moderation scores
-            db_trace_row = page.get_by_role("row").filter(has_text=f"Database_query_{i}")
+            db_trace_row = page.get_by_role("row").filter(
+                has_text=f"Database_query_{i}"
+            )
             # Should not find moderation score cell for these traces
-            expect(db_trace_row.get_by_role("cell", name="0", exact=True)).to_have_count(0)
+            expect(
+                db_trace_row.get_by_role("cell", name="0", exact=True)
+            ).to_have_count(0)
 
         logger.info(
             f"Successfully verified filtered online scoring for {provider_cfg.display_name} - {model_cfg.name}"
