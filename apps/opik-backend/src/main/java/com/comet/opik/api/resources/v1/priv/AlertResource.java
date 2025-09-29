@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -91,5 +92,27 @@ public class AlertResource {
         log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
 
         return Response.ok().entity(alert).build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteAlertBatch", summary = "Delete alert batch", description = "Delete multiple alerts by their IDs", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    public Response deleteAlertBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid @NotNull BatchDelete batch) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting alert batch with '{}' items, workspaceId '{}'",
+                batch.ids().size(), workspaceId);
+
+        alertService.deleteBatch(batch.ids());
+
+        log.info("Deleted alert batch with '{}' items deleted, workspaceId '{}'",
+                batch.ids().size(), workspaceId);
+
+        return Response.noContent().build();
     }
 }
