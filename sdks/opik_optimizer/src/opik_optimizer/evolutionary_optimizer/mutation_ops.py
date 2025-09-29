@@ -32,8 +32,9 @@ class MutationOps:
         """Enhanced mutation operation with multiple strategies."""
         prompt = chat_prompt.ChatPrompt(messages=individual)
 
-        if getattr(self, "_mcp_context", None):
-            mutated_prompt = tool_description_mutation(self, prompt, self._mcp_context)
+        mcp_context = getattr(self, "_mcp_context", None)
+        if mcp_context is not None:
+            mutated_prompt = tool_description_mutation(self, prompt, mcp_context)
             if mutated_prompt is not None:
                 reporting.display_success(
                     "      Mutation successful, tool description updated (MCP mutation).",

@@ -239,7 +239,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # (methods already attached above)
-        self._mcp_context = None
+        self._mcp_context: EvolutionaryMCPContext | None = None
 
     def _attach_helper_methods(self) -> None:
         """Bind selected methods from mixin modules onto this instance."""

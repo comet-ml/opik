@@ -168,7 +168,7 @@ class BaseOptimizer(ABC):
             The agent class to use
         """
         if agent_class is None:
-            return create_litellm_agent_class(prompt, optimizer=self)
+            return create_litellm_agent_class(prompt)
         else:
             return agent_class
 
@@ -255,9 +255,11 @@ class BaseOptimizer(ABC):
                             "annotation": self._describe_annotation(
                                 parameter.annotation
                             ),
-                            "default": None
-                            if parameter.default is inspect._empty
-                            else parameter.default,
+                            "default": (
+                                None
+                                if parameter.default is inspect._empty
+                                else parameter.default
+                            ),
                         }
                     )
                 )
@@ -330,9 +332,11 @@ class BaseOptimizer(ABC):
 
         base_config: dict[str, Any] = {
             "project_name": project_name,
-            "agent_class": getattr(self.agent_class, "__name__", None)
-            if hasattr(self, "agent_class")
-            else None,
+            "agent_class": (
+                getattr(self.agent_class, "__name__", None)
+                if hasattr(self, "agent_class")
+                else None
+            ),
             "agent_config": self._build_agent_config(prompt),
             "metric": getattr(metric, "__name__", str(metric)),
             "dataset": getattr(dataset, "name", None),
@@ -525,7 +529,7 @@ class BaseOptimizer(ABC):
         self.agent_class: type[OptimizableAgent]
 
         if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt, optimizer=self)
+            self.agent_class = create_litellm_agent_class(prompt)
         else:
             self.agent_class = agent_class
 

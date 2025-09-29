@@ -41,8 +41,9 @@ class PopulationOps:
         including some 'fresh start' prompts based purely on task description.
         All generated prompts should aim to elicit answers matching self.output_style_guidance.
         """
-        if getattr(self, "_mcp_context", None):
-            return initialize_population_mcp(self, prompt, self._mcp_context)
+        mcp_context = getattr(self, "_mcp_context", None)
+        if mcp_context is not None:
+            return initialize_population_mcp(self, prompt, mcp_context)
         with reporting.initializing_population(verbose=self.verbose) as init_pop_report:
             init_pop_report.start(self.population_size)
 
