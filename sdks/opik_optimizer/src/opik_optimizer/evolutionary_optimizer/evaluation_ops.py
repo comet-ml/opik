@@ -5,7 +5,6 @@ from collections.abc import Callable
 from .. import task_evaluator
 from ..optimization_config import mappers, chat_prompt
 import opik
-import copy
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..base_optimizer import BaseOptimizer
