@@ -22,6 +22,7 @@ import {
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import { createFilter } from "@/lib/filters";
+import { ThreadStatus } from "@/types/thread";
 import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
@@ -31,7 +32,8 @@ import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
 
-export const AUTOMATION_RULE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
+// Trace-specific columns for automation rule filtering
+export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   {
     id: "id",
     label: "ID",
@@ -42,16 +44,6 @@ export const AUTOMATION_RULE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     label: "Name",
     type: COLUMN_TYPE.string,
   },
-  // {
-  //   id: "start_time",
-  //   label: "Start time",
-  //   type: COLUMN_TYPE.time,
-  // },
-  // {
-  //   id: "end_time",
-  //   label: "End time",
-  //   type: COLUMN_TYPE.time,
-  // },
   {
     id: "input",
     label: "Input",
@@ -94,6 +86,58 @@ export const AUTOMATION_RULE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   },
 ];
 
+// Thread-specific columns for automation rule filtering
+export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
+  {
+    id: "id",
+    label: "ID",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "status",
+    label: "Status",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "created_at",
+    label: "Created at",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "last_updated_at",
+    label: "Last updated at",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "start_time",
+    label: "Start time",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "end_time",
+    label: "End time", 
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "duration",
+    label: "Duration",
+    type: COLUMN_TYPE.duration,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+  },
+  {
+    id: COLUMN_FEEDBACK_SCORES_ID,
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+  },
+];
+
+// Exported for backward compatibility
+export const AUTOMATION_RULE_FILTER_COLUMNS = TRACE_FILTER_COLUMNS;
+
 const DEFAULT_SAMPLING_RATE = 1;
 
 interface RuleFilteringSectionProps {
@@ -106,6 +150,13 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
   projectId,
 }) => {
   const scope = form.watch("scope");
+  const isTraceScope = scope === EVALUATORS_RULE_SCOPE.trace;
+  const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+
+  const currentFilterColumns = useMemo(() => {
+    return isThreadScope ? THREAD_FILTER_COLUMNS : TRACE_FILTER_COLUMNS;
+  }, [isThreadScope]);
+
   const filtersConfig = useMemo(
     () => ({
       rowsMap: {
@@ -118,7 +169,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: isThreadScope ? TRACE_DATA_TYPE.threads : TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: true,
           },
@@ -132,7 +183,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["input", "output"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: isThreadScope ? TRACE_DATA_TYPE.threads : TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: false,
           },
@@ -155,13 +206,26 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             },
           keyComponentProps: {
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: isThreadScope ? TRACE_DATA_TYPE.threads : TRACE_DATA_TYPE.traces,
             placeholder: "Select score",
           },
         },
+        ...(isThreadScope
+          ? {
+              status: {
+                keyComponentProps: {
+                  options: [
+                    { value: ThreadStatus.ACTIVE, label: "Active" },
+                    { value: ThreadStatus.INACTIVE, label: "Inactive" },
+                  ],
+                  placeholder: "Select status",
+                },
+              },
+            }
+          : {}),
       },
     }),
-    [projectId],
+    [projectId, isThreadScope],
   );
 
   const handleAddFilter = useCallback(() => {
@@ -185,8 +249,6 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
     },
     [form],
   );
-
-  const isTraceScope = scope === EVALUATORS_RULE_SCOPE.trace;
 
   return (
     <Accordion
@@ -214,48 +276,46 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           <div className="mb-8 space-y-4">
             <Description>
               Use sampling rate to control how frequently this rule is applied.
-              {isTraceScope &&
-                " For trace scope, you can also add filters to select specific traces based on their properties."}{" "}
+              You can also add filters to select specific{" "}
+              {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"} based on their properties.{" "}
               If nothing is defined, the rule will evaluate all{" "}
               {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"}.
             </Description>
 
-            {isTraceScope && (
-              <FormField
-                control={form.control}
-                name="filters"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">Filters</Label>
+            <FormField
+              control={form.control}
+              name="filters"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Filters</Label>
 
-                      {field.value.length > 0 && (
-                        <FiltersContent
-                          filters={field.value}
-                          setFilters={setFilters}
-                          columns={AUTOMATION_RULE_FILTER_COLUMNS}
-                          config={filtersConfig}
-                          className="py-0"
-                        />
-                      )}
+                    {field.value.length > 0 && (
+                      <FiltersContent
+                        filters={field.value}
+                        setFilters={setFilters}
+                        columns={currentFilterColumns}
+                        config={filtersConfig}
+                        className="py-0"
+                      />
+                    )}
 
-                      <div className="pt-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleAddFilter}
-                          className="w-fit"
-                        >
-                          <Plus className="mr-1 size-3.5" />
-                          Add filter
-                        </Button>
-                      </div>
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddFilter}
+                        className="w-fit"
+                      >
+                        <Plus className="mr-1 size-3.5" />
+                        Add filter
+                      </Button>
                     </div>
-                  </FormItem>
-                )}
-              />
-            )}
+                  </div>
+                </FormItem>
+              )}
+            />
 
             {/* Sampling Rate */}
             <FormField

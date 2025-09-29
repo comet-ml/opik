@@ -47,7 +47,8 @@ public final class AutomationRuleEvaluatorTraceThreadLlmAsJudge
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorTraceThreadLlmAsJudge(UUID id, @NotNull UUID projectId, String projectName,
             @NotBlank String name,
-            float samplingRate, boolean enabled, List<TraceFilter> filters, @NotNull TraceThreadLlmAsJudgeCode code,
+            float samplingRate, boolean enabled, List<TraceFilter> filters,
+            @NotNull TraceThreadLlmAsJudgeCode code,
             Instant createdAt,
             String createdBy,
             Instant lastUpdatedAt, String lastUpdatedBy) {
