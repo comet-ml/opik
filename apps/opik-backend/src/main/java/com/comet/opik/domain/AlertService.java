@@ -63,8 +63,6 @@ class AlertServiceImpl implements AlertService {
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
-            AlertTriggerDAO alertTriggerDAO = handle.attach(AlertTriggerDAO.class);
-            AlertTriggerConfigDAO alertTriggerConfigDAO = handle.attach(AlertTriggerConfigDAO.class);
 
             Alert alert = alertDAO.findById(id, workspaceId);
 

@@ -57,8 +57,16 @@ class AlertResourceTest {
 
     private static final String[] ALERT_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "webhook.id", "webhook.createdAt", "webhook.lastUpdatedAt", "webhook.createdBy",
-            "webhook.lastUpdatedBy"};
+            "lastUpdatedBy", "webhook.id", "webhook.name", "webhook.createdAt", "webhook.lastUpdatedAt", "webhook.createdBy",
+            "webhook.lastUpdatedBy", "triggers"};
+
+    private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
+            "id", "alertId", "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy"};
+
+    private static final String[] TRIGGER_CONFIG_IGNORED_FIELDS = new String[]{
+            "id", "alertTriggerId", "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -275,6 +283,12 @@ class AlertResourceTest {
                     .usingRecursiveComparison()
                     .ignoringFields(ALERT_IGNORED_FIELDS)
                     .isEqualTo(alert);
+
+            assertThat(actualAlert.triggers())
+                    .usingRecursiveComparison()
+                    .ignoringFields(TRIGGER_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(alert.triggers());
         }
 
         @Test
