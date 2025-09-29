@@ -14,8 +14,10 @@ import reactor.core.publisher.Mono;
 
 @ImplementedBy(WorkspaceMetricsServiceImpl.class)
 public interface WorkspaceMetricsService {
+    @Deprecated
     Mono<WorkspaceMetricsSummaryResponse> getWorkspaceFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
 
+    @Deprecated
     Mono<WorkspaceMetricResponse> getWorkspaceFeedbackScores(WorkspaceMetricRequest request);
 
     Mono<WorkspaceMetricsSummaryResponse.Result> getWorkspaceCostsSummary(WorkspaceMetricsSummaryRequest request);

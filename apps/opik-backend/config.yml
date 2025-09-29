@@ -491,12 +491,6 @@ jobTimeout:
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: ${OPIK_TRACE_THREADS_CLOSING_JOB_TIMEOUT:-30}
 
-# Configuration for feedback scores
-feedbackScores:
-  # Default: false
-  # Description: Whether to write feedback scores by their author or not
-  writeToAuthored: ${OPIK_FEEDBACK_SCORES_WRITE_TO_AUTHORED:-false}
-
 # Response formatting configuration
 responseFormatting:
   # Default: 10001
