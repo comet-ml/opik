@@ -23,12 +23,14 @@ import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
 
-ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
-logger = logging.getLogger(__name__)
+from .colbert import ColBERTv2
 
 if TYPE_CHECKING:
     from opik_optimizer.optimizable_agent import OptimizableAgent
     from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+
+ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
+logger = logging.getLogger(__name__)
 
 
 class OptimizationContextManager:
@@ -353,14 +355,14 @@ def python_type_to_json_type(python_type: type) -> str:
         return "string"  # default fallback
 
 
-def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
+def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
     about a topic.
 
     Args:
         query: The search query string
-        use_api: If True, directly use Wikipedia API instead of ColBERTv2.
+        use_api: (Optional) If True, directly use Wikipedia API instead of ColBERTv2.
                 If False (default), try ColBERTv2 first with API fallback.
     """
     if use_api:
@@ -372,8 +374,6 @@ def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
-    from .colbert import ColBERTv2
-
     # Try ColBERTv2 first with a short timeout
     try:
         colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
