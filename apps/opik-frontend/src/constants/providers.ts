@@ -38,7 +38,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: AnthropicIcon,
     apiKeyName: "ANTHROPIC_API_KEY",
     apiKeyURL: "https://console.anthropic.com/settings/keys",
-    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5_LATEST,
+    defaultModel: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
   },
   [PROVIDER_TYPE.OPEN_ROUTER]: {
     label: "OpenRouter",
