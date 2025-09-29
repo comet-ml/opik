@@ -16,6 +16,7 @@ import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.GetGeneratedKeys;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -28,6 +29,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterRowMapper(AlertDAO.AlertWithWebhookRowMapper.class)
@@ -117,9 +119,19 @@ interface AlertDAO {
             JOIN target_webhooks w
                 ON a.webhook_id = w.id
             LEFT JOIN target_triggers t
-                ON a.id = t.alert_id;;
+                ON a.id = t.alert_id;
             """)
     Alert findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
+    @SqlUpdate("""
+                    DELETE a, w, atr, atrc
+                    FROM alerts a
+                    JOIN webhooks w ON a.webhook_id = w.id
+                    LEFT JOIN alert_triggers atr ON a.id = atr.alert_id
+                    LEFT JOIN alert_trigger_configs atrc ON atr.id = atrc.alert_trigger_id
+                    WHERE  a.id IN (<ids>) AND a.workspace_id = :workspaceId;
+            """)
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 
     @Slf4j
     class AlertWithWebhookRowMapper implements RowMapper<Alert> {
