@@ -155,10 +155,12 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             },
         ]
 
-        response = self.generate_provider_response(
-            messages=request, **valid_litellm_params
-        )
-        return response.choices[0].message.content
+        with base_model.get_provider_response(
+            model_provider=self, messages=request, **valid_litellm_params
+        ) as response:
+            return base_model.check_model_output_string(
+                response.choices[0].message.content
+            )
 
     def generate_provider_response(
         self,
@@ -166,6 +168,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         **kwargs: Any,
     ) -> "ModelResponse":
         """
+        Do not use this method directly. It is intended to be used within `base_model.get_provider_response()` method.
+
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
         You can find all possible input parameters here: https://docs.litellm.ai/docs/completion/input
@@ -225,15 +229,19 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             },
         ]
 
-        response = await self.agenerate_provider_response(
-            messages=request, **valid_litellm_params
-        )
-        return response.choices[0].message.content
+        async with base_model.aget_provider_response(
+            model_provider=self, messages=request, **valid_litellm_params
+        ) as response:
+            return base_model.check_model_output_string(
+                response.choices[0].message.content
+            )
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any
     ) -> "ModelResponse":
         """
+        Do not use this method directly. It is intended to be used within `base_model.aget_provider_response()` method.
+
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output. Async version.
         You can find all possible input parameters here: https://docs.litellm.ai/docs/completion/input
