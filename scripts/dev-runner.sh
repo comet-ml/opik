@@ -263,6 +263,10 @@ start_frontend() {
         log_debug "Frontend debug mode enabled - NODE_ENV=development"
     fi
 
+    # Configure frontend to talk to local backend
+    export VITE_BASE_API_URL="http://localhost:8080"
+    log_info "Frontend API base URL (VITE_BASE_API_URL) set to: $VITE_BASE_API_URL"
+
     log_debug "Starting frontend with: npm run start"
 
     # Start frontend in background with interactive mode disabled
