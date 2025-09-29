@@ -30,7 +30,7 @@ class EvolutionaryMCPContext:
 def _tool_metadata_json(metadata: dict[str, Any]) -> str:
     try:
         return json.dumps(metadata, indent=2)
-    except Exception:  # pragma: no cover - defensive, shouldn't happen under normal circumstances
+    except (TypeError, ValueError):  # pragma: no cover - defensive, shouldn't happen under normal circumstances
         return str(metadata)
 
 
