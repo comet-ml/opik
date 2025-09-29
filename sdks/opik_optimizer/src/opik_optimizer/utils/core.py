@@ -8,6 +8,7 @@ from typing import (
 )
 from collections.abc import Callable
 
+import ast
 import inspect
 import base64
 import json
@@ -22,6 +23,8 @@ import requests
 import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
+
+from .colbert import ColBERTv2
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
@@ -197,27 +200,52 @@ def enable_experiment_reporting() -> None:
         pass
 
 
+def _strip_code_fence(candidate: str) -> str:
+    stripped = candidate
+    if stripped.startswith("```json"):
+        stripped = stripped[7:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+    elif stripped.startswith("```"):
+        stripped = stripped[3:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+    return stripped.strip()
+
+
 def json_to_dict(json_str: str) -> Any:
     cleaned_json_string = json_str.strip()
 
     try:
         return json.loads(cleaned_json_string)
     except json.JSONDecodeError:
-        if cleaned_json_string.startswith("```json"):
-            cleaned_json_string = cleaned_json_string[7:]
-            if cleaned_json_string.endswith("```"):
-                cleaned_json_string = cleaned_json_string[:-3]
-        elif cleaned_json_string.startswith("```"):
-            cleaned_json_string = cleaned_json_string[3:]
-            if cleaned_json_string.endswith("```"):
-                cleaned_json_string = cleaned_json_string[:-3]
+        cleaned_json_string = _strip_code_fence(cleaned_json_string)
 
         try:
             return json.loads(cleaned_json_string)
-        except json.JSONDecodeError as e:
-            print(f"Failed to parse JSON string: {json_str}")
-            logger.debug(f"Failed to parse JSON string: {json_str}")
-            raise e
+        except json.JSONDecodeError as json_error:
+            try:
+                python_literal = ast.literal_eval(cleaned_json_string)
+            except (ValueError, SyntaxError):
+                print(f"Failed to parse JSON string: {json_str}")
+                logger.debug(f"Failed to parse JSON string: {json_str}")
+                raise json_error
+
+            if isinstance(python_literal, tuple):
+                python_literal = list(python_literal)
+
+            if isinstance(
+                python_literal,
+                (dict, list, str, int, float, bool, type(None)),
+            ):
+                return python_literal
+
+            try:
+                return json.loads(json.dumps(python_literal))
+            except (TypeError, ValueError):
+                print(f"Failed to parse JSON string: {json_str}")
+                logger.debug(f"Failed to parse JSON string: {json_str}")
+                raise json_error
 
 
 def optimization_context(
@@ -385,18 +413,13 @@ def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
             print(f"Wikipedia API failed: {api_error}")
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
-    # Default behavior: Try ColBERTv2 first with API fallback
-    from ..colbert import ColBERTv2
-
     # Try ColBERTv2 first with a short timeout
     try:
         colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
         # Use a shorter timeout by modifying the max_retries parameter
         results = colbert(query, k=3, max_retries=1)
         return [str(item.text) for item in results if hasattr(item, "text")]
-    except Exception as e:
-        print(f"ColBERTv2 search failed: {e}")
-        # Fallback to Wikipedia API
+    except Exception:
         try:
             return _search_wikipedia_api(query)
         except Exception as api_error:

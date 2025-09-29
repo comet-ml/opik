@@ -11,7 +11,12 @@ from ..base_optimizer import BaseOptimizer
 from ..optimization_config import chat_prompt, mappers
 from ..optimization_result import OptimizationResult
 from ..optimizable_agent import OptimizableAgent
-from ..utils import optimization_context, create_litellm_agent_class
+from ..utils import (
+    optimization_context,
+    create_litellm_agent_class,
+    disable_experiment_reporting,
+    enable_experiment_reporting,
+)
 from .. import task_evaluator
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
@@ -233,16 +238,19 @@ class GepaOptimizer(BaseOptimizer):
 
         opik_client = opik.Opik(project_name=self.project_name)
 
-        with optimization_context(
-            client=opik_client,
-            dataset_name=dataset.name,
-            objective_name=metric.__name__,
-            metadata={"optimizer": self.__class__.__name__},
-        ) as optimization:
-            try:
-                opt_id = optimization.id if optimization is not None else None
-            except Exception:
-                opt_id = None
+        disable_experiment_reporting()
+
+        try:
+            with optimization_context(
+                client=opik_client,
+                dataset_name=dataset.name,
+                objective_name=metric.__name__,
+                metadata={"optimizer": self.__class__.__name__},
+            ) as optimization:
+                try:
+                    opt_id = optimization.id if optimization is not None else None
+                except Exception:
+                    opt_id = None
 
             gepa_reporting.display_header(
                 algorithm="GEPA",
@@ -358,10 +366,13 @@ class GepaOptimizer(BaseOptimizer):
             with gepa_reporting.start_gepa_optimization(verbose=self.verbose):
                 gepa_result = gepa.optimize(**kwargs_gepa)
 
-            try:
-                opt_id = optimization.id if optimization is not None else None
-            except Exception:
-                opt_id = None
+                try:
+                    opt_id = optimization.id if optimization is not None else None
+                except Exception:
+                    opt_id = None
+
+        finally:
+            enable_experiment_reporting()
 
         # ------------------------------------------------------------------
         # Rescoring & result assembly

@@ -32,6 +32,7 @@ from opik_optimizer.mipro_optimizer.utils import (
     opik_metric_to_dspy,
 )
 from opik_optimizer.utils import optimization_context
+from opik_optimizer.utils import get_optimization_run_url_by_id
 
 # Using disk cache for LLM calls
 disk_cache_dir = os.path.expanduser("~/.litellm_cache")
@@ -106,3 +107,16 @@ with optimization_context(
         requires_permission_to_run=False,
         num_trials=experiment_config["num_trials"],
     )
+
+    print("The optimized agent is:")
+    print(results)
+
+    # Print the link to the optimizer run
+    if optimization and optimization.id:
+        try:
+            run_link = get_optimization_run_url_by_id(
+                optimization_id=optimization.id, dataset_id=dataset.id
+            )
+            print(f"\nOptimizer run link: {run_link}")
+        except Exception as e:
+            print(f"\nCould not generate optimizer run link: {e}")

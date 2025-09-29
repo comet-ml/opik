@@ -11,6 +11,9 @@ import copy
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..base_optimizer import BaseOptimizer
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from ..base_optimizer import BaseOptimizer
+
 
 class EvaluationOps:
     if TYPE_CHECKING:
