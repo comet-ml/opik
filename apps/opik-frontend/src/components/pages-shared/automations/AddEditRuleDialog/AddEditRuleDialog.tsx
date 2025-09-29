@@ -51,7 +51,9 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
-import RuleFilteringSection from "@/components/pages-shared/automations/AddEditRuleDialog/RuleFilteringSection";
+import RuleFilteringSection, {
+  AUTOMATION_RULE_FILTER_COLUMNS,
+} from "@/components/pages-shared/automations/AddEditRuleDialog/RuleFilteringSection";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
@@ -169,7 +171,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
       enabled: defaultRule?.enabled ?? true,
-      filters: normalizeFilters(defaultRule?.filters),
+      filters: normalizeFilters(
+        defaultRule?.filters ?? [],
+        AUTOMATION_RULE_FILTER_COLUMNS,
+      ),
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)

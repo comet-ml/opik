@@ -31,7 +31,7 @@ import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
 
-const AUTOMATION_RULE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
+export const AUTOMATION_RULE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   {
     id: "id",
     label: "ID",
@@ -42,16 +42,16 @@ const AUTOMATION_RULE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     label: "Name",
     type: COLUMN_TYPE.string,
   },
-  {
-    id: "start_time",
-    label: "Start time",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "end_time",
-    label: "End time",
-    type: COLUMN_TYPE.time,
-  },
+  // {
+  //   id: "start_time",
+  //   label: "Start time",
+  //   type: COLUMN_TYPE.time,
+  // },
+  // {
+  //   id: "end_time",
+  //   label: "End time",
+  //   type: COLUMN_TYPE.time,
+  // },
   {
     id: "input",
     label: "Input",
