@@ -15,5 +15,7 @@ public record LlmAsJudgeModelParameters(
                 AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) @NotNull String name,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) @NotNull Double temperature){
+                AutomationRuleEvaluator.View.Write.class}) @NotNull Double temperature,
+        @JsonView({AutomationRuleEvaluator.View.Public.class,
+                AutomationRuleEvaluator.View.Write.class}) Integer seed){
 }
