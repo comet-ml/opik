@@ -20,6 +20,7 @@ import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -31,6 +32,8 @@ public interface AlertService {
     UUID create(Alert alert);
 
     Alert getById(UUID id);
+
+    void deleteBatch(Set<UUID> ids);
 }
 
 @Slf4j
@@ -71,6 +74,18 @@ class AlertServiceImpl implements AlertService {
             }
 
             return alert;
+        });
+    }
+
+    @Override
+    public void deleteBatch(Set<UUID> ids) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+            alertDAO.delete(ids, workspaceId);
+
+            return null;
         });
     }
 
