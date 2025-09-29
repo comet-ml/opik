@@ -160,6 +160,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Sonnet 3.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20250107,
+      label: "Claude 3.5 Sonnet 2025-01-07",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3_5,
       label: "Claude Haiku 3.5",
     },
@@ -257,6 +261,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET_20240620,
       label: "anthropic/claude-3.5-sonnet-20240620",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET_20250107,
+      label: "anthropic/claude-3.5-sonnet-20250107",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET,
