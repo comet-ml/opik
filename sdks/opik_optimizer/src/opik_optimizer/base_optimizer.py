@@ -168,7 +168,7 @@ class BaseOptimizer(ABC):
             The agent class to use
         """
         if agent_class is None:
-            return create_litellm_agent_class(prompt)
+            return create_litellm_agent_class(prompt, optimizer_ref=self)
         else:
             return agent_class
 
@@ -529,7 +529,7 @@ class BaseOptimizer(ABC):
         self.agent_class: type[OptimizableAgent]
 
         if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt)
+            self.agent_class = create_litellm_agent_class(prompt, optimizer_ref=self)
         else:
             self.agent_class = agent_class
 
