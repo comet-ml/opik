@@ -273,15 +273,9 @@ def get_optimization_run_url_by_id(
     return urllib.parse.urljoin(ensure_ending_slash(url_override), run_path)
 
 
-def create_litellm_agent_class(
-    prompt: "ChatPrompt", optimizer: Any = None
-) -> type["OptimizableAgent"]:
+def create_litellm_agent_class(prompt: "ChatPrompt") -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
-
-    Args:
-        prompt: The chat prompt to create agent for
-        optimizer: Optional optimizer instance for counter tracking
     """
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
@@ -291,10 +285,6 @@ def create_litellm_agent_class(
             model = prompt.model
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
-
-            def __init__(self, prompt: Any) -> None:
-                super().__init__(prompt)
-                self.optimizer = optimizer
 
             def invoke(
                 self, messages: list[dict[str, str]], seed: int | None = None
@@ -310,15 +300,11 @@ def create_litellm_agent_class(
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
 
-            def __init__(self, prompt: Any) -> None:
-                super().__init__(prompt)
-                self.optimizer = optimizer
-
     return LiteLLMAgent
 
 
 def function_to_tool_definition(
-    func: Callable[..., Any], description: str | None = None
+    func: Callable, description: str | None = None
 ) -> dict[str, Any]:
     sig = inspect.signature(func)
     doc = description or func.__doc__ or ""
@@ -386,7 +372,7 @@ def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
-    from ..colbert import ColBERTv2
+    from .colbert import ColBERTv2
 
     # Try ColBERTv2 first with a short timeout
     try:
