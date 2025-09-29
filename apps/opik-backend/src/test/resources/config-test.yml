@@ -345,9 +345,3 @@ jobTimeout:
   # Default: 30s
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: 30
-
-# Configuration for feedback scores
-feedbackScores:
-  # Default: false
-  # Description: Whether to write feedback scores by their author or not
-  writeToAuthored: false
