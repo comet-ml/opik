@@ -480,7 +480,7 @@ class GepaOptimizer(BaseOptimizer):
         per_item_scores: list[dict[str, Any]] = []
         try:
             analysis_prompt = final_prompt.copy()
-            agent_cls = create_litellm_agent_class(analysis_prompt, optimizer=self)
+            agent_cls = create_litellm_agent_class(analysis_prompt)
             agent = agent_cls(analysis_prompt)
             for item in items:
                 messages = analysis_prompt.get_messages(item)
@@ -513,13 +513,13 @@ class GepaOptimizer(BaseOptimizer):
             "val_scores": val_scores,
             "opik_rescored_scores": rescored,
             "candidate_summary": candidate_rows,
-            "best_candidate_iteration": candidate_rows[best_idx]["iteration"]
-            if candidate_rows
-            else 0,
+            "best_candidate_iteration": (
+                candidate_rows[best_idx]["iteration"] if candidate_rows else 0
+            ),
             "selected_candidate_index": best_idx,
-            "selected_candidate_gepa_score": val_scores[best_idx]
-            if best_idx < len(val_scores)
-            else None,
+            "selected_candidate_gepa_score": (
+                val_scores[best_idx] if best_idx < len(val_scores) else None
+            ),
             "selected_candidate_opik_score": best_score,
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
@@ -609,7 +609,7 @@ class GepaOptimizer(BaseOptimizer):
         if prompt.model_kwargs is None:
             prompt.model_kwargs = self.model_kwargs
 
-        agent_class = create_litellm_agent_class(prompt, optimizer=self)
+        agent_class = create_litellm_agent_class(prompt)
         self.agent_class = agent_class
         agent = agent_class(prompt)
 

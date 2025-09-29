@@ -311,6 +311,7 @@ def test_generate_tool_description_variations(monkeypatch: pytest.MonkeyPatch) -
     candidates = generate_tool_description_variations(optimizer, prompt, context, 2)
     assert len(candidates) == 1
     candidate = candidates[0]
+    assert candidate.tools is not None
     assert (
         candidate.tools[0]["function"]["description"] == "Refined documentation helper."
     )
@@ -358,6 +359,7 @@ def test_tool_description_mutation_and_finalize(
 
     mutated = tool_description_mutation(optimizer, prompt, context)
     assert mutated is not None
+    assert mutated.tools is not None
     assert (
         mutated.tools[0]["function"]["description"] == "Updated documentation helper."
     )
