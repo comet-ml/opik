@@ -1,4 +1,3 @@
-import tests.unit.mcp.stub_opik  # noqa: F401
 import copy
 import json
 import logging
@@ -12,6 +11,43 @@ from typing import Any, Optional
 from types import SimpleNamespace
 
 import pytest
+
+import tests.unit.mcp.stub_opik  # noqa: F401
+
+from opik_optimizer import ChatPrompt
+from opik_optimizer.evolutionary_optimizer import reporting as evo_reporting
+from opik_optimizer.evolutionary_optimizer.mcp import (
+    EvolutionaryMCPContext,
+    finalize_mcp_result,
+    generate_tool_description_variations,
+    tool_description_mutation,
+)
+from opik_optimizer.mcp_utils import mcp_workflow
+from opik_optimizer.mcp_utils.mcp import (
+    MCPManifest,
+    ToolSignature,
+    dump_mcp_signature,
+    extract_description_from_system,
+    load_mcp_signature,
+    signature_updates,
+    system_prompt_from_tool,
+    tools_from_signatures,
+    validate_tool_arguments,
+)
+from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator
+from opik_optimizer.mcp_utils.mcp_workflow import (
+    MCPToolInvocation,
+    ensure_argument_via_resolver,
+    extract_tool_arguments,
+    make_argument_summary_builder,
+    make_follow_up_builder,
+    make_similarity_metric,
+    preview_dataset_tool_invocation,
+)
+from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (
+    _sync_tool_description_in_system,
+)
+from opik_optimizer.optimization_result import OptimizationResult
 
 
 root = Path(__file__).resolve().parents[3]
@@ -28,43 +64,6 @@ if "opik_optimizer.utils" not in sys.modules:
     utils_pkg = types.ModuleType("opik_optimizer.utils")
     utils_pkg.__path__ = [str(src_root / "opik_optimizer" / "utils")]
     sys.modules["opik_optimizer.utils"] = utils_pkg
-
-from opik_optimizer import ChatPrompt  # noqa: E402
-from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (  # noqa: E402
-    _sync_tool_description_in_system,
-)
-
-
-from opik_optimizer.mcp_utils.mcp import (  # noqa: E402
-    MCPManifest,
-    ToolSignature,
-    dump_mcp_signature,
-    extract_description_from_system,
-    load_mcp_signature,
-    signature_updates,
-    system_prompt_from_tool,
-    tools_from_signatures,
-    validate_tool_arguments,
-)
-from opik_optimizer.mcp_utils import mcp_workflow  # noqa: E402
-from opik_optimizer.mcp_utils.mcp_workflow import (  # noqa: E402
-    MCPToolInvocation,
-    ensure_argument_via_resolver,
-    extract_tool_arguments,
-    make_argument_summary_builder,
-    make_follow_up_builder,
-    make_similarity_metric,
-    preview_dataset_tool_invocation,
-)
-from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator  # noqa: E402
-from opik_optimizer.evolutionary_optimizer.mcp import (  # noqa: E402
-    EvolutionaryMCPContext,
-    finalize_mcp_result,
-    generate_tool_description_variations,
-    tool_description_mutation,
-)
-from opik_optimizer.evolutionary_optimizer import reporting as evo_reporting  # noqa: E402
-from opik_optimizer.optimization_result import OptimizationResult  # noqa: E402
 
 
 def _sample_tool_entry() -> dict[str, Any]:

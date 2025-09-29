@@ -164,9 +164,7 @@ if result.tool_prompts and TOOL_NAME in result.tool_prompts:
     signature.description = result.tool_prompts[TOOL_NAME]
 
 final_tools = (
-    result.details.get("final_tools")
-    if isinstance(result.details, dict)
-    else None
+    result.details.get("final_tools") if isinstance(result.details, dict) else None
 )
 if final_tools:
     final_tool_entry = copy.deepcopy(final_tools[0])
