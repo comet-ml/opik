@@ -7,12 +7,12 @@ import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import static com.comet.opik.utils.JsonUtils.MAPPER;
 
 /**
  * Service for evaluating filters against Trace objects in memory.
@@ -29,8 +31,6 @@ import java.util.Set;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class TraceFilterEvaluationService {
-
-    private final @NonNull ObjectMapper objectMapper;
 
     /**
      * Evaluates whether a trace matches all the provided filters.
@@ -61,7 +61,7 @@ public class TraceFilterEvaluationService {
             Object fieldValue = extractFieldValue(traceField, filter.key(), trace);
             return evaluateOperator(filter.operator(), fieldValue, filter.value());
         } catch (Exception e) {
-            log.warn("Error evaluating filter {} against trace {}: {}", filter, trace.id(), e.getMessage());
+            log.warn("Error evaluating filter '{}' against trace '{}': '{}'", filter, trace.id(), e.getMessage());
             return false; // If we can't evaluate the filter, consider it a non-match
         }
     }
@@ -107,7 +107,7 @@ public class TraceFilterEvaluationService {
             return str;
         }
         try {
-            return objectMapper.writeValueAsString(jsonValue);
+            return MAPPER.writeValueAsString(jsonValue);
         } catch (JsonProcessingException e) {
             log.warn("Failed to convert value to string: {}", e.getMessage());
             return jsonValue.toString();
@@ -118,16 +118,16 @@ public class TraceFilterEvaluationService {
      * Extracts a nested value from a JSON object using a key.
      */
     private Object extractNestedValue(Object jsonValue, String key) {
-        if (jsonValue == null || key == null) {
+        if (ObjectUtils.anyNull(jsonValue, key)) {
             return null;
         }
 
         try {
             JsonNode node;
             if (jsonValue instanceof String str) {
-                node = objectMapper.readTree(str);
+                node = MAPPER.readTree(str);
             } else {
-                node = objectMapper.valueToTree(jsonValue);
+                node = MAPPER.valueToTree(jsonValue);
             }
 
             JsonNode valueNode = node.get(key);
@@ -140,7 +140,7 @@ public class TraceFilterEvaluationService {
             } else if (valueNode.isNumber()) {
                 return valueNode.numberValue();
             } else {
-                return objectMapper.treeToValue(valueNode, Object.class);
+                return MAPPER.treeToValue(valueNode, Object.class);
             }
         } catch (Exception e) {
             log.warn("Failed to extract nested value with key '{}': {}", key, e.getMessage());
@@ -310,13 +310,12 @@ public class TraceFilterEvaluationService {
         if (value instanceof Number num) {
             return new BigDecimal(num.toString());
         }
-        if (value instanceof String str) {
-            try {
-                return new BigDecimal(str);
-            } catch (NumberFormatException e) {
-                return null;
-            }
+
+        try {
+            return new BigDecimal(value.toString());
+        } catch (NumberFormatException e) {
+            log.warn("TraceFilterEvaluationService:convertToNumber() failed for value: {}", value);
+            return null;
         }
-        return null;
     }
 }
