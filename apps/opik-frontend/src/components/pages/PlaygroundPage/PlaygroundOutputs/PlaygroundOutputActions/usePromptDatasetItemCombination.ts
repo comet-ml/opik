@@ -9,10 +9,7 @@ import {
 } from "@/store/PlaygroundStore";
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
-import {
-  getMessageContentMustacheTags,
-  renderMessageContent,
-} from "@/lib/llm";
+import { getMessageContentMustacheTags, renderMessageContent } from "@/lib/llm";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import cloneDeep from "lodash/cloneDeep";
@@ -25,10 +22,7 @@ export interface DatasetItemPromptCombination {
   prompt: PlaygroundPromptType;
 }
 
-const serializeTags = (
-  datasetItem: DatasetItem["data"],
-  tags: string[],
-) => {
+const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
   const newDatasetItem = cloneDeep(datasetItem) as Record<string, unknown>;
 
   tags.forEach((tag) => {

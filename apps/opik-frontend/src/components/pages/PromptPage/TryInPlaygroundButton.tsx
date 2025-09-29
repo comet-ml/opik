@@ -8,7 +8,11 @@ import { PromptWithLatestVersion } from "@/types/prompts";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
-import { generateDefaultLLMPromptMessage, isMessageContentEmpty } from "@/lib/llm";
+import {
+  generateDefaultLLMPromptMessage,
+  isMessageContentEmpty,
+  tryDeserializeMessageContent,
+} from "@/lib/llm";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -46,9 +50,7 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
     return (
       keys.length === 1 &&
       promptMap[keys[0]]?.messages?.length === 1 &&
-      isMessageContentEmpty(
-        promptMap[keys[0]]?.messages[0]?.content ?? "",
-      )
+      isMessageContentEmpty(promptMap[keys[0]]?.messages[0]?.content ?? "")
     );
   }, [promptMap]);
 
@@ -66,7 +68,9 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
 
     newPrompt.messages = [
       generateDefaultLLMPromptMessage({
-        content: prompt?.latest_version?.template ?? "",
+        content: tryDeserializeMessageContent(
+          prompt?.latest_version?.template ?? "",
+        ),
         promptId: prompt?.id,
         promptVersionId: prompt?.latest_version?.id,
       }),
