@@ -59,7 +59,7 @@ public class AlertResource {
 
         log.info("Creating alert with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
 
-        var alertId = alertService.create(alert).id();
+        var alertId = alertService.create(alert);
 
         log.info("Created alert with name '{}', id '{}', on workspace_id '{}'", alert.name(), alertId,
                 workspaceId);

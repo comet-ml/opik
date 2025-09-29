@@ -28,7 +28,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(AlertServiceImpl.class)
 public interface AlertService {
 
-    Alert create(Alert alert);
+    UUID create(Alert alert);
 
     Alert getById(UUID id);
 }
@@ -46,17 +46,15 @@ class AlertServiceImpl implements AlertService {
     private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
-    public Alert create(@NonNull Alert alert) {
+    public UUID create(@NonNull Alert alert) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
         var newAlert = prepareAlert(alert, userName);
 
-        Alert createdAlert = EntityConstraintHandler
+        return EntityConstraintHandler
                 .handle(() -> saveAlert(newAlert, workspaceId))
                 .withError(this::newAlertConflict);
-
-        return createdAlert;
     }
 
     @Override
@@ -78,7 +76,7 @@ class AlertServiceImpl implements AlertService {
         });
     }
 
-    private Alert saveAlert(Alert alert, String workspaceId) {
+    private UUID saveAlert(Alert alert, String workspaceId) {
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
@@ -106,7 +104,7 @@ class AlertServiceImpl implements AlertService {
             return null;
         });
 
-        return getById(alert.id());
+        return alert.id();
     }
 
     private EntityAlreadyExistsException newAlertConflict() {
