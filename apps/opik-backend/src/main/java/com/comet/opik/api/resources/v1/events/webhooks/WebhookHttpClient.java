@@ -66,9 +66,9 @@ public class WebhookHttpClient {
     private void logInfo(WebhookEvent<?> event, String message, Object... args) {
         try (var logContext = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.WEBHOOK_EVENT_HANDLER.name(),
-                UserLog.WORKSPACE_ID, event.getWorkspaceId(),
-                UserLog.EVENT_ID, event.getId(),
-                UserLog.ALERT_ID, event.getAlertId().toString()))) {
+                "workspace_id", event.getWorkspaceId(),
+                "webhook_id", event.getId(),
+                "alert_id", event.getAlertId().toString()))) {
             userFacingLog.info(message, args);
         }
     }
@@ -76,9 +76,9 @@ public class WebhookHttpClient {
     private void logError(WebhookEvent<?> event, String message, Throwable throwable) {
         try (var logContext = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.WEBHOOK_EVENT_HANDLER.name(),
-                UserLog.WORKSPACE_ID, event.getWorkspaceId(),
-                UserLog.EVENT_ID, event.getId(),
-                UserLog.ALERT_ID, event.getAlertId().toString()))) {
+                "workspace_id", event.getWorkspaceId(),
+                "webhook_id", event.getId(),
+                "alert_id", event.getAlertId().toString()))) {
             userFacingLog.error(message, throwable);
         }
     }
