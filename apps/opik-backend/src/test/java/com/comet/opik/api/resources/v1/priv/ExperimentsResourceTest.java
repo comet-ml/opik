@@ -173,6 +173,7 @@ import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -5294,22 +5295,24 @@ class ExperimentsResourceTest {
                     HttpStatus.SC_NOT_FOUND);
         }
 
-        @Test
-        @DisplayName("when updating experiment with invalid name, then return 400")
-        void updateExperiment_whenInvalidName_thenReturn400() {
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when updating experiment with invalid values, then return 400")
+        void updateExperiment_whenInvalidUpdate_thenReturn400(ExperimentUpdate experimentUpdate) {
             // given
             var experiment = experimentResourceClient.createPartialExperiment()
                     .name("Original Name")
                     .build();
             var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
-            var experimentUpdate = ExperimentUpdate.builder()
-                    .name("   ") // blank name should be invalid
-                    .build();
-
             // when & then
             experimentResourceClient.updateExperiment(experimentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        private Stream<Arguments> updateExperiment_whenInvalidUpdate_thenReturn400() {
+            return Stream.of(
+                    arguments(named("blank name", ExperimentUpdate.builder().name("   ").build())));
         }
     }
 }
