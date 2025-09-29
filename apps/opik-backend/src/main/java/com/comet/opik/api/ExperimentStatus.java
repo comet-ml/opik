@@ -10,7 +10,6 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum ExperimentStatus {
-    UNKNOWN("unknown"),
     RUNNING("running"),
     COMPLETED("completed"),
     CANCELLED("cancelled");
