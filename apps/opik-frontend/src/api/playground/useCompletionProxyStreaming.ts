@@ -15,6 +15,7 @@ import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
+import { isStructuredMessageContent, stringifyMessageContent } from "@/lib/llm";
 
 const DATA_PREFIX = "data:";
 
@@ -122,9 +123,22 @@ const useCompletionProxyStreaming = ({
       let providerError = null;
 
       try {
+        const normalizedMessages = messages.map((message) => {
+          if (isStructuredMessageContent(message.content)) {
+            return {
+              ...message,
+              content: stringifyMessageContent(message.content, {
+                includeImagePlaceholders: true,
+              }),
+            } satisfies ProviderMessageType;
+          }
+
+          return message;
+        });
+
         const response = await getCompletionProxyStream({
           model,
-          messages,
+          messages: normalizedMessages,
           configs,
           signal,
           workspaceName,

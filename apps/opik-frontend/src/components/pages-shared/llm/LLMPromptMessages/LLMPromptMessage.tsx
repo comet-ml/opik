@@ -233,16 +233,7 @@ const LLMPromptMessage = ({
           />
         );
       } else {
-        partContent = (
-          <Input
-            value={item.image_url.url}
-            onChange={(event) =>
-              handleStructuredImageUrlChange(index, event.target.value)
-            }
-            placeholder="Image URL or {{input.image_url}}"
-            aria-label={`Image URL for message part ${ordinal}`}
-          />
-        );
+        partContent = null;
       }
 
       return (
@@ -263,7 +254,22 @@ const LLMPromptMessage = ({
             </Button>
           </div>
 
-          {partContent}
+          {item.type === "image_url"
+            ? (
+                <Input
+                  value={item.image_url.url}
+                  onChange={(event) =>
+                    handleStructuredImageUrlChange(index, event.target.value)
+                  }
+                  placeholder="Image URL or {{input.image_url}}"
+                  onFocus={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  data-prevent-editor-focus="true"
+                  aria-label={`Image URL for message part ${ordinal}`}
+                />
+              )
+            : partContent}
         </div>
       );
     });
@@ -340,7 +346,15 @@ const LLMPromptMessage = ({
         key={id}
         style={style}
         ref={setNodeRef}
-        onClick={() => {
+        onClick={(event) => {
+          if (event.target instanceof HTMLElement) {
+            const interactiveSelector =
+              'input, textarea, button, [role="combobox"], [data-prevent-editor-focus="true"]';
+            if (event.target.closest(interactiveSelector)) {
+              return;
+            }
+          }
+
           editorViewRef.current?.focus();
         }}
         {...attributes}

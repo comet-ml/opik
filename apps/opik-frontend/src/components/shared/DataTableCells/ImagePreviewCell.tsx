@@ -11,18 +11,30 @@ type ImagePreviewCellProps<TData> = {
   context: CellContext<TData, unknown>;
   images: ParsedImageData[];
   fallbackText?: string;
+  placeholderLabel?: string;
 };
 
 const ImagePreviewCell = <TData,>({
   context,
   images,
   fallbackText,
+  placeholderLabel,
 }: ImagePreviewCellProps<TData>) => {
   if (!images.length) {
     return null;
   }
 
-  const [firstImage, ...restImages] = images;
+  const matchedImage = placeholderLabel
+    ? images.find((image) => {
+        if (!image.name) return false;
+        if (image.name === placeholderLabel) return true;
+        return image.name.endsWith(placeholderLabel);
+      })
+    : undefined;
+
+  const [firstImage, ...restImages] = matchedImage
+    ? [matchedImage]
+    : images;
   const remainingCount = restImages.length;
   const fullLabel = fallbackText || firstImage?.name || "";
   const label =
