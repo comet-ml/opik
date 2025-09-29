@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -40,6 +41,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -293,6 +295,66 @@ class AlertResourceTest {
 
             alertResourceClient.getAlertById(nonExistentId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Alert Batch:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteAlertBatch {
+
+        @Test
+        @DisplayName("Success: should delete multiple alerts")
+        void deleteAlertBatch__whenMultipleAlerts__thenDeleteSuccessfully() {
+            var mock = prepareMockWorkspace();
+
+            // Create multiple alerts
+            var alert1 = factory.manufacturePojo(Alert.class);
+            var alert2 = factory.manufacturePojo(Alert.class);
+            var createdAlertId1 = alertResourceClient.createAlert(alert1, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+            var createdAlertId2 = alertResourceClient.createAlert(alert2, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Delete both alerts
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(createdAlertId1, createdAlertId2))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+
+            // Verify both alerts are deleted
+            alertResourceClient.getAlertById(createdAlertId1, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NOT_FOUND);
+            alertResourceClient.getAlertById(createdAlertId2, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Success: should fail empty list")
+        void deleteAlertBatch__whenEmptyList__thenReturnValidationError() {
+            var mock = prepareMockWorkspace();
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of())
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("Success: should handle non-existent alert IDs gracefully")
+        void deleteAlertBatch__whenNonExistentIds__thenReturnNoContent() {
+            var mock = prepareMockWorkspace();
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(UUID.randomUUID(), UUID.randomUUID()))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
     }
 
