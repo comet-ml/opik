@@ -295,14 +295,21 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     return deduplicatedItems;
   }
 
+  /**
+   * Clears both hash tracking data structures
+   */
+  private clearHashState(): void {
+    this.idToHash.clear();
+    this.hashes.clear();
+  }
+
   public async syncHashes(): Promise<void> {
     logger.debug("Syncing dataset hashes with backend", { datasetId: this.id });
 
     try {
       const allItems = await this.getItemsAsDataclasses();
 
-      this.idToHash.clear();
-      this.hashes.clear();
+      this.clearHashState();
 
       for (const item of allItems) {
         const itemHash = await item.contentHash();
@@ -319,8 +326,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
         logger.debug("Dataset not found - starting with empty hash state", {
           datasetId: this.id,
         });
-        this.idToHash.clear();
-        this.hashes.clear();
+        this.clearHashState();
         return;
       }
       throw error;

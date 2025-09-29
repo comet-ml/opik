@@ -216,7 +216,7 @@ describe("Dataset Deduplication", () => {
     expect(streamDatasetItemsSpy).toHaveBeenCalledWith({
       datasetName: "Test Dataset",
       lastRetrievedId: undefined,
-      steamLimit: 2000,
+      streamLimit: 2000,
     });
 
     // Verify API calls
