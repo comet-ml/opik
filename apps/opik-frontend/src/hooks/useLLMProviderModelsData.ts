@@ -152,6 +152,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Opus 4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_LATEST,
+      label: "Claude Sonnet 4 (Latest)",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
       label: "Claude Sonnet 4",
     },
@@ -277,6 +281,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_1,
       label: "anthropic/claude-opus-4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_LATEST,
+      label: "anthropic/claude-sonnet-4-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
