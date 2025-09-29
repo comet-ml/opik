@@ -315,6 +315,7 @@ def test_generate_tool_description_variations(monkeypatch: pytest.MonkeyPatch) -
     assert (
         candidate.tools[0]["function"]["description"] == "Refined documentation helper."
     )
+    assert candidate.system is not None
     assert "Refined documentation helper." in candidate.system
 
 
