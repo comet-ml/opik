@@ -42,7 +42,13 @@ def create_graph(project_name: str, prompt_template: str) -> Any:
             description="""This agent is used to search wikipedia. It can retrieve additional details about a topic.""",
         )
     ]
-    # We'll use the prompt in the chat-prompt:
+
+    # Ensure the prompt template has the required ReAct format placeholders
+    if "{tools}" not in prompt_template:
+        prompt_template += "\n\nYou have access to the following tools:\n\n{tools}"
+    if "{tool_names}" not in prompt_template:
+        prompt_template += '\n\nUse the following format:\n\nQuestion: "the input question you must answer"\nThought: "you should always think about what to do"\nAction: "the action to take" --- should be one of [{tool_names}]\nAction Input: "the input to the action"\nObservation: "the result of the action"\n... (this Thought/Action/Action Input/Observation can repeat N times)\nThought: "I now know the final answer"\nFinal Answer: "the final answer to the original input question"\n\nBegin!\n\nQuestion: {input}\nThought: {agent_scratchpad}'
+
     prompt = PromptTemplate.from_template(prompt_template)
     agent = create_react_agent(llm, tools=agent_tools, prompt=prompt)
     agent_executor = AgentExecutor(
