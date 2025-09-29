@@ -291,10 +291,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-sonnet-4.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_LATEST,
-      label: "anthropic/claude-sonnet-4-latest",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
