@@ -19,7 +19,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
@@ -28,13 +27,13 @@ import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserL
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
-@ImplementedBy(AutomationRuleEvaluatorLogsDAOImpl.class)
-public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
+@ImplementedBy(WebhookEventHandlerLogsDAOImpl.class)
+public interface WebhookEventHandlerLogsDAO extends UserLogTableDAO {
 
-    List<String> CUSTOM_MARKER_KEYS = List.of("trace_id", "thread_model_id");
+    List<String> CUSTOM_MARKER_KEYS = List.of("event_id", "alert_id");
 
-    static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory) {
-        return new AutomationRuleEvaluatorLogsDAOImpl(factory);
+    static WebhookEventHandlerLogsDAO create(ConnectionFactory factory) {
+        return new WebhookEventHandlerLogsDAOImpl(factory);
     }
 
     Mono<LogPage> findLogs(LogCriteria criteria);
@@ -44,16 +43,15 @@ public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsDAO {
+class WebhookEventHandlerLogsDAOImpl implements WebhookEventHandlerLogsDAO {
 
     private static final String INSERT_STATEMENT = """
-            INSERT INTO automation_rule_evaluator_logs (timestamp, level, workspace_id, rule_id, message, markers)
+            INSERT INTO logs (timestamp, level, workspace_id, message, markers)
             VALUES <items:{item |
                 (
                     parseDateTime64BestEffort(:timestamp<item.index>, 9),
                     :level<item.index>,
                     :workspace_id<item.index>,
-                    :rule_id<item.index>,
                     :message<item.index>,
                     mapFromArrays(:marker_keys<item.index>, :marker_values<item.index>)
                 )
@@ -63,10 +61,14 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
             """;
 
     public static final String FIND_ALL = """
-            SELECT * FROM automation_rule_evaluator_logs
+            SELECT * FROM logs
             WHERE workspace_id = :workspace_id
             <if(level)> AND level = :level <endif>
-            <if(ruleId)> AND rule_id = :rule_id <endif>
+            <if(items)>
+                <items:{item |
+                    AND markers[:marker_keys<item.index>] = :marker_values<item.index>
+                }>
+            <endif>
             ORDER BY timestamp DESC
             <if(limit)> LIMIT :limit <endif><if(offset)> OFFSET :offset <endif>
             """;
@@ -77,7 +79,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
-                    log.info("Finding logs with criteria: {}", criteria);
+                    log.info("Finding webhook logs with criteria: {}", criteria);
 
                     var template = new ST(FIND_ALL);
 
@@ -92,13 +94,13 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)))
                 .collectList()
-                .map(this::mapPage);
+                .map(logs -> mapPage(logs, criteria.page()));
     }
 
-    private LogPage mapPage(List<LogItem> logs) {
+    private LogPage mapPage(List<LogItem> logs, Integer page) {
         return LogPage.builder()
                 .content(logs)
-                .page(1)
+                .page(page)
                 .total(logs.size())
                 .size(logs.size())
                 .build();
@@ -109,23 +111,42 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .timestamp(row.get("timestamp", Instant.class))
                 .level(LogLevel.valueOf(row.get("level", String.class)))
                 .workspaceId(row.get("workspace_id", String.class))
-                .ruleId(row.get("rule_id", UUID.class))
+                .ruleId(null) // Webhook logs don't have rule IDs
                 .message(row.get("message", String.class))
-                .markers((Map<String, String>) row.get("markers", Map.class))
+                .markers((Map<String, String>) row.get("markers", Map.class)) // Cast required for ClickHouse Map type
                 .build();
     }
 
     private void bindTemplateParameters(LogCriteria criteria, ST template) {
-        Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
-        Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> template.add("ruleId", ruleId));
-        Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
+        // Always add level to template, even if null, so the template condition works
+        template.add("level", criteria.level());
+        Optional.of(criteria.size()).ifPresent(limit -> template.add("limit", limit));
+        Optional.of(criteria.page()).ifPresent(page -> template.add("offset", (page - 1) * criteria.size()));
+
+        Optional.ofNullable(criteria.markers())
+                .filter(markers -> !markers.isEmpty())
+                .ifPresent(markers -> {
+                    List<QueryItem> queryItems = getQueryItemPlaceHolder(markers.size());
+                    template.add("items", queryItems);
+                });
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
         statement.bind("workspace_id", criteria.workspaceId());
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
-        Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
-        Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
+        Optional.of(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
+        Optional.of(criteria.page()).ifPresent(page -> statement.bind("offset", (page - 1) * criteria.size()));
+
+        Optional.ofNullable(criteria.markers())
+                .filter(markers -> !markers.isEmpty())
+                .ifPresent(markers -> {
+                    int index = 0;
+                    for (Map.Entry<String, String> entry : markers.entrySet()) {
+                        statement.bind("marker_keys" + index, entry.getKey());
+                        statement.bind("marker_values" + index, entry.getValue());
+                        index++;
+                    }
+                });
     }
 
     @Override
@@ -145,8 +166,6 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                         String logLevel = event.getLevel().toString();
                         String workspaceId = Optional.ofNullable(event.getMDCPropertyMap().get("workspace_id"))
                                 .orElseThrow(() -> failWithMessage("workspace_id is not set"));
-                        String ruleId = Optional.ofNullable(event.getMDCPropertyMap().get("rule_id"))
-                                .orElseThrow(() -> failWithMessage("rule_id is not set"));
 
                         Map<String, String> makers = CUSTOM_MARKER_KEYS.stream()
                                 .map(key -> Map.entry(key, event.getMDCPropertyMap().getOrDefault(key, "")))
@@ -160,7 +179,6 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                                 .bind("timestamp" + i, event.getInstant().toString())
                                 .bind("level" + i, logLevel)
                                 .bind("workspace_id" + i, workspaceId)
-                                .bind("rule_id" + i, ruleId)
                                 .bind("message" + i, event.getFormattedMessage())
                                 .bind("marker_keys" + i, markerKeys)
                                 .bind("marker_values" + i, markerValues);
