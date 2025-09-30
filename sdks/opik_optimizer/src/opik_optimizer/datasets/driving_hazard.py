@@ -84,7 +84,7 @@ def _load_dhpr_dataset(
     nb_items: int,
     test_mode: bool,
     split: str = "train",
-    max_image_size: Optional[tuple[int, int]] = (800, 600),
+    max_image_size: Optional[tuple[int, int]] = (512, 384),  # Smaller to reduce token usage
 ) -> opik.Dataset:
     """
     Internal function to load DHPR dataset with multimodal support.
@@ -224,7 +224,7 @@ def _process_dhpr_item(
     image_uri = encode_pil_to_base64_uri(
         image=pil_image,
         format="JPEG",  # Use JPEG for dashcam photos to reduce size
-        quality=85,
+        quality=60,  # Lower quality to significantly reduce base64 size
     )
 
     # Create structured content (OpenAI format)

@@ -21,6 +21,28 @@ from opik_optimizer.metrics import MultimodalLLMJudge
 from opik.evaluation.metrics.score_result import ScoreResult
 
 
+# ============================================================================
+# CONFIGURATION - Adjust these settings for your needs
+# ============================================================================
+
+# Optimization settings (smaller values = faster, fewer API calls, less context usage)
+POPULATION_SIZE = 6  # Number of prompt variations per generation
+NUM_GENERATIONS = 2  # Number of evolutionary iterations
+N_SAMPLES = 3  # Number of dataset samples to use for optimization
+
+# Image settings (smaller = less tokens, but lower quality)
+# Note: These are configured in the dataset loader, defaults are:
+# - Image size: 512x384 pixels
+# - JPEG quality: 60
+# These settings keep each image under ~15-20k tokens
+
+# Model settings
+VISION_MODEL = "gpt-4o-mini"  # Vision-capable model (gpt-4o-mini, gpt-4o, claude-3-sonnet, etc.)
+JUDGE_MODEL = "gpt-4o-mini"  # Model for evaluation (can be same or different)
+
+# ============================================================================
+
+
 # Load the driving hazard dataset with images
 # Each item contains:
 # - question: Text question about the image
@@ -45,7 +67,7 @@ def multimodal_hazard_judge(dataset_item: dict[str, Any], llm_output: str) -> Sc
         ScoreResult with match score (0.0-1.0) and reasoning
     """
     metric = MultimodalLLMJudge(
-        model="gpt-4o-mini",  # Vision-capable judge model
+        model=JUDGE_MODEL,  # Vision-capable judge model
         evaluation_criteria="""
 Evaluate the hazard detection output based on:
 1. Accuracy: Does it identify the correct hazard?
@@ -105,12 +127,12 @@ prompt = ChatPrompt(
 # - Evaluate using the vision-capable LLM judge
 # - Evolve towards better hazard detection prompts
 optimizer = EvolutionaryOptimizer(
-    model="gpt-4o-mini",  # Vision-capable model
-    population_size=8,  # Smaller population for testing
-    num_generations=3,  # Fewer generations for testing
+    model=VISION_MODEL,  # Vision-capable model
+    population_size=POPULATION_SIZE,  # Smaller population for multimodal (images are large)
+    num_generations=NUM_GENERATIONS,  # Fewer generations to reduce API calls
     enable_moo=False,  # Single objective optimization
-    enable_llm_crossover=True,  # Use LLM-based crossover for better semantic preservation
-    infer_output_style=True,  # Automatically infer desired output style from dataset
+    enable_llm_crossover=False,  # Disable LLM crossover to reduce API calls with large images
+    infer_output_style=False,  # IMPORTANT: Disable for multimodal to avoid context overflow
     verbose=1,  # Show progress
 )
 
@@ -121,7 +143,10 @@ print(f"\nDataset: {len(dataset.get_items())} driving scenarios with images")
 print(f"Model: {optimizer.model} (vision-capable)")
 print(f"Population size: {optimizer.population_size}")
 print(f"Generations: {optimizer.num_generations}")
-print(f"Evaluation: Multimodal LLM-as-a-Judge (GPT-4o-mini)")
+print(f"Evaluation: Multimodal LLM-as-a-Judge ({JUDGE_MODEL})")
+print(f"\nNOTE: Images are resized to 512x384 and compressed to reduce token usage")
+print(f"NOTE: Using {N_SAMPLES} samples to avoid context window limits with base64 images")
+print(f"TIP: Adjust POPULATION_SIZE, NUM_GENERATIONS, N_SAMPLES at the top of this script")
 print("\n" + "=" * 80 + "\n")
 
 # Optimize the prompt
@@ -131,7 +156,7 @@ optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=multimodal_hazard_judge,
-    n_samples=5,  # Use 5 samples for quick testing
+    n_samples=N_SAMPLES,  # Use fewer samples to avoid context overflow with images
 )
 
 print("\n" + "=" * 80)
