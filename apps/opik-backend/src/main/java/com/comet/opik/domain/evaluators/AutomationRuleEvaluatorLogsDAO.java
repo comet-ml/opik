@@ -101,20 +101,40 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .workspaceId(row.get("workspace_id", String.class))
                 .ruleId(row.get("rule_id", UUID.class))
                 .message(row.get("message", String.class))
-                .markers((Map<String, String>) row.get("markers", Map.class))
+                .markers(getStringStringMap(row.get("markers", Map.class)))
                 .build();
+    }
+
+    /**
+     * Safely converts a Map<?, ?> to a Map<String, String>, or returns null if input is null.
+     * Throws IllegalArgumentException if any key or value is not convertible to String.
+     */
+    private Map<String, String> getStringStringMap(Object mapObj) {
+        if (mapObj == null) {
+            return null;
+        }
+        if (!(mapObj instanceof Map<?, ?>)) {
+            throw new IllegalArgumentException("Expected a Map for markers, got: " + mapObj.getClass());
+        }
+        Map<?, ?> rawMap = (Map<?, ?>) mapObj;
+        return rawMap.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> String.valueOf(e.getKey()),
+                        e -> String.valueOf(e.getValue())));
     }
 
     private void bindTemplateParameters(LogCriteria criteria, ST template) {
         Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> template.add("ruleId", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
+        Optional.ofNullable(criteria.page()).ifPresent(page -> template.add("offset", (page - 1) * criteria.size()));
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
+        Optional.ofNullable(criteria.page()).ifPresent(page -> statement.bind("offset", (page - 1) * criteria.size()));
     }
 
     @Override
