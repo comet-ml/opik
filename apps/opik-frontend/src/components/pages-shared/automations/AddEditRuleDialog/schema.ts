@@ -245,13 +245,17 @@ export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
   messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
 
+type MessageContentItem =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 /**
  * Deserialize message content from string to structured format.
  * Converts `<<<image>>>URL<<</image>>>` placeholders back to structured content array.
  */
 const deserializeMessageContent = (
-  content: string | any[],
-): string | any[] => {
+  content: string | MessageContentItem[],
+): string | MessageContentItem[] => {
   if (typeof content !== "string") {
     return content;
   }
@@ -264,7 +268,7 @@ const deserializeMessageContent = (
   }
 
   // Parse into structured content array
-  const parts: any[] = [];
+  const parts: MessageContentItem[] = [];
   let lastIndex = 0;
   imagePattern.lastIndex = 0; // Reset regex state
 

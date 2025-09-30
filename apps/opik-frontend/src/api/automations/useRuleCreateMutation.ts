@@ -31,7 +31,7 @@ const serializeMessageContent = (
       }
       return "";
     })
-    .join("");
+    .join("\n\n");
 };
 
 const useRuleCreateMutation = () => {

@@ -35,7 +35,6 @@ import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 import { DropdownOption } from "@/types/shared";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import LLMPromptMessageActions from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import { Input } from "@/components/ui/input";
 import {
   getMessageContentTextSegments,
   getMessageContentImageSegments,
@@ -58,8 +57,6 @@ const MESSAGE_TYPE_OPTIONS = [
 ];
 
 const MAX_IMAGE_PARTS = 3;
-const IMAGE_PART_TOOLTIP =
-  "Use a direct image URL or reference a variable like {{input.image_url}} or {{image_base64}}. When typing the prompt as text, wrap image variables with <<<image>>>{{variable}}<<</image>>>.";
 
 const theme = EditorView.theme({
   "&": {
@@ -291,7 +288,9 @@ const LLMPromptMessage = ({
               <CodeMirror
                 theme={theme}
                 value={item.image_url.url}
-                onChange={(value) => handleStructuredImageUrlChange(index, value)}
+                onChange={(value) =>
+                  handleStructuredImageUrlChange(index, value)
+                }
                 placeholder="Image URL or {{input.image_url}}"
                 onFocus={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
