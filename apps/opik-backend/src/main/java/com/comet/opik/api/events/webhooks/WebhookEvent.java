@@ -1,12 +1,16 @@
 package com.comet.opik.api.events.webhooks;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.jackson.Jacksonized;
+import org.hibernate.validator.constraints.URL;
 
 import java.time.Instant;
 import java.util.Map;
@@ -22,34 +26,27 @@ import java.util.UUID;
 @Getter
 public class WebhookEvent<T> {
 
-    @JsonProperty("id")
-    private String id;
+    @NotBlank private String id;
 
-    @JsonProperty("event_type")
-    private WebhookEventTypes eventType;
+    @NotNull private WebhookEventTypes eventType;
 
-    @JsonProperty("alert_id")
-    private UUID alertId;
+    @NotNull private UUID alertId;
 
-    @JsonProperty("workspace_id")
-    private String workspaceId;
+    @NotBlank private String workspaceId;
 
-    @JsonProperty("payload")
-    private T payload;
+    @NotBlank private String userName;
 
-    @JsonProperty("created_at")
-    private Instant createdAt;
+    @NotNull private T payload;
 
-    @JsonProperty("max_retries")
+    @NotNull private Instant createdAt;
+
     @Builder.Default
-    private int maxRetries = 3;
+    @Min(1) @Max(10) private int maxRetries = 3;
 
-    @JsonProperty("url")
+    @NotBlank @URL
     private String url;
 
-    @JsonProperty("secret")
     private String secret;
 
-    @JsonProperty("headers")
     private Map<String, String> headers;
 }
