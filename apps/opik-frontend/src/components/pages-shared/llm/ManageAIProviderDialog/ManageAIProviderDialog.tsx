@@ -72,13 +72,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     defaultValues: {
       provider: providerKey?.provider || "",
       apiKey: "",
-      // @ts-expect-error not to trigger type error when we have different schemas to different providers
       location: providerKey?.configuration?.location ?? "",
       url: providerKey?.base_url ?? "",
+      providerName: providerKey?.keyName ?? "",
       models: convertCustomProviderModels(
         providerKey?.configuration?.models ?? "",
       ),
-    },
+    } as AIProviderFormType,
   });
 
   const provider = form.watch("provider") as PROVIDER_TYPE | "";
@@ -108,6 +108,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const apiKey = form.getValues("apiKey");
     const url = form.getValues("url");
     const location = form.getValues("location");
+    const providerName = form.getValues("providerName");
     const models = convertCustomProviderModels(
       form.getValues("models") ?? "",
       true,
@@ -129,6 +130,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           id: providerKey?.id ?? calculatedProviderKey?.id,
           apiKey,
           base_url: isCustom ? url : undefined,
+          keyName: isCustom ? providerName : undefined,
           ...(configuration && { configuration }),
         },
       });
@@ -142,6 +144,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           apiKey,
           provider,
           base_url: isCustom ? url : undefined,
+          keyName: isCustom ? providerName : undefined,
           ...(configuration && { configuration }),
         },
       });
@@ -218,6 +221,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                             );
 
                             form.setValue("url", providerData?.base_url ?? "");
+                            form.setValue(
+                              "providerName",
+                              providerData?.keyName ?? "",
+                            );
                             form.setValue(
                               "models",
                               convertCustomProviderModels(
