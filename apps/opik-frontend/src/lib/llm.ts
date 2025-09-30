@@ -169,14 +169,8 @@ export const serializeMessageContentForStorage = (
   return "";
 };
 
-const IMAGE_PLACEHOLDER_REGEX = new RegExp(
-  String.raw`<<<image>>>(.*?)<<<\/image>>>`,
-  "gs",
-);
-const LEGACY_IMAGE_PLACEHOLDER_REGEX = new RegExp(
-  String.raw`!\[image\]\((.*?)\)`,
-  "gs",
-);
+const IMAGE_PLACEHOLDER_REGEX = /<<<image>>>(.*?)<<<\/image>>>/gs;
+const LEGACY_IMAGE_PLACEHOLDER_REGEX = /!\[image\]\((.*?)\)/gs;
 
 const buildPartsFromPattern = (
   template: string,
