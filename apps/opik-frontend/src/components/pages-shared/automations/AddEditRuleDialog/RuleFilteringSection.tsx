@@ -115,7 +115,7 @@ export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   // },
   // {
   //   id: "end_time",
-  //   label: "End time", 
+  //   label: "End time",
   //   type: COLUMN_TYPE.time,
   // },
   {
@@ -169,7 +169,9 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
-            type: isThreadScope ? TRACE_DATA_TYPE.threads : TRACE_DATA_TYPE.traces,
+            type: isThreadScope
+              ? TRACE_DATA_TYPE.threads
+              : TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: true,
           },
@@ -183,7 +185,9 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["input", "output"],
             projectId,
-            type: isThreadScope ? TRACE_DATA_TYPE.threads : TRACE_DATA_TYPE.traces,
+            type: isThreadScope
+              ? TRACE_DATA_TYPE.threads
+              : TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: false,
           },
@@ -206,7 +210,9 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             },
           keyComponentProps: {
             projectId,
-            type: isThreadScope ? TRACE_DATA_TYPE.threads : TRACE_DATA_TYPE.traces,
+            type: isThreadScope
+              ? TRACE_DATA_TYPE.threads
+              : TRACE_DATA_TYPE.traces,
             placeholder: "Select score",
           },
         },
@@ -259,9 +265,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
       <AccordionItem value="filtering-sampling" className="border-none">
         <AccordionTrigger className="px-3 py-2 hover:no-underline">
           <div className="flex items-center gap-1">
-            <Label className="text-sm font-medium">
-              Filtering & Sampling
-            </Label>
+            <Label className="text-sm font-medium">Filtering & Sampling</Label>
             <ExplainerIcon
               className="mt-0.5"
               description={
@@ -277,8 +281,9 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             <Description>
               Use sampling rate to control how frequently this rule is applied.
               You can also add filters to select specific{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"} based on their properties.{" "}
-              If nothing is defined, the rule will evaluate all{" "}
+              {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"}{" "}
+              based on their properties. If nothing is defined, the rule will
+              evaluate all{" "}
               {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"}.
             </Description>
 

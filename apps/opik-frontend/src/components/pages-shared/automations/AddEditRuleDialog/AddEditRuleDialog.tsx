@@ -173,10 +173,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
       enabled: defaultRule?.enabled ?? true,
-        filters: normalizeFilters(
-          defaultRule?.filters ?? [],
-          (formScope === EVALUATORS_RULE_SCOPE.thread ? THREAD_FILTER_COLUMNS : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
-        ),
+      filters: normalizeFilters(
+        defaultRule?.filters ?? [],
+        (formScope === EVALUATORS_RULE_SCOPE.thread
+          ? THREAD_FILTER_COLUMNS
+          : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
+      ),
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)
