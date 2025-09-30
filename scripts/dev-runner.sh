@@ -202,6 +202,8 @@ run_db_migrations() {
 
     # Run ClickHouse (analytics DB) migrations
     log_info "Running ClickHouse (analytics DB) migrations..."
+    # Set the database name environment variable for ClickHouse migrations
+    export ANALYTICS_DB_DATABASE_NAME="opik"
     if java -jar "$JAR_FILE" dbAnalytics migrate config.yml; then
         log_success "ClickHouse migrations completed successfully"
     else
