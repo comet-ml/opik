@@ -55,14 +55,14 @@ tabs:
     display-name: Documentation
     icon: fa-regular fa-building
     slug: /
-  agent-optimization:
-    display-name: Agent Optimization
-    icon: fa-regular fa-robot
-    slug: /agent_optimization
   integrations:
     display-name: Integrations
     icon: fa-regular fa-plug
     slug: /integrations
+  agent-optimization:
+    display-name: Agent Optimization
+    icon: fa-regular fa-robot
+    slug: /agent_optimization
   self-host:
     display-name: Self-hosting Opik
     icon: fa-regular fa-server
@@ -118,18 +118,9 @@ navigation:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
-          - page: Opik Assist
-            path: docs/tracing/opik_assist.mdx
-            slug: opik_assist
-          - page: Debug Mode & Environment Variables
-            path: docs/tracing/debug_mode.mdx
-            slug: debug_mode
           - page: Log conversations
             path: docs/tracing/log_chat_conversations.mdx
             slug: log_chat_conversations
-          - page: Log agents
-            path: docs/tracing/log_agents.mdx
-            slug: log_agents
           - page: Log media & attachments
             path: docs/tracing/log_multimodal_traces.mdx
             slug: log_multimodal_traces
@@ -145,15 +136,25 @@ navigation:
           - page: Supported models
             path: docs/tracing/supported_models.mdx
             slug: supported_models
-          - page: SDK configuration
-            path: docs/tracing/sdk_configuration.mdx
-            slug: sdk_configuration
-          - page: Dynamic tracing control
-            path: docs/cookbook/dynamic_tracing_cookbook.mdx
-            slug: dynamic_tracing_control
           - page: Export data
             path: docs/tracing/export_data.mdx
             slug: export_data
+          - page: Opik Assist
+            path: docs/tracing/opik_assist.mdx
+            slug: opik_assist
+          - section: Advanced
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: SDK configuration
+                path: docs/tracing/sdk_configuration.mdx
+                slug: sdk_configuration
+              - page: Log Agent Graphs
+                path: docs/tracing/log_agent_graph.mdx
+                slug: log_agent_graphs
+              - page: Dynamic tracing control
+                path: docs/cookbook/dynamic_tracing_cookbook.mdx
+                slug: dynamic_tracing_control
       - section: Evaluation
         slug: /evaluation
         contents:
@@ -235,12 +236,12 @@ navigation:
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
             slug: prompt_management
-          - page: Opik's MCP server
-            path: docs/prompt_engineering/mcp_server.mdx
-            slug: mcp_server
           - page: Prompt Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
+          - page: Opik's MCP server
+            path: docs/prompt_engineering/mcp_server.mdx
+            slug: mcp_server
       - section: Testing
         slug: /testing
         contents:
@@ -271,114 +272,6 @@ navigation:
           - page: AI Providers
             path: docs/configuration/ai_providers.mdx
             slug: ai_providers
-  - tab: agent-optimization
-    layout:
-      - page: Opik Agent Optimizer
-        icon: fa-regular fa-house
-        path: docs/agent_optimization/overview.mdx
-        slug: overview
-      - section: Opik Agent Optimizer Guide
-        slug: /opik_optimizer
-        contents:
-          - page: Optimizer Quickstart
-            icon: fa-regular fa-bolt
-            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
-            slug: quickstart
-          - page: Optimizer Concepts
-            icon: fa-regular fa-lightbulb
-            path: docs/agent_optimization/opik_optimizer/concepts.mdx
-            slug: concepts
-          - page: Datasets for Optimization
-            icon: fa-regular fa-database
-            path: docs/agent_optimization/opik_optimizer/datasets.mdx
-            slug: datasets
-          - page: Models for Optimization
-            icon: fa-regular fa-rocket
-            path: docs/agent_optimization/opik_optimizer/models.mdx
-            slug: models
-          - page: API Reference
-            icon: fa-regular fa-square-terminal
-            path: docs/agent_optimization/opik_optimizer/reference.mdx
-            slug: reference
-          - page: Optimizer & SDK FAQ
-            icon: fa-regular fa-question
-            path: docs/agent_optimization/opik_optimizer/faq.mdx
-            slug: faq
-      - section: Optimization Algorithms
-        slug: /algorithms
-        contents:
-          - page: Evolutionary Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
-            slug: evolutionary_optimizer
-          - page: Few-Shot Bayesian Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
-            slug: fewshot_bayesian_optimizer
-          - page: MetaPrompt Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
-            slug: metaprompt_optimizer
-          - page: MIPRO Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
-            slug: mipro_optimizer
-          - page: GEPA Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/gepa_optimizer.mdx
-            slug: gepa_optimizer
-          - page: Tool Optimization (MCP & Function Calling)
-            icon: fa-regular fa-tools
-            path: docs/agent_optimization/algorithms/tool_optimization.mdx
-            slug: tool_optimization
-      - section: Optimization Best Practices
-        slug: /best_practices
-        contents:
-          - page: Prompt Engineering
-            icon: fa-regular fa-book
-            path: docs/agent_optimization/best_practices/prompt_engineering.mdx
-            slug: prompt_engineering
-      - section: Example Projects and Cookbooks
-        slug: /optimizer-cookbooks
-        contents:
-          - page: Introduction Example
-            icon: fa-regular fa-book
-            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
-            slug: optimizer_introduction_cookbook
-          - page: Synthetic Data
-            icon: fa-regular fa-book
-            path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
-            slug: synthetic_data_optimizer_cookbook
-      - section: Advanced Topics
-        slug: /advanced
-        contents:
-          - page: Extending Optimizers
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/extending_optimizers.mdx
-            slug: extending_optimizers
-  - tab: self-host
-    layout:
-      - page: Overview
-        path: docs/self-host/overview.mdx
-        slug: overview
-      - page: Local deployment
-        path: docs/self-host/local_deployment.mdx
-        slug: local_deployment
-      - page: Kubernetes deployment
-        path: docs/self-host/kubernetes.mdx
-        slug: kubernetes
-      - page: Platform Architecture
-        path: docs/self-host/architecture.mdx
-        slug: architecture
-      - page: Advanced clickhouse backup
-        path: docs/self-host/backup.mdx
-        slug: backup
-      - section: Configuration
-        slug: /configure
-        contents:
-          - page: Anonymous usage statistics
-            path: docs/self-host/configure/anonymous_usage_statistics.mdx
-            slug: anonymous_usage_statistics
   - tab: integrations
     layout:
       - page: Overview
@@ -600,6 +493,114 @@ navigation:
           - page: Guardrails AI
             path: docs/tracing/integrations/guardrails-ai.mdx
             slug: guardrails-ai
+  - tab: agent-optimization
+    layout:
+      - page: Opik Agent Optimizer
+        icon: fa-regular fa-house
+        path: docs/agent_optimization/overview.mdx
+        slug: overview
+      - section: Opik Agent Optimizer Guide
+        slug: /opik_optimizer
+        contents:
+          - page: Optimizer Quickstart
+            icon: fa-regular fa-bolt
+            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
+            slug: quickstart
+          - page: Optimizer Concepts
+            icon: fa-regular fa-lightbulb
+            path: docs/agent_optimization/opik_optimizer/concepts.mdx
+            slug: concepts
+          - page: Datasets for Optimization
+            icon: fa-regular fa-database
+            path: docs/agent_optimization/opik_optimizer/datasets.mdx
+            slug: datasets
+          - page: Models for Optimization
+            icon: fa-regular fa-rocket
+            path: docs/agent_optimization/opik_optimizer/models.mdx
+            slug: models
+          - page: API Reference
+            icon: fa-regular fa-square-terminal
+            path: docs/agent_optimization/opik_optimizer/reference.mdx
+            slug: reference
+          - page: Optimizer & SDK FAQ
+            icon: fa-regular fa-question
+            path: docs/agent_optimization/opik_optimizer/faq.mdx
+            slug: faq
+      - section: Optimization Algorithms
+        slug: /algorithms
+        contents:
+          - page: Evolutionary Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/evolutionary_optimizer.mdx
+            slug: evolutionary_optimizer
+          - page: Few-Shot Bayesian Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
+            slug: fewshot_bayesian_optimizer
+          - page: MetaPrompt Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
+            slug: metaprompt_optimizer
+          - page: MIPRO Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
+            slug: mipro_optimizer
+          - page: GEPA Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/gepa_optimizer.mdx
+            slug: gepa_optimizer
+          - page: Tool Optimization (MCP & Function Calling)
+            icon: fa-regular fa-tools
+            path: docs/agent_optimization/algorithms/tool_optimization.mdx
+            slug: tool_optimization
+      - section: Optimization Best Practices
+        slug: /best_practices
+        contents:
+          - page: Prompt Engineering
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/best_practices/prompt_engineering.mdx
+            slug: prompt_engineering
+      - section: Example Projects and Cookbooks
+        slug: /optimizer-cookbooks
+        contents:
+          - page: Introduction Example
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
+            slug: optimizer_introduction_cookbook
+          - page: Synthetic Data
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
+            slug: synthetic_data_optimizer_cookbook
+      - section: Advanced Topics
+        slug: /advanced
+        contents:
+          - page: Extending Optimizers
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/extending_optimizers.mdx
+            slug: extending_optimizers
+  - tab: self-host
+    layout:
+      - page: Overview
+        path: docs/self-host/overview.mdx
+        slug: overview
+      - page: Local deployment
+        path: docs/self-host/local_deployment.mdx
+        slug: local_deployment
+      - page: Kubernetes deployment
+        path: docs/self-host/kubernetes.mdx
+        slug: kubernetes
+      - page: Platform Architecture
+        path: docs/self-host/architecture.mdx
+        slug: architecture
+      - page: Advanced clickhouse backup
+        path: docs/self-host/backup.mdx
+        slug: backup
+      - section: Configuration
+        slug: /configure
+        contents:
+          - page: Anonymous usage statistics
+            path: docs/self-host/configure/anonymous_usage_statistics.mdx
+            slug: anonymous_usage_statistics
   - tab: reference
     layout:
       - page: Overview
