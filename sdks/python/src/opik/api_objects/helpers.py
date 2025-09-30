@@ -220,6 +220,18 @@ def search_and_wait_for_done(
     wait_for_at_least: int,
     wait_for_timeout: int,
 ) -> List[Any]:
+    """
+    The expected behavior is to keep making repeated calls until either the specified number of
+    results is found or the timeout is reached. The function will then return the best possible
+    attempt results to meet these conditions.
+    Args:
+        search_functor: The function to call to retrieve the results.
+        wait_for_at_least: The minimum number of results to return.
+        wait_for_timeout: The timeout for waiting for results.
+
+    Returns:
+        The function returns the results of the best possible attempt to meet both waiting conditions.
+    """
     result: List[Any] = []
 
     def search() -> List[Any]:
