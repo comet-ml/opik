@@ -13,6 +13,11 @@ example. These datasets can be created from:
 Once a dataset has been created, you can run Experiments on it. Each Experiment will evaluate an LLM application based
 on the test cases in the dataset using an evaluation metric and report the results back to the dataset.
 
+<Note>
+  Image fields are automatically detected: when a column contains base64 data or an image URL, the dataset table renders
+  a thumbnail while keeping the raw value available for copy/download.
+</Note>
+
 ## Create a dataset via the UI
 
 The simplest and fastest way to create a dataset is directly in the Opik UI.

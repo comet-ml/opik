@@ -86,6 +86,11 @@ dataset.insert([
     {"input": "Hello, world!", "expected_output": "Hello, world!"},
     {"input": "What is the capital of France?", "expected_output": "Paris"},
 ])
+
+<Tip>
+  Evaluations that include images just work—the SDK keeps `image_url` blocks intact for models that support vision and
+  automatically falls back to markdown placeholders when the model is text-only.
+</Tip>
 ```
 
 ## 4. Choose evaluation metrics
