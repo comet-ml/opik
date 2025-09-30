@@ -406,8 +406,7 @@ class OnlineScoringEngineTest {
         var templateMessages = List.of(
                 new LlmAsJudgeMessage(
                         ChatMessageType.USER,
-                        "Hello<<<image>>>https://example.com/cat.png<<</image>>>")
-        );
+                        "Hello<<<image>>>https://example.com/cat.png<<</image>>>"));
 
         Trace trace = Trace.builder()
                 .startTime(Instant.now())

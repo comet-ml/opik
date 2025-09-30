@@ -11,7 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MessageContentNormalizerTest {
 
     @Test
-    void renderImagePlaceholderUsesDelimitedFormat() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    void renderImagePlaceholderUsesDelimitedFormat()
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         ImageUrl imageUrl = new ImageUrl();
         imageUrl.setUrl("https://example.com/image.png");
 
@@ -26,7 +27,8 @@ class MessageContentNormalizerTest {
     }
 
     @Test
-    void renderImagePlaceholderSkipsBlankUrls() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    void renderImagePlaceholderSkipsBlankUrls()
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         ImageUrl imageUrl = new ImageUrl();
         imageUrl.setUrl("   ");
 
