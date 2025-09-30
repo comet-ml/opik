@@ -481,7 +481,7 @@ const LLMPromptMessage = ({
                   editorViewRef.current = view;
                 }}
                 theme={theme}
-                value={(content as string) ?? ""}
+                value={typeof content === "string" ? content : ""}
                 onChange={(c) => onChangeMessage({ content: c })}
                 placeholder="Type your message"
                 basicSetup={{
