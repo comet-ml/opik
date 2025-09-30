@@ -35,10 +35,10 @@ public record Alert(
                 Alert.View.Public.class, Alert.View.Write.class}) List<AlertTrigger> triggers,
 
         @JsonView({
-                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
+                Alert.View.Public.class, Alert.View.Write.class}) Instant createdAt,
 
         @JsonView({
-                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
+                Alert.View.Public.class, Alert.View.Write.class}) String createdBy,
 
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
