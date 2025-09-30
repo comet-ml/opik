@@ -209,7 +209,7 @@ run_db_migrations() {
     else
         # TODO: dbAnalytics clear-checksums not supported by liquibase-clickhouse yet,
         #  this would enable automatic recovery,
-        #  not worthy adding it only for MySQL as volumes might might need pruning anyway
+        #  not worthy adding it only for MySQL as volumes might need pruning anyway
         log_error "MySQL migrations failed"
         print_migrations_recovery_message
         exit 1
