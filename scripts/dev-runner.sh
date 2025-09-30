@@ -120,8 +120,9 @@ build_backend() {
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
 
     # resolve.skip=true skips swagger, adjust if any future interference
-    log_debug "Running: mvn clean install -T 1C -Dmaven.test.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.compile.skip=true -Dmaven.test.resources.skip=true -Dmaven.compiler.useIncrementalCompilation=false -Dresolve.skip=true"
-    if mvn clean install -T 1C -Dmaven.test.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.compile.skip=true -Dmaven.test.resources.skip=true -Dmaven.compiler.useIncrementalCompilation=false -Dresolve.skip=true; then
+    MAVEN_BUILD_CMD="mvn clean install -T 1C -Dmaven.test.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.compile.skip=true -Dmaven.test.resources.skip=true -Dmaven.compiler.useIncrementalCompilation=false -Dresolve.skip=true"
+    log_debug "Running: $MAVEN_BUILD_CMD"
+    if $MAVEN_BUILD_CMD; then
         log_success "Backend build completed successfully"
     else
         log_error "Backend build failed"
