@@ -137,21 +137,20 @@ const EditPromptVersionDialog: React.FunctionComponent<
               </ToggleGroup>
             </div>
             {previewMode === PROMPT_PREVIEW_MODE.write ? (
-              <div className="rounded-md border border-border">
-                <CodeMirror
-                  theme={theme}
-                  value={template}
-                  onChange={setTemplate}
-                  placeholder="Type your prompt here"
-                  extensions={[EditorView.lineWrapping, mustachePlugin]}
-                  basicSetup={{
-                    foldGutter: false,
-                    allowMultipleSelections: false,
-                    lineNumbers: false,
-                    highlightActiveLine: false,
-                  }}
-                />
-              </div>
+              <CodeMirror
+                className="min-h-44"
+                theme={theme}
+                value={template}
+                onChange={setTemplate}
+                placeholder="Type your prompt here"
+                extensions={[EditorView.lineWrapping, mustachePlugin]}
+                basicSetup={{
+                  foldGutter: false,
+                  allowMultipleSelections: false,
+                  lineNumbers: false,
+                  highlightActiveLine: false,
+                }}
+              />
             ) : (
               <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
                 <TextDiff content1={promptTemplate} content2={template} />

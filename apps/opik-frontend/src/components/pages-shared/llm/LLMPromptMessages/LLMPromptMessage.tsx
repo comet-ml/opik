@@ -268,15 +268,7 @@ const LLMPromptMessage = ({
           className="rounded-md border border-border p-3"
         >
           <div className="mb-2 flex items-center justify-between">
-            {item.type === "image_url" ? (
-              <TooltipWrapper content={IMAGE_PART_TOOLTIP}>
-                <span className="comet-body-s text-muted-slate underline decoration-dotted underline-offset-4">
-                  {label}
-                </span>
-              </TooltipWrapper>
-            ) : (
-              <span className="comet-body-s text-muted-slate">{label}</span>
-            )}
+            <span className="comet-body-s text-muted-slate">{label}</span>
             <Button
               variant="ghost"
               size="icon-sm"
