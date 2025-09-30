@@ -13,6 +13,7 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
@@ -1718,6 +1719,414 @@ class ProjectsResourceTest {
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
         return traces;
+    }
+
+    // Helper methods for new sorting tests
+
+    private void createTracesForProject(String projectName, int traceCount, String apiKey, String workspaceName) {
+        List<Trace> traces = new ArrayList<>(traceCount);
+        for (int i = 0; i < traceCount; i++) {
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .errorInfo(null)
+                    .build();
+            traces.add(trace);
+        }
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+    }
+
+    private void createErrorTracesForProject(String projectName, int errorCount, String apiKey, String workspaceName) {
+        List<Trace> traces = new ArrayList<>();
+        for (int i = 0; i < errorCount; i++) {
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .errorInfo(ErrorInfo.builder()
+                            .exceptionType("TestException")
+                            .message("Test error message")
+                            .build())
+                    .build();
+            traces.add(trace);
+        }
+        // Also create one normal trace to ensure project exists
+        Trace normalTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .errorInfo(null)
+                .build();
+        traces.add(normalTrace);
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+    }
+
+    private void createTracesWithUsageForProject(String projectName, int promptTokens, int completionTokens,
+            String apiKey, String workspaceName) {
+        Map<String, Long> usage = Map.of(
+                "prompt_tokens", (long) promptTokens,
+                "completion_tokens", (long) completionTokens,
+                "total_tokens", (long) (promptTokens + completionTokens));
+
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .usage(usage)
+                .build();
+
+        traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+    }
+
+    private void createTracesWithFeedbackScoresForProject(String projectName, double avgScore, String apiKey,
+            String workspaceName) {
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+
+        List<Trace> traces = List.of(trace);
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        // Add feedback score
+        List<FeedbackScoreBatchItem> feedbackScores = List.of(
+                FeedbackScoreBatchItem.builder()
+                        .id(trace.id())
+                        .name("test-score")
+                        .value(BigDecimal.valueOf(avgScore))
+                        .source(ScoreSource.SDK)
+                        .build());
+
+        traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+    }
+
+    @Test
+    @DisplayName("when projects with traces sorted by trace count, then return project aggregations sorted by trace count")
+    void getProjects__whenProjectsSortedByTraceCount__thenReturnProjectAggregationsSortedByTraceCount() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different numbers of traces for sorting validation
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create different numbers of traces per project
+        createTracesForProject(project1.name(), 1, apiKey, workspaceName); // 1 trace
+        createTracesForProject(project2.name(), 3, apiKey, workspaceName); // 3 traces
+        createTracesForProject(project3.name(), 2, apiKey, workspaceName); // 2 traces
+
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.TRACE_COUNT)
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by trace count (DESC): project2 (3), project3 (2), project1 (1)
+        assertThat(actualEntity.content().get(0).projectId()).isEqualTo(id2);
+        assertThat(actualEntity.content().get(1).projectId()).isEqualTo(id3);
+        assertThat(actualEntity.content().get(2).projectId()).isEqualTo(id1);
+    }
+
+    @Test
+    @DisplayName("when projects with error traces sorted by error count, then return project aggregations sorted by error count")
+    void getProjects__whenProjectsSortedByErrorCount__thenReturnProjectAggregationsSortedByErrorCount() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different numbers of error traces
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different error counts per project
+        createErrorTracesForProject(project1.name(), 0, apiKey, workspaceName); // 0 errors
+        createErrorTracesForProject(project2.name(), 2, apiKey, workspaceName); // 2 errors
+        createErrorTracesForProject(project3.name(), 1, apiKey, workspaceName); // 1 error
+
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.ERROR_COUNT)
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by error count (DESC): project2 (2), project3 (1), project1 (0)
+        assertThat(actualEntity.content().get(0).projectId()).isEqualTo(id2);
+        assertThat(actualEntity.content().get(1).projectId()).isEqualTo(id3);
+        assertThat(actualEntity.content().get(2).projectId()).isEqualTo(id1);
+    }
+
+    @Test
+    @DisplayName("when projects with token usage sorted by total tokens, then return project aggregations sorted by total tokens")
+    void getProjects__whenProjectsSortedByTotalTokens__thenReturnProjectAggregationsSortedByTotalTokens() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different token usage
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different token usage per project
+        createTracesWithUsageForProject(project1.name(), 100, 50, apiKey, workspaceName); // 150 total
+        createTracesWithUsageForProject(project2.name(), 200, 100, apiKey, workspaceName); // 300 total
+        createTracesWithUsageForProject(project3.name(), 150, 75, apiKey, workspaceName); // 225 total
+
+        var sorting = List.of(SortingField.builder()
+                .field("usage.total_tokens")
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by total tokens (DESC): project2 (300), project3 (225), project1 (150)
+        assertThat(actualEntity.content().get(0).projectId()).isEqualTo(id2);
+        assertThat(actualEntity.content().get(1).projectId()).isEqualTo(id3);
+        assertThat(actualEntity.content().get(2).projectId()).isEqualTo(id1);
+    }
+
+    @Test
+    @DisplayName("when projects with feedback scores sorted by feedback scores, then return project aggregations sorted by feedback scores")
+    void getProjects__whenProjectsSortedByFeedbackScores__thenReturnProjectAggregationsSortedByFeedbackScores() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different feedback scores
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different feedback scores per project
+        createTracesWithFeedbackScoresForProject(project1.name(), 3.0, apiKey, workspaceName); // 3.0 avg
+        createTracesWithFeedbackScoresForProject(project2.name(), 5.0, apiKey, workspaceName); // 5.0 avg
+        createTracesWithFeedbackScoresForProject(project3.name(), 4.0, apiKey, workspaceName); // 4.0 avg
+
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.FEEDBACK_SCORES_AVG)
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by feedback scores (DESC): project2 (5.0), project3 (4.0), project1 (3.0)
+        assertThat(actualEntity.content().get(0).projectId()).isEqualTo(id2);
+        assertThat(actualEntity.content().get(1).projectId()).isEqualTo(id3);
+        assertThat(actualEntity.content().get(2).projectId()).isEqualTo(id1);
+    }
+
+    @Test
+    @DisplayName("when projects sorted by created by, then return project aggregations sorted by created by")
+    void getProjects__whenProjectsSortedByCreatedBy__thenReturnProjectAggregationsSortedByCreatedBy() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different createdBy values
+        var project1 = factory.manufacturePojo(Project.class).toBuilder()
+                .createdBy("alice")
+                .build();
+        var project2 = factory.manufacturePojo(Project.class).toBuilder()
+                .createdBy("charlie")
+                .build();
+        var project3 = factory.manufacturePojo(Project.class).toBuilder()
+                .createdBy("bob")
+                .build();
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.CREATED_BY)
+                .direction(Direction.ASC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by created_by (ASC): alice, bob, charlie
+        assertThat(actualEntity.content().get(0).projectId()).isEqualTo(id1);
+        assertThat(actualEntity.content().get(1).projectId()).isEqualTo(id3);
+        assertThat(actualEntity.content().get(2).projectId()).isEqualTo(id2);
+    }
+
+    @Test
+    @DisplayName("when projects with token usage sorted by input tokens, then return project aggregations sorted by input tokens")
+    void getProjects__whenProjectsSortedByInputTokens__thenReturnProjectAggregationsSortedByInputTokens() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different input token usage
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different input token usage per project
+        createTracesWithUsageForProject(project1.name(), 100, 50, apiKey, workspaceName); // 100 input
+        createTracesWithUsageForProject(project2.name(), 200, 100, apiKey, workspaceName); // 200 input
+        createTracesWithUsageForProject(project3.name(), 150, 75, apiKey, workspaceName); // 150 input
+
+        var sorting = List.of(SortingField.builder()
+                .field("usage.prompt_tokens")
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by input tokens (DESC): project2 (200), project3 (150), project1 (100)
+        assertThat(actualEntity.content().get(0).projectId()).isEqualTo(id2);
+        assertThat(actualEntity.content().get(1).projectId()).isEqualTo(id3);
+        assertThat(actualEntity.content().get(2).projectId()).isEqualTo(id1);
+    }
+
+    @Test
+    @DisplayName("when projects with token usage sorted by output tokens, then return project aggregations sorted by output tokens")
+    void getProjects__whenProjectsSortedByOutputTokens__thenReturnProjectAggregationsSortedByOutputTokens() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different output token usage
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different output token usage per project
+        createTracesWithUsageForProject(project1.name(), 100, 50, apiKey, workspaceName); // 50 output
+        createTracesWithUsageForProject(project2.name(), 200, 100, apiKey, workspaceName); // 100 output
+        createTracesWithUsageForProject(project3.name(), 150, 75, apiKey, workspaceName); // 75 output
+
+        var sorting = List.of(SortingField.builder()
+                .field("usage.completion_tokens")
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by output tokens (DESC): project2 (100), project3 (75), project1 (50)
+        assertThat(actualEntity.content().get(0).projectId()).isEqualTo(id2);
+        assertThat(actualEntity.content().get(1).projectId()).isEqualTo(id3);
+        assertThat(actualEntity.content().get(2).projectId()).isEqualTo(id1);
     }
 
     @Nested
