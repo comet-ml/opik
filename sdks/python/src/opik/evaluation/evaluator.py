@@ -324,16 +324,18 @@ def _render_message_content(
             elif part_type == "image_url":
                 image_dict = part.get("image_url", {}) if isinstance(part.get("image_url"), dict) else {}
                 url_template = str(image_dict.get("url", ""))
+
+                rendered_image = dict(image_dict)
+                rendered_image["url"] = prompt_template.PromptTemplate(
+                    url_template,
+                    validate_placeholders=False,
+                    type=variables.get("type", "mustache"),
+                ).format(**variables)
+
                 rendered_parts.append(
                     {
                         "type": "image_url",
-                        "image_url": {
-                          "url": prompt_template.PromptTemplate(
-                              url_template,
-                              validate_placeholders=False,
-                              type=variables.get("type", "mustache"),
-                          ).format(**variables)
-                        },
+                        "image_url": rendered_image,
                     }
                 )
 
