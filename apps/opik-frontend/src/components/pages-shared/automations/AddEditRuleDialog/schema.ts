@@ -15,6 +15,7 @@ import {
   ProviderMessageType,
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
+import { COLUMN_TYPE } from "@/types/shared";
 
 const RuleNameSchema = z
   .string({
@@ -31,6 +32,31 @@ const ProjectIdSchema = z
 const SamplingRateSchema = z.number();
 
 const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
+
+export const FilterSchema = z.object({
+  id: z.string(),
+  field: z.string(),
+  type: z.nativeEnum(COLUMN_TYPE).or(z.literal("")),
+  operator: z.union([
+    z.literal("contains"),
+    z.literal("not_contains"),
+    z.literal("starts_with"),
+    z.literal("ends_with"),
+    z.literal("is_empty"),
+    z.literal("is_not_empty"),
+    z.literal("="),
+    z.literal(">"),
+    z.literal(">="),
+    z.literal("<"),
+    z.literal("<="),
+    z.literal(""),
+  ]),
+  key: z.string().optional(),
+  value: z.union([z.string(), z.number()]),
+  error: z.string().optional(),
+});
+
+export const FiltersSchema = z.array(FilterSchema);
 
 const LLMJudgeBaseSchema = z.object({
   model: z
@@ -166,6 +192,7 @@ export const BaseEvaluationRuleFormSchema = z.object({
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
   enabled: z.boolean().default(true),
+  filters: FiltersSchema.default([]),
 });
 
 export const LLMJudgeTraceEvaluationRuleFormSchema =

@@ -15,6 +15,9 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -597,6 +600,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -824,6 +828,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .name(updatedEvaluator.getName())
                     .samplingRate(updatedEvaluator.getSamplingRate())
                     .enabled(updatedEvaluator.isEnabled())
+                    .filters(updatedEvaluator.getFilters())
                     .code(updatedEvaluator.getCode())
                     .build();
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
@@ -942,6 +947,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class))
                     .samplingRate(1f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -972,6 +978,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode.class))
                     .samplingRate(1f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
 
@@ -1026,6 +1033,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                     "reference", "abc"))
                             .build())
                     .samplingRate(1f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -1078,6 +1086,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .metric(TRACE_THREAD_USER_DEFINED_METRIC)
                             .build())
                     .samplingRate(1f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -1122,6 +1131,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluatorPython = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class)
                     .toBuilder()
                     .samplingRate(0f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var idPython = evaluatorsResourceClient.createEvaluator(evaluatorPython, WORKSPACE_NAME, API_KEY);
@@ -1130,6 +1140,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluatorLlm = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
                     .samplingRate(0f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var idLlm = evaluatorsResourceClient.createEvaluator(evaluatorLlm, WORKSPACE_NAME, API_KEY);
@@ -1161,6 +1172,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
                     .samplingRate(0f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1173,6 +1185,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
                             .toBuilder()
                             .samplingRate(0f)
+                            .filters(List.of())
                             .projectId(projectId)
                             .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1192,12 +1205,13 @@ class AutomationRuleEvaluatorsResourceTest {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
+                // Wait for threadModelId to be populated
+                assertThat(traceThread.threadModelId()).isNotNull();
+
                 var logPagePython = evaluatorsResourceClient.getLogs(evaluatorPython.getId(), WORKSPACE_NAME, API_KEY);
                 var logPageLlm = evaluatorsResourceClient.getLogs(evaluatorLlm.getId(), WORKSPACE_NAME, API_KEY);
 
-                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
-                        .map(Object::toString)
-                        .orElseThrow();
+                String threadModelId = traceThread.threadModelId().toString();
 
                 Map<String, String> markers = Map.of("thread_model_id", threadModelId);
                 String message = "The threadModelId '%s' was skipped for rule: '%s' and per the sampling rate '%s'";
@@ -1295,6 +1309,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1307,6 +1322,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .toBuilder()
                             .samplingRate(1.0f) // High sampling rate, but rule is disabled
                             .enabled(false)
+                            .filters(List.of())
                             .projectId(projectId)
                             .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1326,12 +1342,13 @@ class AutomationRuleEvaluatorsResourceTest {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
+                // Wait for threadModelId to be populated
+                assertThat(traceThread.threadModelId()).isNotNull();
+
                 var logPagePython = evaluatorsResourceClient.getLogs(evaluatorPython.getId(), WORKSPACE_NAME, API_KEY);
                 var logPageLlm = evaluatorsResourceClient.getLogs(evaluatorLlm.getId(), WORKSPACE_NAME, API_KEY);
 
-                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
-                        .map(Object::toString)
-                        .orElseThrow();
+                String threadModelId = traceThread.threadModelId().toString();
 
                 Map<String, String> markers = Map.of("thread_model_id", threadModelId);
                 String disabledMessage = "The threadModelId '%s' was skipped for rule: '%s' as the rule is disabled";
@@ -1354,6 +1371,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(0f) // Low sampling rate to avoid actual processing
                     .enabled(true)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var enabledId = evaluatorsResourceClient.createEvaluator(enabledRule, WORKSPACE_NAME, API_KEY);
@@ -1363,6 +1381,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var disabledId = evaluatorsResourceClient.createEvaluator(disabledRule, WORKSPACE_NAME, API_KEY);
@@ -1594,5 +1613,209 @@ class AutomationRuleEvaluatorsResourceTest {
 
         assertThat(logPage.content().getFirst().message())
                 .isEqualTo(messageTemplate.formatted(threadModelId, rule.getName()));
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Filter Functionality")
+    class FilterFunctionality {
+
+        @Test
+        void createAndGetEvaluatorWithFilters() {
+            // Given
+            List<TraceFilter> filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.CONTAINS)
+                            .value("test")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TOTAL_ESTIMATED_COST)
+                            .operator(Operator.GREATER_THAN)
+                            .value("0.01")
+                            .build());
+
+            var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .filters(filters)
+                    .build();
+
+            // When
+            var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator.getFilters()).hasSize(2);
+                assertThat(actualAutomationRuleEvaluator.getFilters())
+                        .usingRecursiveFieldByFieldElementComparator()
+                        .containsExactlyElementsOf(filters);
+            }
+        }
+
+        @Test
+        void createEvaluatorWithEmptyFilters() {
+            // Given
+            List<TraceFilter> emptyFilters = List.of();
+            var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .filters(emptyFilters)
+                    .build();
+
+            // When
+            var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator.getFilters()).isEmpty();
+            }
+        }
+
+        @Test
+        void updateEvaluatorWithFilters() {
+            // Given
+            List<TraceFilter> initialFilters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.EQUAL)
+                            .value("old_name")
+                            .build());
+
+            AutomationRuleEvaluatorLlmAsJudge automationRuleEvaluator = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .filters(initialFilters)
+                    .build();
+            UUID id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            List<TraceFilter> updatedFilters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.CONTAINS)
+                            .value("new_name")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.TAGS)
+                            .operator(Operator.CONTAINS)
+                            .value("production")
+                            .build());
+
+            AutomationRuleEvaluatorUpdateLlmAsJudge updateRequest = factory
+                    .manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)
+                    .toBuilder()
+                    .projectId(automationRuleEvaluator.getProjectId())
+                    .filters(updatedFilters)
+                    .build();
+
+            // When
+            try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
+                    id, WORKSPACE_NAME, updateRequest, API_KEY, HttpStatus.SC_NO_CONTENT)) {
+                assertThat(actualResponse.hasEntity()).isFalse();
+            }
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator.getFilters()).hasSize(2);
+                assertThat(actualAutomationRuleEvaluator.getFilters())
+                        .usingRecursiveFieldByFieldElementComparator()
+                        .containsExactlyElementsOf(updatedFilters);
+            }
+        }
+
+        Stream<Class<? extends AutomationRuleEvaluator<?>>> evaluatorTypesWithFilters() {
+            return Stream.of(
+                    AutomationRuleEvaluatorLlmAsJudge.class,
+                    AutomationRuleEvaluatorUserDefinedMetricPython.class,
+                    AutomationRuleEvaluatorTraceThreadLlmAsJudge.class,
+                    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class);
+        }
+
+        @ParameterizedTest
+        @MethodSource("evaluatorTypesWithFilters")
+        void createEvaluatorWithFiltersForAllTypes(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass) {
+            // Given
+            List<TraceFilter> filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(Operator.CONTAINS)
+                            .value("test")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .key("relevance")
+                            .operator(Operator.GREATER_THAN)
+                            .value("0.8")
+                            .build());
+
+            AutomationRuleEvaluator<?> automationRuleEvaluator = factory.manufacturePojo(evaluatorClass)
+                    .toBuilder()
+                    .filters(filters)
+                    .build();
+
+            // When
+            UUID id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator.getFilters()).hasSize(2);
+                assertThat(actualAutomationRuleEvaluator.getFilters())
+                        .usingRecursiveFieldByFieldElementComparator()
+                        .containsExactlyElementsOf(filters);
+            }
+        }
+
+        @Test
+        void createEvaluatorWithComplexFilters() {
+            // Given
+            List<TraceFilter> complexFilters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.INPUT)
+                            .key("nested.query")
+                            .operator(Operator.CONTAINS)
+                            .value("machine learning")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.METADATA)
+                            .key("llm_config.model")
+                            .operator(Operator.EQUAL)
+                            .value("gpt-4")
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.USAGE_TOTAL_TOKENS)
+                            .operator(Operator.LESS_THAN)
+                            .value("1000")
+                            .build());
+
+            AutomationRuleEvaluatorLlmAsJudge automationRuleEvaluator = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .filters(complexFilters)
+                    .build();
+
+            // When
+            UUID id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualAutomationRuleEvaluator.getFilters()).hasSize(3);
+                assertThat(actualAutomationRuleEvaluator.getFilters())
+                        .usingRecursiveFieldByFieldElementComparator()
+                        .containsExactlyElementsOf(complexFilters);
+            }
+        }
     }
 }

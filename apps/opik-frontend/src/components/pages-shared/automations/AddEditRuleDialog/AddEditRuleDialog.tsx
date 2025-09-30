@@ -46,12 +46,15 @@ import {
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
-import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
+import RuleFilteringSection, {
+  TRACE_FILTER_COLUMNS,
+  THREAD_FILTER_COLUMNS,
+} from "@/components/pages-shared/automations/AddEditRuleDialog/RuleFilteringSection";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
   convertLLMJudgeObjectToLLMJudgeData,
@@ -59,6 +62,7 @@ import {
   EvaluationRuleFormType,
 } from "@/components/pages-shared/automations/AddEditRuleDialog/schema";
 import { LLM_JUDGE } from "@/types/llm";
+import { ColumnData } from "@/types/shared";
 import {
   DEFAULT_PYTHON_CODE_THREAD_DATA,
   DEFAULT_PYTHON_CODE_TRACE_DATA,
@@ -72,11 +76,14 @@ import { Description } from "@/components/ui/description";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "@tanstack/react-router";
-import { getBackendRuleType, getUIRuleScope, getUIRuleType } from "./helpers";
+import {
+  getBackendRuleType,
+  getUIRuleScope,
+  getUIRuleType,
+  normalizeFilters,
+} from "./helpers";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
-
-export const DEFAULT_SAMPLING_RATE = 1;
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: {
@@ -161,11 +168,17 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     defaultValues: {
       ruleName: defaultRule?.name || "",
       projectId: defaultRule?.project_id || projectId || "",
-      samplingRate: defaultRule?.sampling_rate ?? DEFAULT_SAMPLING_RATE,
+      samplingRate: defaultRule?.sampling_rate ?? 1,
       uiType: formUIRuleType,
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
       enabled: defaultRule?.enabled ?? true,
+      filters: normalizeFilters(
+        defaultRule?.filters ?? [],
+        (formScope === EVALUATORS_RULE_SCOPE.thread
+          ? THREAD_FILTER_COLUMNS
+          : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
+      ),
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)
@@ -183,6 +196,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
   const scope = form.getValues("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+
+  const formProjectId = form.watch("projectId");
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -248,7 +263,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
             navigate({
               to: "/$workspaceName/projects/$projectId/traces",
               params: {
-                projectId: form.getValues("projectId"),
+                projectId: formProjectId,
                 workspaceName,
               },
               search: {
@@ -264,7 +279,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         </ToastAction>,
       ],
     });
-  }, [form, navigate, toast, workspaceName, scope]);
+  }, [navigate, toast, workspaceName, scope, formProjectId]);
 
   const getRule = useCallback(() => {
     const formData = form.getValues();
@@ -275,6 +290,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
       enabled: formData.enabled,
+      filters: formData.filters,
       type: ruleType,
     };
 
@@ -349,7 +365,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
             )}
             <Form {...form}>
               <form
-                className="flex flex-col gap-4 pb-4"
+                className="flex flex-col gap-4"
                 onSubmit={form.handleSubmit(onSubmit)}
               >
                 <FormField
@@ -442,24 +458,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     )}
                   />
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="samplingRate"
-                  render={({ field }) => (
-                    <SliderInputControl
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      defaultValue={DEFAULT_SAMPLING_RATE}
-                      value={field.value}
-                      onChange={field.onChange}
-                      id="sampling_rate"
-                      label="Sampling rate"
-                      tooltip="Percentage of traces to evaluate"
-                    />
-                  )}
-                />
 
                 <FormField
                   control={form.control}
@@ -562,6 +560,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 ) : (
                   <PythonCodeRuleDetails form={form} />
                 )}
+
+                {/* Filtering Section */}
+                <RuleFilteringSection form={form} projectId={formProjectId} />
               </form>
             </Form>
           </DialogAutoScrollBody>
