@@ -27,8 +27,8 @@ install:
 	$(PIP) install .
 
 install-dev:
-	$(PIP) install .[dev]
 	# $(PRECOMMIT) install
+	$(PIP) install '.[dev]'
 
 # Disable LiteLLM disk cache to avoid RO sqlite errors during tests.
 test:
