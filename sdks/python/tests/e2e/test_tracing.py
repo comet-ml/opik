@@ -430,7 +430,7 @@ def test_manually_created_trace_and_span__happyflow(
 
 
 def test_search_traces__happyflow(opik_client):
-    # To define a unique search query, we will create a unique identifier that will be part of the input of the trace
+    # To define a unique search query, we will create a unique identifier that will be part of the trace input
     unique_identifier = str(uuid.uuid4())[-6:]
 
     filter_string = f'input contains "{unique_identifier}"'
@@ -520,7 +520,7 @@ def test_search_traces__wait_for_at_least__happyflow(opik_client):
 
 
 def test_search_spans__happyflow(opik_client: opik.Opik):
-    # To define a unique search query, we will create a unique identifier that will be part of the input of the trace
+    # To define a unique search query, we will create a unique identifier that will be part of the trace input
     trace_id = helpers.generate_id()
     unique_identifier = str(uuid.uuid4())[-6:]
 

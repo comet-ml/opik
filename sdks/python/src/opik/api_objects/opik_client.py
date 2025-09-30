@@ -976,7 +976,7 @@ class Opik:
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
-        to be found before returning withing the specified timeout.
+        to be found before returning within the specified timeout.
 
         Args:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -1057,7 +1057,7 @@ class Opik:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
         metadata, tags, etc. or based on the trace ID. Also, you can wait for at least a certain number of spans
-        to be found before returning withing the specified timeout.
+        to be found before returning within the specified timeout.
 
         Args:
             project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
