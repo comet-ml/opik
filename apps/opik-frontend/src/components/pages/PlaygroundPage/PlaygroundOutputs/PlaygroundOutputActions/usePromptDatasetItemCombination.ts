@@ -16,6 +16,7 @@ import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
 import { parseCompletionOutput } from "@/lib/playground";
+import { processInputData } from "@/lib/images";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -25,10 +26,72 @@ export interface DatasetItemPromptCombination {
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
   const newDatasetItem = cloneDeep(datasetItem) as Record<string, unknown>;
 
+  const placeholderMap = (() => {
+    try {
+      const { images } = processInputData(datasetItem as object);
+      const map = images.reduce<Record<string, string>>((acc, image) => {
+        if (!image.name || !image.url) {
+          return acc;
+        }
+
+        const match = image.name.match(/\[(image(?:_\d+)?)\]/i);
+        if (match) {
+          acc[`[${match[1]}]`] = image.url;
+        }
+
+        return acc;
+      }, {});
+
+      if (!map["[image]"] && images[0]?.url) {
+        map["[image]"] = images[0].url;
+      }
+
+      return map;
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[Playground] Failed to build image placeholder map",
+          error,
+        );
+      }
+      return {};
+    }
+  })();
+
   tags.forEach((tag) => {
     const value = get(newDatasetItem, tag);
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug("[Playground] dataset value", tag, value);
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().replace(/^"(.*)"$/, "$1");
+      if (placeholderMap[normalized]) {
+        set(newDatasetItem, tag, placeholderMap[normalized]);
+        return;
+      }
+
+      if (
+        !normalized.startsWith("data:image") &&
+        placeholderMap["[image]"] &&
+        tag.toLowerCase().includes("image")
+      ) {
+        set(newDatasetItem, tag, placeholderMap["[image]"]);
+        return;
+      }
+
+      set(newDatasetItem, tag, normalized);
+      return;
+    }
+
     set(newDatasetItem, tag, isObject(value) ? JSON.stringify(value) : value);
   });
+
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.debug("[Playground] Serialized dataset item", newDatasetItem);
+  }
 
   return newDatasetItem;
 };
@@ -39,6 +102,14 @@ const transformMessageIntoProviderMessage = (
 ): ProviderMessageType => {
   const messageTags = getMessageContentMustacheTags(message.content);
   const serializedDatasetItem = serializeTags(datasetItem, messageTags);
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.debug(
+      "[Playground] Message tags",
+      messageTags,
+      serializedDatasetItem,
+    );
+  }
 
   const notDefinedVariables = messageTags.filter((tag) =>
     isUndefined(get(serializedDatasetItem, tag)),
