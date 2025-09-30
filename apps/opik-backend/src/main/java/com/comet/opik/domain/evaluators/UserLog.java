@@ -2,7 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 public enum UserLog {
     AUTOMATION_RULE_EVALUATOR,
-    EVENT_HANDLER_LOGS,
+    ALERT_EVENT,
     ;
 
     public static final String MARKER = "user_log";

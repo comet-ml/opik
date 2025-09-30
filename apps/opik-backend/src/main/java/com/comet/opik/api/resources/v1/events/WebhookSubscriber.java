@@ -14,6 +14,8 @@ import reactor.core.scheduler.Schedulers;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
 
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
+
 /**
  * Service responsible for sending webhook events to external HTTP endpoints.
  * This service ONLY sends webhooks and does not handle aggregation or debouncing.
@@ -21,21 +23,31 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
  */
 @Singleton
 @Slf4j
-@RequiredArgsConstructor(onConstructor_ = @Inject)
-public class WebhookSubscriber {
+public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
-    private final @NonNull WebhookHttpClient webhookHttpClient;
-    private final @NonNull WebhookConfig webhookConfig;
+    private static final String METRICS_BASE_NAME = "webhook";
+    private static final String METRICS_NAMESPACE = "opik.webhook";
 
-    /**
-     * Sends a webhook event to the specified HTTP endpoint.
-     * This is the ONLY responsibility of this service.
-     *
-     * @param event the webhook event to send
-     * @return Mono that completes when the webhook is sent successfully
-     */
-    public Mono<Void> sendWebhook(@NonNull WebhookEvent<?> event) {
-        log.debug("Sending webhook: id='{}', type='{}', url='{}'",
+    private final WebhookHttpClient webhookHttpClient;
+    private final WebhookConfig webhookConfig;
+
+    @Inject
+    public WebhookSubscriber(@NonNull WebhookConfig webhookConfig,
+            @NonNull RedissonReactiveClient redisson,
+            @NonNull WebhookHttpClient webhookHttpClient) {
+        super(webhookConfig, redisson, METRICS_BASE_NAME, WebhookConfig.PAYLOAD_FIELD);
+        this.webhookHttpClient = webhookHttpClient;
+        this.webhookConfig = webhookConfig;
+    }
+
+    @Override
+    protected String getMetricNamespace() {
+        return METRICS_NAMESPACE;
+    }
+
+    @Override
+    protected Mono<Void> processEvent(@NonNull WebhookEvent<?> event) {
+        log.debug("Processing webhook event: id='{}', type='{}', url='{}'",
                 event.getId(), event.getEventType(), event.getUrl());
 
         return Mono.defer(() -> validateEvent(event))

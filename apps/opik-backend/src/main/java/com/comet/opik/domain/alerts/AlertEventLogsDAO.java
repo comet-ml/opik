@@ -1,4 +1,4 @@
-package com.comet.opik.domain.evaluators;
+package com.comet.opik.domain.alerts;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.api.LogCriteria;
@@ -20,7 +20,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
@@ -30,13 +29,13 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
-@ImplementedBy(AutomationRuleEvaluatorLogsDAOImpl.class)
-public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
+@ImplementedBy(AlertEventLogsDAOImpl.class)
+public interface AlertEventLogsDAO extends UserLogTableDAO {
 
-    List<String> CUSTOM_MARKER_KEYS = List.of("trace_id", "thread_model_id");
+    List<String> CUSTOM_MARKER_KEYS = List.of("event_id", "alert_id");
 
-    static AutomationRuleEvaluatorLogsDAO create(ConnectionFactory factory) {
-        return new AutomationRuleEvaluatorLogsDAOImpl(factory);
+    static AlertEventLogsDAO create(ConnectionFactory factory) {
+        return new AlertEventLogsDAOImpl(factory);
     }
 
     Flux<LogItem> findLogs(LogCriteria criteria);
@@ -46,16 +45,16 @@ public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsDAO {
+class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
 
     private static final String INSERT_STATEMENT = """
-            INSERT INTO automation_rule_evaluator_logs (timestamp, level, workspace_id, rule_id, message, markers)
+            INSERT INTO alert_logs (timestamp, level, workspace_id, alert_id, message, markers)
             VALUES <items:{item |
                 (
                     parseDateTime64BestEffort(:timestamp<item.index>, 9),
                     :level<item.index>,
                     :workspace_id<item.index>,
-                    :rule_id<item.index>,
+                    :alert_id<item.index>,
                     :message<item.index>,
                     mapFromArrays(:marker_keys<item.index>, :marker_values<item.index>)
                 )
@@ -65,10 +64,14 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
             """;
 
     public static final String FIND_ALL = """
-            SELECT * FROM automation_rule_evaluator_logs
+            SELECT * FROM alert_logs
             WHERE workspace_id = :workspace_id
             <if(level)> AND level = :level <endif>
-            <if(ruleId)> AND rule_id = :rule_id <endif>
+            <if(items)>
+                <items:{item |
+                    AND markers[:marker_keys<item.index>] = :marker_values<item.index>
+                }>
+            <endif>
             ORDER BY timestamp DESC
             <if(limit)> LIMIT :limit <endif><if(offset)> OFFSET :offset <endif>
             """;
@@ -79,7 +82,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
-                    log.info("Finding logs with criteria: {}", criteria);
+                    log.info("Finding alert logs with criteria: {}", criteria);
 
                     var template = new ST(FIND_ALL);
 
@@ -99,7 +102,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .timestamp(row.get("timestamp", Instant.class))
                 .level(LogLevel.valueOf(row.get("level", String.class)))
                 .workspaceId(row.get("workspace_id", String.class))
-                .ruleId(row.get("rule_id", UUID.class))
+                .ruleId(null) // Alert logs don't have rule IDs
                 .message(row.get("message", String.class))
                 .markers(getStringStringMap(row.get("markers", Map.class)))
                 .build();
@@ -124,23 +127,41 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
     }
 
     private void bindTemplateParameters(LogCriteria criteria, ST template) {
+        // Always add level to template, even if null, so the template condition works
         Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
-        Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> template.add("ruleId", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
         // Only add offset if both page and size are present
         if (criteria.page() != null && criteria.size() != null) {
             template.add("offset", (criteria.page() - 1) * criteria.size());
         }
+
+        Optional.ofNullable(criteria.markers())
+                .filter(markers -> !markers.isEmpty())
+                .ifPresent(markers -> {
+                    List<QueryItem> queryItems = getQueryItemPlaceHolder(markers.size());
+                    template.add("items", queryItems);
+                });
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
+        // Note: workspace_id is bound automatically by bindWorkspaceIdToFlux in findLogs
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
-        Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
         // Only bind offset if both page and size are present
         if (criteria.page() != null && criteria.size() != null) {
             statement.bind("offset", (criteria.page() - 1) * criteria.size());
         }
+
+        Optional.ofNullable(criteria.markers())
+                .filter(markers -> !markers.isEmpty())
+                .ifPresent(markers -> {
+                    int index = 0;
+                    for (Map.Entry<String, String> entry : markers.entrySet()) {
+                        statement.bind("marker_keys" + index, entry.getKey());
+                        statement.bind("marker_values" + index, entry.getValue());
+                        index++;
+                    }
+                });
     }
 
     @Override
@@ -160,8 +181,8 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                         String logLevel = event.getLevel().toString();
                         String workspaceId = Optional.ofNullable(event.getMDCPropertyMap().get("workspace_id"))
                                 .orElseThrow(() -> failWithMessage("workspace_id is not set"));
-                        String ruleId = Optional.ofNullable(event.getMDCPropertyMap().get("rule_id"))
-                                .orElseThrow(() -> failWithMessage("rule_id is not set"));
+                        String alertId = Optional.ofNullable(event.getMDCPropertyMap().get("alert_id"))
+                                .orElseThrow(() -> failWithMessage("alert_id is not set"));
 
                         Map<String, String> makers = CUSTOM_MARKER_KEYS.stream()
                                 .map(key -> Map.entry(key, event.getMDCPropertyMap().getOrDefault(key, "")))
@@ -175,7 +196,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                                 .bind("timestamp" + i, event.getInstant().toString())
                                 .bind("level" + i, logLevel)
                                 .bind("workspace_id" + i, workspaceId)
-                                .bind("rule_id" + i, ruleId)
+                                .bind("alert_id" + i, alertId)
                                 .bind("message" + i, event.getFormattedMessage())
                                 .bind("marker_keys" + i, markerKeys)
                                 .bind("marker_values" + i, markerValues);

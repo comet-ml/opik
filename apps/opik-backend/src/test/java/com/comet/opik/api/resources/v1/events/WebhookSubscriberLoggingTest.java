@@ -10,7 +10,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
-import com.comet.opik.domain.evaluators.EventLogsDAO;
+import com.comet.opik.domain.alerts.AlertEventLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -60,9 +60,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WebhookSubscriberLoggingTest {
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String USER_NAME = "test-user-" + UUID.randomUUID();
+    private static final String USER_AGENT = "Opik-Webhook/1.0";
+
+    // Test configuration constants
     private static final int MAX_RETRIES = 3;
-    public static final String USER_AGENT = "Opik-Webhook/1.0";
-    public static final String USER_NAME = "test-user-" + UUID.randomUUID();
+    private static final String WEBHOOK_PATH = "/webhook";
+    private static final int AWAIT_TIMEOUT_SECONDS = 5;
+    private static final int AWAIT_POLL_INTERVAL_MS = 500;
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -94,14 +99,14 @@ class WebhookSubscriberLoggingTest {
     private WebhookConfig webhookConfig;
     private WebhookHttpClient webhookHttpClient;
     private WebhookSubscriber webhookSubscriber;
-    private EventLogsDAO eventLogsDAO;
+    private AlertEventLogsDAO alertEventLogsDAO;
 
     @BeforeAll
     void setUpAll(ConnectionFactory connectionFactory, RedissonReactiveClient redissonReactiveClient) {
         // Get real dependencies via parameter injection
         var userLogTableFactory = UserLogTableFactory.getInstance(connectionFactory);
-        eventLogsDAO = (EventLogsDAO) userLogTableFactory
-                .getDAO(UserLog.EVENT_HANDLER_LOGS);
+        alertEventLogsDAO = (AlertEventLogsDAO) userLogTableFactory
+                .getDAO(UserLog.ALERT_EVENT);
 
         // Set up external webhook server
         setupWireMock();
@@ -114,7 +119,7 @@ class WebhookSubscriberLoggingTest {
         webhookHttpClient = new WebhookHttpClient(httpClient, webhookConfig);
 
         // Create real WebhookSubscriber
-        webhookSubscriber = new WebhookSubscriber(webhookHttpClient, webhookConfig);
+        webhookSubscriber = new WebhookSubscriber(webhookConfig, redissonReactiveClient, webhookHttpClient);
     }
 
     private void setupWireMock() {
@@ -137,53 +142,29 @@ class WebhookSubscriberLoggingTest {
     @Test
     void processEvent_whenSuccessfulWebhook_shouldSendRequestAndCreateLogs() {
         // Given
-        var webhookUrl = "http://localhost:" + externalWebhookServer.port() + "/webhook";
+        var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
         var alertId = UUID.randomUUID();
         var eventId = "test-event-success-" + UUID.randomUUID();
         var webhookEvent = createWebhookEvent(webhookUrl, alertId, eventId);
 
         // Set up MDC context for logging
-        externalWebhookServer.stubFor(post(urlEqualTo("/webhook"))
+        externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
                         .withBody("{\"status\":\"success\"}")));
 
         // When
-        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete();
 
         // Then - verify HTTP call was made
-        externalWebhookServer.verify(postRequestedFor(urlEqualTo("/webhook"))
+        externalWebhookServer.verify(postRequestedFor(urlEqualTo(WEBHOOK_PATH))
                 .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON))
                 .withHeader(HttpHeader.USER_AGENT.toString(), equalTo(USER_AGENT)));
 
         // And verify logs were created in the database
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .pollInterval(500, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    var criteria = LogCriteria.builder()
-                            .markers(Map.of("alert_id", alertId.toString(), "event_id", eventId))
-                            .page(1)
-                            .size(10)
-                            .build();
-
-                    StepVerifier.create(
-                            eventLogsDAO.findLogs(criteria)
-                                    .collectList()
-                                    .contextWrite(ctx -> setContent(ctx)))
-                            .assertNext(logs -> {
-                                assertThat(logs).isNotEmpty();
-
-                                var webhookLog = logs.getFirst();
-                                assertThat(webhookLog.workspaceId()).isEqualTo(WORKSPACE_ID);
-                                assertThat(webhookLog.ruleId()).isNull(); // Webhook logs don't have rule IDs
-                                assertThat(webhookLog.markers()).containsEntry("alert_id", alertId.toString());
-                                assertThat(webhookLog.markers()).containsEntry("event_id", eventId);
-                            })
-                            .verifyComplete();
-                });
+        assertLogsCreated(alertId, eventId);
     }
 
     private static @NotNull Context setContent(Context ctx) {
@@ -194,49 +175,26 @@ class WebhookSubscriberLoggingTest {
     @Test
     void processEvent_whenWebhookFails_shouldRetryAndCreateErrorLogs() {
         // Given
-        var webhookUrl = "http://localhost:" + externalWebhookServer.port() + "/webhook";
+        var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
         var alertId = UUID.randomUUID();
         var eventId = "test-event-error-" + System.currentTimeMillis();
         var webhookEvent = createWebhookEvent(webhookUrl, alertId, eventId);
 
-        externalWebhookServer.stubFor(post(urlEqualTo("/webhook"))
+        externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
                 .willReturn(aResponse()
                         .withStatus(500)
                         .withBody("Internal Server Error")));
 
         // When
-        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete();
 
         // Then - verify HTTP call was made with retries (1 initial + MAX_RETRIES retries)
         externalWebhookServer.verify(MAX_RETRIES + 1, // 1 initial + MAX_RETRIES retries
-                postRequestedFor(urlEqualTo("/webhook")));
+                postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
 
         // And verify error logs were created in the database
-        Awaitility.await()
-                .atMost(5, TimeUnit.SECONDS)
-                .pollInterval(500, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    var criteria = LogCriteria.builder()
-                            .markers(Map.of("alert_id", alertId.toString(), "event_id", eventId))
-                            .page(1)
-                            .size(10)
-                            .build();
-
-                    StepVerifier.create(eventLogsDAO.findLogs(criteria)
-                            .collectList()
-                            .contextWrite(ctx -> setContent(ctx)))
-                            .assertNext(logs -> {
-                                assertThat(logs).isNotEmpty();
-
-                                var errorLog = logs.getFirst();
-                                assertThat(errorLog.workspaceId()).isEqualTo(WORKSPACE_ID);
-                                assertThat(errorLog.ruleId()).isNull();
-                                assertThat(errorLog.markers()).containsEntry("alert_id", alertId.toString());
-                                assertThat(errorLog.markers()).containsEntry("event_id", eventId);
-                            })
-                            .verifyComplete();
-                });
+        assertLogsCreated(alertId, eventId);
     }
 
     private WebhookConfig createWebhookConfig() {
@@ -265,5 +223,42 @@ class WebhookSubscriberLoggingTest {
                 .maxRetries(MAX_RETRIES)
                 .headers(Map.of())
                 .build();
+    }
+
+    /**
+     * Helper method to build log criteria for querying alert event logs.
+     */
+    private LogCriteria createLogCriteria(UUID alertId, String eventId) {
+        return LogCriteria.builder()
+                .markers(Map.of("alert_id", alertId.toString(), "event_id", eventId))
+                .page(1)
+                .size(10)
+                .build();
+    }
+
+    /**
+     * Helper method to wait for logs to be created and assert their presence.
+     */
+    private void assertLogsCreated(UUID alertId, String eventId) {
+        Awaitility.await()
+                .atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .pollInterval(AWAIT_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    var criteria = createLogCriteria(alertId, eventId);
+
+                    StepVerifier.create(
+                            alertEventLogsDAO.findLogs(criteria)
+                                    .collectList()
+                                    .contextWrite(ctx -> setContent(ctx)))
+                            .assertNext(logs -> {
+                                assertThat(logs).isNotEmpty();
+
+                                var log = logs.getFirst();
+                                assertThat(log.workspaceId()).isEqualTo(WORKSPACE_ID);
+                                assertThat(log.markers()).containsEntry("alert_id", alertId.toString());
+                                assertThat(log.markers()).containsEntry("event_id", eventId);
+                            })
+                            .verifyComplete();
+                });
     }
 }

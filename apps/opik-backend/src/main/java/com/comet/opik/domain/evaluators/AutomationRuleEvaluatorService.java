@@ -33,6 +33,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -346,7 +347,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 .collectList()
                 .map(logs -> LogPage.builder()
                         .content(logs)
-                        .page(criteria.page())
+                        .page(Optional.ofNullable(criteria.page()).orElse(1))
                         .total(logs.size())
                         .size(logs.size())
                         .build());
