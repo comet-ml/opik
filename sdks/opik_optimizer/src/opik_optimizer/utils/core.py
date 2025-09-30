@@ -205,7 +205,7 @@ def json_to_dict(json_str: str) -> Any:
 
     try:
         return json.loads(cleaned_json_string)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as json_error:
         if cleaned_json_string.startswith("```json"):
             cleaned_json_string = cleaned_json_string[7:]
             if cleaned_json_string.endswith("```"):
@@ -218,13 +218,41 @@ def json_to_dict(json_str: str) -> Any:
         try:
             return json.loads(cleaned_json_string)
         except json.JSONDecodeError:
-            # Try Python literal evaluation as fallback
             try:
-                return ast.literal_eval(cleaned_json_string)
-            except (ValueError, SyntaxError) as e:
-                print(f"Failed to parse JSON string: {json_str}")
-                logger.debug(f"Failed to parse JSON string: {json_str}")
-                raise e
+                literal_result = ast.literal_eval(cleaned_json_string)
+            except (ValueError, SyntaxError):
+                logger.debug("Failed to parse JSON string: %s", json_str)
+                raise json_error
+
+            normalized = _convert_literals_to_json_compatible(literal_result)
+
+            try:
+                return json.loads(json.dumps(normalized))
+            except (TypeError, ValueError) as serialization_error:
+                logger.debug(
+                    "Failed to serialise literal-evaluated payload %r: %s",
+                    literal_result,
+                    serialization_error,
+                )
+                raise json_error
+
+
+def _convert_literals_to_json_compatible(value: Any) -> Any:
+    """Convert Python literals to JSON-compatible structures."""
+    if isinstance(value, dict):
+        return {key: _convert_literals_to_json_compatible(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_convert_literals_to_json_compatible(item) for item in value]
+    if isinstance(value, tuple):
+        return [_convert_literals_to_json_compatible(item) for item in value]
+    if isinstance(value, set):
+        return [
+            _convert_literals_to_json_compatible(item)
+            for item in sorted(value, key=repr)
+        ]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def optimization_context(
