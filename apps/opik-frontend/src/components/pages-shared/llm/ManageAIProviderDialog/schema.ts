@@ -35,6 +35,15 @@ export const CustomProviderDetailsFormSchema = z.object({
   provider: z.enum([PROVIDER_TYPE.CUSTOM], {
     message: "Provider is required",
   }),
+  providerName: z
+    .string({
+      required_error: "Provider name is required",
+    })
+    .min(1, { message: "Provider name is required" })
+    .regex(/^[a-z0-9-]+$/, {
+      message:
+        "Provider name must contain only lowercase letters, numbers, and hyphens",
+    }),
   apiKey: z.string(),
   url: z.string().url(),
   models: z

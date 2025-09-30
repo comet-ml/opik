@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { ColumnPinningState } from "@tanstack/react-table";
 
 import { convertColumnDataToColumn } from "@/lib/table";
-import { ProviderKey } from "@/types/providers";
+import { ProviderKey, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useAppStore from "@/store/AppStore";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
@@ -20,6 +20,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import CustomProvidersSection from "@/components/pages-shared/llm/CustomProvidersSection";
 
 export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
   {
@@ -65,14 +66,19 @@ const AIProvidersTab = () => {
 
   const providerKeys = useMemo(() => data?.content ?? [], [data?.content]);
 
+  // Filter out custom providers - they're shown in a separate section
+  const nonCustomProviderKeys = useMemo(() => {
+    return providerKeys.filter((pk) => pk.provider !== PROVIDER_TYPE.CUSTOM);
+  }, [providerKeys]);
+
   const filteredProviderKeys = useMemo(() => {
-    if (providerKeys?.length === 0 || search === "") {
-      return providerKeys;
+    if (nonCustomProviderKeys?.length === 0 || search === "") {
+      return nonCustomProviderKeys;
     }
 
     const searchLowerCase = search.toLowerCase();
 
-    return providerKeys.filter((p) => {
+    return nonCustomProviderKeys.filter((p) => {
       const providerDetails = PROVIDERS[p.provider];
 
       return (
@@ -80,7 +86,7 @@ const AIProvidersTab = () => {
         providerDetails.value.toLowerCase().includes(searchLowerCase)
       );
     });
-  }, [providerKeys, search]);
+  }, [nonCustomProviderKeys, search]);
 
   const columns = useMemo(() => {
     return [
@@ -125,7 +131,7 @@ const AIProvidersTab = () => {
         <Button
           onClick={handleAddConfigurationClick}
           size="sm"
-          disabled={areAllProvidersConfigured(providerKeys)}
+          disabled={areAllProvidersConfigured(nonCustomProviderKeys)}
         >
           Add configuration
         </Button>
@@ -145,6 +151,9 @@ const AIProvidersTab = () => {
           </DataTableNoData>
         }
       />
+      
+      <CustomProvidersSection providerKeys={providerKeys} />
+
       <ManageAIProviderDialog
         configuredProvidersList={providerKeys}
         key={resetDialogKeyRef.current}

@@ -26,6 +26,37 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
     <div className="flex flex-col gap-4 pb-4">
       <FormField
         control={form.control}
+        name="providerName"
+        render={({ field, formState }) => {
+          const validationErrors = get(formState.errors, ["providerName"]);
+
+          return (
+            <FormItem>
+              <Label htmlFor="providerName">Provider Name</Label>
+              <FormControl>
+                <Input
+                  id="providerName"
+                  placeholder="ollama"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  className={cn({
+                    "border-destructive": Boolean(validationErrors?.message),
+                  })}
+                />
+              </FormControl>
+              <FormMessage />
+              <Description>
+                A unique identifier for this provider instance (e.g., "ollama",
+                "vllm-local", "lm-studio"). Use lowercase letters, numbers, and
+                hyphens only.
+              </Description>
+            </FormItem>
+          );
+        }}
+      />
+
+      <FormField
+        control={form.control}
         name="url"
         render={({ field, formState }) => {
           const validationErrors = get(formState.errors, ["url"]);
