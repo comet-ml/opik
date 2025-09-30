@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -11,6 +12,8 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
+
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
 
 /**
  * Reactive Redis subscriber that processes webhook events from a Redis stream
@@ -21,6 +24,7 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     private static final String METRICS_BASE_NAME = "webhook";
+    private static final String METRICS_NAMESPACE = "opik.webhook";
 
     private final WebhookHttpClient webhookHttpClient;
     private final WebhookConfig webhookConfig;
@@ -36,7 +40,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     @Override
     protected String getMetricNamespace() {
-        return "opik.webhook";
+        return METRICS_NAMESPACE;
     }
 
     @Override
@@ -52,6 +56,8 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
         return Mono.defer(() -> validateEvent(event))
                 .then(Mono.defer(() -> webhookHttpClient.sendWebhook(event)))
+                .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId())
+                        .put(RequestContext.USER_NAME, event.getUserName()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(unused -> {
                     log.info("Successfully processed webhook event: id='{}', type='{}', url='{}'",

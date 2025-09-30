@@ -198,8 +198,8 @@ public class OnlineScoringSampler {
             Trace trace) {
         return wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                "workspace_id", workspaceId,
-                "rule_id", evaluator.getId().toString(),
-                "trace_id", trace.id().toString()));
+                UserLog.WORKSPACE_ID, workspaceId,
+                UserLog.RULE_ID, evaluator.getId().toString(),
+                UserLog.TRACE_ID, trace.id().toString()));
     }
 }
