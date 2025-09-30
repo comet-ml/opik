@@ -207,7 +207,11 @@ const LLMPromptMessage = ({
     return structuredContent.map((item, index) => {
       const isText = item.type === "text";
       const ordinal = isText ? ++textPartOrdinal : ++imagePartOrdinal;
-      const label = isText ? `Text block ${ordinal}` : `Image ${ordinal}`;
+      const label = isText
+        ? textPartOrdinal === 1
+          ? "Text"
+          : `Text block ${ordinal}`
+        : `Image ${ordinal}`;
 
       let partContent: React.ReactNode = null;
 
