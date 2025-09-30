@@ -253,9 +253,6 @@ start_backend() {
         fi
     fi
 
-    # Run database migrations before starting the backend
-    run_db_migrations
-
     log_debug "Starting backend with JAR: $JAR_FILE"
     log_debug "Command: java -jar $JAR_FILE server config.yml"
 
@@ -516,21 +513,23 @@ verify_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/8: Stopping frontend..."
+    log_info "Step 1/9: Stopping frontend..."
     stop_frontend
-    log_info "Step 2/8: Stopping backend..."
+    log_info "Step 2/9: Stopping backend..."
     stop_backend
-    log_info "Step 3/8: Stopping infrastructure..."
+    log_info "Step 3/9: Stopping infrastructure..."
     stop_infrastructure
-    log_info "Step 4/8: Starting infrastructure..."
+    log_info "Step 4/9: Starting infrastructure..."
     start_infrastructure
-    log_info "Step 5/8: Building backend..."
+    log_info "Step 5/9: Building backend..."
     build_backend
-    log_info "Step 6/8: Building frontend..."
+    log_info "Step 6/9: Building frontend..."
     build_frontend
-    log_info "Step 7/8: Starting backend (includes DB migrations)..."
+    log_info "Step 7/9: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 8/9: Starting backend..."
     start_backend
-    log_info "Step 8/8: Starting frontend..."
+    log_info "Step 9/9: Starting frontend..."
     start_frontend
     log_success "=== Restart Complete ==="
     verify_services
@@ -543,7 +542,7 @@ show_usage() {
     echo "Options:"
     echo "  --build-be     - Build backend"
     echo "  --build-fe     - Build frontend"
-    echo "  --migrate      - Run database migrations (MySQL, ClickHouse etc.)"
+    echo "  --migrate      - Run database migrations"
     echo "  --start        - Start all services (without building)"
     echo "  --stop         - Stop all services"
     echo "  --restart      - Stop, build, and start all services (DEFAULT IF NO OPTIONS PROVIDED)"
@@ -613,10 +612,12 @@ case "${1:-}" in
         build_frontend
         ;;
     "--migrate")
+        start_infrastructure
         run_db_migrations
         ;;
     "--start")
         start_infrastructure
+        run_db_migrations
         start_backend
         start_frontend
         verify_services
