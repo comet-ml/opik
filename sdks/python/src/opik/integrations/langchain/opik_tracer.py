@@ -122,7 +122,7 @@ class OpikTracer(BaseTracer):
         )
 
     def _persist_run(self, run: Run) -> None:
-        run_dict: Dict[str, Any] = run.model_dump()
+        run_dict: Dict[str, Any] = run.dict()
 
         error_info: Optional[ErrorInfoDict]
         trace_additional_metadata: Dict[str, Any] = {}
@@ -325,7 +325,7 @@ class OpikTracer(BaseTracer):
             LOGGER.error("Failed during _process_start_span: %s", e, exc_info=True)
 
     def _process_start_span_unsafe(self, run: Run) -> None:
-        run_dict: Dict[str, Any] = run.model_dump()
+        run_dict: Dict[str, Any] = run.dict()
         new_span_data: span.SpanData
 
         if not run.parent_run_id:
@@ -393,7 +393,7 @@ class OpikTracer(BaseTracer):
     def _process_end_span(self, run: Run) -> None:
         span_data = None
         try:
-            run_dict: Dict[str, Any] = run.model_dump()
+            run_dict: Dict[str, Any] = run.dict()
             span_data = self._span_data_map[run.id]
 
             usage_info = provider_usage_extractors.try_extract_provider_usage_data(
@@ -438,7 +438,7 @@ class OpikTracer(BaseTracer):
     def _process_end_span_with_error(self, run: Run) -> None:
         span_data = None
         try:
-            run_dict: Dict[str, Any] = run.model_dump()
+            run_dict: Dict[str, Any] = run.dict()
             span_data = self._span_data_map[run.id]
             error_info: ErrorInfoDict = {
                 "exception_type": "Exception",
