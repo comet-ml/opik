@@ -1,11 +1,11 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type, Union
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Callable
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants, rest_stream_parser
 
-from .. import config, datetime_helpers, logging_messages
+from .. import config, datetime_helpers, logging_messages, synchronization
 from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
 from ..message_processing import messages
 from ..rest_api.types import (
@@ -213,3 +213,23 @@ def search_traces_with_filters(
         parsed_item_class=trace_public.TracePublic,
     )
     return traces
+
+
+def search_and_wait_for_done(
+    search_functor: Callable[[], List[Any]],
+    wait_for_at_least: int,
+    wait_for_timeout: int,
+) -> List[Any]:
+    result: List[Any] = []
+
+    def search() -> List[Any]:
+        nonlocal result
+        result = search_functor()
+        return result
+
+    synchronization.wait_for_done(
+        check_function=lambda: len(search()) >= wait_for_at_least,
+        timeout=wait_for_timeout,
+    )
+
+    return result

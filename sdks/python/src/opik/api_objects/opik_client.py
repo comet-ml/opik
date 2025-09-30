@@ -5,9 +5,27 @@ import logging
 from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
-from opik.api_objects import opik_query_language
 
+from opik.api_objects import opik_query_language
+from . import (
+    constants,
+    dataset,
+    experiment,
+    optimization,
+    helpers,
+    span,
+    trace,
+)
+from .attachment import Attachment
+from .attachment import client as attachment_client
+from .attachment import converters as attachment_converters
+from .dataset import rest_operations as dataset_rest_operations
+from .experiment import helpers as experiment_helpers
+from .experiment import rest_operations as experiment_rest_operations
+from .prompt import Prompt, PromptType
+from .prompt.client import PromptClient
 from .threads import threads_client
+from .trace import migration as trace_migration
 from .. import (
     config,
     datetime_helpers,
@@ -17,7 +35,6 @@ from .. import (
     llm_usage,
     rest_client_configurator,
     url_helpers,
-    synchronization,
 )
 from ..message_processing import messages, streamer_constructors, message_queue
 from ..message_processing.batching import sequence_splitter
@@ -32,24 +49,6 @@ from ..rest_api.types import (
     trace_filter_public,
 )
 from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
-from . import (
-    constants,
-    dataset,
-    experiment,
-    optimization,
-    helpers,
-    span,
-    trace,
-)
-from .attachment import converters as attachment_converters
-from .attachment import Attachment
-from .attachment import client as attachment_client
-from .dataset import rest_operations as dataset_rest_operations
-from .experiment import helpers as experiment_helpers
-from .experiment import rest_operations as experiment_rest_operations
-from .prompt import Prompt, PromptType
-from .prompt.client import PromptClient
-from .trace import migration as trace_migration
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1037,12 +1036,11 @@ class Opik:
             return search_functor()
 
         # do synchronization with backend if wait_for_at_least is provided until a specific number of traces are found
-        synchronization.wait_for_done(
-            check_function=lambda: len(search_functor()) >= wait_for_at_least,
-            timeout=wait_for_timeout,
+        return helpers.search_and_wait_for_done(
+            search_functor=search_functor,
+            wait_for_at_least=wait_for_at_least,
+            wait_for_timeout=wait_for_timeout,
         )
-
-        return search_functor()
 
     def search_spans(
         self,
@@ -1120,12 +1118,11 @@ class Opik:
             return search_functor()
 
         # do synchronization with backend if wait_for_at_least is provided until a specific number of spans are found
-        synchronization.wait_for_done(
-            check_function=lambda: len(search_functor()) >= wait_for_at_least,
-            timeout=wait_for_timeout,
+        return helpers.search_and_wait_for_done(
+            search_functor=search_functor,
+            wait_for_at_least=wait_for_at_least,
+            wait_for_timeout=wait_for_timeout,
         )
-
-        return search_functor()
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
