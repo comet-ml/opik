@@ -130,7 +130,10 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
         // Always add level to template, even if null, so the template condition works
         Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
-        Optional.ofNullable(criteria.page()).ifPresent(page -> template.add("offset", (page - 1) * criteria.size()));
+        // Only add offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            template.add("offset", (criteria.page() - 1) * criteria.size());
+        }
 
         Optional.ofNullable(criteria.markers())
                 .filter(markers -> !markers.isEmpty())
@@ -141,9 +144,13 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
+        // Note: workspace_id is bound automatically by bindWorkspaceIdToFlux in findLogs
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
-        Optional.ofNullable(criteria.page()).ifPresent(page -> statement.bind("offset", (page - 1) * criteria.size()));
+        // Only bind offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            statement.bind("offset", (criteria.page() - 1) * criteria.size());
+        }
 
         Optional.ofNullable(criteria.markers())
                 .filter(markers -> !markers.isEmpty())

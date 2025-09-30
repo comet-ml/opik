@@ -127,14 +127,21 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
         Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> template.add("ruleId", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
-        Optional.ofNullable(criteria.page()).ifPresent(page -> template.add("offset", (page - 1) * criteria.size()));
+        // Only add offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            template.add("offset", (criteria.page() - 1) * criteria.size());
+        }
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
+        // Note: workspace_id is bound automatically by bindWorkspaceIdToFlux in findLogs
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
-        Optional.ofNullable(criteria.page()).ifPresent(page -> statement.bind("offset", (page - 1) * criteria.size()));
+        // Only bind offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            statement.bind("offset", (criteria.page() - 1) * criteria.size());
+        }
     }
 
     @Override
