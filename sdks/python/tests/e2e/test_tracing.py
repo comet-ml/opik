@@ -1104,4 +1104,5 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
         entity_id=child_span_client.id,
         attachments=attachments,
         data_sizes=data_sizes,
+        timeout=30,
     )
