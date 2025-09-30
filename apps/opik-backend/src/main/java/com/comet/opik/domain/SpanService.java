@@ -11,6 +11,7 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -58,6 +59,7 @@ public class SpanService {
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
+    private final @NonNull AttachmentStripperService attachmentStripperService;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -117,10 +119,21 @@ public class SpanService {
     }
 
     private Mono<UUID> create(Span span, Project project, UUID id) {
-        span = span.toBuilder().id(id).projectId(project.id()).build();
-        log.info("Inserting span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
-                span.id(), span.projectId(), span.traceId(), span.parentSpanId());
-        return spanDAO.insert(span).thenReturn(span.id());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            // Strip attachments from the span with the generated ID and project ID
+            Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
+            return attachmentStripperService.stripAttachmentsFromSpan(spanWithId, workspaceId, userName, projectName)
+                    .flatMap(processedSpan -> {
+                        log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
+                                processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
+                                processedSpan.parentSpanId());
+                        return spanDAO.insert(processedSpan).thenReturn(processedSpan.id());
+                    });
+        });
     }
 
     @WithSpan
@@ -140,9 +153,24 @@ public class SpanService {
                                 Mono.defer(() -> spanDAO.getOnlySpanDataById(id, project.id())
                                         .flatMap(span -> updateOrFail(spanUpdate, id, span, project))
                                         .switchIfEmpty(
-                                                Mono.defer(() -> spanDAO.partialInsert(id, project.id(), spanUpdate)))
+                                                Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
                                         .onErrorResume(this::handleSpanDBError)
                                         .then()))));
+    }
+
+    private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
+        return IdGenerator
+                .validateVersionAsync(id, SPAN_KEY)
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+                    String projectName = project.name();
+
+                    // Strip attachments OUTSIDE the database transaction
+                    return attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                            spanUpdate, id, workspaceId, userName, projectName)
+                            .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
+                }));
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {
@@ -192,7 +220,30 @@ public class SpanService {
             return failWithConflict(TRACE_ID_MISMATCH);
         }
 
-        return spanDAO.update(id, spanUpdate, existingSpan);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
+
+            // Step 1: Get existing attachments OUTSIDE the database transaction
+            return attachmentService.getAttachmentInfoByEntity(id, SPAN, existingSpan.projectId())
+                    .flatMap(existingAttachments ->
+            // Step 2: Strip attachments OUTSIDE the database transaction
+            attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                    spanUpdate, id, workspaceId, userName, projectName)
+                    .flatMap(processedUpdate ->
+            // Step 3: Update the span in database transaction
+            spanDAO.update(id, processedUpdate, existingSpan)
+                    .flatMap(updateResult -> {
+                        // Step 4: Delete old attachments OUTSIDE the database transaction
+                        if (!existingAttachments.isEmpty()) {
+                            return attachmentService.deleteSpecificAttachments(existingAttachments,
+                                    id, SPAN, existingSpan.projectId())
+                                    .thenReturn(updateResult);
+                        }
+                        return Mono.just(updateResult);
+                    })));
+        });
     }
 
     private <T> Mono<T> failWithConflict(String error) {
@@ -231,7 +282,23 @@ public class SpanService {
                 .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
         return resolveProjects
+                .flatMap(this::stripAttachmentsFromSpanBatch)
                 .flatMap(spanDAO::batchInsert);
+    }
+
+    private Mono<List<Span>> stripAttachmentsFromSpanBatch(List<Span> spans) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return Flux.fromIterable(spans)
+                    .flatMap(span -> {
+                        String projectName = WorkspaceUtils.getProjectName(span.projectName());
+                        return attachmentStripperService.stripAttachmentsFromSpan(span, workspaceId, userName,
+                                projectName);
+                    })
+                    .collectList();
+        });
     }
 
     private List<Span> dedupSpans(List<Span> initialSpans) {
