@@ -148,7 +148,7 @@ export const stringifyMessageContent = (
 
   const imagePlaceholders = includeImagePlaceholders
     ? imageSegments.map(
-        (segment) => `<<<image>>>${segment.image_url.url}<<<\/image>>>`,
+        (segment) => `<<<image>>>${segment.image_url.url}<<</image>>>`,
       )
     : [];
 
@@ -169,7 +169,7 @@ export const serializeMessageContentForStorage = (
   return "";
 };
 
-const IMAGE_PLACEHOLDER_REGEX = /<<<image>>>(.*?)<<<\/image>>>/gs;
+const IMAGE_PLACEHOLDER_REGEX = /<<<image>>>([\s\S]*?)<<<\/image>>>/g;
 const LEGACY_IMAGE_PLACEHOLDER_REGEX = /!\[image\]\((.*?)\)/gs;
 
 const buildPartsFromPattern = (

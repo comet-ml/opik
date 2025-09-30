@@ -19,13 +19,26 @@ export const mustachePlugin = ViewPlugin.fromClass(
       const widgets = [];
       for (const { from, to } of view.visibleRanges) {
         const text = view.state.doc.sliceString(from, to);
-        const regex = /{{(.*?)}}/g;
+
+        const mustacheRegex = /{{(.*?)}}/g;
         let match;
-        while ((match = regex.exec(text)) !== null) {
+        while ((match = mustacheRegex.exec(text)) !== null) {
           const start = from + match.index;
           const end = start + match[0].length;
           widgets.push(
             Decoration.mark({ class: "text-[var(--color-green)]" }).range(
+              start,
+              end,
+            ),
+          );
+        }
+
+        const imageRegex = /<<<image>>>([\s\S]*?)<<<\/image>>>/g;
+        while ((match = imageRegex.exec(text)) !== null) {
+          const start = from + match.index;
+          const end = start + match[0].length;
+          widgets.push(
+            Decoration.mark({ class: "text-[var(--color-orange)]" }).range(
               start,
               end,
             ),

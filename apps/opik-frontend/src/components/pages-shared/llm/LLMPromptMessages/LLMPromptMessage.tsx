@@ -58,6 +58,8 @@ const MESSAGE_TYPE_OPTIONS = [
 ];
 
 const MAX_IMAGE_PARTS = 3;
+const IMAGE_PART_TOOLTIP =
+  "Use a direct image URL or reference a variable like {{input.image_url}} or {{image_base64}}. When typing the prompt as text, wrap image variables with <<<image>>>{{variable}}<<</image>>>.";
 
 const theme = EditorView.theme({
   "&": {
@@ -266,7 +268,15 @@ const LLMPromptMessage = ({
           className="rounded-md border border-border p-3"
         >
           <div className="mb-2 flex items-center justify-between">
-            <span className="comet-body-s text-muted-slate">{label}</span>
+            {item.type === "image_url" ? (
+              <TooltipWrapper content={IMAGE_PART_TOOLTIP}>
+                <span className="comet-body-s text-muted-slate underline decoration-dotted underline-offset-4">
+                  {label}
+                </span>
+              </TooltipWrapper>
+            ) : (
+              <span className="comet-body-s text-muted-slate">{label}</span>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
