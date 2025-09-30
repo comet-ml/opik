@@ -474,7 +474,7 @@ def test_search_traces__happyflow(opik_client):
 
 
 def test_search_spans__happyflow(opik_client: opik.Opik):
-    # In order to define a unique search query, we will create a unique identifier that will be part of the input of the trace
+    # To define a unique search query, we will create a unique identifier that will be part of the input of the trace
     trace_id = helpers.generate_id()
     unique_identifier = str(uuid.uuid4())[-6:]
 
@@ -517,6 +517,62 @@ def test_search_spans__happyflow(opik_client: opik.Opik):
     # Verify that the matching trace is returned
     assert len(spans) == 1, "Expected to find 1 matching span"
     assert spans[0].id == matching_span.id, "Expected to find the matching span"
+
+
+def test_search_spans__wait_for_at_least__happy_flow(opik_client: opik.Opik):
+    # check that synchronized searching for spans is working
+    trace_id = helpers.generate_id()
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send a trace that matches the input filter
+    trace = opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    count = 1000
+    matching_span_ids = []
+    for i in range(count):
+        matching_span = trace.span(
+            name=f"span-name-{i}",
+            input={"input": f"Some random input - {unique_identifier}"},
+            output={"output": "span-output"},
+        )
+        matching_span_ids.append(matching_span.id)
+
+    # adding two not matching spans
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 1"},
+        output={"output": "span-output"},
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+    )
+
+    opik_client.flush()
+
+    filter_string = f'input contains "{unique_identifier}"'
+
+    # Search for the spans with synchronization
+    spans = opik_client.search_spans(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        trace_id=trace_id,
+        filter_string=filter_string,
+        wait_for_at_least=count,
+        wait_for_timeout=10,
+    )
+
+    # Verify that the matching trace is returned
+    assert len(spans) == count, f"Expected to find {count} matching span"
+    for span in spans:
+        assert (
+            span.id in matching_span_ids
+        ), f"Expected to find the matching span id {span.id}"
 
 
 def test_copy_traces__happyflow(opik_client):

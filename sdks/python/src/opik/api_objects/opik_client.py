@@ -17,6 +17,7 @@ from .. import (
     llm_usage,
     rest_client_configurator,
     url_helpers,
+    synchronization,
 )
 from ..message_processing import messages, streamer_constructors, message_queue
 from ..message_processing.batching import sequence_splitter
@@ -1041,10 +1042,13 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        wait_for_at_least: Optional[int] = None,
+        wait_for_timeout: int = 30,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
-        metadata, tags, etc. or based on the trace ID.
+        metadata, tags, etc. or based on the trace ID. Also, you can wait for at least a certain number of spans
+        to be found before returning withing the specified timeout.
 
         Args:
             project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -1086,26 +1090,33 @@ class Opik:
                 If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            wait_for_at_least: The minimum number of spans to wait for before returning.
+            wait_for_timeout: The timeout for waiting for spans.
         """
         filters = helpers.parse_filter_expressions(
             filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
         )
 
-        spans = rest_stream_parser.read_and_parse_full_stream(
-            read_source=lambda current_batch_size,
-            last_retrieved_id: self._rest_client.spans.search_spans(
-                trace_id=trace_id,
-                project_name=project_name or self._project_name,
-                filters=filters,
-                limit=current_batch_size,
-                truncate=truncate,
-                last_retrieved_id=last_retrieved_id,
-            ),
+        search_functor = functools.partial(
+            helpers.search_spans_with_filters,
+            rest_client=self._rest_client,
+            project_name=project_name or self._project_name,
+            trace_id=trace_id,
+            filters=filters,
             max_results=max_results,
-            parsed_item_class=span_public.SpanPublic,
+            truncate=truncate,
         )
 
-        return spans
+        if wait_for_at_least is None:
+            return search_functor()
+
+        # do synchronization with backend if wait_for_at_least is provided until a specific number of spans is found
+        synchronization.wait_for_done(
+            check_function=lambda: len(search_functor()) >= wait_for_at_least,
+            timeout=wait_for_timeout,
+        )
+
+        return search_functor()
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """

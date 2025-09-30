@@ -3,7 +3,7 @@ import logging
 from typing import Optional, Dict, Any, List, TypeVar, Type, Union
 
 import opik.llm_usage as llm_usage
-from . import opik_query_language, validation_helpers, constants
+from . import opik_query_language, validation_helpers, constants, rest_stream_parser
 
 from .. import config, datetime_helpers, logging_messages
 from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
@@ -12,7 +12,9 @@ from ..rest_api.types import (
     span_filter_public,
     trace_filter_public,
     trace_thread_filter,
+    span_public,
 )
+from ..rest_api import client as rest_api_client
 from ..types import FeedbackScoreDict
 
 LOGGER = logging.getLogger(__name__)
@@ -163,3 +165,28 @@ def parse_feedback_score_messages(
     ]
 
     return score_messages
+
+
+def search_spans_with_filters(
+    rest_client: rest_api_client.OpikApi,
+    trace_id: Optional[str],
+    project_name: str,
+    filters: Optional[OptionalFilterParsedItemList],
+    max_results: int,
+    truncate: bool,
+) -> List[span_public.SpanPublic]:
+    spans = rest_stream_parser.read_and_parse_full_stream(
+        read_source=lambda current_batch_size,
+        last_retrieved_id: rest_client.spans.search_spans(
+            trace_id=trace_id,
+            project_name=project_name,
+            filters=filters,
+            limit=current_batch_size,
+            truncate=truncate,
+            last_retrieved_id=last_retrieved_id,
+        ),
+        max_results=max_results,
+        parsed_item_class=span_public.SpanPublic,
+    )
+
+    return spans
