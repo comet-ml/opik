@@ -34,6 +34,7 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
         few_shot_examples: Optional few-shot examples to guide the LLM's judgment.
         track: Whether to track metric execution for observability.
         project_name: Optional name for tracking in an observability tool.
+        seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
     """
 
     def __init__(
@@ -45,8 +46,10 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
         ] = None,
         track: bool = True,
         project_name: Optional[str] = None,
+        seed: Optional[int] = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
+        self._seed = seed
         self._init_model(model)
         self.few_shot_examples = few_shot_examples
 
@@ -82,6 +85,7 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
             model_output = self._model.generate_string(
                 input=llm_query,
                 response_format=StructuredOutputComplianceResponseFormat,
+                seed=self._seed,
             )
 
             return parser.parse_model_output(content=model_output, name=self.name)
@@ -118,6 +122,7 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
             model_output = await self._model.agenerate_string(
                 input=llm_query,
                 response_format=StructuredOutputComplianceResponseFormat,
+                seed=self._seed,
             )
 
             return parser.parse_model_output(content=model_output, name=self.name)

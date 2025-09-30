@@ -22,6 +22,7 @@ class GEval(base_metric.BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
         temperature: float = 0.0,
+        seed: Optional[int] = None,
     ):
         """
         A metric that evaluates an LLM output based on chain-of-thought built with the evaluation criteria provided
@@ -39,6 +40,7 @@ class GEval(base_metric.BaseMetric):
             project_name: Optional project name to track the metric in for the cases when
                 there is no parent span/trace to inherit project name from.
             temperature: The temperature to use for the model. Defaults to 0.0.
+            seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
         """
         super().__init__(
             name=name,
@@ -47,6 +49,7 @@ class GEval(base_metric.BaseMetric):
         )
         self.task_introduction = task_introduction
         self.evaluation_criteria = evaluation_criteria
+        self._seed = seed
 
         self._log_probs_supported = False
         self._chain_of_thought_response: Optional[str] = None
@@ -59,7 +62,9 @@ class GEval(base_metric.BaseMetric):
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
             )
-            self._chain_of_thought_response = self._model.generate_string(input=prompt)
+            self._chain_of_thought_response = self._model.generate_string(
+                input=prompt, seed=self._seed
+            )
 
         return self._chain_of_thought_response
 
@@ -70,7 +75,7 @@ class GEval(base_metric.BaseMetric):
                 evaluation_criteria=self.evaluation_criteria,
             )
             self._chain_of_thought_response = await self._model.agenerate_string(
-                input=prompt
+                input=prompt, seed=self._seed
             )
 
         return self._chain_of_thought_response
@@ -135,7 +140,7 @@ class GEval(base_metric.BaseMetric):
                 )
 
         model_output_string = self._model.generate_string(
-            input=llm_query, response_format=GEvalScoreFormat
+            input=llm_query, response_format=GEvalScoreFormat, seed=self._seed
         )
 
         return parser.parse_model_output_string(model_output_string, self.name)
@@ -183,7 +188,7 @@ class GEval(base_metric.BaseMetric):
                 )
 
         model_output_string = await self._model.agenerate_string(
-            input=llm_query, response_format=GEvalScoreFormat
+            input=llm_query, response_format=GEvalScoreFormat, seed=self._seed
         )
 
         return parser.parse_model_output_string(model_output_string, self.name)

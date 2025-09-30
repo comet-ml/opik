@@ -27,6 +27,7 @@ class Hallucination(base_metric.BaseMetric):
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when
             there are no parent span/trace to inherit project name from.
+        seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
 
     Example:
         >>> from opik.evaluation.metrics import Hallucination
@@ -49,8 +50,10 @@ class Hallucination(base_metric.BaseMetric):
         few_shot_examples: Optional[List[template.FewShotExampleHallucination]] = None,
         track: bool = True,
         project_name: Optional[str] = None,
+        seed: Optional[int] = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
+        self._seed = seed
         self._init_model(model)
         self.few_shot_examples = few_shot_examples
 
@@ -89,7 +92,9 @@ class Hallucination(base_metric.BaseMetric):
             few_shot_examples=self.few_shot_examples,
         )
         model_output = self._model.generate_string(
-            input=llm_query, response_format=HallucinationResponseFormat
+            input=llm_query,
+            response_format=HallucinationResponseFormat,
+            seed=self._seed,
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)
@@ -121,7 +126,9 @@ class Hallucination(base_metric.BaseMetric):
             few_shot_examples=self.few_shot_examples,
         )
         model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=HallucinationResponseFormat
+            input=llm_query,
+            response_format=HallucinationResponseFormat,
+            seed=self._seed,
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)
