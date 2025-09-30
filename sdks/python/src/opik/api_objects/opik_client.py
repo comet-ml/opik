@@ -1047,10 +1047,7 @@ class Opik:
         )
         if len(result) < wait_for_at_least:
             raise exceptions.SearchTimeoutError(
-                "Timeout after %d seconds: expected %d traces, but only %d were found.",
-                wait_for_timeout,
-                wait_for_at_least,
-                len(result),
+                f"Timeout after {wait_for_timeout} seconds: expected {wait_for_at_least} traces, but only {len(result)} were found."
             )
 
         return result
@@ -1142,10 +1139,7 @@ class Opik:
         )
         if len(result) < wait_for_at_least:
             raise exceptions.SearchTimeoutError(
-                "Timeout after %d seconds: expected %d spans, but only %d were found.",
-                wait_for_timeout,
-                wait_for_at_least,
-                len(result),
+                f"Timeout after {wait_for_timeout} seconds: expected {wait_for_at_least} spans, but only {len(result)} were found."
             )
 
         return result
