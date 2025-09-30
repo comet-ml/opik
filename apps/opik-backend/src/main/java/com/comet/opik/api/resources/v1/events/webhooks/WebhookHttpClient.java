@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
@@ -11,6 +12,7 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.InvocationCallback;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -32,6 +34,8 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Singleton
 public class WebhookHttpClient {
 
+    private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
+
     private final @NonNull Client httpClient;
     private final @NonNull WebhookConfig webhookConfig;
     private final Logger userFacingLog;
@@ -52,33 +56,35 @@ public class WebhookHttpClient {
     public Mono<Void> sendWebhook(@NonNull WebhookEvent<?> event) {
         log.info("Sending webhook event '{}' to URL: '{}'", event.getId(), event.getUrl());
 
-        return Mono.defer(() -> performWebhookRequest(event))
+        return Mono.deferContextual(ctx -> performWebhookRequest(event)
                 .doOnSuccess(response -> {
-                    logInfo(event, "Webhook '{}' sent successfully. Status: '{}'", event.getId(), response.getStatus());
+                    logInfo(event, ctx.get(RequestContext.WORKSPACE_ID), "Webhook '{}' sent successfully. Status: '{}'",
+                            event.getId(), response.getStatus());
                     response.close(); // Ensure response is closed to free resources
                 })
-                .retryWhen(createRetrySpec())
+                .retryWhen(createRetrySpec(event.getMaxRetries()))
                 .doOnError(throwable -> logError(event,
+                        ctx.get(RequestContext.WORKSPACE_ID),
                         "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable))
-                .then();
+                .then());
     }
 
-    private void logInfo(WebhookEvent<?> event, String message, Object... args) {
+    private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {
         try (var logContext = wrapWithMdc(Map.of(
-                UserLog.MARKER, UserLog.WEBHOOK_EVENT_HANDLER.name(),
-                "workspace_id", event.getWorkspaceId(),
-                "webhook_id", event.getId(),
-                "alert_id", event.getAlertId().toString()))) {
+                UserLog.MARKER, UserLog.ALERT_EVENT.name(),
+                UserLog.WORKSPACE_ID, workspaceId,
+                UserLog.EVENT_ID, event.getId(),
+                UserLog.ALERT_ID, event.getAlertId().toString()))) {
             userFacingLog.info(message, args);
         }
     }
 
-    private void logError(WebhookEvent<?> event, String message, Throwable throwable) {
+    private void logError(WebhookEvent<?> event, String workspaceId, String message, Throwable throwable) {
         try (var logContext = wrapWithMdc(Map.of(
-                UserLog.MARKER, UserLog.WEBHOOK_EVENT_HANDLER.name(),
-                "workspace_id", event.getWorkspaceId(),
-                "webhook_id", event.getId(),
-                "alert_id", event.getAlertId().toString()))) {
+                UserLog.MARKER, UserLog.ALERT_EVENT.name(),
+                UserLog.WORKSPACE_ID, workspaceId,
+                UserLog.EVENT_ID, event.getId(),
+                UserLog.ALERT_ID, event.getAlertId().toString()))) {
             userFacingLog.error(message, throwable);
         }
     }
@@ -95,8 +101,8 @@ public class WebhookHttpClient {
                 }
 
                 // Add default headers
-                requestBuilder.header("User-Agent", "Opik-Webhook/1.0");
-                requestBuilder.header("Content-Type", MediaType.APPLICATION_JSON);
+                requestBuilder.header(HttpHeaders.USER_AGENT, USER_AGENT_VALUE);
+                requestBuilder.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
 
                 // Serialize payload using JsonUtils.MAPPER to handle Instant fields properly
                 var jsonPayload = JsonUtils.writeValueAsString(event);
@@ -148,9 +154,9 @@ public class WebhookHttpClient {
         }
     }
 
-    private Retry createRetrySpec() {
+    private Retry createRetrySpec(int maxRetries) {
         return RetryUtils.handleHttpErrors(
-                webhookConfig.getMaxRetries(),
+                maxRetries,
                 webhookConfig.getInitialRetryDelay().toJavaDuration(),
                 webhookConfig.getMaxRetryDelay().toJavaDuration());
     }
