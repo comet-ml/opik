@@ -122,7 +122,16 @@ export const tryDeserializeMessageContent = (
       return parsed;
     }
   } catch (error) {
+    const serializedParts = parseSerializedMessageContent(template);
+    if (serializedParts) {
+      return serializedParts;
+    }
     return template;
+  }
+
+  const serializedParts = parseSerializedMessageContent(template);
+  if (serializedParts) {
+    return serializedParts;
   }
 
   return template;
@@ -138,10 +147,83 @@ export const stringifyMessageContent = (
   const imageSegments = getMessageContentImageSegments(content);
 
   const imagePlaceholders = includeImagePlaceholders
-    ? imageSegments.map((segment) => `![image](${segment.image_url.url})`)
+    ? imageSegments.map(
+        (segment) => `<<<image>>>${segment.image_url.url}<<<\/image>>>`,
+      )
     : [];
 
   return [...textSegments, ...imagePlaceholders].join("\n\n").trim();
+};
+
+export const serializeMessageContentForStorage = (
+  content: LLMMessage["content"],
+): string => {
+  if (isStructuredMessageContent(content)) {
+    return JSON.stringify(content);
+  }
+
+  if (isString(content)) {
+    return content;
+  }
+
+  return "";
+};
+
+const IMAGE_PLACEHOLDER_REGEX = new RegExp(
+  String.raw`<<<image>>>(.*?)<<<\/image>>>`,
+  "gs",
+);
+const LEGACY_IMAGE_PLACEHOLDER_REGEX = new RegExp(
+  String.raw`!\[image\]\((.*?)\)`,
+  "gs",
+);
+
+const buildPartsFromPattern = (
+  template: string,
+  pattern: RegExp,
+): LLMMessageContentItem[] => {
+  const parts: LLMMessageContentItem[] = [];
+  let match: RegExpExecArray | null;
+  let lastIndex = 0;
+
+  pattern.lastIndex = 0;
+
+  while ((match = pattern.exec(template)) !== null) {
+    const precedingText = template.slice(lastIndex, match.index);
+    if (precedingText.trim().length > 0) {
+      parts.push({ type: "text", text: precedingText });
+    }
+
+    const url = match[1].trim();
+    if (url.length > 0) {
+      parts.push({ type: "image_url", image_url: { url } });
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  const trailingText = template.slice(lastIndex);
+  if (trailingText.trim().length > 0) {
+    parts.push({ type: "text", text: trailingText });
+  }
+
+  return parts;
+};
+
+const parseSerializedMessageContent = (
+  template: string,
+): LLMMessageContentItem[] | null => {
+  const parts = buildPartsFromPattern(template, IMAGE_PLACEHOLDER_REGEX);
+  if (parts.length > 0) {
+    return parts;
+  }
+
+  const legacyParts = buildPartsFromPattern(
+    template,
+    LEGACY_IMAGE_PLACEHOLDER_REGEX,
+  );
+
+  return legacyParts.length > 0 ? legacyParts : null;
 };
 
 export const isMessageContentEmpty = (content: LLMMessage["content"]) => {

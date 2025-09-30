@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   CopyPlus,
@@ -141,6 +141,17 @@ const LLMPromptMessage = ({
     onChangeMessage({ content: items });
   };
 
+  useEffect(() => {
+    if (
+      isStructured &&
+      structuredContent.length > 0 &&
+      structuredContent.every((item) => item.type !== "text")
+    ) {
+      setStructuredContent([{ type: "text", text: "" }, ...structuredContent]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStructured, structuredContent]);
+
   const handleAddImagePart = () => {
     if (!canAddMoreImages) {
       return;
@@ -204,7 +215,16 @@ const LLMPromptMessage = ({
     let textPartOrdinal = 0;
     let imagePartOrdinal = 0;
 
-    return structuredContent.map((item, index) => {
+    const normalizedContent = structuredContent.some(
+      (item) => item.type === "text",
+    )
+      ? structuredContent
+      : ([
+          { type: "text", text: "" },
+          ...structuredContent,
+        ] as LLMMessageContentItem[]);
+
+    return normalizedContent.map((item, index) => {
       const isText = item.type === "text";
       const ordinal = isText ? ++textPartOrdinal : ++imagePartOrdinal;
       const label = isText

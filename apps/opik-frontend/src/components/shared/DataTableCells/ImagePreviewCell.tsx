@@ -53,12 +53,12 @@ const ImagePreviewCell = <TData,>({
         stopClickPropagation
       >
         <div className="flex items-center gap-3">
-            <div className="relative inline-flex">
-              <img
-                src={firstImage.url}
-                alt={firstImage.name}
-                className="size-10 rounded-md border border-border object-cover"
-              />
+          <div className="relative inline-flex">
+            <img
+              src={firstImage.url}
+              alt={firstImage.name}
+              className="size-10 rounded-md border border-border object-cover"
+            />
             {remainingCount > 0 ? (
               <span className="absolute -bottom-1 -right-1 rounded-full bg-background px-1 text-xs font-medium text-foreground shadow-sm">
                 +{remainingCount}
