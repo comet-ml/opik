@@ -14,7 +14,6 @@ import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;

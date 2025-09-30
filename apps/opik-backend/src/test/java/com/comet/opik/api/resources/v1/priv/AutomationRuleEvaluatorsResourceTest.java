@@ -978,6 +978,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
                             AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode.class))
                     .samplingRate(1f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
 
@@ -1085,6 +1086,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .metric(TRACE_THREAD_USER_DEFINED_METRIC)
                             .build())
                     .samplingRate(1f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -1170,6 +1172,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
                     .samplingRate(0f)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1182,6 +1185,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
                             .toBuilder()
                             .samplingRate(0f)
+                            .filters(List.of())
                             .projectId(projectId)
                             .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1201,12 +1205,13 @@ class AutomationRuleEvaluatorsResourceTest {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
+                // Wait for threadModelId to be populated
+                assertThat(traceThread.threadModelId()).isNotNull();
+
                 var logPagePython = evaluatorsResourceClient.getLogs(evaluatorPython.getId(), WORKSPACE_NAME, API_KEY);
                 var logPageLlm = evaluatorsResourceClient.getLogs(evaluatorLlm.getId(), WORKSPACE_NAME, API_KEY);
 
-                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
-                        .map(Object::toString)
-                        .orElseThrow();
+                String threadModelId = traceThread.threadModelId().toString();
 
                 Map<String, String> markers = Map.of("thread_model_id", threadModelId);
                 String message = "The threadModelId '%s' was skipped for rule: '%s' and per the sampling rate '%s'";
@@ -1304,6 +1309,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .toBuilder()
                     .samplingRate(1.0f) // High sampling rate, but rule is disabled
                     .enabled(false)
+                    .filters(List.of())
                     .projectId(projectId)
                     .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1316,6 +1322,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .toBuilder()
                             .samplingRate(1.0f) // High sampling rate, but rule is disabled
                             .enabled(false)
+                            .filters(List.of())
                             .projectId(projectId)
                             .build())
                     .map(evaluator -> evaluator.toBuilder()
@@ -1335,12 +1342,13 @@ class AutomationRuleEvaluatorsResourceTest {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
+                // Wait for threadModelId to be populated
+                assertThat(traceThread.threadModelId()).isNotNull();
+
                 var logPagePython = evaluatorsResourceClient.getLogs(evaluatorPython.getId(), WORKSPACE_NAME, API_KEY);
                 var logPageLlm = evaluatorsResourceClient.getLogs(evaluatorLlm.getId(), WORKSPACE_NAME, API_KEY);
 
-                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
-                        .map(Object::toString)
-                        .orElseThrow();
+                String threadModelId = traceThread.threadModelId().toString();
 
                 Map<String, String> markers = Map.of("thread_model_id", threadModelId);
                 String disabledMessage = "The threadModelId '%s' was skipped for rule: '%s' as the rule is disabled";
