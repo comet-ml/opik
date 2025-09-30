@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import textwrap
+import warnings
 from typing import Any, cast
 from collections.abc import Callable
 
@@ -11,12 +12,10 @@ import opik
 from litellm.caching import Cache
 from litellm.types.caching import LiteLLMCacheType
 from opik import Dataset
-from opik.api_objects import opik_client
 from opik.environment import get_tqdm_for_current_environment
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from opik_optimizer import task_evaluator
-from ..utils.core import create_litellm_agent_class
 
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer, OptimizationRound
@@ -143,6 +142,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         verbose: int = 1,
         enable_context: bool = True,
         n_threads: int = 12,
+        seed: int = 42,
         **model_kwargs: Any,
     ) -> None:
         """
@@ -157,22 +157,28 @@ class MetaPromptOptimizer(BaseOptimizer):
             **model_kwargs: Additional model parameters
         """
         if "project_name" in model_kwargs:
-            print(
-                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            warnings.warn(
+                "The 'project_name' parameter in optimizer constructor is deprecated. "
+                "Set project_name in the ChatPrompt instead.",
+                DeprecationWarning,
+                stacklevel=2,
             )
             del model_kwargs["project_name"]
 
-        super().__init__(model=model, verbose=verbose, **model_kwargs)
+        super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
         self.reasoning_model = reasoning_model if reasoning_model is not None else model
         self.rounds = rounds
         self.num_prompts_per_round = num_prompts_per_round
         if num_threads is not None:
-            print("num_threads is deprecated; use n_threads instead")
+            warnings.warn(
+                "The 'num_threads' parameter is deprecated and will be removed in a future version. "
+                "Use 'n_threads' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             n_threads = num_threads
         self.num_threads = n_threads
         self.dataset: Dataset | None = None
-        self._opik_client = opik_client.get_client_cached()
-        self.llm_call_counter = 0
         self.enable_context = enable_context
         logger.debug(
             f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
@@ -180,6 +186,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         logger.debug(
             f"Optimization rounds: {rounds}, Prompts/round: {num_prompts_per_round}"
         )
+
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {
+            "rounds": self.rounds,
+            "num_prompts_per_round": self.num_prompts_per_round,
+            "reasoning_model": self.reasoning_model,
+            "enable_context": self.enable_context,
+        }
 
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
@@ -190,7 +204,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
-        self.llm_call_counter += 1
+        self.increment_llm_counter()
         # Note: Basic retry logic could be added here using tenacity
         try:
             # Basic LLM parameters (e.g., temperature, max_tokens)
@@ -321,25 +335,28 @@ class MetaPromptOptimizer(BaseOptimizer):
             subset_size = None  # Use all items for final checks
             logger.debug("Using full dataset for evaluation")
 
-        experiment_config = experiment_config or {}
-        experiment_config = {
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "agent_class": self.agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": getattr(metric, "__name__", str(metric)),
-                "dataset": dataset.name,
-                "configuration": {
-                    "prompt": prompt.get_messages(),
-                    "tools": getattr(prompt, "tools", None),
-                    "n_samples": subset_size,
-                    "use_full_dataset": use_full_dataset,
-                },
-            },
-        }
-        if optimization_id:
-            experiment_config["optimization_id"] = optimization_id
+        configuration_updates = self._drop_none(
+            {
+                "n_samples": subset_size,
+                "use_full_dataset": use_full_dataset,
+            }
+        )
+        meta_metadata = self._drop_none(
+            {
+                "optimization_id": optimization_id,
+                "stage": "trial_evaluation" if not use_full_dataset else "final_eval",
+            }
+        )
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata={"meta_prompt": meta_metadata}
+            if meta_metadata
+            else None,
+        )
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             new_prompt = prompt.copy()
@@ -357,7 +374,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     )
                     raw_model_output = agent.llm_invoke(
                         messages=messages,
-                        seed=None,
+                        seed=self.seed,
                         allow_tool_use=True,
                     )
                 except Exception as exc:
@@ -391,7 +408,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     )
                     final_response = agent.llm_invoke(
                         messages=second_pass_messages,
-                        seed=None,
+                        seed=self.seed,
                         allow_tool_use=mcp_config.allow_tool_use_on_second_pass,
                     )
                 else:
@@ -459,36 +476,25 @@ class MetaPromptOptimizer(BaseOptimizer):
         Optimize a prompt using meta-reasoning.
 
         Args:
+            prompt: The prompt to optimize
             dataset: The dataset to evaluate against
             metric: The metric to use for evaluation
             experiment_config: A dictionary to log with the experiments
             n_samples: The number of dataset items to use for evaluation
             auto_continue: If True, the algorithm may continue if goal not met
-            **kwargs: Additional arguments for evaluation
+            agent_class: Optional agent class to use
+            **kwargs: Additional arguments for evaluation, including:
+                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
+                candidate_generator: Optional candidate generator
+                candidate_generator_kwargs: Optional kwargs for candidate generator
 
         Returns:
             OptimizationResult: Structured result containing optimization details
         """
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
-
-        if not isinstance(dataset, Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
-
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
-
-        if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt)
-        else:
-            self.agent_class = agent_class
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+        self.configure_prompt_model(prompt)
+        self.agent_class = self.setup_agent_class(prompt, agent_class)
 
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
@@ -499,7 +505,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         optimization = None
         try:
-            optimization = self._opik_client.create_optimization(
+            optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
                 metadata={"optimizer": self.__class__.__name__},
@@ -633,26 +639,25 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.auto_continue = auto_continue
         self.dataset = dataset
         self.prompt = prompt
-        self.llm_call_counter = 0  # Reset counter for run
+        self.reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
         current_prompt = prompt
-        experiment_config = experiment_config or {}
-        experiment_config = {
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "agent_class": self.agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": getattr(metric, "__name__", str(metric)),
-                "dataset": dataset.name,
-                "configuration": {
-                    "prompt": prompt.get_messages(),
-                    "rounds": self.rounds,
-                    "num_prompts_per_round": self.num_prompts_per_round,
-                },
-            },
-        }
+        configuration_updates = self._drop_none(
+            {
+                "rounds": self.rounds,
+                "num_prompts_per_round": self.num_prompts_per_round,
+            }
+        )
+        meta_metadata = {"stage": "initial"}
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata={"meta_prompt": meta_metadata},
+        )
 
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             initial_score = self._evaluate_prompt(
@@ -887,6 +892,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             metric_name=getattr(metric, "__name__", str(metric)),
             details=details,
             llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
             dataset_id=dataset_id,
             optimization_id=optimization_id,
             tool_prompts=tool_prompts,
