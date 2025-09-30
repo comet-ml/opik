@@ -240,7 +240,9 @@ def json_to_dict(json_str: str) -> Any:
 def _convert_literals_to_json_compatible(value: Any) -> Any:
     """Convert Python literals to JSON-compatible structures."""
     if isinstance(value, dict):
-        return {key: _convert_literals_to_json_compatible(val) for key, val in value.items()}
+        return {
+            key: _convert_literals_to_json_compatible(val) for key, val in value.items()
+        }
     if isinstance(value, list):
         return [_convert_literals_to_json_compatible(item) for item in value]
     if isinstance(value, tuple):
