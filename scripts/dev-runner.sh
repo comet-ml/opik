@@ -193,6 +193,8 @@ run_db_migrations() {
 
     # Run MySQL (state DB) migrations
     log_info "Running MySQL (state DB) migrations..."
+    # Set the database name environment variable for MySQL migrations
+    export STATE_DB_DATABASE_NAME="opik"
     if java -jar "$JAR_FILE" db migrate config.yml; then
         log_success "MySQL migrations completed successfully"
     else
