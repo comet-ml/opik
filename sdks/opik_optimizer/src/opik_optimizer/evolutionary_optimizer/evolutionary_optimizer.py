@@ -1031,7 +1031,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         if fallback_invoker is None:
             function_map = getattr(prompt, "function_map", {}) or {}
-            fallback_invoker = function_map.get(tool_name)
+            default_invoker = function_map.get(tool_name)
+            if default_invoker is not None:
+                fallback_invoker = lambda args, _invoker=default_invoker: _invoker(
+                    **args
+                )
 
         tool_entry = None
         for entry in prompt.tools or []:
