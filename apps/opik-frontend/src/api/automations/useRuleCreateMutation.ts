@@ -15,11 +15,20 @@ const useRuleCreateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ rule }: UseRuleCreateMutationParams) => {
+      // Clean schema to remove frontend-only fields like 'unsaved'
+      const cleanedRule = {
+        ...rule,
+        code: rule.code
+          ? {
+              ...rule.code,
+              schema: rule.code.schema?.map(({ unsaved, ...rest }: any) => rest),
+            }
+          : rule.code,
+      };
+
       const { data } = await api.post(
         `${AUTOMATIONS_REST_ENDPOINT}evaluators`,
-        {
-          ...rule,
-        },
+        cleanedRule,
       );
       return data;
     },
