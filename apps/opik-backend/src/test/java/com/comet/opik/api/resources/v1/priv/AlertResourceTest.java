@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -37,7 +39,9 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -54,6 +58,19 @@ class AlertResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
+
+    private static final String[] ALERT_IGNORED_FIELDS = new String[]{
+            "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy", "webhook.name", "webhook.createdAt", "webhook.lastUpdatedAt",
+            "webhook.createdBy", "webhook.lastUpdatedBy", "triggers"};
+
+    private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
+            "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy", "triggerConfigs"};
+
+    private static final String[] TRIGGER_CONFIG_IGNORED_FIELDS = new String[]{
+            "createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -248,6 +265,99 @@ class AlertResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Get Alert By ID:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetAlertById {
+
+        @Test
+        @DisplayName("Success: should get alert by id")
+        void getAlertById() {
+            var mock = prepareMockWorkspace();
+
+            // Create an alert first
+            var alert = factory.manufacturePojo(Alert.class);
+            var createdAlertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            compareAlerts(alert, actualAlert);
+        }
+
+        @Test
+        @DisplayName("when alert does not exist, then return not found")
+        void getAlertById__whenAlertDoesNotExist__thenReturnNotFound() {
+            var mock = prepareMockWorkspace();
+
+            UUID nonExistentId = UUID.randomUUID();
+
+            alertResourceClient.getAlertById(nonExistentId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Alert Batch:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DeleteAlertBatch {
+
+        @Test
+        @DisplayName("Success: should delete multiple alerts")
+        void deleteAlertBatch__whenMultipleAlerts__thenDeleteSuccessfully() {
+            var mock = prepareMockWorkspace();
+
+            // Create multiple alerts
+            var alert1 = factory.manufacturePojo(Alert.class);
+            var alert2 = factory.manufacturePojo(Alert.class);
+            var createdAlertId1 = alertResourceClient.createAlert(alert1, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+            var createdAlertId2 = alertResourceClient.createAlert(alert2, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Delete both alerts
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(createdAlertId1, createdAlertId2))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+
+            // Verify both alerts are deleted
+            alertResourceClient.getAlertById(createdAlertId1, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NOT_FOUND);
+            alertResourceClient.getAlertById(createdAlertId2, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Success: should fail empty list")
+        void deleteAlertBatch__whenEmptyList__thenReturnValidationError() {
+            var mock = prepareMockWorkspace();
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of())
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("Success: should handle non-existent alert IDs gracefully")
+        void deleteAlertBatch__whenNonExistentIds__thenReturnNoContent() {
+            var mock = prepareMockWorkspace();
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(UUID.randomUUID(), UUID.randomUUID()))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
     private Pair<String, String> prepareMockWorkspace() {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
@@ -256,5 +366,54 @@ class AlertResourceTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         return Pair.of(apiKey, workspaceName);
+    }
+
+    private void compareAlerts(Alert expected, Alert actual) {
+        var preparedExpected = prepareForComparison(expected, true);
+        var preparedActual = prepareForComparison(actual, false);
+
+        assertThat(preparedActual)
+                .usingRecursiveComparison()
+                .ignoringFields(ALERT_IGNORED_FIELDS)
+                .ignoringCollectionOrder()
+                .isEqualTo(preparedExpected);
+
+        assertThat(preparedActual.triggers())
+                .usingRecursiveComparison()
+                .ignoringFields(TRIGGER_IGNORED_FIELDS)
+                .ignoringCollectionOrder()
+                .isEqualTo(preparedExpected.triggers());
+
+        for (int i = 0; i < preparedActual.triggers().size(); i++) {
+            var actualTrigger = preparedActual.triggers().get(i);
+            var expectedTrigger = preparedExpected.triggers().get(i);
+
+            assertThat(actualTrigger.triggerConfigs())
+                    .usingRecursiveComparison()
+                    .ignoringFields(TRIGGER_CONFIG_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedTrigger.triggerConfigs());
+        }
+    }
+
+    private Alert prepareForComparison(Alert alert, boolean isExpected) {
+        var sortedTriggers = alert.triggers().stream()
+                .map(trigger -> {
+                    var configs = trigger.triggerConfigs().stream()
+                            .map(config -> config.toBuilder()
+                                    .alertTriggerId(isExpected ? trigger.id() : config.alertTriggerId())
+                                    .build())
+                            .toList();
+                    return trigger.toBuilder()
+                            .triggerConfigs(configs)
+                            .alertId(isExpected ? alert.id() : trigger.alertId())
+                            .build();
+                })
+                .sorted(Comparator.comparing(AlertTrigger::id))
+                .toList();
+
+        return alert.toBuilder()
+                .triggers(sortedTriggers)
+                .build();
     }
 }

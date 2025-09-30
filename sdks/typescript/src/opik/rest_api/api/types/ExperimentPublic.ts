@@ -23,6 +23,7 @@ export interface ExperimentPublic {
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
+    status?: OpikApi.ExperimentPublicStatus;
     promptVersion?: OpikApi.PromptVersionLinkPublic;
     promptVersions?: OpikApi.PromptVersionLinkPublic[];
 }

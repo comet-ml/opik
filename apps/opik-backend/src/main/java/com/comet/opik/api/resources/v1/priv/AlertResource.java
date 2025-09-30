@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -19,8 +20,10 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -29,6 +32,8 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.UUID;
 
 @Path("/v1/private/alerts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -69,4 +74,45 @@ public class AlertResource {
         return Response.created(uri).build();
     }
 
+    @GET
+    @Path("/{id}")
+    @Operation(operationId = "getAlertById", summary = "Get Alert by id", description = "Get Alert by id", responses = {
+            @ApiResponse(responseCode = "200", description = "Alert resource", content = @Content(schema = @Schema(implementation = Alert.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @JsonView(Alert.View.Public.class)
+    public Response getAlertById(@PathParam("id") UUID id) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Finding Alert by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        var alert = alertService.getById(id);
+
+        log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
+
+        return Response.ok().entity(alert).build();
+    }
+
+    @POST
+    @Path("/delete")
+    @Operation(operationId = "deleteAlertBatch", summary = "Delete alert batch", description = "Delete multiple alerts by their IDs", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    public Response deleteAlertBatch(
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid @NotNull BatchDelete batch) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting alert batch with '{}' items, workspaceId '{}'",
+                batch.ids().size(), workspaceId);
+
+        alertService.deleteBatch(batch.ids());
+
+        log.info("Deleted alert batch with '{}' items deleted, workspaceId '{}'",
+                batch.ids().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
 }

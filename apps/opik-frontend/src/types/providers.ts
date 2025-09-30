@@ -40,6 +40,7 @@ export enum PROVIDER_MODEL_TYPE {
   //  <----- anthropic
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
+  CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
   CLAUDE_HAIKU_3_5 = "claude-3-5-haiku-20241022",
@@ -73,6 +74,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_3_7_SONNET_THINKING = "anthropic/claude-3.7-sonnet:thinking",
   ANTHROPIC_CLAUDE_OPUS_4 = "anthropic/claude-opus-4",
   ANTHROPIC_CLAUDE_OPUS_4_1 = "anthropic/claude-opus-4.1",
+  ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ARCEE_AI_CODER_LARGE = "arcee-ai/coder-large",
   ARCEE_AI_MAESTRO_REASONING = "arcee-ai/maestro-reasoning",
@@ -420,12 +422,14 @@ export interface LLMOpenAIConfigsType {
   frequencyPenalty: number;
   presencePenalty: number;
   reasoningEffort?: ReasoningEffort;
+  seed?: number | null;
 }
 
 export interface LLMAnthropicConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
+  seed?: number | null;
 }
 
 export interface LLMOpenRouterConfigsType {
@@ -438,18 +442,21 @@ export interface LLMOpenRouterConfigsType {
   repetitionPenalty: number;
   minP: number;
   topA: number;
+  seed?: number | null;
 }
 
 export interface LLMGeminiConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
+  seed?: number | null;
 }
 
 export interface LLMVertexAIConfigsType {
   temperature: number;
   maxCompletionTokens: number;
   topP: number;
+  seed?: number | null;
 }
 
 export interface LLMCustomConfigsType {
@@ -458,6 +465,7 @@ export interface LLMCustomConfigsType {
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;
+  seed?: number | null;
 }
 
 export type LLMPromptConfigsType =

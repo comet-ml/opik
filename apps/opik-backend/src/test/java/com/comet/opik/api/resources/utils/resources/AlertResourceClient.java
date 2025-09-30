@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -64,5 +65,36 @@ public class AlertResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.entity(body, ContentType.APPLICATION_JSON.toString()));
+    }
+
+    public Alert getAlertById(UUID id, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Alert.class);
+            }
+
+            return null;
+        }
+    }
+
+    public void deleteAlertBatch(BatchDelete batchDelete, String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
     }
 }

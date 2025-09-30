@@ -20,6 +20,7 @@ import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -31,6 +32,8 @@ public interface AlertService {
     UUID create(Alert alert);
 
     Alert getById(UUID id);
+
+    void deleteBatch(Set<UUID> ids);
 }
 
 @Slf4j
@@ -63,8 +66,6 @@ class AlertServiceImpl implements AlertService {
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
-            AlertTriggerDAO alertTriggerDAO = handle.attach(AlertTriggerDAO.class);
-            AlertTriggerConfigDAO alertTriggerConfigDAO = handle.attach(AlertTriggerConfigDAO.class);
 
             Alert alert = alertDAO.findById(id, workspaceId);
 
@@ -73,6 +74,18 @@ class AlertServiceImpl implements AlertService {
             }
 
             return alert;
+        });
+    }
+
+    @Override
+    public void deleteBatch(Set<UUID> ids) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+            alertDAO.delete(ids, workspaceId);
+
+            return null;
         });
     }
 
@@ -115,9 +128,12 @@ class AlertServiceImpl implements AlertService {
         UUID id = alert.id() == null ? idGenerator.generateId() : alert.id();
         IdGenerator.validateVersion(id, "Alert");
 
+        UUID webhookId = alert.webhook().id() == null ? idGenerator.generateId() : alert.webhook().id();
+        IdGenerator.validateVersion(webhookId, "Webhook");
+
         Webhook webhook = alert.webhook()
                 .toBuilder()
-                .id(idGenerator.generateId())
+                .id(webhookId)
                 .name("Webhook for alert " + alert.id()) // Not used by FE
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
@@ -142,7 +158,8 @@ class AlertServiceImpl implements AlertService {
     }
 
     private AlertTrigger prepareTrigger(AlertTrigger trigger, String userName, UUID alertId) {
-        UUID triggerId = idGenerator.generateId();
+        UUID triggerId = trigger.id() == null ? idGenerator.generateId() : trigger.id();
+        IdGenerator.validateVersion(triggerId, "Alert Trigger");
 
         List<AlertTriggerConfig> preparedConfigs = null;
         if (trigger.triggerConfigs() != null) {
@@ -160,9 +177,11 @@ class AlertServiceImpl implements AlertService {
     }
 
     private AlertTriggerConfig prepareTriggerConfig(AlertTriggerConfig config, String userName, UUID triggerId) {
+        UUID triggerConfigId = config.id() == null ? idGenerator.generateId() : config.id();
+        IdGenerator.validateVersion(triggerConfigId, "Alert Trigger Config");
 
         return config.toBuilder()
-                .id(idGenerator.generateId())
+                .id(triggerConfigId)
                 .alertTriggerId(triggerId)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
