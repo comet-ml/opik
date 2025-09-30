@@ -24,4 +24,18 @@ class MessageContentNormalizerTest {
         assertThat(placeholder)
                 .isEqualTo("<<<image>>>https://example.com/image.png<<</image>>>");
     }
+
+    @Test
+    void renderImagePlaceholderSkipsBlankUrls() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        ImageUrl imageUrl = new ImageUrl();
+        imageUrl.setUrl("   ");
+
+        Method method = MessageContentNormalizer.class
+                .getDeclaredMethod("renderImagePlaceholder", ImageUrl.class);
+        method.setAccessible(true);
+
+        String placeholder = (String) method.invoke(null, imageUrl);
+
+        assertThat(placeholder).isEmpty();
+    }
 }

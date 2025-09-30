@@ -19,3 +19,21 @@ def test_flatten_multimodal_content_uses_placeholder():
     flattened = image_support.flatten_multimodal_content(value)
 
     assert flattened == "Hi\n\n<<<image>>>https://example.com/cat.png<<</image>>>"
+
+
+def test_flatten_multimodal_content_recurses_through_dicts():
+    value = {
+        "prompt": [
+            {"type": "text", "text": "Look"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://example.com/frog.png"},
+            },
+        ]
+    }
+
+    flattened = image_support.flatten_multimodal_content(value)
+
+    assert flattened == {
+        "prompt": "Look\n\n<<<image>>>https://example.com/frog.png<<</image>>>"
+    }

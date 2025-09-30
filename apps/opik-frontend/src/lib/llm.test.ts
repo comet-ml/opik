@@ -25,6 +25,22 @@ describe("llm message serialization", () => {
     );
   });
 
+  it("omits image placeholders when disabled", () => {
+    const content: LLMMessageContentItem[] = [
+      { type: "text", text: "Hello" },
+      {
+        type: "image_url",
+        image_url: { url: "https://example.com/cat.png" },
+      },
+    ];
+
+    const result = stringifyMessageContent(content, {
+      includeImagePlaceholders: false,
+    });
+
+    expect(result).toBe("Hello");
+  });
+
   it("deserializes placeholder format into structured content", () => {
     const serialized =
       "Hello\n\n<<<image>>>https://example.com/cat.png<<</image>>>";
