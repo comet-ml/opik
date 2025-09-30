@@ -52,12 +52,7 @@ def create_scoring_inputs(
     task_output: Dict[str, Any],
     scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
 ) -> Dict[str, Any]:
-    from opik.message_processing import image_support
-
-    normalized_dataset = image_support.flatten_multimodal_content(dataset_item)
-    normalized_output = image_support.flatten_multimodal_content(task_output)
-
-    mapped_inputs = {**normalized_dataset, **normalized_output}
+    mapped_inputs = {**dataset_item, **task_output}
 
     if scoring_key_mapping is None:
         return mapped_inputs
