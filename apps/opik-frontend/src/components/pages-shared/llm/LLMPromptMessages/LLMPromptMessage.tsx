@@ -57,7 +57,7 @@ const MESSAGE_TYPE_OPTIONS = [
   },
 ];
 
-const MAX_IMAGE_PARTS = 4;
+const MAX_IMAGE_PARTS = 3;
 
 const theme = EditorView.theme({
   "&": {

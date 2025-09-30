@@ -34,10 +34,6 @@ const PlaygroundVariableCell: React.FunctionComponent<
     try {
       return processInputData({ value }).images;
     } catch (error) {
-      if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.debug("[Playground] Failed to extract images", error);
-      }
       return [] as ParsedImageData[];
     }
   }, [value]);

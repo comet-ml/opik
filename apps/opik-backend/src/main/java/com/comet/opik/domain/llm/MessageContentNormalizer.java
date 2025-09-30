@@ -98,6 +98,6 @@ public final class MessageContentNormalizer {
             return "";
         }
 
-        return String.format("![image](%s)", imageUrl.getUrl());
+        return String.format("<<<image>>>%s<<<\\/image>>>", imageUrl.getUrl());
     }
 }

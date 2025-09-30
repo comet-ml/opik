@@ -12,7 +12,6 @@ import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.chat.ToolMessage;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
@@ -24,7 +23,6 @@ import java.util.Locale;
  * As we can't annotate them Message interface with JsonTypeInfo and JsonSubTypes, solving this issue by creating
  * a custom deserializer.
  */
-@Slf4j
 public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
 
     public static final OpenAiMessageJsonDeserializer INSTANCE = new OpenAiMessageJsonDeserializer();
@@ -68,8 +66,9 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
                 switch (type) {
                     case "text", "input_text" -> builder.addText(partNode.path("text").asText(""));
                     case "image_url" -> handleImageUrlPart(builder, partNode.path("image_url"));
-                    default ->
-                        log.debug("Unsupported message content type '{}' encountered while parsing user message", type);
+                    default -> {
+                        // unsupported content type - skip
+                    }
                 }
             }
 
@@ -101,7 +100,6 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
             var detail = ImageDetail.valueOf(detailText.toUpperCase(Locale.ENGLISH));
             builder.addImageUrl(url, detail);
         } catch (IllegalArgumentException exception) {
-            log.warn("Unknown image detail '{}'. Falling back to default detail for url {}", detailText, url);
             builder.addImageUrl(url);
         }
     }

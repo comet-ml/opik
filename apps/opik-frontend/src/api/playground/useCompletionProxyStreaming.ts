@@ -155,13 +155,6 @@ const useCompletionProxyStreaming = ({
 
         const sendRequest = async (useStructured: boolean) => {
           const payload = buildPayload(useStructured);
-          if (import.meta.env.DEV) {
-            // eslint-disable-next-line no-console
-            console.debug("[Playground] Sending payload", {
-              useStructured,
-              messages: payload,
-            });
-          }
           const response = await getCompletionProxyStream({
             model,
             messages: payload,

@@ -48,23 +48,12 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
 
       return map;
     } catch (error) {
-      if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.debug(
-          "[Playground] Failed to build image placeholder map",
-          error,
-        );
-      }
       return {};
     }
   })();
 
   tags.forEach((tag) => {
     const value = get(newDatasetItem, tag);
-    if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
-      console.debug("[Playground] dataset value", tag, value);
-    }
     if (typeof value === "string") {
       const normalized = value.trim().replace(/^"(.*)"$/, "$1");
       if (placeholderMap[normalized]) {
@@ -87,12 +76,6 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
 
     set(newDatasetItem, tag, isObject(value) ? JSON.stringify(value) : value);
   });
-
-  if (import.meta.env.DEV) {
-    // eslint-disable-next-line no-console
-    console.debug("[Playground] Serialized dataset item", newDatasetItem);
-  }
-
   return newDatasetItem;
 };
 
@@ -102,14 +85,6 @@ const transformMessageIntoProviderMessage = (
 ): ProviderMessageType => {
   const messageTags = getMessageContentMustacheTags(message.content);
   const serializedDatasetItem = serializeTags(datasetItem, messageTags);
-  if (import.meta.env.DEV) {
-    // eslint-disable-next-line no-console
-    console.debug(
-      "[Playground] Message tags",
-      messageTags,
-      serializedDatasetItem,
-    );
-  }
 
   const notDefinedVariables = messageTags.filter((tag) =>
     isUndefined(get(serializedDatasetItem, tag)),
