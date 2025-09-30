@@ -430,7 +430,7 @@ def test_manually_created_trace_and_span__happyflow(
 
 
 def test_search_traces__happyflow(opik_client):
-    # In order to define a unique search query, we will create a unique identifier that will be part of the input of the trace
+    # To define a unique search query, we will create a unique identifier that will be part of the input of the trace
     unique_identifier = str(uuid.uuid4())[-6:]
 
     filter_string = f'input contains "{unique_identifier}"'
@@ -444,15 +444,14 @@ def test_search_traces__happyflow(opik_client):
     )
 
     # Send traces that don't match
-    non_matching_trace_ids = []
     for input_value in range(2):
-        trace = opik_client.trace(
+        opik_client.trace(
             name="trace-name",
             input={"input": "some-random-input"},
             output={"output": "trace-output"},
             project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         )
-        non_matching_trace_ids.append(trace.id)
+
     opik_client.flush()
 
     # Search for the traces - Note that we use a large max_results to ensure that we get all traces, if the project has more than 100000 matching traces it is possible
@@ -465,12 +464,59 @@ def test_search_traces__happyflow(opik_client):
 
     verifiers.verify_trace(
         opik_client=opik_client,
-        trace_id=traces[0].id,
+        trace_id=trace.id,
         name="trace-name",
         input={"input": f"Some random input - {unique_identifier}"},
         output={"output": "trace-output"},
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
+
+
+def test_search_traces__wait_for_at_least__happyflow(opik_client):
+    # check that synchronized searching for traces is working
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send traces that have this input
+    trace_ids = []
+    matching_count = 1000
+    for i in range(matching_count):
+        trace = opik_client.trace(
+            name=f"trace-name-{i}",
+            input={"input": f"Some random input - {unique_identifier}"},
+            output={"output": "trace-output"},
+            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        )
+        trace_ids.append(trace.id)
+
+    # send not matching traces
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-1"},
+    )
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-2"},
+    )
+
+    opik_client.flush()
+
+    # Search for the traces with synchronization
+    filter_string = f'input contains "{unique_identifier}"'
+    traces = opik_client.search_traces(
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        filter_string=filter_string,
+        wait_for_at_least=matching_count,
+        wait_for_timeout=10,
+    )
+
+    # Verify that the matching trace is returned
+    assert (
+        len(traces) == matching_count
+    ), f"Expected to find {matching_count} matching traces"
+    for trace in traces:
+        assert (
+            trace.id in trace_ids
+        ), f"Expected to find the matching trace id {trace.id}"
 
 
 def test_search_spans__happyflow(opik_client: opik.Opik):
@@ -506,8 +552,7 @@ def test_search_spans__happyflow(opik_client: opik.Opik):
 
     opik_client.flush()
 
-    # Search for the traces - Note that we use a large max_results to ensure that we get all traces,
-    # if the project has more than 100000 matching traces it is possible
+    # Search for the spans
     spans = opik_client.search_spans(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         trace_id=trace_id,
@@ -532,9 +577,9 @@ def test_search_spans__wait_for_at_least__happy_flow(opik_client: opik.Opik):
         output={"output": "trace-output"},
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
-    count = 1000
+    matching_count = 1000
     matching_span_ids = []
-    for i in range(count):
+    for i in range(matching_count):
         matching_span = trace.span(
             name=f"span-name-{i}",
             input={"input": f"Some random input - {unique_identifier}"},
@@ -563,12 +608,14 @@ def test_search_spans__wait_for_at_least__happy_flow(opik_client: opik.Opik):
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         trace_id=trace_id,
         filter_string=filter_string,
-        wait_for_at_least=count,
+        wait_for_at_least=matching_count,
         wait_for_timeout=10,
     )
 
     # Verify that the matching trace is returned
-    assert len(spans) == count, f"Expected to find {count} matching span"
+    assert (
+        len(spans) == matching_count
+    ), f"Expected to find {matching_count} matching spans"
     for span in spans:
         assert (
             span.id in matching_span_ids

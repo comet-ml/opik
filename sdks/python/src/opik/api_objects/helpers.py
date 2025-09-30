@@ -13,6 +13,7 @@ from ..rest_api.types import (
     trace_filter_public,
     trace_thread_filter,
     span_public,
+    trace_public,
 )
 from ..rest_api import client as rest_api_client
 from ..types import FeedbackScoreDict
@@ -190,3 +191,25 @@ def search_spans_with_filters(
     )
 
     return spans
+
+
+def search_traces_with_filters(
+    rest_client: rest_api_client.OpikApi,
+    project_name: Optional[str],
+    filters: Optional[OptionalFilterParsedItemList],
+    max_results: int,
+    truncate: bool,
+) -> List[trace_public.TracePublic]:
+    traces = rest_stream_parser.read_and_parse_full_stream(
+        read_source=lambda current_batch_size,
+        last_retrieved_id: rest_client.traces.search_traces(
+            project_name=project_name,
+            filters=filters,
+            limit=current_batch_size,
+            truncate=truncate,
+            last_retrieved_id=last_retrieved_id,
+        ),
+        max_results=max_results,
+        parsed_item_class=trace_public.TracePublic,
+    )
+    return traces

@@ -44,7 +44,6 @@ from . import (
 from .attachment import converters as attachment_converters
 from .attachment import Attachment
 from .attachment import client as attachment_client
-from . import rest_stream_parser
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
@@ -972,9 +971,12 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        wait_for_at_least: Optional[int] = None,
+        wait_for_timeout: int = 30,
     ) -> List[trace_public.TracePublic]:
         """
-        Search for traces in the given project.
+        Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
+        to be found before returning withing the specified timeout.
 
         Args:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -1015,25 +1017,32 @@ class Opik:
                 If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            wait_for_at_least: The minimum number of traces to wait for before returning.
+            wait_for_timeout: The timeout for waiting for traces.
         """
         filters_ = helpers.parse_filter_expressions(
             filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
         )
 
-        traces = rest_stream_parser.read_and_parse_full_stream(
-            read_source=lambda current_batch_size,
-            last_retrieved_id: self._rest_client.traces.search_traces(
-                project_name=project_name or self._project_name,
-                filters=filters_,
-                limit=current_batch_size,
-                truncate=truncate,
-                last_retrieved_id=last_retrieved_id,
-            ),
+        search_functor = functools.partial(
+            helpers.search_traces_with_filters,
+            rest_client=self._rest_client,
+            project_name=project_name,
+            filters=filters_,
             max_results=max_results,
-            parsed_item_class=trace_public.TracePublic,
+            truncate=truncate,
         )
 
-        return traces
+        if wait_for_at_least is None:
+            return search_functor()
+
+        # do synchronization with backend if wait_for_at_least is provided until a specific number of traces are found
+        synchronization.wait_for_done(
+            check_function=lambda: len(search_functor()) >= wait_for_at_least,
+            timeout=wait_for_timeout,
+        )
+
+        return search_functor()
 
     def search_spans(
         self,
@@ -1110,7 +1119,7 @@ class Opik:
         if wait_for_at_least is None:
             return search_functor()
 
-        # do synchronization with backend if wait_for_at_least is provided until a specific number of spans is found
+        # do synchronization with backend if wait_for_at_least is provided until a specific number of spans are found
         synchronization.wait_for_done(
             check_function=lambda: len(search_functor()) >= wait_for_at_least,
             timeout=wait_for_timeout,
