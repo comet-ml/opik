@@ -140,18 +140,16 @@ class TraceServiceImpl implements TraceService {
 
                     // Strip attachments from the trace with the generated ID and project ID
                     Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
-                    Trace processedTrace = attachmentStripperService.stripAttachmentsFromTrace(traceWithId, workspaceId,
-                            userName,
-                            projectName);
-
-                    return lockService.executeWithLock(
-                            new LockService.Lock(id, TRACE_KEY),
-                            Mono.defer(() -> insertTrace(processedTrace, project, id)))
-                            .doOnSuccess(__ -> {
-                                var savedTrace = processedTrace.toBuilder().projectId(project.id())
-                                        .projectName(projectName).build();
-                                eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                            });
+                    return attachmentStripperService.stripAttachmentsFromTrace(traceWithId, workspaceId,
+                            userName, projectName)
+                            .flatMap(processedTrace -> lockService.executeWithLock(
+                                    new LockService.Lock(id, TRACE_KEY),
+                                    Mono.defer(() -> insertTrace(processedTrace, project, id)))
+                                    .doOnSuccess(__ -> {
+                                        var savedTrace = processedTrace.toBuilder().projectId(project.id())
+                                                .projectName(projectName).build();
+                                        eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                                    }));
                 }));
     }
 
@@ -178,10 +176,9 @@ class TraceServiceImpl implements TraceService {
                     .collectList()
                     .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
                     .flatMapMany(Flux::fromIterable)
-                    .map(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId, userName,
+                    .flatMap(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId, userName,
                             trace.projectName()))
-                    .collectList()
-                    .subscribeOn(Schedulers.boundedElastic());
+                    .collectList();
 
             return resolveProjects
                     .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection))
@@ -318,13 +315,11 @@ class TraceServiceImpl implements TraceService {
                     String userName = ctx.get(RequestContext.USER_NAME);
                     String projectName = project.name();
 
-                    return template.nonTransaction(connection -> {
-                        // Strip attachments from the new trace data before inserting
-                        TraceUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromTraceUpdate(
-                                traceUpdate, id, workspaceId, userName, projectName);
-
-                        return dao.partialInsert(project.id(), processedUpdate, id, connection);
-                    });
+                    // Strip attachments from the new trace data before inserting
+                    return attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                            traceUpdate, id, workspaceId, userName, projectName)
+                            .flatMap(processedUpdate -> template.nonTransaction(
+                                    connection -> dao.partialInsert(project.id(), processedUpdate, id, connection)));
                 }));
     }
 
@@ -338,29 +333,23 @@ class TraceServiceImpl implements TraceService {
             String userName = ctx.get(RequestContext.USER_NAME);
             String projectName = project.name();
 
-            return template.nonTransaction(connection -> {
-                // Step 1: Get existing attachments using the new convenience method
-                return attachmentService.getAttachmentInfoByEntity(id, EntityType.TRACE, trace.projectId())
-                        .flatMap(existingAttachments -> {
-
-                            // Step 2: Strip attachments from the updated trace data (creates new attachments with unique names)
-                            TraceUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromTraceUpdate(
-                                    traceUpdate, id, workspaceId, userName, projectName);
-
-                            // Step 3: Update the trace with processed data first
-                            return dao.update(processedUpdate, id, connection)
-                                    .then(Mono.defer(() -> {
-                                        // Step 4: Delete only the old attachments by their specific filenames
-                                        // New attachments have unique timestamps, so no conflicts
-                                        if (!existingAttachments.isEmpty()) {
-                                            return attachmentService.deleteSpecificAttachments(existingAttachments,
-                                                    id, EntityType.TRACE, trace.projectId());
-                                        }
-                                        return Mono.empty();
-                                    }));
-                        })
-                        .then();
-            });
+            // Step 1: Get existing attachments OUTSIDE the database transaction
+            return attachmentService.getAttachmentInfoByEntity(id, EntityType.TRACE, trace.projectId())
+                    .flatMap(existingAttachments ->
+            // Step 2: Strip attachments OUTSIDE the database transaction
+            attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                    traceUpdate, id, workspaceId, userName, projectName)
+                    .flatMap(processedUpdate ->
+            // Step 3: Update the trace in database transaction
+            template.nonTransaction(connection -> dao.update(processedUpdate, id, connection))
+                    .then(Mono.defer(() -> {
+                        // Step 4: Delete old attachments OUTSIDE the database transaction
+                        if (!existingAttachments.isEmpty()) {
+                            return attachmentService.deleteSpecificAttachments(existingAttachments,
+                                    id, EntityType.TRACE, trace.projectId());
+                        }
+                        return Mono.empty();
+                    }))));
         });
     }
 

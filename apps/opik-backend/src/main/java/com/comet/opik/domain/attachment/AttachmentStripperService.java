@@ -28,6 +28,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.mime.MimeTypeException;
 import org.apache.tika.mime.MimeTypes;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.net.URI;
@@ -121,28 +123,30 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Trace stripAttachmentsFromTrace(Trace trace, String workspaceId, String userName, String projectName) {
-        Trace.TraceBuilder builder = trace.toBuilder();
+    public Mono<Trace> stripAttachmentsFromTrace(Trace trace, String workspaceId, String userName, String projectName) {
+        return Mono.fromCallable(() -> {
+            Trace.TraceBuilder builder = trace.toBuilder();
 
-        if (trace.input() != null) {
-            JsonNode processedInput = stripAttachments(trace.input(), trace.id(), EntityType.TRACE,
-                    workspaceId, userName, projectName, "input");
-            builder.input(processedInput);
-        }
+            if (trace.input() != null) {
+                JsonNode processedInput = stripAttachments(trace.input(), trace.id(), EntityType.TRACE,
+                        workspaceId, userName, projectName, "input");
+                builder.input(processedInput);
+            }
 
-        if (trace.output() != null) {
-            JsonNode processedOutput = stripAttachments(trace.output(), trace.id(), EntityType.TRACE,
-                    workspaceId, userName, projectName, "output");
-            builder.output(processedOutput);
-        }
+            if (trace.output() != null) {
+                JsonNode processedOutput = stripAttachments(trace.output(), trace.id(), EntityType.TRACE,
+                        workspaceId, userName, projectName, "output");
+                builder.output(processedOutput);
+            }
 
-        if (trace.metadata() != null) {
-            JsonNode processedMetadata = stripAttachments(trace.metadata(), trace.id(), EntityType.TRACE,
-                    workspaceId, userName, projectName, "metadata");
-            builder.metadata(processedMetadata);
-        }
+            if (trace.metadata() != null) {
+                JsonNode processedMetadata = stripAttachments(trace.metadata(), trace.id(), EntityType.TRACE,
+                        workspaceId, userName, projectName, "metadata");
+                builder.metadata(processedMetadata);
+            }
 
-        return builder.build();
+            return builder.build();
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
@@ -151,29 +155,31 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public TraceUpdate stripAttachmentsFromTraceUpdate(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
+    public Mono<TraceUpdate> stripAttachmentsFromTraceUpdate(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
             String userName, String projectName) {
-        TraceUpdate.TraceUpdateBuilder builder = traceUpdate.toBuilder();
+        return Mono.fromCallable(() -> {
+            TraceUpdate.TraceUpdateBuilder builder = traceUpdate.toBuilder();
 
-        if (traceUpdate.input() != null) {
-            JsonNode processedInput = stripAttachments(traceUpdate.input(), traceId, EntityType.TRACE,
-                    workspaceId, userName, projectName, "input");
-            builder.input(processedInput);
-        }
+            if (traceUpdate.input() != null) {
+                JsonNode processedInput = stripAttachments(traceUpdate.input(), traceId, EntityType.TRACE,
+                        workspaceId, userName, projectName, "input");
+                builder.input(processedInput);
+            }
 
-        if (traceUpdate.output() != null) {
-            JsonNode processedOutput = stripAttachments(traceUpdate.output(), traceId, EntityType.TRACE,
-                    workspaceId, userName, projectName, "output");
-            builder.output(processedOutput);
-        }
+            if (traceUpdate.output() != null) {
+                JsonNode processedOutput = stripAttachments(traceUpdate.output(), traceId, EntityType.TRACE,
+                        workspaceId, userName, projectName, "output");
+                builder.output(processedOutput);
+            }
 
-        if (traceUpdate.metadata() != null) {
-            JsonNode processedMetadata = stripAttachments(traceUpdate.metadata(), traceId, EntityType.TRACE,
-                    workspaceId, userName, projectName, "metadata");
-            builder.metadata(processedMetadata);
-        }
+            if (traceUpdate.metadata() != null) {
+                JsonNode processedMetadata = stripAttachments(traceUpdate.metadata(), traceId, EntityType.TRACE,
+                        workspaceId, userName, projectName, "metadata");
+                builder.metadata(processedMetadata);
+            }
 
-        return builder.build();
+            return builder.build();
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
@@ -182,28 +188,30 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Span stripAttachmentsFromSpan(Span span, String workspaceId, String userName, String projectName) {
-        Span.SpanBuilder builder = span.toBuilder();
+    public Mono<Span> stripAttachmentsFromSpan(Span span, String workspaceId, String userName, String projectName) {
+        return Mono.fromCallable(() -> {
+            Span.SpanBuilder builder = span.toBuilder();
 
-        if (span.input() != null) {
-            JsonNode processedInput = stripAttachments(span.input(), span.id(), EntityType.SPAN,
-                    workspaceId, userName, projectName, "input");
-            builder.input(processedInput);
-        }
+            if (span.input() != null) {
+                JsonNode processedInput = stripAttachments(span.input(), span.id(), EntityType.SPAN,
+                        workspaceId, userName, projectName, "input");
+                builder.input(processedInput);
+            }
 
-        if (span.output() != null) {
-            JsonNode processedOutput = stripAttachments(span.output(), span.id(), EntityType.SPAN,
-                    workspaceId, userName, projectName, "output");
-            builder.output(processedOutput);
-        }
+            if (span.output() != null) {
+                JsonNode processedOutput = stripAttachments(span.output(), span.id(), EntityType.SPAN,
+                        workspaceId, userName, projectName, "output");
+                builder.output(processedOutput);
+            }
 
-        if (span.metadata() != null) {
-            JsonNode processedMetadata = stripAttachments(span.metadata(), span.id(), EntityType.SPAN,
-                    workspaceId, userName, projectName, "metadata");
-            builder.metadata(processedMetadata);
-        }
+            if (span.metadata() != null) {
+                JsonNode processedMetadata = stripAttachments(span.metadata(), span.id(), EntityType.SPAN,
+                        workspaceId, userName, projectName, "metadata");
+                builder.metadata(processedMetadata);
+            }
 
-        return builder.build();
+            return builder.build();
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
@@ -212,29 +220,31 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public SpanUpdate stripAttachmentsFromSpanUpdate(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
+    public Mono<SpanUpdate> stripAttachmentsFromSpanUpdate(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
             String userName, String projectName) {
-        SpanUpdate.SpanUpdateBuilder builder = spanUpdate.toBuilder();
+        return Mono.fromCallable(() -> {
+            SpanUpdate.SpanUpdateBuilder builder = spanUpdate.toBuilder();
 
-        if (spanUpdate.input() != null) {
-            JsonNode processedInput = stripAttachments(spanUpdate.input(), spanId, EntityType.SPAN,
-                    workspaceId, userName, projectName, "input");
-            builder.input(processedInput);
-        }
+            if (spanUpdate.input() != null) {
+                JsonNode processedInput = stripAttachments(spanUpdate.input(), spanId, EntityType.SPAN,
+                        workspaceId, userName, projectName, "input");
+                builder.input(processedInput);
+            }
 
-        if (spanUpdate.output() != null) {
-            JsonNode processedOutput = stripAttachments(spanUpdate.output(), spanId, EntityType.SPAN,
-                    workspaceId, userName, projectName, "output");
-            builder.output(processedOutput);
-        }
+            if (spanUpdate.output() != null) {
+                JsonNode processedOutput = stripAttachments(spanUpdate.output(), spanId, EntityType.SPAN,
+                        workspaceId, userName, projectName, "output");
+                builder.output(processedOutput);
+            }
 
-        if (spanUpdate.metadata() != null) {
-            JsonNode processedMetadata = stripAttachments(spanUpdate.metadata(), spanId, EntityType.SPAN,
-                    workspaceId, userName, projectName, "metadata");
-            builder.metadata(processedMetadata);
-        }
+            if (spanUpdate.metadata() != null) {
+                JsonNode processedMetadata = stripAttachments(spanUpdate.metadata(), spanId, EntityType.SPAN,
+                        workspaceId, userName, projectName, "metadata");
+                builder.metadata(processedMetadata);
+            }
 
-        return builder.build();
+            return builder.build();
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**

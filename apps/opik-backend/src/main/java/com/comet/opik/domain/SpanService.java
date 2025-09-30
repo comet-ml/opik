@@ -126,13 +126,13 @@ public class SpanService {
 
             // Strip attachments from the span with the generated ID and project ID
             Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
-            Span processedSpan = attachmentStripperService.stripAttachmentsFromSpan(spanWithId, workspaceId,
-                    userName, projectName);
-
-            log.info("Inserting span with id '{}', projectId '{}', traceId '{}', parentSpanId '{}'",
-                    processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
-                    processedSpan.parentSpanId());
-            return spanDAO.insert(processedSpan).thenReturn(processedSpan.id());
+            return attachmentStripperService.stripAttachmentsFromSpan(spanWithId, workspaceId, userName, projectName)
+                    .flatMap(processedSpan -> {
+                        log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
+                                processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
+                                processedSpan.parentSpanId());
+                        return spanDAO.insert(processedSpan).thenReturn(processedSpan.id());
+                    });
         });
     }
 
@@ -166,11 +166,10 @@ public class SpanService {
                     String userName = ctx.get(RequestContext.USER_NAME);
                     String projectName = project.name();
 
-                    // Strip attachments from the new span data before inserting
-                    SpanUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromSpanUpdate(
-                            spanUpdate, id, workspaceId, userName, projectName);
-
-                    return spanDAO.partialInsert(id, project.id(), processedUpdate);
+                    // Strip attachments OUTSIDE the database transaction
+                    return attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                            spanUpdate, id, workspaceId, userName, projectName)
+                            .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
                 }));
     }
 
@@ -226,26 +225,24 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
             String projectName = project.name();
 
-            // Step 1: Get existing attachments using the new convenience method
+            // Step 1: Get existing attachments OUTSIDE the database transaction
             return attachmentService.getAttachmentInfoByEntity(id, SPAN, existingSpan.projectId())
-                    .flatMap(existingAttachments -> {
-                        // Step 2: Strip attachments from the updated span data (creates new attachments with unique names)
-                        SpanUpdate processedUpdate = attachmentStripperService.stripAttachmentsFromSpanUpdate(
-                                spanUpdate, id, workspaceId, userName, projectName);
-
-                        // Step 3: Update the span with processed data first
-                        return spanDAO.update(id, processedUpdate, existingSpan)
-                                .flatMap(updateResult -> {
-                                    // Step 4: Delete only the old attachments by their specific filenames
-                                    // New attachments have unique timestamps, so no conflicts
-                                    if (!existingAttachments.isEmpty()) {
-                                        return attachmentService.deleteSpecificAttachments(existingAttachments,
-                                                id, SPAN, existingSpan.projectId())
-                                                .thenReturn(updateResult);
-                                    }
-                                    return Mono.just(updateResult);
-                                });
-                    });
+                    .flatMap(existingAttachments ->
+            // Step 2: Strip attachments OUTSIDE the database transaction
+            attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                    spanUpdate, id, workspaceId, userName, projectName)
+                    .flatMap(processedUpdate ->
+            // Step 3: Update the span in database transaction
+            spanDAO.update(id, processedUpdate, existingSpan)
+                    .flatMap(updateResult -> {
+                        // Step 4: Delete old attachments OUTSIDE the database transaction
+                        if (!existingAttachments.isEmpty()) {
+                            return attachmentService.deleteSpecificAttachments(existingAttachments,
+                                    id, SPAN, existingSpan.projectId())
+                                    .thenReturn(updateResult);
+                        }
+                        return Mono.just(updateResult);
+                    })));
         });
     }
 
@@ -294,15 +291,13 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            List<Span> processedSpans = spans.stream()
-                    .map(span -> {
+            return Flux.fromIterable(spans)
+                    .flatMap(span -> {
                         String projectName = WorkspaceUtils.getProjectName(span.projectName());
                         return attachmentStripperService.stripAttachmentsFromSpan(span, workspaceId, userName,
                                 projectName);
                     })
-                    .toList();
-
-            return Mono.just(processedSpans);
+                    .collectList();
         });
     }
 
