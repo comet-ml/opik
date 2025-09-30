@@ -21,7 +21,7 @@ import {
 } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { createFilter } from "@/lib/filters";
+import { createFilter, isFilterValid } from "@/lib/filters";
 import { ThreadStatus } from "@/types/thread";
 import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
@@ -285,10 +285,13 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
               control={form.control}
               name="filters"
               render={({ field }) => {
-                const filterErrors = form.formState.errors.filters;
-                const hasErrors =
-                  Array.isArray(filterErrors) &&
-                  filterErrors.some((err) => err);
+                const invalidFilters = field.value
+                  .map((filter, index) => ({
+                    filter,
+                    index,
+                    isValid: isFilterValid(filter),
+                  }))
+                  .filter((item) => !item.isValid);
 
                 return (
                   <FormItem>
@@ -305,40 +308,48 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                         />
                       )}
 
-                      {hasErrors && (
+                      {invalidFilters.length > 0 && (
                         <div className="space-y-1">
-                          {filterErrors.map((filterError, index) => {
-                            if (!filterError) return null;
+                          {invalidFilters.map(({ filter, index }) => {
                             const errors: string[] = [];
-                            if (filterError.field?.message) {
-                              errors.push(
-                                `Filter ${index + 1}: ${
-                                  filterError.field.message
-                                }`,
-                              );
+
+                            // Check what's missing
+                            if (!filter.field || filter.field.trim() === "") {
+                              errors.push("field is required");
                             }
-                            if (filterError.operator?.message) {
-                              errors.push(
-                                `Filter ${index + 1}: ${
-                                  filterError.operator.message
-                                }`,
-                              );
+                            if (
+                              !filter.operator ||
+                              filter.operator.trim() === ""
+                            ) {
+                              errors.push("operator is required");
                             }
-                            if (filterError.value?.message) {
-                              errors.push(
-                                `Filter ${index + 1}: ${
-                                  filterError.value.message
-                                }`,
-                              );
+                            if (
+                              filter.operator !== "is_empty" &&
+                              filter.operator !== "is_not_empty" &&
+                              (!filter.value ||
+                                String(filter.value).trim() === "")
+                            ) {
+                              errors.push("value is required");
                             }
-                            return errors.map((error, errorIndex) => (
+                            if (
+                              (filter.type === COLUMN_TYPE.dictionary ||
+                                filter.type === COLUMN_TYPE.numberDictionary) &&
+                              (!filter.key || filter.key.trim() === "")
+                            ) {
+                              errors.push("key is required");
+                            }
+                            if (filter.error) {
+                              errors.push(filter.error);
+                            }
+
+                            return (
                               <p
-                                key={`${index}-${errorIndex}`}
+                                key={index}
                                 className="text-sm font-medium text-destructive"
                               >
-                                {error}
+                                Filter {index + 1}: {errors.join(", ")}
                               </p>
-                            ));
+                            );
                           })}
                         </div>
                       )}

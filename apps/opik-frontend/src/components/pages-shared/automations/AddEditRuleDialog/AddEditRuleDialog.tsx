@@ -44,6 +44,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
+import { isFilterValid } from "@/lib/filters";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
@@ -289,25 +290,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    // Filter out empty/incomplete filters
-    const validFilters = formData.filters.filter((filter) => {
-      const hasField = filter.field && filter.field.trim().length > 0;
-      const hasOperator = filter.operator && filter.operator.trim().length > 0;
-
-      // For operators that don't require value
-      if (
-        filter.operator === "is_empty" ||
-        filter.operator === "is_not_empty"
-      ) {
-        return hasField && hasOperator;
-      }
-
-      // For operators that require value
-      const valueString = String(filter.value || "").trim();
-      const hasValue = valueString.length > 0;
-
-      return hasField && hasOperator && hasValue;
-    });
+    // Filter out empty/incomplete filters using the existing utility
+    const validFilters = formData.filters.filter(isFilterValid);
 
     const ruleData = {
       name: formData.ruleName,
