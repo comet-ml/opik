@@ -119,8 +119,8 @@ build_backend() {
     log_debug "Backend directory: $BACKEND_DIR"
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
 
-    log_debug "Running: mvn clean install -DskipTests"
-    if mvn clean install -DskipTests; then
+    log_debug "Running: mvn clean install -T 1C -Dmaven.test.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.compile.skip=true -Dmaven.test.resources.skip=true -Dmaven.compiler.useIncrementalCompilation=false -Dresolve.skip=true"
+    if mvn clean install -T 1C -Dmaven.test.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.compile.skip=true -Dmaven.test.resources.skip=true -Dmaven.compiler.useIncrementalCompilation=false -Dresolve.skip=true; then
         log_success "Backend build completed successfully"
     else
         log_error "Backend build failed"
