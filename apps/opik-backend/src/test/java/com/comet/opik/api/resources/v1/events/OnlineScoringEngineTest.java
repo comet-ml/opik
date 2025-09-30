@@ -25,6 +25,7 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -73,6 +74,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -397,6 +399,30 @@ class OnlineScoringEngineTest {
                 .samplingRate(1.0f)
                 .enabled(true)
                 .build();
+    }
+
+    @Test
+    void renderMessagesParsesImagePlaceholderIntoStructuredUserMessage() {
+        var templateMessages = List.of(
+                new LlmAsJudgeMessage(
+                        ChatMessageType.USER,
+                        "Hello<<<image>>>https://example.com/cat.png<<</image>>>")
+        );
+
+        Trace trace = Trace.builder()
+                .startTime(Instant.now())
+                .input(JsonUtils.getJsonNodeOrDefault("{}"))
+                .build();
+
+        var rendered = OnlineScoringEngine.renderMessages(templateMessages, Map.of(), trace);
+
+        assertThat(rendered).hasSize(1);
+        assertThat(rendered.get(0)).isInstanceOf(UserMessage.class);
+
+        var userMessage = (UserMessage) rendered.get(0);
+        assertThat(userMessage.content()).isInstanceOf(List.class);
+        assertThat(MessageContentNormalizer.flattenContent(userMessage.content()))
+                .isEqualTo("Hello<<<image>>>https://example.com/cat.png<<</image>>>");
     }
 
     @Test

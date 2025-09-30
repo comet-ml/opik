@@ -22,6 +22,6 @@ class MessageContentNormalizerTest {
         String placeholder = (String) method.invoke(null, imageUrl);
 
         assertThat(placeholder)
-                .isEqualTo("<<<image>>>https://example.com/image.png<<<\\/image>>>");
+                .isEqualTo("<<<image>>>https://example.com/image.png<<</image>>>");
     }
 }

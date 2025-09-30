@@ -55,6 +55,8 @@ public class OnlineScoringEngine {
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
+    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile("<<<image>>>(.*?)<<<\\/image>>>",
+            Pattern.DOTALL);
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -116,7 +118,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -150,7 +152,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -209,6 +211,42 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    static UserMessage buildUserMessage(String content) {
+        Matcher matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
+        if (!matcher.find()) {
+            return UserMessage.from(content);
+        }
+
+        matcher.reset();
+        UserMessage.Builder builder = UserMessage.builder();
+        int lastIndex = 0;
+
+        while (matcher.find()) {
+            if (matcher.start() > lastIndex) {
+                String textSegment = content.substring(lastIndex, matcher.start());
+                if (!textSegment.isBlank()) {
+                    builder.addText(textSegment);
+                }
+            }
+
+            String url = matcher.group(1).trim();
+            if (!url.isEmpty()) {
+                builder.addImageUrl(url);
+            }
+
+            lastIndex = matcher.end();
+        }
+
+        if (lastIndex < content.length()) {
+            String trailingText = content.substring(lastIndex);
+            if (!trailingText.isBlank()) {
+                builder.addText(trailingText);
+            }
+        }
+
+        return builder.build();
     }
 
     private static String extractFromJson(JsonNode json, String path) {
