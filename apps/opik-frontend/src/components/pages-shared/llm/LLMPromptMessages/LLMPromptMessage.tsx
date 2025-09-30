@@ -289,18 +289,25 @@ const LLMPromptMessage = ({
           </div>
 
           {item.type === "image_url" ? (
-            <Input
-              value={item.image_url.url}
-              onChange={(event) =>
-                handleStructuredImageUrlChange(index, event.target.value)
-              }
-              placeholder="Image URL or {{input.image_url}}"
-              onFocus={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
-              onMouseDown={(event) => event.stopPropagation()}
-              data-prevent-editor-focus="true"
-              aria-label={`Image URL for message part ${ordinal}`}
-            />
+            <div className="rounded-md border border-border">
+              <CodeMirror
+                theme={theme}
+                value={item.image_url.url}
+                onChange={(value) => handleStructuredImageUrlChange(index, value)}
+                placeholder="Image URL or {{input.image_url}}"
+                onFocus={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+                data-prevent-editor-focus="true"
+                basicSetup={{
+                  foldGutter: false,
+                  allowMultipleSelections: false,
+                  lineNumbers: false,
+                  highlightActiveLine: false,
+                }}
+                extensions={[mustachePlugin]}
+              />
+            </div>
           ) : (
             partContent
           )}

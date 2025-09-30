@@ -1,45 +1,101 @@
 package com.comet.opik.domain.llm;
 
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.Content;
+import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
+import dev.langchain4j.model.openai.internal.chat.Message;
+import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MessageContentNormalizerTest {
 
     @Test
-    void renderImagePlaceholderUsesDelimitedFormat()
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    void normalizeRequestFlattensImageUrlToPlaceholderForNonVisionModel() {
         ImageUrl imageUrl = ImageUrl.builder()
                 .url("https://example.com/image.png")
                 .build();
 
-        Method method = MessageContentNormalizer.class
-                .getDeclaredMethod("renderImagePlaceholder", ImageUrl.class);
-        method.setAccessible(true);
+        Content imageContent = Content.builder()
+                .type(ContentType.IMAGE_URL)
+                .imageUrl(imageUrl)
+                .build();
 
-        String placeholder = (String) method.invoke(null, imageUrl);
+        UserMessage userMessage = UserMessage.builder()
+                .content(List.of(imageContent))
+                .build();
 
-        assertThat(placeholder)
-                .isEqualTo("<<<image>>>https://example.com/image.png<<</image>>>");
+        ChatCompletionRequest request = ChatCompletionRequest.builder()
+                .messages(List.of(userMessage))
+                .model("gpt-3.5-turbo")
+                .build();
+
+        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request, false);
+
+        assertThat(normalized.messages()).hasSize(1);
+        Message normalizedMessage = normalized.messages().get(0);
+        assertThat(normalizedMessage).isInstanceOf(UserMessage.class);
+
+        String content = ((UserMessage) normalizedMessage).content().toString();
+        assertThat(content).contains("<<<image>>>https://example.com/image.png<<</image>>>");
     }
 
     @Test
-    void renderImagePlaceholderSkipsBlankUrls()
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    void normalizeRequestSkipsBlankImageUrls() {
         ImageUrl imageUrl = ImageUrl.builder()
                 .url("   ")
                 .build();
 
-        Method method = MessageContentNormalizer.class
-                .getDeclaredMethod("renderImagePlaceholder", ImageUrl.class);
-        method.setAccessible(true);
+        Content imageContent = Content.builder()
+                .type(ContentType.IMAGE_URL)
+                .imageUrl(imageUrl)
+                .build();
 
-        String placeholder = (String) method.invoke(null, imageUrl);
+        UserMessage userMessage = UserMessage.builder()
+                .content(List.of(imageContent))
+                .build();
 
-        assertThat(placeholder).isEmpty();
+        ChatCompletionRequest request = ChatCompletionRequest.builder()
+                .messages(List.of(userMessage))
+                .model("gpt-3.5-turbo")
+                .build();
+
+        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request, false);
+
+        assertThat(normalized.messages()).hasSize(1);
+        Message normalizedMessage = normalized.messages().get(0);
+        assertThat(normalizedMessage).isInstanceOf(UserMessage.class);
+
+        String content = ((UserMessage) normalizedMessage).content().toString();
+        assertThat(content).isEmpty();
+    }
+
+    @Test
+    void normalizeRequestPreservesStructuredContentForVisionModel() {
+        ImageUrl imageUrl = ImageUrl.builder()
+                .url("https://example.com/image.png")
+                .build();
+
+        Content imageContent = Content.builder()
+                .type(ContentType.IMAGE_URL)
+                .imageUrl(imageUrl)
+                .build();
+
+        UserMessage userMessage = UserMessage.builder()
+                .content(List.of(imageContent))
+                .build();
+
+        ChatCompletionRequest request = ChatCompletionRequest.builder()
+                .messages(List.of(userMessage))
+                .model("gpt-4-vision-preview")
+                .build();
+
+        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request, true);
+
+        assertThat(normalized).isSameAs(request);
     }
 }

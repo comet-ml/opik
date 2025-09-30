@@ -55,7 +55,7 @@ const LLMPromptMessagesVariables = ({
     <div className="pt-4">
       <div className="comet-body-s-accented mb-1 flex items-center gap-1 text-muted-slate">
         <span>Variable mapping ({variablesList.length})</span>
-        <TooltipWrapper content="Choose the trace field that should fill each variable. For images, point to a JSON path that contains a URL or base64 string (e.g., input.image_url or output.image_base64).">
+        <TooltipWrapper content="Choose the trace field that should fill each variable. Map variables to any trace field, including image fields like input.image_url or output.image_base64.">
           <Info className="size-3.5 text-light-slate" />
         </TooltipWrapper>
       </div>

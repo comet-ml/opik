@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -57,7 +58,9 @@ public class OnlineScoringEngine {
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
-    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile("<<<image>>>(.*?)<<<\\/image>>>",
+    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile(
+            Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_START) + "(.*?)"
+                    + Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_END),
             Pattern.DOTALL);
 
     /**
@@ -216,6 +219,10 @@ public class OnlineScoringEngine {
     }
 
     static UserMessage buildUserMessage(String content) {
+        if (content.length() > 100_000) {
+            throw new IllegalArgumentException("Message content exceeds maximum allowed size of 100,000 characters");
+        }
+
         Matcher matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
         if (!matcher.find()) {
             return UserMessage.from(content);

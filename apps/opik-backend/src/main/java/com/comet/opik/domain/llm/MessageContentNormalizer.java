@@ -7,12 +7,18 @@ import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+@Slf4j
+
 public final class MessageContentNormalizer {
+
+    public static final String IMAGE_PLACEHOLDER_START = "<<<image>>>";
+    public static final String IMAGE_PLACEHOLDER_END = "<<</image>>>";
 
     private MessageContentNormalizer() {
     }
@@ -89,7 +95,10 @@ public final class MessageContentNormalizer {
         return switch (normalized) {
             case "text" -> content.text() == null ? "" : content.text();
             case "image_url" -> renderImagePlaceholder(content.imageUrl());
-            default -> "";
+            default -> {
+                log.debug("Skipping unknown content type during normalization: {}", normalized);
+                yield "";
+            }
         };
     }
 
@@ -98,6 +107,6 @@ public final class MessageContentNormalizer {
             return "";
         }
 
-        return String.format("<<<image>>>%s<<</image>>>", imageUrl.getUrl());
+        return String.format("%s%s%s", IMAGE_PLACEHOLDER_START, imageUrl.getUrl(), IMAGE_PLACEHOLDER_END);
     }
 }
