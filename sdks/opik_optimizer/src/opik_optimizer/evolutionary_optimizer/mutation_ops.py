@@ -40,9 +40,7 @@ class MutationOps:
                     "      Mutation successful, tool description updated (MCP mutation).",
                     verbose=self.verbose,
                 )
-                return self._update_individual_with_prompt(
-                    individual, mutated_prompt
-                )
+                return self._update_individual_with_prompt(individual, mutated_prompt)
 
         # Choose mutation strategy based on current diversity
         diversity = self._calculate_population_diversity()
