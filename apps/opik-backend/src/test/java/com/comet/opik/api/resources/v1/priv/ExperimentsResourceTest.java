@@ -5383,4 +5383,213 @@ class ExperimentsResourceTest {
                     arguments(named("blank name", ExperimentUpdate.builder().name("   ").build())));
         }
     }
+
+    @Nested
+    @DisplayName("Get Experiment Items Stats:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetExperimentItemsStats {
+
+        @Test
+        @DisplayName("when getting stats for single experiment with items, then return correct stats")
+        void getExperimentItemsStats_whenSingleExperimentWithItems_thenReturnStats() {
+            var datasetName = RandomStringUtils.randomAlphanumeric(10);
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), API_KEY, TEST_WORKSPACE);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Test Experiment")
+                    .datasetName(datasetName)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var datasetItemId1 = podamFactory.manufacturePojo(UUID.class);
+            var datasetItemId2 = podamFactory.manufacturePojo(UUID.class);
+            var datasetItems = List.of(
+                    podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .id(datasetItemId1)
+                            .datasetId(datasetId)
+                            .build(),
+                    podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .id(datasetItemId2)
+                            .datasetId(datasetId)
+                            .build());
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(datasetName, null, datasetItems), TEST_WORKSPACE, API_KEY);
+
+            var experimentItem1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId1)
+                    .build();
+            var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId2)
+                    .build();
+
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem1, experimentItem2), API_KEY,
+                    TEST_WORKSPACE);
+
+            var stats = experimentResourceClient.getExperimentItemsStats(List.of(experimentId), null,
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(stats).isNotNull();
+            assertThat(stats.stats()).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("when getting stats for multiple experiments, then return aggregated stats")
+        void getExperimentItemsStats_whenMultipleExperiments_thenReturnAggregatedStats() {
+            var datasetName = RandomStringUtils.randomAlphanumeric(10);
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), API_KEY, TEST_WORKSPACE);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .name("Experiment 1")
+                    .datasetName(datasetName)
+                    .build();
+            var experimentId1 = experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .name("Experiment 2")
+                    .datasetName(datasetName)
+                    .build();
+            var experimentId2 = experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+
+            var datasetItemId = podamFactory.manufacturePojo(UUID.class);
+            var datasetItems = List.of(
+                    podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .id(datasetItemId)
+                            .datasetId(datasetId)
+                            .build());
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(datasetName, null, datasetItems), TEST_WORKSPACE, API_KEY);
+
+            var experimentItem1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId1)
+                    .datasetItemId(datasetItemId)
+                    .build();
+            var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId2)
+                    .datasetItemId(datasetItemId)
+                    .build();
+
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem1, experimentItem2), API_KEY,
+                    TEST_WORKSPACE);
+
+            var stats = experimentResourceClient.getExperimentItemsStats(
+                    List.of(experimentId1, experimentId2), null, API_KEY, TEST_WORKSPACE);
+
+            assertThat(stats).isNotNull();
+            assertThat(stats.stats()).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("when getting stats with valid filters, then return filtered stats")
+        void getExperimentItemsStats_whenValidFilters_thenReturnFilteredStats() {
+            var datasetName = RandomStringUtils.randomAlphanumeric(10);
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), API_KEY, TEST_WORKSPACE);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Test Experiment")
+                    .datasetName(datasetName)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var datasetItemId1 = podamFactory.manufacturePojo(UUID.class);
+            var datasetItemId2 = podamFactory.manufacturePojo(UUID.class);
+            var datasetItems = List.of(
+                    podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .id(datasetItemId1)
+                            .datasetId(datasetId)
+                            .data(Map.of("input", JsonUtils.getJsonNodeFromString(
+                                    "{\"query\": \"test query 1\"}")))
+                            .build(),
+                    podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .id(datasetItemId2)
+                            .datasetId(datasetId)
+                            .data(Map.of("input", JsonUtils.getJsonNodeFromString(
+                                    "{\"query\": \"test query 2\"}")))
+                            .build());
+
+            datasetResourceClient.createDatasetItems(
+                    new DatasetItemBatch(datasetName, null, datasetItems), TEST_WORKSPACE, API_KEY);
+
+            var experimentItem1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId1)
+                    .output(JsonUtils.getJsonNodeFromString("{\"result\": \"output 1\"}"))
+                    .build();
+            var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId2)
+                    .output(JsonUtils.getJsonNodeFromString("{\"result\": \"output 2\"}"))
+                    .build();
+
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem1, experimentItem2), API_KEY,
+                    TEST_WORKSPACE);
+
+            var filter = com.comet.opik.api.filter.ExperimentsComparisonFilter.builder()
+                    .field("output")
+                    .operator(com.comet.opik.api.filter.Operator.CONTAINS)
+                    .value("output 1")
+                    .build();
+            var statsWithFilter = experimentResourceClient.getExperimentItemsStats(List.of(experimentId),
+                    List.of(filter), API_KEY, TEST_WORKSPACE);
+            var statsWithoutFilter = experimentResourceClient.getExperimentItemsStats(List.of(experimentId),
+                    null,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(statsWithFilter).isNotNull();
+            assertThat(statsWithoutFilter).isNotNull();
+        }
+
+        @Test
+        @DisplayName("when getting stats with invalid experiment IDs, then return 400")
+        void getExperimentItemsStats_whenInvalidExperimentIds_thenReturn400() {
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("items/stats")
+                    .queryParam("experiment_ids", "invalid-id")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("when getting stats with invalid filter format, then return 400")
+        void getExperimentItemsStats_whenInvalidFilterFormat_thenReturn400() {
+            var datasetName = RandomStringUtils.randomAlphanumeric(10);
+            datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), API_KEY, TEST_WORKSPACE);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Test Experiment")
+                    .datasetName(datasetName)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("items/stats")
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("filters", "invalid filter syntax !!!")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+    }
 }
+

@@ -17,6 +17,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -126,6 +127,13 @@ public class ExperimentItemService {
                 .collect(Collectors.mapping(Experiment::id, Collectors.toUnmodifiableSet()))
                 .flatMapMany(experimentIds -> experimentItemDAO.getItems(
                         experimentIds, criteria));
+    }
+
+    public Mono<com.comet.opik.api.ProjectStats> getStats(@NonNull Set<UUID> experimentIds,
+            List<? extends com.comet.opik.api.filter.Filter> filters) {
+        log.info("Getting experiment items stats for experiments '{}' with filters '{}'", experimentIds, filters);
+        return experimentItemDAO.getStats(experimentIds, filters)
+                .switchIfEmpty(Mono.just(com.comet.opik.api.ProjectStats.empty()));
     }
 
     public Mono<Void> delete(@NonNull Set<UUID> ids) {

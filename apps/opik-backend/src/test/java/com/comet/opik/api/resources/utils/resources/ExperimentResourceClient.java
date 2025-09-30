@@ -324,4 +324,29 @@ public class ExperimentResourceClient {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
+
+    public com.comet.opik.api.ProjectStats getExperimentItemsStats(List<UUID> experimentIds,
+            List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters,
+            String apiKey,
+            String workspaceName) {
+        var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
+
+        var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items/stats")
+                .queryParam("experiment_ids", experimentIdsQueryParam);
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(com.comet.opik.api.ProjectStats.class);
+        }
+    }
 }

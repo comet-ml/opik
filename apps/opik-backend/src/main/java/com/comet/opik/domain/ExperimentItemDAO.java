@@ -20,10 +20,13 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -43,6 +46,8 @@ class ExperimentItemDAO {
             return new ExperimentSummary(datasetId, 0, null);
         }
     }
+
+    private final @NonNull com.comet.opik.domain.filter.FilterQueryBuilder filterQueryBuilder;
 
     /**
      * The query validates if already exists with this id. Failing if so.
@@ -307,6 +312,145 @@ class ExperimentItemDAO {
             ;
             """;
 
+    private static final String SELECT_EXPERIMENT_ITEMS_STATS = """
+            WITH experiment_items_filtered AS (
+                SELECT
+                    ei.id,
+                    ei.experiment_id,
+                    ei.dataset_item_id,
+                    ei.trace_id
+                FROM experiment_items ei
+                WHERE ei.workspace_id = :workspace_id
+                AND ei.experiment_id IN :experiment_ids
+                <if(filters)>
+                AND ei.dataset_item_id IN (
+                    SELECT di.id
+                    FROM dataset_items di
+                    WHERE di.workspace_id = :workspace_id
+                    AND <filters>
+                )
+                <endif>
+            ), traces_with_cost_and_duration AS (
+                SELECT DISTINCT
+                    eif.trace_id as trace_id,
+                    t.duration as duration,
+                    s.total_estimated_cost as total_estimated_cost
+                FROM experiment_items_filtered eif
+                LEFT JOIN (
+                    SELECT
+                        id,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) as duration
+                    FROM traces final
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_filtered)
+                ) AS t ON eif.trace_id = t.id
+                LEFT JOIN (
+                    SELECT
+                        trace_id,
+                        sum(total_estimated_cost) as total_estimated_cost
+                    FROM spans final
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
+                    GROUP BY workspace_id, project_id, trace_id
+                ) AS s ON eif.trace_id = s.trace_id
+            ), feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    value,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+                   AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            ),
+            feedback_scores_agg AS (
+                SELECT
+                    entity_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) AS feedback_scores
+                FROM feedback_scores_final
+                GROUP BY workspace_id, project_id, entity_id
+            )
+            SELECT
+                count(DISTINCT ei.id) as experiment_items_count,
+                count(DISTINCT tc.trace_id) as trace_count,
+                mapFromArrays(
+                    ['p50', 'p90', 'p99'],
+                    arrayMap(
+                      v -> toDecimal64(
+                             greatest(
+                               least(if(isFinite(v), v, 0),  999999999.999999999),
+                               -999999999.999999999
+                             ),
+                             9
+                           ),
+                      quantiles(0.5, 0.9, 0.99)(tc.duration)
+                    )
+                ) AS duration,
+                avgMap(f.feedback_scores) AS feedback_scores,
+                avgIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_,
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
+            FROM experiment_items_filtered ei
+            LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
+            LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
+            ;
+            """;
+
     private static final String DELETE = """
             DELETE FROM experiment_items
             WHERE id IN :ids
@@ -504,5 +648,87 @@ class ExperimentItemDAO {
                 .bind("experiment_ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    @WithSpan
+    public Mono<com.comet.opik.api.ProjectStats> getStats(
+            @NonNull Set<UUID> experimentIds,
+            List<? extends com.comet.opik.api.filter.Filter> filters) {
+        log.info("Getting experiment items stats for experiments '{}' with filters '{}'", experimentIds, filters);
+
+        ST template = new ST(SELECT_EXPERIMENT_ITEMS_STATS);
+
+        Optional.ofNullable(filters)
+                .ifPresent(filtersParam -> {
+                    filterQueryBuilder.toAnalyticsDbFilters(filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM)
+                            .ifPresent(datasetItemFilters -> template.add("filters", datasetItemFilters));
+                });
+
+        String sql = template.render();
+        log.info("Experiment items stats query: '{}'", sql);
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(sql);
+                    statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+
+                    Optional.ofNullable(filters)
+                            .ifPresent(filtersParam -> filterQueryBuilder.bind(statement, filtersParam,
+                                    com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> mapExperimentItemsStats(row)))
+                .singleOrEmpty()
+                .doOnSuccess(stats -> log.info("Found experiment items stats: '{}'", stats))
+                .doOnError(error -> log.error("Failed to get experiment items stats", error));
+    }
+
+    private com.comet.opik.api.ProjectStats mapExperimentItemsStats(io.r2dbc.spi.Row row) {
+        var stats = java.util.stream.Stream.<com.comet.opik.api.ProjectStats.ProjectStatItem<?>>builder();
+
+        stats.add(new com.comet.opik.api.ProjectStats.CountValueStat("experiment_items_count",
+                row.get("experiment_items_count", Long.class)));
+
+        stats.add(new com.comet.opik.api.ProjectStats.CountValueStat("trace_count",
+                row.get("trace_count", Long.class)));
+
+        BigDecimal totalEstimatedCostAvg = getCostValue(row, "total_estimated_cost_avg");
+        if (totalEstimatedCostAvg != null) {
+            stats.add(new com.comet.opik.api.ProjectStats.AvgValueStat("total_estimated_cost",
+                    totalEstimatedCostAvg.doubleValue()));
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, BigDecimal> durationMap = row.get("duration", Map.class);
+        if (durationMap != null) {
+            var duration = new com.comet.opik.api.PercentageValues(
+                    durationMap.get("p50"),
+                    durationMap.get("p90"),
+                    durationMap.get("p99"));
+            stats.add(new com.comet.opik.api.ProjectStats.PercentageValueStat("duration", duration));
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> feedbackScoresMap = row.get("feedback_scores", Map.class);
+        if (feedbackScoresMap != null) {
+            feedbackScoresMap.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        double value = entry.getValue() instanceof Number number
+                                ? number.doubleValue()
+                                : 0.0;
+                        stats.add(new com.comet.opik.api.ProjectStats.AvgValueStat(
+                                "feedback_scores.%s".formatted(entry.getKey()),
+                                value));
+                    });
+        }
+
+        return new com.comet.opik.api.ProjectStats(stats.build().toList());
+    }
+
+    private BigDecimal getCostValue(io.r2dbc.spi.Row row, String columnName) {
+        return row.get(columnName, BigDecimal.class);
     }
 }

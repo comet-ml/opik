@@ -55,6 +55,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
@@ -478,6 +479,31 @@ public class ExperimentsResource {
                 request.experimentId());
 
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/items/stats")
+    @Operation(operationId = "getExperimentItemsStats", summary = "Get experiment items stats", description = "Get experiment items stats", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment items stats resource", content = @Content(schema = @Schema(implementation = com.comet.opik.api.ProjectStats.class)))
+    })
+    @JsonView({com.comet.opik.api.ProjectStats.ProjectStatItem.View.Public.class})
+    public Response getExperimentItemsStats(
+            @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
+            @QueryParam("filters") String filters) {
+
+        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+        var queryFilters = filtersFactory.newFilters(filters,
+                com.comet.opik.api.filter.ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+
+        log.info("Getting experiment items stats for experiments '{}' with filters '{}'", experimentIds,
+                filters);
+        var stats = experimentItemService.getStats(experimentIds, queryFilters)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got experiment items stats for experiments '{}', count '{}'", experimentIds,
+                stats.stats().size());
+        return Response.ok(stats).build();
     }
 
     @GET
