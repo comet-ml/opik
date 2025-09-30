@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.log.tables;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import com.comet.opik.domain.alerts.AlertEventLogsDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
 import io.r2dbc.spi.ConnectionFactory;
@@ -30,7 +31,8 @@ class UserLogTableFactoryImpl implements UserLogTableFactory {
 
     UserLogTableFactoryImpl(@NonNull ConnectionFactory factory) {
         daoMap = Map.of(
-                UserLog.AUTOMATION_RULE_EVALUATOR, AutomationRuleEvaluatorLogsDAO.create(factory));
+                UserLog.AUTOMATION_RULE_EVALUATOR, AutomationRuleEvaluatorLogsDAO.create(factory),
+                UserLog.ALERT_EVENT, AlertEventLogsDAO.create(factory));
     }
 
     @Override
