@@ -80,9 +80,12 @@ if (eventMatchesAlertConfig(event, alert)) {
 ```json
 {
   "eventIds": "[\"event-1\", \"event-2\", \"event-3\"]",
-  "firstSeen": "1704067200000"
+  "firstSeen": "1704067200000",
+  "windowSize": "60000"
 }
 ```
+
+**Note:** The `windowSize` field stores the debouncing window (in milliseconds) that was active when the bucket was created. This ensures that configuration changes do not affect existing buckets.
 
 ### 3. Background Processing
 
@@ -161,18 +164,25 @@ public Mono<Void> addEventToBucket(
     
     String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
     RMapReactive<String, String> bucket = redissonClient.getMap(bucketKey);
+    long currentWindowSizeMillis = webhookConfig.getDebouncing().getWindowSize().toMilliseconds();
     
     // Add event ID to set
-    // Store firstSeen timestamp if first event
-    // Set bucket TTL
+    // If first event in bucket:
+    //   - Store firstSeen timestamp
+    //   - Store windowSize (preserves config at creation time)
+    //   - Set bucket TTL (ONLY on first event, NOT refreshed on subsequent events)
+    // Subsequent events:
+    //   - DO NOT update windowSize (preserves original config)
+    //   - DO NOT refresh TTL (bucket expires based on original TTL)
 }
 
 public Flux<String> getBucketsReadyToProcess() {
     // Scan all alert_bucket:* keys
     // For each bucket:
-    //   - Check firstSeen timestamp
-    //   - If (now - firstSeen) >= debouncingWindow
+    //   - Retrieve firstSeen timestamp AND windowSize from bucket
+    //   - If (now - firstSeen) >= stored windowSize
     //   - Return bucket key
+    // Note: Uses the windowSize stored in the bucket, not current config
 }
 ```
 
@@ -181,12 +191,55 @@ public Flux<String> getBucketsReadyToProcess() {
 ```
 Event Timeline:
 
-t0: First event arrives → Store firstSeen = t0
-t1: Second event arrives → Keep firstSeen = t0
-t2: Third event arrives → Keep firstSeen = t0
+t0: First event arrives → Store firstSeen = t0, windowSize = 60000ms, Set TTL = 3 minutes
+t1: Second event arrives → Keep firstSeen = t0, Keep windowSize = 60000ms, Keep TTL (not refreshed)
+t2: Third event arrives → Keep firstSeen = t0, Keep windowSize = 60000ms, Keep TTL (not refreshed)
 ...
 t60: AlertJob runs → (t60 - t0) >= 60s → Send consolidated webhook
+t60+: Bucket deleted by AlertJob after processing
+     (If not deleted by AlertJob, Redis automatically expires bucket after TTL)
 ```
+
+**TTL Behavior:**
+- TTL is set ONLY when the first event is added to a new bucket
+- Subsequent events to the same bucket do NOT refresh the TTL
+- This prevents buckets from living indefinitely if events keep arriving
+- The `bucketTtl` configuration (default: 3 minutes) is the safety cleanup mechanism
+- After processing, buckets are explicitly deleted by AlertJob
+
+### Handling Configuration Changes
+
+When the debouncing `windowSize` configuration is changed, the system handles existing and new buckets correctly:
+
+**Scenario:**
+1. Alert has debouncing window = 60 seconds
+2. Bucket A is created at t0 with events
+3. Configuration is changed to debouncing window = 120 seconds
+4. New events for same alert arrive
+
+**Behavior:**
+- **Bucket A** (created with 60s window):
+  - Continues to use its stored windowSize = 60000ms
+  - Will be processed when (now - firstSeen) >= 60s
+  - Not affected by configuration change
+  
+- **New Bucket B** (created after config change):
+  - Stores new windowSize = 120000ms
+  - Will be processed when (now - firstSeen) >= 120s
+  - Uses the new configuration
+
+**Key Implementation Details:**
+1. `addEventToBucket()` stores `windowSize` only for the first event in a bucket
+2. Subsequent events to the same bucket preserve the original `windowSize`
+3. `getBucketsReadyToProcess()` reads the `windowSize` from each bucket (not from current config)
+4. This ensures existing buckets are processed with their original configuration
+
+**Test Coverage:**
+See `AlertBucketServiceTest.java` for comprehensive tests covering:
+- Window size storage with first event
+- Window size preservation with subsequent events
+- Multiple buckets with different window sizes being processed independently
+- Configuration changes creating new buckets while existing ones continue with original settings
 
 ### Consolidated Webhook Payload
 
@@ -335,6 +388,14 @@ void shouldHandleDisabledAlert() {
 - `AlertDAO.java` - Alert database access
 
 ## Version History
+
+### Version 1.1 (Current)
+- **Configuration Change Handling**: Buckets now store their creation-time `windowSize`
+  - Existing buckets continue to use their original debouncing window
+  - New buckets created after configuration changes use the updated window
+  - Added comprehensive test coverage in `AlertBucketServiceTest.java`
+- Enhanced bucket data structure to include `windowSize` field
+- Modified `getBucketsReadyToProcess()` to use stored window size instead of current config
 
 ### Version 1.0 (2024-01-01)
 - Initial implementation

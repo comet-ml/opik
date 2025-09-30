@@ -114,7 +114,7 @@ class WebhookSubscriberLoggingTest {
         webhookHttpClient = new WebhookHttpClient(httpClient, webhookConfig);
 
         // Create real WebhookSubscriber
-        webhookSubscriber = new WebhookSubscriber(webhookConfig, redissonReactiveClient, webhookHttpClient);
+        webhookSubscriber = new WebhookSubscriber(webhookHttpClient, webhookConfig);
     }
 
     private void setupWireMock() {
@@ -150,7 +150,7 @@ class WebhookSubscriberLoggingTest {
                         .withBody("{\"status\":\"success\"}")));
 
         // When
-        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
+        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
                 .verifyComplete();
 
         // Then - verify HTTP call was made
@@ -205,7 +205,7 @@ class WebhookSubscriberLoggingTest {
                         .withBody("Internal Server Error")));
 
         // When
-        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
+        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
                 .verifyComplete();
 
         // Then - verify HTTP call was made with retries (1 initial + MAX_RETRIES retries)
