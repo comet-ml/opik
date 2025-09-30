@@ -79,7 +79,7 @@ class MIPROv2(Teleprompter):
         num_candidates: int = 10,
         num_threads: int | None = None,
         max_errors: int = 10,
-        seed: int = 9,
+        seed: int = 42,
         init_temperature: float = 0.5,
         verbose: bool = False,
         track_stats: bool = True,

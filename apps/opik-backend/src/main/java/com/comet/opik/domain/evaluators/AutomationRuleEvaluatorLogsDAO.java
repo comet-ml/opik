@@ -111,7 +111,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .workspaceId(row.get("workspace_id", String.class))
                 .ruleId(row.get("rule_id", UUID.class))
                 .message(row.get("message", String.class))
-                .markers((Map<String, String>) row.get("markers", Map.class))
+                .markers(row.get("markers", Map.class))
                 .build();
     }
 
