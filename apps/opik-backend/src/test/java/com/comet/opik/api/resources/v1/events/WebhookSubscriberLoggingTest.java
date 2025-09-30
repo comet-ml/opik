@@ -10,8 +10,8 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
+import com.comet.opik.domain.evaluators.EventLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
-import com.comet.opik.domain.evaluators.WebhookEventHandlerLogsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.WebhookConfig;
@@ -94,14 +94,14 @@ class WebhookSubscriberLoggingTest {
     private WebhookConfig webhookConfig;
     private WebhookHttpClient webhookHttpClient;
     private WebhookSubscriber webhookSubscriber;
-    private WebhookEventHandlerLogsDAO webhookEventHandlerLogsDAO;
+    private EventLogsDAO eventLogsDAO;
 
     @BeforeAll
     void setUpAll(ConnectionFactory connectionFactory, RedissonReactiveClient redissonReactiveClient) {
         // Get real dependencies via parameter injection
         var userLogTableFactory = UserLogTableFactory.getInstance(connectionFactory);
-        webhookEventHandlerLogsDAO = (WebhookEventHandlerLogsDAO) userLogTableFactory
-                .getDAO(UserLog.WEBHOOK_EVENT_HANDLER);
+        eventLogsDAO = (EventLogsDAO) userLogTableFactory
+                .getDAO(UserLog.EVENT_HANDLER_LOGS);
 
         // Set up external webhook server
         setupWireMock();
@@ -170,7 +170,7 @@ class WebhookSubscriberLoggingTest {
                             .build();
 
                     StepVerifier.create(
-                            webhookEventHandlerLogsDAO.findLogs(criteria)
+                            eventLogsDAO.findLogs(criteria)
                                     .contextWrite(ctx -> setContent(ctx)))
                             .assertNext(logPage -> {
                                 assertThat(logPage.content()).isNotEmpty();
@@ -222,7 +222,7 @@ class WebhookSubscriberLoggingTest {
                             .size(10)
                             .build();
 
-                    StepVerifier.create(webhookEventHandlerLogsDAO.findLogs(criteria)
+                    StepVerifier.create(eventLogsDAO.findLogs(criteria)
                             .contextWrite(ctx -> setContent(ctx)))
                             .assertNext(logPage -> {
                                 assertThat(logPage.content()).isNotEmpty();

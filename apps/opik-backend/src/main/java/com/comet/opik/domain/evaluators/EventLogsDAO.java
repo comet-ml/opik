@@ -29,13 +29,13 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
-@ImplementedBy(WebhookEventHandlerLogsDAOImpl.class)
-public interface WebhookEventHandlerLogsDAO extends UserLogTableDAO {
+@ImplementedBy(EventLogsDAOImpl.class)
+public interface EventLogsDAO extends UserLogTableDAO {
 
     List<String> CUSTOM_MARKER_KEYS = List.of("event_id", "alert_id");
 
-    static WebhookEventHandlerLogsDAO create(ConnectionFactory factory) {
-        return new WebhookEventHandlerLogsDAOImpl(factory);
+    static EventLogsDAO create(ConnectionFactory factory) {
+        return new EventLogsDAOImpl(factory);
     }
 
     Mono<LogPage> findLogs(LogCriteria criteria);
@@ -45,7 +45,7 @@ public interface WebhookEventHandlerLogsDAO extends UserLogTableDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class WebhookEventHandlerLogsDAOImpl implements WebhookEventHandlerLogsDAO {
+class EventLogsDAOImpl implements EventLogsDAO {
 
     private static final String INSERT_STATEMENT = """
             INSERT INTO logs (timestamp, level, workspace_id, message, markers)
