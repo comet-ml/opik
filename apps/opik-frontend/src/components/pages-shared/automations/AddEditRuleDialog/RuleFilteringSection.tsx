@@ -169,9 +169,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
-            type: isThreadScope
-              ? TRACE_DATA_TYPE.threads
-              : TRACE_DATA_TYPE.traces,
+            type: TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: true,
           },
@@ -185,9 +183,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["input", "output"],
             projectId,
-            type: isThreadScope
-              ? TRACE_DATA_TYPE.threads
-              : TRACE_DATA_TYPE.traces,
+            type: TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: false,
           },
@@ -210,9 +206,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             },
           keyComponentProps: {
             projectId,
-            type: isThreadScope
-              ? TRACE_DATA_TYPE.threads
-              : TRACE_DATA_TYPE.traces,
+            type: TRACE_DATA_TYPE.traces,
             placeholder: "Select score",
           },
         },
