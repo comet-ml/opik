@@ -57,7 +57,7 @@ const ImagePreviewCell = <TData,>({
             <img
               src={firstImage.url}
               alt={firstImage.name}
-              className="size-12 rounded-md border border-border object-cover"
+              className="size-10 rounded-md border border-border object-cover"
             />
             {remainingCount > 0 ? (
               <span className="absolute -bottom-1 -right-1 rounded-full bg-background px-1 text-xs font-medium text-foreground shadow-sm">
