@@ -92,6 +92,7 @@ interface LLMPromptMessageProps {
   errorText?: string;
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
+  disableImages?: boolean;
 }
 
 const LLMPromptMessage = ({
@@ -105,6 +106,7 @@ const LLMPromptMessage = ({
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
+  disableImages = false,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -188,26 +190,30 @@ const LLMPromptMessage = ({
   };
 
   const renderAddImageButton = () => {
+    const isDisabled = disableImages || !canAddMoreImages;
+
     const button = (
       <Button
         variant="outline"
         size="sm"
         type="button"
         onClick={handleAddImagePart}
-        disabled={!canAddMoreImages}
+        disabled={isDisabled}
       >
         <ImageIcon className="mr-2 size-4" /> Add image
       </Button>
     );
 
-    if (canAddMoreImages) {
+    if (!isDisabled) {
       return button;
     }
 
+    const tooltipContent = disableImages
+      ? "Images are not supported for thread-level evaluation"
+      : `Maximum of ${MAX_IMAGE_PARTS} images per message`;
+
     return (
-      <TooltipWrapper
-        content={`Maximum of ${MAX_IMAGE_PARTS} images per message`}
-      >
+      <TooltipWrapper content={tooltipContent}>
         <span className="inline-flex">{button}</span>
       </TooltipWrapper>
     );

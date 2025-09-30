@@ -245,11 +245,73 @@ export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
   messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
 
+/**
+ * Deserialize message content from string to structured format.
+ * Converts `<<<image>>>URL<<</image>>>` placeholders back to structured content array.
+ */
+const deserializeMessageContent = (
+  content: string | any[],
+): string | any[] => {
+  if (typeof content !== "string") {
+    return content;
+  }
+
+  // Check if content contains image placeholders
+  const imagePattern = /<<<image>>>(.+?)<<\/image>>>/g;
+  if (!imagePattern.test(content)) {
+    return content;
+  }
+
+  // Parse into structured content array
+  const parts: any[] = [];
+  let lastIndex = 0;
+  imagePattern.lastIndex = 0; // Reset regex state
+
+  let match;
+  while ((match = imagePattern.exec(content)) !== null) {
+    // Add text before the image placeholder
+    if (match.index > lastIndex) {
+      const textSegment = content.substring(lastIndex, match.index);
+      if (textSegment) {
+        parts.push({
+          type: "text",
+          text: textSegment,
+        });
+      }
+    }
+
+    // Add image content
+    const imageUrl = match[1];
+    parts.push({
+      type: "image_url",
+      image_url: {
+        url: imageUrl,
+      },
+    });
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last image
+  if (lastIndex < content.length) {
+    const trailingText = content.substring(lastIndex);
+    if (trailingText) {
+      parts.push({
+        type: "text",
+        text: trailingText,
+      });
+    }
+  }
+
+  return parts.length > 0 ? parts : content;
+};
+
 const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
   messages.map(
     (m) =>
       ({
         ...m,
+        content: deserializeMessageContent(m.content),
         role: m.role.toLowerCase(),
         id: generateRandomString(),
       }) as LLMMessage,
