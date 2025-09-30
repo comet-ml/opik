@@ -45,6 +45,7 @@ import java.util.UUID;
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.View;
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/automations/evaluators/")
 @Produces(MediaType.APPLICATION_JSON)
@@ -177,12 +178,14 @@ public class AutomationRuleEvaluatorsResource {
 
         log.info("Looking for logs for automated evaluator: id '{}' on workspace_id '{}'",
                 evaluatorId, workspaceId);
-        var criteria = LogCriteria.builder().workspaceId(workspaceId).entityId(evaluatorId).size(size).build();
-        LogPage logs = service.getLogs(criteria).block();
+        var criteria = LogCriteria.builder().entityId(evaluatorId).size(size).build();
+        LogPage logs = service.getLogs(criteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
         log.info("Found {} logs for automated evaluator: id '{}' on workspace_id '{}'", logs.size(),
                 evaluatorId, workspaceId);
 
-        return Response.ok().entity(logs).build();
+        return Response.ok(logs).build();
     }
 
 }
