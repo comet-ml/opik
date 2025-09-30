@@ -9,14 +9,20 @@ type UseRuleCreateMutationParams = {
   rule: Partial<EvaluatorsRule>;
 };
 
-const serializeMessageContent = (content: string | any[]): string => {
+type MessageContentItem =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+const serializeMessageContent = (
+  content: string | MessageContentItem[],
+): string => {
   if (typeof content === "string") {
     return content;
   }
 
   // Convert structured content array to string format
   return content
-    .map((item: any) => {
+    .map((item) => {
       if (item.type === "text") {
         return item.text;
       } else if (item.type === "image_url") {
@@ -41,11 +47,30 @@ const useRuleCreateMutation = () => {
         code: rule.code
           ? {
               ...rule.code,
-              messages: rule.code.messages?.map((msg: any) => ({
-                ...msg,
-                content: serializeMessageContent(msg.content),
-              })),
-              schema: rule.code.schema?.map(({ unsaved, ...rest }: any) => rest),
+              // Only process messages if they exist (LLM judge rules)
+              ...("messages" in rule.code && rule.code.messages
+                ? {
+                    messages: rule.code.messages.map(
+                      (msg: {
+                        content: string | MessageContentItem[];
+                        [key: string]: unknown;
+                      }) => ({
+                        ...msg,
+                        content: serializeMessageContent(msg.content),
+                      }),
+                    ),
+                  }
+                : {}),
+              // Only process schema if it exists (LLM judge rules)
+              ...("schema" in rule.code && rule.code.schema
+                ? {
+                    schema: rule.code.schema.map((item) => {
+                      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                      const { unsaved, ...rest } = item;
+                      return rest;
+                    }),
+                  }
+                : {}),
             }
           : rule.code,
       };

@@ -257,7 +257,8 @@ const deserializeMessageContent = (
   }
 
   // Check if content contains image placeholders
-  const imagePattern = /<<<image>>>(.+?)<<\/image>>>/g;
+  // Note: closing tag has 3 angle brackets: <<</image>>>
+  const imagePattern = /<<<image>>>(.+?)<<<\/image>>>/g;
   if (!imagePattern.test(content)) {
     return content;
   }
