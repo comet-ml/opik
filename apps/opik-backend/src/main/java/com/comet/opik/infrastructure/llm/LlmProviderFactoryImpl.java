@@ -38,8 +38,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     public LlmProviderService getService(@NonNull String workspaceId, @NonNull String model) {
         var llmProvider = getLlmProvider(model);
-        var providerConfig = getProviderApiKey(workspaceId, llmProvider);
-
+        var providerName = extractProviderNameIfCustom(llmProvider, model);
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider, providerName);
         var config = buildConfig(providerConfig);
 
         return Optional.ofNullable(services.get(llmProvider))
@@ -60,8 +60,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     public ChatModel getLanguageModel(@NonNull String workspaceId,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var llmProvider = getLlmProvider(modelParameters.name());
-        var providerConfig = getProviderApiKey(workspaceId, llmProvider);
-
+        var providerName = extractProviderNameIfCustom(llmProvider, modelParameters.name());
+        var providerConfig = getProviderApiKey(workspaceId, llmProvider, providerName);
         var config = buildConfig(providerConfig);
 
         return Optional.ofNullable(services.get(llmProvider))
@@ -98,13 +98,29 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         throw new BadRequestException(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
     }
 
+    private String extractProviderNameIfCustom(LlmProvider llmProvider, String model) {
+        return llmProvider == LlmProvider.CUSTOM_LLM ? CustomLlmModelNameChecker.extractProviderName(model) : null;
+    }
+
     /**
      * Finding API keys isn't paginated at the moment.
      * Even in the future, the number of supported LLM providers per workspace is going to be very low.
      */
-    private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider) {
+    private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider, String providerName) {
         return llmProviderApiKeyService.find(workspaceId).content().stream()
-                .filter(providerApiKey -> llmProvider.equals(providerApiKey.provider()))
+                .filter(providerApiKey -> {
+                    // Match provider
+                    if (!llmProvider.equals(providerApiKey.provider())) {
+                        return false;
+                    }
+
+                    // For custom LLMs, also match provider_name
+                    if (llmProvider == LlmProvider.CUSTOM_LLM) {
+                        return providerName.equals(providerApiKey.providerName());
+                    }
+
+                    return true;
+                })
                 .findFirst()
                 .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
                         llmProvider.getValue())));
