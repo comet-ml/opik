@@ -6,5 +6,6 @@ export { type ExperimentItemBulkUploadExperimentItemBulkWriteView } from "./Expe
 export { type FindFeedbackScoreNamesRequest } from "./FindFeedbackScoreNamesRequest";
 export { type FindExperimentGroupsRequest } from "./FindExperimentGroupsRequest";
 export { type FindExperimentGroupsAggregationsRequest } from "./FindExperimentGroupsAggregationsRequest";
+export { type ExperimentUpdate } from "./ExperimentUpdate";
 export { type ExperimentItemStreamRequest } from "./ExperimentItemStreamRequest";
 export { type ExperimentStreamRequestPublic } from "./ExperimentStreamRequestPublic";

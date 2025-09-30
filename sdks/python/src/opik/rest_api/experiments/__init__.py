@@ -2,6 +2,6 @@
 
 # isort: skip_file
 
-from .types import ExperimentWriteType
+from .types import ExperimentUpdateStatus, ExperimentUpdateType, ExperimentWriteStatus, ExperimentWriteType
 
-__all__ = ["ExperimentWriteType"]
+__all__ = ["ExperimentUpdateStatus", "ExperimentUpdateType", "ExperimentWriteStatus", "ExperimentWriteType"]
