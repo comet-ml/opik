@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.stringtemplate.v4.ST;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -22,7 +23,6 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
-import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -38,7 +38,7 @@ public interface EventLogsDAO extends UserLogTableDAO {
         return new EventLogsDAOImpl(factory);
     }
 
-    Mono<LogPage> findLogs(LogCriteria criteria);
+    Flux<LogItem> findLogs(LogCriteria criteria);
 
 }
 
@@ -77,7 +77,7 @@ class EventLogsDAOImpl implements EventLogsDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    public Mono<LogPage> findLogs(@NonNull LogCriteria criteria) {
+    public Flux<LogItem> findLogs(@NonNull LogCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
@@ -93,18 +93,7 @@ class EventLogsDAOImpl implements EventLogsDAO {
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)))
-                .collectList()
-                .map(logs -> mapPage(logs, criteria.page()));
-    }
-
-    private LogPage mapPage(List<LogItem> logs, Integer page) {
-        return LogPage.builder()
-                .content(logs)
-                .page(page)
-                .total(logs.size())
-                .size(logs.size())
-                .build();
+                .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)));
     }
 
     private LogItem mapRow(Row row) {
@@ -205,7 +194,6 @@ class EventLogsDAOImpl implements EventLogsDAO {
                     return statement.execute();
 
                 })
-                .collectList()
                 .then();
 
     }

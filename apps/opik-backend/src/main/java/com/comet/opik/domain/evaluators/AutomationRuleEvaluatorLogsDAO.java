@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.stringtemplate.v4.ST;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -23,7 +24,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
-import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -39,7 +39,7 @@ public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
         return new AutomationRuleEvaluatorLogsDAOImpl(factory);
     }
 
-    Mono<LogPage> findLogs(LogCriteria criteria);
+    Flux<LogItem> findLogs(LogCriteria criteria);
 
 }
 
@@ -75,7 +75,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    public Mono<LogPage> findLogs(@NonNull LogCriteria criteria) {
+    public Flux<LogItem> findLogs(@NonNull LogCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
@@ -91,18 +91,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)))
-                .collectList()
-                .map(this::mapPage);
-    }
-
-    private LogPage mapPage(List<LogItem> logs) {
-        return LogPage.builder()
-                .content(logs)
-                .page(1)
-                .total(logs.size())
-                .size(logs.size())
-                .build();
+                .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)));
     }
 
     private LogItem mapRow(Row row) {
@@ -169,7 +158,6 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                     return statement.execute();
 
                 })
-                .collectList()
                 .then();
 
     }

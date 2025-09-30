@@ -342,6 +342,13 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     public Mono<LogPage> getLogs(@NonNull LogCriteria criteria) {
-        return logsDAO.findLogs(criteria);
+        return logsDAO.findLogs(criteria)
+                .collectList()
+                .map(logs -> LogPage.builder()
+                        .content(logs)
+                        .page(criteria.page())
+                        .total(logs.size())
+                        .size(logs.size())
+                        .build());
     }
 }

@@ -171,11 +171,12 @@ class WebhookSubscriberLoggingTest {
 
                     StepVerifier.create(
                             eventLogsDAO.findLogs(criteria)
+                                    .collectList()
                                     .contextWrite(ctx -> setContent(ctx)))
-                            .assertNext(logPage -> {
-                                assertThat(logPage.content()).isNotEmpty();
+                            .assertNext(logs -> {
+                                assertThat(logs).isNotEmpty();
 
-                                var webhookLog = logPage.content().getFirst();
+                                var webhookLog = logs.getFirst();
                                 assertThat(webhookLog.workspaceId()).isEqualTo(WORKSPACE_ID);
                                 assertThat(webhookLog.ruleId()).isNull(); // Webhook logs don't have rule IDs
                                 assertThat(webhookLog.markers()).containsEntry("alert_id", alertId.toString());
@@ -207,8 +208,8 @@ class WebhookSubscriberLoggingTest {
         StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete();
 
-        // Then - verify HTTP call was made with retries (1 initial + retries)
-        externalWebhookServer.verify(MAX_RETRIES + 1, // 1 initial + MAX_RETRIES
+        // Then - verify HTTP call was made with retries (1 initial + MAX_RETRIES retries)
+        externalWebhookServer.verify(MAX_RETRIES + 1, // 1 initial + MAX_RETRIES retries
                 postRequestedFor(urlEqualTo("/webhook")));
 
         // And verify error logs were created in the database
@@ -223,11 +224,12 @@ class WebhookSubscriberLoggingTest {
                             .build();
 
                     StepVerifier.create(eventLogsDAO.findLogs(criteria)
+                            .collectList()
                             .contextWrite(ctx -> setContent(ctx)))
-                            .assertNext(logPage -> {
-                                assertThat(logPage.content()).isNotEmpty();
+                            .assertNext(logs -> {
+                                assertThat(logs).isNotEmpty();
 
-                                var errorLog = logPage.content().getFirst();
+                                var errorLog = logs.getFirst();
                                 assertThat(errorLog.workspaceId()).isEqualTo(WORKSPACE_ID);
                                 assertThat(errorLog.ruleId()).isNull();
                                 assertThat(errorLog.markers()).containsEntry("alert_id", alertId.toString());
