@@ -23,7 +23,7 @@ def flatten_multimodal_content(value: Any) -> Any:
                     else None
                 )
                 if url:
-                    parts.append(f"<<<image>>>{url}<<<\\/image>>>")
+                    parts.append(f"<<<image>>>{url}<<</image>>>")
         return "\n\n".join(part for part in parts if part)
 
     if isinstance(value, dict):

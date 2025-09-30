@@ -18,4 +18,4 @@ def test_flatten_multimodal_content_uses_placeholder():
 
     flattened = image_support.flatten_multimodal_content(value)
 
-    assert flattened == "Hi\n\n<<<image>>>https://example.com/cat.png<<<\\/image>>>"
+    assert flattened == "Hi\n\n<<<image>>>https://example.com/cat.png<<</image>>>"
