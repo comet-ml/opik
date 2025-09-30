@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 import opik
-from opik import opik_context, id_helpers, Attachment
+from opik import opik_context, id_helpers, Attachment, exceptions
 from opik.api_objects import helpers
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 from . import verifiers
@@ -519,6 +519,42 @@ def test_search_traces__wait_for_at_least__happyflow(opik_client):
         ), f"Expected to find the matching trace id {trace.id}"
 
 
+def test_search_traces__wait_for_at_least__timeout__exception_raised(opik_client):
+    # check that synchronized searching for traces is working
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send traces that have this input
+    opik_client.trace(
+        name="trace-name-3",
+        input={"input": f"Some random input - {unique_identifier}"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    # send not matching traces
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-1"},
+    )
+    opik_client.trace(
+        name="trace-name",
+        input={"input": "some-random-input-2"},
+    )
+
+    opik_client.flush()
+
+    # Search for the traces with synchronization
+    unmatchable_count = 1000
+    filter_string = f'input contains "{unique_identifier}"'
+    with pytest.raises(exceptions.SearchTimeoutError):
+        opik_client.search_traces(
+            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+            filter_string=filter_string,
+            wait_for_at_least=unmatchable_count,
+            wait_for_timeout=1,
+        )
+
+
 def test_search_spans__happyflow(opik_client: opik.Opik):
     # To define a unique search query, we will create a unique identifier that will be part of the trace input
     trace_id = helpers.generate_id()
@@ -620,6 +656,51 @@ def test_search_spans__wait_for_at_least__happy_flow(opik_client: opik.Opik):
         assert (
             span.id in matching_span_ids
         ), f"Expected to find the matching span id {span.id}"
+
+
+def test_search_spans__wait_for_at_least__timeout__exception_raised(
+    opik_client: opik.Opik,
+):
+    trace_id = helpers.generate_id()
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    # Send a trace that matches the input filter
+    trace = opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    trace.span(
+        name="span-name",
+        input={"input": f"Some random input - {unique_identifier}"},
+        output={"output": "span-output"},
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 1"},
+        output={"output": "span-output"},
+    )
+    trace.span(
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+    )
+
+    opik_client.flush()
+
+    # Search for the spans
+    unmatchable_count = 1000
+    filter_string = f'input contains "{unique_identifier}"'
+    with pytest.raises(exceptions.SearchTimeoutError):
+        opik_client.search_spans(
+            project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+            trace_id=trace_id,
+            filter_string=filter_string,
+            wait_for_at_least=unmatchable_count,
+            wait_for_timeout=1,
+        )
 
 
 def test_copy_traces__happyflow(opik_client):

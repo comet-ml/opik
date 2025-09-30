@@ -975,7 +975,8 @@ class Opik:
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
-        to be found before returning within the specified timeout.
+        to be found before returning within the specified timeout. If wait_for_at_least number of traces are not found
+        within the specified timeout, an exception will be raised.
 
         Args:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -1018,6 +1019,9 @@ class Opik:
             truncate: Whether to truncate image data stored in input, output, or metadata
             wait_for_at_least: The minimum number of traces to wait for before returning.
             wait_for_timeout: The timeout for waiting for traces.
+
+        Raises:
+            exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
         filters_ = helpers.parse_filter_expressions(
             filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
@@ -1042,7 +1046,7 @@ class Opik:
             wait_for_timeout=wait_for_timeout,
         )
         if len(result) < wait_for_at_least:
-            LOGGER.warning(
+            raise exceptions.SearchTimeoutError(
                 "Timeout after %d seconds: expected %d traces, but only %d were found.",
                 wait_for_timeout,
                 wait_for_at_least,
@@ -1064,7 +1068,8 @@ class Opik:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
         metadata, tags, etc. or based on the trace ID. Also, you can wait for at least a certain number of spans
-        to be found before returning within the specified timeout.
+        to be found before returning within the specified timeout. If wait_for_at_least number of spans are not found
+        within the specified timeout, an exception will be raised.
 
         Args:
             project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -1108,6 +1113,9 @@ class Opik:
             truncate: Whether to truncate image data stored in input, output, or metadata
             wait_for_at_least: The minimum number of spans to wait for before returning.
             wait_for_timeout: The timeout for waiting for spans.
+
+        Raises:
+            exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
         filters = helpers.parse_filter_expressions(
             filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
@@ -1133,7 +1141,7 @@ class Opik:
             wait_for_timeout=wait_for_timeout,
         )
         if len(result) < wait_for_at_least:
-            LOGGER.warning(
+            raise exceptions.SearchTimeoutError(
                 "Timeout after %d seconds: expected %d spans, but only %d were found.",
                 wait_for_timeout,
                 wait_for_at_least,
