@@ -7,7 +7,6 @@ to the underlying model generation methods for all LLM judge metrics.
 
 import pytest
 from unittest.mock import Mock, patch
-from typing import List, Dict, Any
 
 from opik.evaluation.metrics.llm_judges.answer_relevance.metric import AnswerRelevance
 from opik.evaluation.metrics.llm_judges.context_precision.metric import ContextPrecision
@@ -384,7 +383,6 @@ class TestSeedParameter:
         ), patch(
             "opik.evaluation.metrics.llm_judges.structure_output_compliance.metric.models_factory.get"
         ):
-
             metrics = [
                 AnswerRelevance(seed=test_seed, track=False),
                 ContextPrecision(seed=test_seed, track=False),
@@ -437,7 +435,6 @@ class TestSeedParameter:
 
     def test_seed_parameter_documentation(self) -> None:
         """Test that seed parameter is properly documented in docstrings."""
-        import inspect
 
         metrics_with_seed = [
             AnswerRelevance,
@@ -463,7 +460,6 @@ class TestSeedParameter:
     def test_seed_parameter_type_hints(self) -> None:
         """Test that seed parameter has correct type hints."""
         import inspect
-        from typing import get_type_hints
 
         # Check AnswerRelevance as an example
         sig = inspect.signature(AnswerRelevance.__init__)
