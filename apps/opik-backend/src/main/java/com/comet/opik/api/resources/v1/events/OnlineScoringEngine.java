@@ -14,7 +14,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -226,14 +228,12 @@ public class OnlineScoringEngine {
         while (matcher.find()) {
             if (matcher.start() > lastIndex) {
                 String textSegment = content.substring(lastIndex, matcher.start());
-                if (!textSegment.isBlank()) {
-                    builder.addText(textSegment);
-                }
+                appendTextContent(builder, textSegment);
             }
 
             String url = matcher.group(1).trim();
             if (!url.isEmpty()) {
-                builder.addImageUrl(url);
+                builder.addContent(ImageContent.from(url));
             }
 
             lastIndex = matcher.end();
@@ -241,12 +241,22 @@ public class OnlineScoringEngine {
 
         if (lastIndex < content.length()) {
             String trailingText = content.substring(lastIndex);
-            if (!trailingText.isBlank()) {
-                builder.addText(trailingText);
-            }
+            appendTextContent(builder, trailingText);
         }
 
         return builder.build();
+    }
+
+    private static void appendTextContent(UserMessage.Builder builder, String textSegment) {
+        if (textSegment == null) {
+            return;
+        }
+
+        if (textSegment.isBlank()) {
+            return;
+        }
+
+        builder.addContent(TextContent.from(textSegment));
     }
 
     private static String extractFromJson(JsonNode json, String path) {

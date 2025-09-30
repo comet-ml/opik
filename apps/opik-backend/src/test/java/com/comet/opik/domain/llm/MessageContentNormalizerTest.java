@@ -13,8 +13,9 @@ class MessageContentNormalizerTest {
     @Test
     void renderImagePlaceholderUsesDelimitedFormat()
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        ImageUrl imageUrl = new ImageUrl();
-        imageUrl.setUrl("https://example.com/image.png");
+        ImageUrl imageUrl = ImageUrl.builder()
+                .url("https://example.com/image.png")
+                .build();
 
         Method method = MessageContentNormalizer.class
                 .getDeclaredMethod("renderImagePlaceholder", ImageUrl.class);
@@ -29,8 +30,9 @@ class MessageContentNormalizerTest {
     @Test
     void renderImagePlaceholderSkipsBlankUrls()
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        ImageUrl imageUrl = new ImageUrl();
-        imageUrl.setUrl("   ");
+        ImageUrl imageUrl = ImageUrl.builder()
+                .url("   ")
+                .build();
 
         Method method = MessageContentNormalizer.class
                 .getDeclaredMethod("renderImagePlaceholder", ImageUrl.class);

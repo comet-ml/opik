@@ -25,7 +25,6 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.llm.ChatCompletionService;
-import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -42,7 +41,9 @@ import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessageType;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
 import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
@@ -419,9 +420,14 @@ class OnlineScoringEngineTest {
         assertThat(rendered.get(0)).isInstanceOf(UserMessage.class);
 
         var userMessage = (UserMessage) rendered.get(0);
-        assertThat(userMessage.content()).isInstanceOf(List.class);
-        assertThat(MessageContentNormalizer.flattenContent(userMessage.content()))
-                .isEqualTo("Hello<<<image>>>https://example.com/cat.png<<</image>>>");
+        List<dev.langchain4j.data.message.Content> parts = userMessage.contents();
+
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(0)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(0)).text()).isEqualTo("Hello");
+        assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
+        assertThat(((ImageContent) parts.get(1)).image().url().toString())
+                .isEqualTo("https://example.com/cat.png");
     }
 
     @Test
