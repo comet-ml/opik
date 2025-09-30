@@ -180,7 +180,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       });
       setIsLoading(false);
     }
-  }, [latestTemplateContent, onChangeMessage, promptData, promptId, setIsLoading]);
+  }, [
+    latestTemplateContent,
+    onChangeMessage,
+    promptData,
+    promptId,
+    setIsLoading,
+  ]);
 
   return (
     <div className="flex h-full flex-1 cursor-default flex-nowrap items-center justify-start gap-2">
