@@ -11,6 +11,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -168,6 +169,34 @@ public class DatasetResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return response.readEntity(DatasetItemPage.class);
+        }
+    }
+
+    public com.comet.opik.api.ProjectStats getDatasetExperimentItemsStats(UUID datasetId, List<UUID> experimentIds,
+            String apiKey, String workspaceName, List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters) {
+        var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
+
+        var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("experiments")
+                .path("items")
+                .path("stats")
+                .queryParam("experiment_ids", experimentIdsQueryParam);
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters",
+                    com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam(filters));
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(com.comet.opik.api.ProjectStats.class);
         }
     }
 }

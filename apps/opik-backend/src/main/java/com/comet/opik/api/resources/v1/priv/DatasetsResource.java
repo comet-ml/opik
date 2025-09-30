@@ -448,6 +448,31 @@ public class DatasetsResource {
     }
 
     @GET
+    @Path("/{id}/items/experiments/items/stats")
+    @Operation(operationId = "getDatasetExperimentItemsStats", summary = "Get experiment items stats for dataset", description = "Get experiment items stats for dataset", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment items stats resource", content = @Content(schema = @Schema(implementation = com.comet.opik.api.ProjectStats.class)))
+    })
+    @JsonView({com.comet.opik.api.ProjectStats.ProjectStatItem.View.Public.class})
+    public Response getDatasetExperimentItemsStats(
+            @PathParam("id") UUID datasetId,
+            @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
+            @QueryParam("filters") String filters) {
+
+        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+        var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+
+        log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'",
+                datasetId, experimentIds, filters);
+        var stats = itemService.getExperimentItemsStats(datasetId, experimentIds, queryFilters)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got experiment items stats for dataset '{}' and experiments '{}', count '{}'", datasetId,
+                experimentIds, stats.stats().size());
+        return Response.ok(stats).build();
+    }
+
+    @GET
     @Path("/{id}/items/experiments/items/output/columns")
     @Operation(operationId = "getDatasetItemsOutputColumns", summary = "Get dataset items output columns", description = "Get dataset items output columns", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset item output columns", content = @Content(schema = @Schema(implementation = PageColumns.class)))

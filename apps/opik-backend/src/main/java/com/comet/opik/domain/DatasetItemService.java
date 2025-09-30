@@ -45,6 +45,9 @@ public interface DatasetItemService {
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
+
+    Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
+            List<? extends com.comet.opik.api.filter.Filter> filters);
 }
 
 @Singleton
@@ -227,5 +230,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return dao.getItems(datasetItemSearchCriteria, page, size)
                 .defaultIfEmpty(DatasetItemPage.empty(page));
+    }
+
+    public Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
+            @NonNull Set<UUID> experimentIds,
+            List<? extends com.comet.opik.api.filter.Filter> filters) {
+        log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
+                experimentIds, filters);
+        return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
+                .switchIfEmpty(Mono.just(com.comet.opik.api.ProjectStats.empty()));
     }
 }

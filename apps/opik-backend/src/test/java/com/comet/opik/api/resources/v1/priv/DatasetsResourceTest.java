@@ -6072,4 +6072,440 @@ class DatasetsResourceTest {
 
         return datasets;
     }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Get Dataset Experiment Items Stats")
+    class GetDatasetExperimentItemsStats {
+
+        private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
+        @BeforeEach
+        void setUp() {
+            wireMock.server().resetAll();
+        }
+
+        @Test
+        @DisplayName("Success: Get experiment items stats without filters")
+        void getExperimentItemsStats__happyFlow() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment2, apiKey, workspaceName);
+
+            var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class);
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output1")))
+                    .build();
+
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment2.name())
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment2.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output2")))
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2));
+
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            var feedbackScore1 = FeedbackScoreBatchItem.builder()
+                    .id(trace1.id())
+                    .name("accuracy")
+                    .value(new BigDecimal("0.95"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore2 = FeedbackScoreBatchItem.builder()
+                    .id(trace2.id())
+                    .name("accuracy")
+                    .value(new BigDecimal("0.85"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            traceResourceClient.feedbackScores(List.of(feedbackScore1, feedbackScore2), apiKey,
+                    workspaceName);
+
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(30))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> {
+                        try (var actualResponse = getExperimentItemsStats(
+                                datasetId,
+                                Set.of(experiment1.id(), experiment2.id()),
+                                null,
+                                apiKey,
+                                workspaceName)) {
+
+                            assertThat(actualResponse.getStatusInfo().getStatusCode())
+                                    .isEqualTo(HttpStatus.SC_OK);
+
+                            var stats = actualResponse.readEntity(
+                                    com.comet.opik.api.ProjectStats.class);
+
+                            assertThat(stats.stats()).isNotEmpty();
+
+                            var accuracyStats = stats.stats().stream()
+                                    .filter(stat -> stat.getName().equals(
+                                            "feedback_scores.accuracy"))
+                                    .findFirst()
+                                    .orElseThrow(() -> new AssertionError(
+                                            "Expected feedback_scores.accuracy stat not found"));
+
+                            assertThat(accuracyStats).isInstanceOf(
+                                    com.comet.opik.api.ProjectStats.AvgValueStat.class);
+                            var avgStat = (com.comet.opik.api.ProjectStats.AvgValueStat) accuracyStats;
+
+                            var expectedAvg = new BigDecimal("0.90");
+                            assertThat(BigDecimal.valueOf(avgStat.getValue()))
+                                    .usingComparator(
+                                            StatsUtils::bigDecimalComparator)
+                                    .isEqualByComparingTo(expectedAvg);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("Success: Get experiment items stats with output filter")
+        void getExperimentItemsStats__withOutputFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment1, apiKey, workspaceName);
+
+            var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class);
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .output(JsonUtils.readTree(Map.of("result", "success")))
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .build();
+
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .output(JsonUtils.readTree(Map.of("result", "failure")))
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2));
+
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            var feedbackScore1 = FeedbackScoreBatchItem.builder()
+                    .id(trace1.id())
+                    .name("accuracy")
+                    .value(new BigDecimal("0.95"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore2 = FeedbackScoreBatchItem.builder()
+                    .id(trace2.id())
+                    .name("accuracy")
+                    .value(new BigDecimal("0.50"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            traceResourceClient.feedbackScores(List.of(feedbackScore1, feedbackScore2), apiKey,
+                    workspaceName);
+
+            var outputFilter = List.of(ExperimentsComparisonFilter.builder()
+                    .field(ExperimentsComparisonValidKnownField.OUTPUT.getQueryParamField())
+                    .operator(Operator.CONTAINS)
+                    .value("success")
+                    .build());
+
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(30))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> {
+                        try (var actualResponse = getExperimentItemsStats(
+                                datasetId,
+                                Set.of(experiment1.id()),
+                                outputFilter,
+                                apiKey,
+                                workspaceName)) {
+
+                            assertThat(actualResponse.getStatusInfo().getStatusCode())
+                                    .isEqualTo(HttpStatus.SC_OK);
+
+                            var stats = actualResponse.readEntity(
+                                    com.comet.opik.api.ProjectStats.class);
+
+                            assertThat(stats.stats()).hasSizeGreaterThanOrEqualTo(4);
+
+                            assertThat(stats.stats().stream()
+                                    .anyMatch(stat -> stat.getName().equals(
+                                            "experiment_items_count")))
+                                    .isTrue();
+                            assertThat(stats.stats().stream()
+                                    .anyMatch(stat -> stat.getName()
+                                            .equals("trace_count")))
+                                    .isTrue();
+                            assertThat(stats.stats().stream()
+                                    .anyMatch(stat -> stat.getName().equals(
+                                            "total_estimated_cost")))
+                                    .isTrue();
+                            assertThat(stats.stats().stream()
+                                    .anyMatch(stat -> stat.getName()
+                                            .equals("duration")))
+                                    .isTrue();
+
+                            var accuracyStats = stats.stats().stream()
+                                    .filter(stat -> stat.getName().equals(
+                                            "feedback_scores.accuracy"))
+                                    .findFirst()
+                                    .orElseThrow(() -> new AssertionError(
+                                            "Expected feedback_scores.accuracy stat not found"));
+
+                            assertThat(accuracyStats).isInstanceOf(
+                                    com.comet.opik.api.ProjectStats.AvgValueStat.class);
+                            var avgStat = (com.comet.opik.api.ProjectStats.AvgValueStat) accuracyStats;
+
+                            var expectedAvg = new BigDecimal("0.95");
+                            assertThat(BigDecimal.valueOf(avgStat.getValue()))
+                                    .usingComparator(
+                                            StatsUtils::bigDecimalComparator)
+                                    .isEqualByComparingTo(expectedAvg);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("Success: Get experiment items stats with multiple experiments")
+        void getExperimentItemsStats__multipleExperiments() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment1, apiKey, workspaceName);
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment2, apiKey, workspaceName);
+
+            var experiment3 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment3, apiKey, workspaceName);
+
+            var datasetItem1 = podamFactory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = podamFactory.manufacturePojo(DatasetItem.class);
+            var datasetItem3 = podamFactory.manufacturePojo(DatasetItem.class);
+
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2, datasetItem3))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment2.name())
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment3.name())
+                    .build();
+            traceResourceClient.createTrace(trace3, apiKey, workspaceName);
+
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment1.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output1")))
+                    .build();
+
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment2.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output2")))
+                    .build();
+
+            var experimentItem3 = ExperimentItem.builder()
+                    .experimentId(experiment3.id())
+                    .datasetItemId(datasetItem3.id())
+                    .traceId(trace3.id())
+                    .output(JsonUtils.readTree(Map.of("result", "output3")))
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(
+                    Set.of(experimentItem1, experimentItem2, experimentItem3));
+
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            var feedbackScore1 = FeedbackScoreBatchItem.builder()
+                    .id(trace1.id())
+                    .name("quality")
+                    .value(new BigDecimal("0.90"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore2 = FeedbackScoreBatchItem.builder()
+                    .id(trace2.id())
+                    .name("quality")
+                    .value(new BigDecimal("0.80"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScore3 = FeedbackScoreBatchItem.builder()
+                    .id(trace3.id())
+                    .name("quality")
+                    .value(new BigDecimal("0.70"))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            traceResourceClient.feedbackScores(
+                    List.of(feedbackScore1, feedbackScore2, feedbackScore3),
+                    apiKey,
+                    workspaceName);
+
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(30))
+                    .pollInterval(Duration.ofMillis(500))
+                    .untilAsserted(() -> {
+                        try (var actualResponse = getExperimentItemsStats(
+                                datasetId,
+                                Set.of(experiment1.id(), experiment2.id(),
+                                        experiment3.id()),
+                                null,
+                                apiKey,
+                                workspaceName)) {
+
+                            assertThat(actualResponse.getStatusInfo().getStatusCode())
+                                    .isEqualTo(HttpStatus.SC_OK);
+
+                            var stats = actualResponse.readEntity(
+                                    com.comet.opik.api.ProjectStats.class);
+
+                            var qualityStats = stats.stats().stream()
+                                    .filter(stat -> stat instanceof com.comet.opik.api.ProjectStats.AvgValueStat)
+                                    .map(stat -> (com.comet.opik.api.ProjectStats.AvgValueStat) stat)
+                                    .filter(stat -> "feedback_scores.quality"
+                                            .equals(stat.getName()))
+                                    .findFirst();
+
+                            assertThat(qualityStats).isPresent();
+
+                            var expectedAvg = new BigDecimal("0.80");
+                            assertThat(BigDecimal.valueOf(qualityStats.get().getValue()))
+                                    .isCloseTo(expectedAvg,
+                                            org.assertj.core.data.Offset
+                                                    .offset(new BigDecimal(
+                                                            "0.01")));
+                        }
+                    });
+        }
+
+        private Response getExperimentItemsStats(
+                UUID datasetId,
+                Set<UUID> experimentIds,
+                List<ExperimentsComparisonFilter> filters,
+                String apiKey,
+                String workspaceName) {
+
+            WebTarget webTarget = client.target(getExperimentItemsStatsPath(datasetId))
+                    .queryParam("experiment_ids",
+                            toURLEncodedQueryParam(List.copyOf(experimentIds)));
+
+            if (CollectionUtils.isNotEmpty(filters)) {
+                webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+            }
+
+            return webTarget
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+        }
+
+        private String getExperimentItemsStatsPath(UUID datasetId) {
+            return "%s/%s/items/experiments/items/stats".formatted(
+                    BASE_RESOURCE_URI.formatted(baseURI),
+                    datasetId);
+        }
+    }
 }
