@@ -66,9 +66,8 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
                 String type = partNode.path("type").asText();
 
                 switch (type) {
-                    case "text" -> builder.addText(partNode.path("text").asText(""));
+                    case "text", "input_text" -> builder.addText(partNode.path("text").asText(""));
                     case "image_url" -> handleImageUrlPart(builder, partNode.path("image_url"));
-                    case "input_text" -> builder.addText(partNode.path("text").asText(""));
                     default ->
                         log.debug("Unsupported message content type '{}' encountered while parsing user message", type);
                 }
