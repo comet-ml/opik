@@ -169,6 +169,13 @@ lint_backend() {
     fi
 }
 
+print_migrations_recovery_message() {
+    log_error "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
+    log_error "  1. Stop all services: ./dev-runner.sh --stop"
+    log_error "  2. Remove Docker volumes: docker volume prune -f"
+    log_error "  3. Restart services: ./dev-runner.sh --restart"
+}
+
 # Function to run database migrations
 run_db_migrations() {
     require_command java
@@ -198,7 +205,11 @@ run_db_migrations() {
     if java -jar "$JAR_FILE" db migrate config.yml; then
         log_success "MySQL migrations completed successfully"
     else
+        # TODO: dbAnalytics clear-checksums not supported by liquibase-clickhouse yet,
+        #  this would enable automatic recovery,
+        #  not worthy adding it only for MySQL as volumes might might need pruning anyway
         log_error "MySQL migrations failed"
+        print_migrations_recovery_message
         exit 1
     fi
 
@@ -211,7 +222,10 @@ run_db_migrations() {
     if java -jar "$JAR_FILE" dbAnalytics migrate config.yml; then
         log_success "ClickHouse migrations completed successfully"
     else
+        # TODO: dbAnalytics clear-checksums not supported by liquibase-clickhouse yet,
+        #  this would enable automatic recovery
         log_error "ClickHouse migrations failed"
+        print_migrations_recovery_message
         exit 1
     fi
 
@@ -516,6 +530,22 @@ verify_services() {
     echo "  Frontend: tail -f /tmp/opik-frontend.log"
 }
 
+# Function to start services (without building)
+start_services() {
+    log_info "=== Starting Opik Development Environment ==="
+    log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
+    log_info "Step 1/4: Starting infrastructure..."
+    start_infrastructure
+    log_info "Step 2/4: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 3/4: Starting backend..."
+    start_backend
+    log_info "Step 4/4: Starting frontend..."
+    start_frontend
+    log_success "=== Start Complete ==="
+    verify_services
+}
+
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
@@ -619,14 +649,11 @@ case "${1:-}" in
         ;;
     "--migrate")
         start_infrastructure
+        build_backend
         run_db_migrations
         ;;
     "--start")
-        start_infrastructure
-        run_db_migrations
-        start_backend
-        start_frontend
-        verify_services
+        start_services
         ;;
     "--stop")
         stop_frontend
