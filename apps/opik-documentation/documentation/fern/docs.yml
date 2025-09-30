@@ -133,9 +133,6 @@ navigation:
           - page: Cost tracking
             path: docs/tracing/cost_tracking.mdx
             slug: cost_tracking
-          - page: Supported models
-            path: docs/tracing/supported_models.mdx
-            slug: supported_models
           - page: Export data
             path: docs/tracing/export_data.mdx
             slug: export_data
@@ -1060,4 +1057,7 @@ redirects:
     permanent: true
   - source: "/docs/opik/cookbook"
     destination: "/docs/opik/integrations"
+    permanent: true
+  - source: "/docs/opik/tracing/supported_models"
+    destination: "/docs/opik/tracing/cost_tracking"
     permanent: true
