@@ -51,7 +51,10 @@ public enum WebhookEventTypes {
     // Evaluation events
     EVALUATION_STARTED("evaluation.started"),
     EVALUATION_COMPLETED("evaluation.completed"),
-    EVALUATION_FAILED("evaluation.failed");
+    EVALUATION_FAILED("evaluation.failed"),
+
+    // Alert events
+    ALERT_FIRED("alert.fired");
 
     @JsonValue
     private final String value;

@@ -1,302 +1,345 @@
-# Webhook Event Debouncing Implementation
+# Webhook Alert Debouncing Implementation
 
 ## Overview
 
-This document describes the implementation of webhook event debouncing and aggregation based on the Alerting MVP design document. The implementation provides a mechanism to aggregate multiple webhook events within a configurable time window and send consolidated notifications.
+This document describes the implementation of webhook alert debouncing in the Opik backend. The system aggregates multiple alert events within a configurable time window and sends consolidated webhook notifications.
 
-## Architecture Principle
+## Architecture
 
-**WebhookSubscriber ONLY sends webhooks via HTTP** - it has no knowledge of aggregation or debouncing logic. All event grouping and aggregation happens in Redis, managed by dedicated services.
+### Core Components
 
-## Key Components
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                          Alert Evaluation                               │
+│  (Checks if events match alert config and adds to bucket)             │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │
+                                  ↓
+┌────────────────────────────────────────────────────────────────────────┐
+│                        AlertBucketService                               │
+│              (Manages alert event buckets in Redis)                    │
+│                                                                         │
+│  • addEventToBucket()     - Adds event to Redis bucket                │
+│  • getBucketsReadyToProcess() - Returns buckets past debounce window  │
+│  • getBucketEventIds()    - Retrieves aggregated event IDs            │
+│  • deleteBucket()         - Removes processed bucket                   │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │
+                                  ↓
+┌────────────────────────────────────────────────────────────────────────┐
+│                            AlertJob                                     │
+│             (Scheduled job runs every 5 seconds)                       │
+│                                                                         │
+│  1. Check buckets ready to process                                     │
+│  2. For each ready bucket:                                             │
+│     • Retrieve alert configuration                                     │
+│     • Get aggregated event IDs                                         │
+│     • Create consolidated webhook event                                 │
+│     • Send via WebhookSubscriber                                       │
+│     • Delete bucket                                                     │
+└─────────────────────────────────┬──────────────────────────────────────┘
+                                  │
+                                  ↓
+┌────────────────────────────────────────────────────────────────────────┐
+│                        WebhookSubscriber                                │
+│                 (Sends webhooks via HTTP)                              │
+│                                                                         │
+│  • sendWebhook() - Validates and sends HTTP request                   │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-### 1. WebhookEventStorageService (NEW)
-- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookEventStorageService`
-- **Purpose**: Entry point for webhook events - decides whether to aggregate or send immediately
-- **Responsibilities**:
-  - Receives webhook events from the application
-  - If debouncing enabled → stores in Redis via WebhookEventAggregationService
-  - If debouncing disabled → sends immediately via WebhookSubscriber
-  - Single responsibility: routing events based on configuration
+### Separation of Concerns
 
-### 2. WebhookEventAggregationService
-- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookEventAggregationService`
-- **Purpose**: Manages event aggregation with timestamp-based debouncing in Redis
-- **Responsibilities**:
-  - Stores events with first-seen timestamp in Redis
-  - Groups events by alert ID and event type
-  - Checks if events are ready to be published based on debouncing window
-  - Key pattern: `webhook_pending:{alertId}:{eventType}`
-  - **Does NOT send webhooks** - only manages Redis storage
-
-### 3. WebhookBucketProcessorJob
-- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookBucketProcessorJob`
-- **Purpose**: Scheduled job that processes pending events
-- **Configuration**: Runs every 5 seconds (`@Every("5s")`)
-- **Responsibilities**:
-  - Checks Redis for events past debouncing window
-  - Processes aggregated events via WebhookBucketProcessor
-  - Prevents concurrent execution using `@DisallowConcurrentExecution`
-  - Continues processing even if individual events fail
-
-### 4. WebhookBucketProcessor
-- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookBucketProcessor`
-- **Purpose**: Creates and sends consolidated webhook notifications
-- **Responsibilities**:
-  - Retrieves aggregated event data from Redis
-  - Creates consolidated webhook event with all event IDs
-  - **Sends via WebhookSubscriber** (not directly via HTTP client)
-  - Cleans up processed events from Redis
-
-### 5. WebhookSubscriber (SIMPLIFIED)
-- **Location**: `com.comet.opik.api.resources.v1.events.WebhookSubscriber`
-- **Purpose**: **ONLY sends webhooks via HTTP** - no aggregation logic
-- **Responsibilities**:
-  - Single public method: `sendWebhook(WebhookEvent event)` 
-  - Validates webhook URLs and event data
-  - Sends webhooks via WebhookHttpClient
-  - **No knowledge of debouncing or aggregation**
-  - **No Redis subscription** - just a service that sends HTTP requests
-
-### 6. WebhookConfig.DebouncingConfig
-- **Location**: `com.comet.opik.infrastructure.WebhookConfig.DebouncingConfig`
-- **Purpose**: Configuration for debouncing behavior
-- **Properties**:
-  - `enabled`: Enable/disable debouncing (default: `true`)
-  - `windowSize`: Debouncing time window (default: 60 seconds)
-  - `bucketTtl`: TTL for pending events in Redis (default: 3 minutes)
+| Component | Responsibility |
+|-----------|---------------|
+| **Alert Evaluation** | Checks if event matches alert config, adds to bucket via AlertBucketService |
+| **AlertBucketService** | Stores and retrieves alert event buckets in Redis |
+| **AlertJob** | Scheduled job that checks buckets, retrieves alert config, creates consolidated events, triggers webhooks |
+| **WebhookSubscriber** | **ONLY sends HTTP webhooks** - no knowledge of aggregation |
 
 ## Data Flow
 
+### 1. Event Occurs
+
+```java
+// Alert evaluation logic (to be implemented)
+if (eventMatchesAlertConfig(event, alert)) {
+    alertBucketService.addEventToBucket(
+        alert.getId(),
+        eventType,
+        event.getId()
+    ).subscribe();
+}
 ```
-┌─────────────────┐
-│  Webhook Event  │
-│   Triggered     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────────────┐
-│  WebhookEventStorageService     │
-│  (Entry Point)                  │
-│  - Check if debouncing enabled  │
-└────────┬─────────────┬──────────┘
-         │             │
- Debouncing ON   Debouncing OFF
-         │             │
-         │             └──────────────────────┐
-         ▼                                    │
-┌──────────────────────────────────────┐     │
-│  WebhookEventAggregationService      │     │
-│  Store event with timestamp in Redis │     │
-│  Key: webhook_pending:{alertId}:     │     │
-│       {eventType}                    │     │
-│  Data:                               │     │
-│    - event_timestamps: first_seen    │     │
-│    - eventIds: [id1, id2, ...]       │     │
-└──────────────────────────────────────┘     │
-         │                                    │
-         │  (Background Job - Every 5 seconds)│
-         ▼                                    │
-┌──────────────────────────────────────┐     │
-│  WebhookBucketProcessorJob           │     │
-│  Check for pending events            │     │
-│  If (now - first_seen) >= window:   │     │
-└────────┬─────────────────────────────┘     │
-         │ YES: Ready to publish              │
-         ▼                                    │
-┌──────────────────────────────────────┐     │
-│  WebhookBucketProcessor              │     │
-│  - Create consolidated event         │     │
-│  - Call WebhookSubscriber            │     │
-│  - Delete pending key from Redis     │     │
-└────────┬─────────────────────────────┘     │
-         │                                    │
-         └──────────────┬─────────────────────┘
-                        ▼
-         ┌──────────────────────────┐
-         │   WebhookSubscriber      │
-         │   sendWebhook(event)     │
-         │   - Validate             │
-         │   - Send via HTTP        │
-         └──────────────────────────┘
+
+### 2. Event Storage in Redis
+
+**Bucket Key Format:** `alert_bucket:{alertId}:{eventType}`
+
+**Bucket Data Structure:**
+```json
+{
+  "eventIds": "[\"event-1\", \"event-2\", \"event-3\"]",
+  "firstSeen": "1704067200000"
+}
+```
+
+### 3. Background Processing
+
+**AlertJob** (runs every 5 seconds):
+
+```java
+@Every("5s")
+public class AlertJob extends Job {
+    @Override
+    public void doJob(JobExecutionContext context) {
+        // Check buckets ready to process
+        bucketService.getBucketsReadyToProcess()
+            .flatMap(this::processBucket)
+            .blockLast();
+    }
+}
+```
+
+### 4. Webhook Notification
+
+When a bucket is ready:
+
+```java
+private Mono<Void> processBucket(String bucketKey) {
+    // 1. Parse alert ID and event type
+    // 2. Retrieve alert configuration from AlertService
+    // 3. Get aggregated event IDs from bucket
+    // 4. Create consolidated webhook event
+    // 5. Send via WebhookSubscriber
+    // 6. Delete bucket
+}
+```
+
+## Configuration
+
+### Debouncing Settings
+
+```yaml
+webhook:
+  debouncing:
+    enabled: true
+    windowSize: 60 seconds    # Time to wait before sending consolidated notification
+    bucketTtl: 3 minutes      # Bucket expiration time (safety cleanup)
+```
+
+### Alert Configuration
+
+```java
+Alert {
+    id: UUID
+    name: String
+    enabled: Boolean
+    webhook: {
+        url: String
+        headers: Map<String, String>
+        secretToken: String
+    }
+    triggers: List<AlertTrigger> {
+        eventType: AlertEventType
+        triggerConfigs: List<TriggerConfig>
+    }
+}
 ```
 
 ## Implementation Details
 
-### Event Storage in Redis
+### Redis Bucket Management
 
-Each unique alert+event type combination gets a Redis key:
+**AlertBucketService:**
 
-```
-Key: webhook_pending:{alertId}:{eventType}
-Value: Hash Map {
-  "event_timestamps": "1704067200000",  // First seen timestamp in milliseconds
-  "eventIds": "[\"event-123\", \"event-456\", \"event-789\"]"  // JSON array of event IDs
+```java
+public Mono<Void> addEventToBucket(
+    UUID alertId,
+    AlertEventType eventType,
+    String eventId) {
+    
+    String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+    RMapReactive<String, String> bucket = redissonClient.getMap(bucketKey);
+    
+    // Add event ID to set
+    // Store firstSeen timestamp if first event
+    // Set bucket TTL
 }
-TTL: 3 minutes (configurable)
+
+public Flux<String> getBucketsReadyToProcess() {
+    // Scan all alert_bucket:* keys
+    // For each bucket:
+    //   - Check firstSeen timestamp
+    //   - If (now - firstSeen) >= debouncingWindow
+    //   - Return bucket key
+}
 ```
 
-### Debouncing Logic
+### Timestamp-Based Debouncing
 
-1. **Event Arrives**: 
-   - Application calls `WebhookEventStorageService.storeEvent(event)`
-   - If debouncing enabled:
-     - Check if pending key exists in Redis
-     - If **first event**: Store current timestamp as `event_timestamps`
-     - If **subsequent event**: Keep original timestamp, add event ID to list
-   - If debouncing disabled:
-     - Immediately call `WebhookSubscriber.sendWebhook(event)`
-
-2. **Background Check** (Every 5 seconds):
-   - `WebhookBucketProcessorJob` runs
-   - Scan all keys matching `webhook_pending:*`
-   - For each key:
-     - Get `event_timestamps` value
-     - Calculate: `elapsed = now - event_timestamps`
-     - If `elapsed >= windowSize`: Mark as ready to publish
-
-3. **Publishing**:
-   - `WebhookBucketProcessor` creates consolidated webhook event with:
-     - All aggregated event IDs
-     - Event count
-     - Aggregation metadata
-   - Calls `WebhookSubscriber.sendWebhook(consolidatedEvent)`
-   - `WebhookSubscriber` validates and sends via HTTP
-   - Delete pending key from Redis
-
-### Separation of Concerns
-
-| Component | Responsible For | NOT Responsible For |
-|-----------|----------------|---------------------|
-| **WebhookEventStorageService** | Routing events based on config | Sending webhooks, Redis storage |
-| **WebhookEventAggregationService** | Redis storage and grouping | Sending webhooks, scheduling |
-| **WebhookBucketProcessorJob** | Scheduling and triggering processing | Creating events, sending webhooks |
-| **WebhookBucketProcessor** | Creating consolidated events | Sending HTTP requests |
-| **WebhookSubscriber** | **ONLY sending HTTP webhooks** | Aggregation, debouncing, Redis, scheduling |
-
-### Configuration Example
-
-```yaml
-webhook:
-  enabled: true
-  debouncing:
-    enabled: true
-    windowSize: 60s        # Wait 60 seconds before publishing
-    bucketTtl: 3m          # Keep pending events for max 3 minutes
 ```
+Event Timeline:
 
-## Benefits
-
-1. **Reduced Webhook Calls**: Multiple events are consolidated into single notifications
-2. **Configurable Window**: Adjust debouncing window based on requirements
-3. **Non-Blocking**: Events are stored immediately, processing happens asynchronously
-4. **Fault Tolerant**: Individual failures don't affect other events
-5. **Scalable**: Background job frequency (5s) is independent of debouncing window
-6. **Clean Architecture**: Clear separation between aggregation and sending
-
-## Example Scenarios
-
-### Scenario 1: Single Event
-```
-Time 0s:  Event A arrives → Store with timestamp
-Time 5s:  Background check → Not ready (5s < 60s)
-Time 10s: Background check → Not ready (10s < 60s)
+t0: First event arrives → Store firstSeen = t0
+t1: Second event arrives → Keep firstSeen = t0
+t2: Third event arrives → Keep firstSeen = t0
 ...
-Time 60s: Background check → Ready! → Publish 1 event → Delete key
+t60: AlertJob runs → (t60 - t0) >= 60s → Send consolidated webhook
 ```
 
-### Scenario 2: Multiple Events Within Window
-```
-Time 0s:  Event A arrives → Store with timestamp T0
-Time 5s:  Background check → Not ready
-Time 10s: Event B arrives → Add to same key (keeps timestamp T0)
-Time 15s: Event C arrives → Add to same key (keeps timestamp T0)
-...
-Time 60s: Background check → Ready! → Publish consolidated (3 events) → Delete key
+### Consolidated Webhook Payload
+
+```json
+{
+  "id": "alert-{alertId}-{uuid}",
+  "eventType": "alert.fired",
+  "alertId": "{alertId}",
+  "alertName": "High Error Rate",
+  "workspaceId": "{workspaceId}",
+  "userName": "system",
+  "url": "{webhookUrl}",
+  "payload": {
+    "alertId": "{alertId}",
+    "alertName": "High Error Rate",
+    "eventType": "trace:errors",
+    "eventIds": ["event-1", "event-2", "event-3"],
+    "eventCount": 3,
+    "aggregationType": "consolidated",
+    "message": "Alert 'High Error Rate': 3 trace:errors events aggregated"
+  },
+  "headers": {
+    "X-Custom-Header": "value"
+  }
+}
 ```
 
-### Scenario 3: Debouncing Disabled
+## Job Management
+
+### AlertJob Schedule
+
+- **Frequency**: Every 5 seconds
+- **Concurrency**: Disabled (`@DisallowConcurrentExecution`)
+- **Purpose**: Check buckets and trigger webhooks for events past debouncing window
+
+### Job Execution Flow
+
+```java
+1. getBucketsReadyToProcess() → Flux<String> of bucket keys
+2. For each bucketKey:
+   a. Parse alertId and eventType
+   b. Retrieve Alert configuration
+   c. Get aggregated event IDs
+   d. Create consolidated webhook event
+   e. Send via WebhookSubscriber
+   f. Delete bucket
+3. Error handling: Continue on error, log failures
 ```
-Time 0s:  Event A arrives → Immediately sent via WebhookSubscriber
-Time 10s: Event B arrives → Immediately sent via WebhookSubscriber
-(No aggregation, each event sent individually)
+
+## Error Handling
+
+### Bucket Processing Errors
+
+```java
+bucketService.getBucketsReadyToProcess()
+    .flatMap(this::processBucket)
+    .onErrorContinue((throwable, bucketKey) -> {
+        log.error("Failed to process bucket '{}': {}",
+            bucketKey, throwable.getMessage(), throwable);
+    })
+    .blockLast();
+```
+
+### Alert Configuration Errors
+
+```java
+// If alert is disabled
+if (!alert.enabled()) {
+    log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
+    return Mono.empty();
+}
+
+// If webhook configuration is missing
+if (alert.webhook() == null || alert.webhook().url() == null) {
+    log.error("Alert '{}' has no webhook configuration, skipping", alert.id());
+    return Mono.empty();
+}
+```
+
+### Webhook Sending Errors
+
+```java
+return webhookSubscriber.sendWebhook(webhookEvent)
+    .doOnSuccess(__ -> log.info("Successfully sent webhook for alert '{}'", alert.id()))
+    .doOnError(error -> log.error("Failed to send webhook for alert '{}': {}",
+        alert.id(), error.getMessage(), error));
 ```
 
 ## Testing
 
 ### Unit Tests
 
-Test file: `WebhookEventAggregationTest.java`
+```java
+@Test
+void shouldAddEventToBucket() {
+    // Test event addition to Redis bucket
+}
 
-Tests cover:
-- Event aggregation with single and multiple events
-- Timestamp tracking (first event sets timestamp)
-- Debouncing window validation
-- Pending key retrieval and filtering
-- Event ID serialization/deserialization
+@Test
+void shouldReturnBucketsReadyToProcess() {
+    // Test bucket readiness based on firstSeen timestamp
+}
+
+@Test
+void shouldProcessBucketAndSendWebhook() {
+    // Test AlertJob processing and webhook sending
+}
+
+@Test
+void shouldHandleDisabledAlert() {
+    // Test skipping webhooks for disabled alerts
+}
+```
 
 ### Integration Tests
 
-Required tests (to be implemented):
-- End-to-end flow with real Redis
-- Multiple concurrent events
-- TTL expiration behavior
-- Job scheduling and execution
-- WebhookSubscriber HTTP sending
+- Test complete flow from event to webhook
+- Test bucket TTL and cleanup
+- Test concurrent event additions to same bucket
+- Test AlertJob execution with multiple ready buckets
 
-## Known Limitations & Future Enhancements
+## Future Enhancements
 
-1. **Alert Configuration**: Currently uses placeholder values for:
-   - Workspace ID
-   - Webhook URL
-   - Custom headers
-   - **TODO**: Integrate with alert management service
+1. **Alert Configuration Management**: Integration with Alert CRUD operations
+2. **Workspace Context**: Proper workspace ID handling in webhook events
+3. **Metrics**: Track aggregation stats, publish latency, success/failure rates
+4. **Rate Limiting**: Implement per-alert webhook rate limits
+5. **Batch Size Limits**: Configurable maximum events per consolidated webhook
 
-2. **Monitoring**: Add metrics for:
-   - Events aggregated count
-   - Publish latency
-   - Failed publications
-   - WebhookSubscriber success/failure rates
+## Key Files
 
-3. **Rate Limiting**: Consider adding:
-   - Maximum events per pending key
-   - Maximum pending keys per workspace
+### Core Implementation
+- `AlertBucketService.java` - Redis bucket management
+- `AlertJob.java` - Scheduled job for processing buckets
+- `WebhookSubscriber.java` - HTTP webhook sender
+- `WebhookConfig.java` - Debouncing configuration
 
-## Configuration Tuning
+### Data Models
+- `Alert.java` - Alert configuration
+- `AlertTrigger.java` - Alert trigger configuration
+- `WebhookEvent.java` - Webhook event structure
+- `WebhookEventTypes.java` - Event type enum (includes `ALERT_FIRED`)
 
-### Recommended Settings
-
-For different use cases:
-
-**High-Frequency Events (e.g., error tracking)**:
-```yaml
-debouncing:
-  windowSize: 30s   # Shorter window for faster notifications
-  bucketTtl: 2m
-```
-
-**Low-Frequency Events (e.g., daily reports)**:
-```yaml
-debouncing:
-  windowSize: 5m    # Longer window for better aggregation
-  bucketTtl: 10m
-```
-
-**Real-Time Alerts (disable debouncing)**:
-```yaml
-debouncing:
-  enabled: false    # Immediate webhook for every event
-```
-
-## Related Documentation
-
-- [Alerting MVP High-Level Design Document](https://www.notion.so/cometml/Alerting-MVP-High-Level-Design-Document-2387124010a38003b6ffc619fddcafe1)
-- [Webhook Configuration Guide](./webhook-configuration.md)
-- [Redis Configuration Guide](./redis-configuration.md)
+### Services
+- `AlertService.java` - Alert CRUD operations
+- `AlertDAO.java` - Alert database access
 
 ## Version History
 
-| Version | Date | Author | Description |
-|---------|------|--------|-------------|
-| 1.0     | 2025-01-30 | System | Initial implementation with timestamp-based debouncing |
-| 2.0     | 2025-01-30 | System | **Architecture redesign**: WebhookSubscriber only sends HTTP requests, added WebhookEventStorageService |
+### Version 1.0 (2024-01-01)
+- Initial implementation
+- Timestamp-based debouncing
+- 5-second AlertJob schedule
+- WebhookSubscriber only sends HTTP
+- AlertBucketService manages Redis storage
+- AlertJob orchestrates bucket processing and webhook triggering
