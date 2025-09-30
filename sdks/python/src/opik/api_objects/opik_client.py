@@ -1027,7 +1027,7 @@ class Opik:
         search_functor = functools.partial(
             helpers.search_traces_with_filters,
             rest_client=self._rest_client,
-            project_name=project_name,
+            project_name=project_name or self._project_name,
             filters=filters_,
             max_results=max_results,
             truncate=truncate,
