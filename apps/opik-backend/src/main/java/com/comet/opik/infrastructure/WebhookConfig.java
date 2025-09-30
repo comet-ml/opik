@@ -61,9 +61,31 @@ public class WebhookConfig implements StreamConfiguration {
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration connectionTimeout = Duration.seconds(5);
 
+    // Debouncing configuration
+    @Valid @JsonProperty
+    private DebouncingConfig debouncing = new DebouncingConfig();
+
     @Override
     @JsonIgnore
     public Codec getCodec() {
         return CODEC;
+    }
+
+    /**
+     * Configuration for webhook event debouncing and aggregation.
+     */
+    @Data
+    public static class DebouncingConfig {
+
+        @Valid @JsonProperty
+        private boolean enabled = true;
+
+        @Valid @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration windowSize = Duration.seconds(60);
+
+        @Valid @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration bucketTtl = Duration.minutes(3);
     }
 }

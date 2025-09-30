@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.api.resources.v1.events.webhooks.WebhookEventAggregationService;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -27,14 +28,17 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     private final WebhookHttpClient webhookHttpClient;
     private final WebhookConfig webhookConfig;
+    private final WebhookEventAggregationService aggregationService;
 
     @Inject
     public WebhookSubscriber(@NonNull WebhookConfig webhookConfig,
             @NonNull RedissonReactiveClient redisson,
-            @NonNull WebhookHttpClient webhookHttpClient) {
+            @NonNull WebhookHttpClient webhookHttpClient,
+            @NonNull WebhookEventAggregationService aggregationService) {
         super(webhookConfig, redisson, METRICS_BASE_NAME, WebhookConfig.PAYLOAD_FIELD);
         this.webhookHttpClient = webhookHttpClient;
         this.webhookConfig = webhookConfig;
+        this.aggregationService = aggregationService;
     }
 
     @Override
@@ -54,7 +58,18 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                 .build();
 
         return Mono.defer(() -> validateEvent(event))
-                .then(Mono.defer(() -> webhookHttpClient.sendWebhook(event)))
+                .then(Mono.defer(() -> {
+                    // Check if debouncing is enabled
+                    if (webhookConfig.getDebouncing().isEnabled()) {
+                        log.debug("Debouncing is enabled, aggregating event '{}' into bucket",
+                                event.getId());
+                        return aggregationService.aggregateEvent(event);
+                    } else {
+                        log.debug("Debouncing is disabled, sending event '{}' immediately",
+                                event.getId());
+                        return webhookHttpClient.sendWebhook(event);
+                    }
+                }))
                 .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId())
                         .put(RequestContext.USER_NAME, event.getUserName()))
                 .subscribeOn(Schedulers.boundedElastic())
