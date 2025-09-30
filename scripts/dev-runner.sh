@@ -169,6 +169,49 @@ lint_backend() {
     fi
 }
 
+# Function to run database migrations
+run_db_migrations() {
+    require_command java
+    log_info "Running database migrations..."
+    log_debug "Backend directory: $BACKEND_DIR"
+    cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
+
+    # Find and validate the JAR file
+    if ! find_jar_files; then
+        log_warning "No backend JAR file found in target/. Building backend automatically..."
+        build_backend
+
+        # Re-scan for JAR files after build
+        if ! find_jar_files; then
+            log_error "Backend build completed but no JAR file found. Build may have failed."
+            exit 1
+        fi
+    fi
+
+    log_debug "Running migrations with JAR: $JAR_FILE"
+    log_debug "Current directory: $(pwd)"
+
+    # Run MySQL (state DB) migrations
+    log_info "Running MySQL (state DB) migrations..."
+    if java -jar "$JAR_FILE" db migrate config.yml; then
+        log_success "MySQL migrations completed successfully"
+    else
+        log_error "MySQL migrations failed"
+        exit 1
+    fi
+
+    # Run ClickHouse (analytics DB) migrations
+    log_info "Running ClickHouse (analytics DB) migrations..."
+    if java -jar "$JAR_FILE" dbAnalytics migrate config.yml; then
+        log_success "ClickHouse migrations completed successfully"
+    else
+        log_error "ClickHouse migrations failed"
+        exit 1
+    fi
+
+    log_success "All database migrations completed successfully"
+}
+
 # Function to start backend
 start_backend() {
     require_command java
@@ -209,6 +252,9 @@ start_backend() {
             exit 1
         fi
     fi
+
+    # Run database migrations before starting the backend
+    run_db_migrations
 
     log_debug "Starting backend with JAR: $JAR_FILE"
     log_debug "Command: java -jar $JAR_FILE server config.yml"
@@ -482,7 +528,7 @@ restart_services() {
     build_backend
     log_info "Step 6/8: Building frontend..."
     build_frontend
-    log_info "Step 7/8: Starting backend..."
+    log_info "Step 7/8: Starting backend (includes DB migrations)..."
     start_backend
     log_info "Step 8/8: Starting frontend..."
     start_frontend
@@ -497,6 +543,7 @@ show_usage() {
     echo "Options:"
     echo "  --build-be     - Build backend"
     echo "  --build-fe     - Build frontend"
+    echo "  --migrate      - Run database migrations (MySQL, ClickHouse etc.)"
     echo "  --start        - Start all services (without building)"
     echo "  --stop         - Stop all services"
     echo "  --restart      - Stop, build, and start all services (DEFAULT IF NO OPTIONS PROVIDED)"
@@ -564,6 +611,9 @@ case "${1:-}" in
         ;;
     "--build-fe")
         build_frontend
+        ;;
+    "--migrate")
+        run_db_migrations
         ;;
     "--start")
         start_infrastructure
