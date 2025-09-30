@@ -424,7 +424,28 @@ class MCPToolInvocation:
         try:
             return json.dumps(payload, sort_keys=True, default=str)
         except TypeError:
-            return repr(tuple(sorted(payload.items())))
+            normalised = self._normalise_cache_payload(payload)
+            return json.dumps(normalised, sort_keys=True, default=str)
+
+    @staticmethod
+    def _normalise_cache_payload(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {
+                key: MCPToolInvocation._normalise_cache_payload(val)
+                for key, val in sorted(value.items(), key=lambda item: str(item[0]))
+            }
+        if isinstance(value, list):
+            return [MCPToolInvocation._normalise_cache_payload(item) for item in value]
+        if isinstance(value, tuple):
+            return [MCPToolInvocation._normalise_cache_payload(item) for item in value]
+        if isinstance(value, set):
+            return [
+                MCPToolInvocation._normalise_cache_payload(item)
+                for item in sorted(value, key=repr)
+            ]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        return str(value)
 
 
 def summarise_with_template(template: str) -> SummaryBuilder:
