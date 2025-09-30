@@ -10,6 +10,7 @@ import { ExperimentType } from "./ExperimentType";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 import { Comment } from "./Comment";
 import { PercentageValues } from "./PercentageValues";
+import { ExperimentStatus } from "./ExperimentStatus";
 import { PromptVersionLink } from "./PromptVersionLink";
 
 export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.Raw, OpikApi.Experiment> =
@@ -38,6 +39,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+        status: ExperimentStatus.optional(),
         promptVersion: core.serialization.property("prompt_version", PromptVersionLink.optional()),
         promptVersions: core.serialization.property(
             "prompt_versions",
@@ -65,6 +67,7 @@ export declare namespace Experiment {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        status?: ExperimentStatus.Raw | null;
         prompt_version?: PromptVersionLink.Raw | null;
         prompt_versions?: PromptVersionLink.Raw[] | null;
     }

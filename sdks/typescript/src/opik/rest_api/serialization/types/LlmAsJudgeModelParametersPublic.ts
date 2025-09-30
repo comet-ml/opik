@@ -12,7 +12,7 @@ export const LlmAsJudgeModelParametersPublic: core.serialization.ObjectSchema<
 > = core.serialization.object({
     name: core.serialization.string(),
     temperature: core.serialization.number(),
-    seed: core.serialization.number().nullable().optional()
+    seed: core.serialization.number().optional(),
 });
 
 export declare namespace LlmAsJudgeModelParametersPublic {

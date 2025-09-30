@@ -10,6 +10,7 @@ import { ExperimentPublicType } from "./ExperimentPublicType";
 import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic";
 import { CommentPublic } from "./CommentPublic";
 import { PercentageValuesPublic } from "./PercentageValuesPublic";
+import { ExperimentPublicStatus } from "./ExperimentPublicStatus";
 import { PromptVersionLinkPublic } from "./PromptVersionLinkPublic";
 
 export const ExperimentPublic: core.serialization.ObjectSchema<
@@ -40,6 +41,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+    status: ExperimentPublicStatus.optional(),
     promptVersion: core.serialization.property("prompt_version", PromptVersionLinkPublic.optional()),
     promptVersions: core.serialization.property(
         "prompt_versions",
@@ -67,6 +69,7 @@ export declare namespace ExperimentPublic {
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
+        status?: ExperimentPublicStatus.Raw | null;
         prompt_version?: PromptVersionLinkPublic.Raw | null;
         prompt_versions?: PromptVersionLinkPublic.Raw[] | null;
     }

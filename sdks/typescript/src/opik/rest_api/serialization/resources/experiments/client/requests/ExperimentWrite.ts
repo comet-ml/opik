@@ -7,6 +7,7 @@ import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { JsonListStringWrite } from "../../../../types/JsonListStringWrite";
 import { ExperimentWriteType } from "../../types/ExperimentWriteType";
+import { ExperimentWriteStatus } from "../../types/ExperimentWriteStatus";
 import { PromptVersionLinkWrite } from "../../../../types/PromptVersionLinkWrite";
 
 export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWrite.Raw, OpikApi.ExperimentWrite> =
@@ -17,6 +18,7 @@ export const ExperimentWrite: core.serialization.Schema<serializers.ExperimentWr
         metadata: JsonListStringWrite.optional(),
         type: ExperimentWriteType.optional(),
         optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
+        status: ExperimentWriteStatus.optional(),
         promptVersion: core.serialization.property("prompt_version", PromptVersionLinkWrite.optional()),
         promptVersions: core.serialization.property(
             "prompt_versions",
@@ -32,6 +34,7 @@ export declare namespace ExperimentWrite {
         metadata?: JsonListStringWrite.Raw | null;
         type?: ExperimentWriteType.Raw | null;
         optimization_id?: string | null;
+        status?: ExperimentWriteStatus.Raw | null;
         prompt_version?: PromptVersionLinkWrite.Raw | null;
         prompt_versions?: PromptVersionLinkWrite.Raw[] | null;
     }
