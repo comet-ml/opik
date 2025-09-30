@@ -9,6 +9,25 @@ type UseRuleCreateMutationParams = {
   rule: Partial<EvaluatorsRule>;
 };
 
+const serializeMessageContent = (content: string | any[]): string => {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  // Convert structured content array to string format
+  return content
+    .map((item: any) => {
+      if (item.type === "text") {
+        return item.text;
+      } else if (item.type === "image_url") {
+        // Wrap image variable with placeholder tags for backend parsing
+        return `<<<image>>>${item.image_url.url}<<</image>>>`;
+      }
+      return "";
+    })
+    .join("");
+};
+
 const useRuleCreateMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -16,11 +35,16 @@ const useRuleCreateMutation = () => {
   return useMutation({
     mutationFn: async ({ rule }: UseRuleCreateMutationParams) => {
       // Clean schema to remove frontend-only fields like 'unsaved'
+      // Serialize message content from structured to string format
       const cleanedRule = {
         ...rule,
         code: rule.code
           ? {
               ...rule.code,
+              messages: rule.code.messages?.map((msg: any) => ({
+                ...msg,
+                content: serializeMessageContent(msg.content),
+              })),
               schema: rule.code.schema?.map(({ unsaved, ...rest }: any) => rest),
             }
           : rule.code,
