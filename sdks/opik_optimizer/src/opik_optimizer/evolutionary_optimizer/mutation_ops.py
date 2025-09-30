@@ -1,4 +1,4 @@
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Union, List, Dict
 from collections.abc import Callable
 
 import json
@@ -13,6 +13,79 @@ from . import reporting
 
 
 logger = logging.getLogger(__name__)
+
+
+# Type alias for multimodal content
+MessageContent = Union[str, List[Dict[str, Any]]]
+
+
+def extract_text_from_content(content: MessageContent) -> str:
+    """
+    Extract text from message content, handling both string and structured formats.
+
+    For structured content (multimodal), extracts only text parts and ignores images.
+
+    Args:
+        content: Message content (string or structured list)
+
+    Returns:
+        Extracted text as a string
+    """
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        # Extract text from structured content
+        text_parts = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text_parts.append(part.get("text", ""))
+
+        return " ".join(text_parts)
+
+    return str(content)
+
+
+def rebuild_content_with_mutated_text(
+    original_content: MessageContent,
+    mutated_text: str,
+) -> MessageContent:
+    """
+    Rebuild message content with mutated text while preserving images.
+
+    If original content is structured (multimodal), replaces text parts with
+    mutated text while keeping image parts intact.
+
+    Args:
+        original_content: Original message content
+        mutated_text: The mutated text to use
+
+    Returns:
+        Rebuilt content with mutated text
+    """
+    if isinstance(original_content, str):
+        # Simple case: return mutated text
+        return mutated_text
+
+    if isinstance(original_content, list):
+        # Structured content: rebuild with mutated text + preserved images
+        result_parts = []
+
+        # First, add mutated text
+        result_parts.append({
+            "type": "text",
+            "text": mutated_text,
+        })
+
+        # Then, preserve all image parts from original
+        for part in original_content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                result_parts.append(part)
+
+        return result_parts
+
+    # Fallback: return as string
+    return mutated_text
 
 
 class MutationOps:
@@ -142,13 +215,16 @@ class MutationOps:
         self, prompt: chat_prompt.ChatPrompt
     ) -> chat_prompt.ChatPrompt:
         """Perform structural mutation (reordering, combining, splitting)."""
-        mutated_messages: list[dict[str, str]] = []
+        mutated_messages: list[dict[str, MessageContent]] = []
 
         for message in prompt.get_messages():
             content = message["content"]
             role = message["role"]
 
-            sentences = [s.strip() for s in content.split(".") if s.strip()]
+            # Extract text for mutation (handles both string and structured content)
+            text_content = extract_text_from_content(content)
+
+            sentences = [s.strip() for s in text_content.split(".") if s.strip()]
             if len(sentences) <= 1:
                 mutated_messages.append(
                     {"role": role, "content": self._word_level_mutation(content)}
@@ -156,21 +232,17 @@ class MutationOps:
                 continue
 
             mutation_type = random.random()
+            mutated_text = None
+
             if mutation_type < 0.3:
                 random.shuffle(sentences)
-                mutated_messages.append(
-                    {"role": role, "content": ". ".join(sentences) + "."}
-                )
-                continue
+                mutated_text = ". ".join(sentences) + "."
             elif mutation_type < 0.6:
                 if len(sentences) >= 2:
                     idx = random.randint(0, len(sentences) - 2)
                     combined = sentences[idx] + " and " + sentences[idx + 1]
                     sentences[idx : idx + 2] = [combined]
-                    mutated_messages.append(
-                        {"role": role, "content": ". ".join(sentences) + "."}
-                    )
-                    continue
+                    mutated_text = ". ".join(sentences) + "."
             else:
                 idx = random.randint(0, len(sentences) - 1)
                 words = sentences[idx].split()
@@ -180,19 +252,21 @@ class MutationOps:
                         " ".join(words[:split_point]),
                         " ".join(words[split_point:]),
                     ]
-                    mutated_messages.append(
-                        {"role": role, "content": ". ".join(sentences) + "."}
-                    )
-                    continue
-                else:
-                    mutated_messages.append({"role": role, "content": content})
+                    mutated_text = ". ".join(sentences) + "."
+
+            # Rebuild content with mutated text, preserving any images
+            if mutated_text:
+                new_content = rebuild_content_with_mutated_text(content, mutated_text)
+                mutated_messages.append({"role": role, "content": new_content})
+            else:
+                mutated_messages.append({"role": role, "content": content})
 
         return chat_prompt.ChatPrompt(messages=mutated_messages)
 
     def _word_level_mutation_prompt(
         self, prompt: chat_prompt.ChatPrompt
     ) -> chat_prompt.ChatPrompt:
-        mutated_messages: list[dict[str, str]] = []
+        mutated_messages: list[dict[str, MessageContent]] = []
         for message in prompt.get_messages():
             mutated_messages.append(
                 {
@@ -202,9 +276,12 @@ class MutationOps:
             )
         return chat_prompt.ChatPrompt(messages=mutated_messages)
 
-    def _word_level_mutation(self, msg_content: str) -> str:
-        """Perform word-level mutation."""
-        words = msg_content.split()
+    def _word_level_mutation(self, msg_content: MessageContent) -> MessageContent:
+        """Perform word-level mutation on message content."""
+        # Extract text for mutation
+        text_content = extract_text_from_content(msg_content)
+
+        words = text_content.split()
         if len(words) <= 1:
             return msg_content
 
@@ -220,7 +297,9 @@ class MutationOps:
             idx = random.randint(0, len(words) - 1)
             words[idx] = self._modify_phrase(words[idx])
 
-        return " ".join(words)
+        # Rebuild content with mutated text, preserving any images
+        mutated_text = " ".join(words)
+        return rebuild_content_with_mutated_text(msg_content, mutated_text)
 
     def _get_synonym(self, word: str) -> str:
         """Get a synonym for a word using LLM."""

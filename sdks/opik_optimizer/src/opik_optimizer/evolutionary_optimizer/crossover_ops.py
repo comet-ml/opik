@@ -1,4 +1,4 @@
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Union, List, Dict
 
 import logging
 import random
@@ -13,6 +13,79 @@ from .. import utils
 
 logger = logging.getLogger(__name__)
 creator = _creator  # backward compt.
+
+
+# Type alias for multimodal content
+MessageContent = Union[str, List[Dict[str, Any]]]
+
+
+def extract_text_from_content(content: MessageContent) -> str:
+    """
+    Extract text from message content, handling both string and structured formats.
+
+    For structured content (multimodal), extracts only text parts and ignores images.
+
+    Args:
+        content: Message content (string or structured list)
+
+    Returns:
+        Extracted text as a string
+    """
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        # Extract text from structured content
+        text_parts = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text_parts.append(part.get("text", ""))
+
+        return " ".join(text_parts)
+
+    return str(content)
+
+
+def rebuild_content_with_mutated_text(
+    original_content: MessageContent,
+    mutated_text: str,
+) -> MessageContent:
+    """
+    Rebuild message content with mutated text while preserving images.
+
+    If original content is structured (multimodal), replaces text parts with
+    mutated text while keeping image parts intact.
+
+    Args:
+        original_content: Original message content
+        mutated_text: The mutated text to use
+
+    Returns:
+        Rebuilt content with mutated text
+    """
+    if isinstance(original_content, str):
+        # Simple case: return mutated text
+        return mutated_text
+
+    if isinstance(original_content, list):
+        # Structured content: rebuild with mutated text + preserved images
+        result_parts = []
+
+        # First, add mutated text
+        result_parts.append({
+            "type": "text",
+            "text": mutated_text,
+        })
+
+        # Then, preserve all image parts from original
+        for part in original_content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                result_parts.append(part)
+
+        return result_parts
+
+    # Fallback: return as string
+    return mutated_text
 
 
 class CrossoverOps:
@@ -62,20 +135,27 @@ class CrossoverOps:
     def _deap_crossover(self, ind1: Any, ind2: Any) -> tuple[Any, Any]:
         """Crossover operation that preserves semantic meaning.
         Attempts chunk-level crossover first, then falls back to word-level.
+        Now supports multimodal content by preserving images during crossover.
         """
         reporting.display_message(
             "      Recombining prompts by mixing and matching words and sentences.",
             verbose=self.verbose,
         )
-        messages_1_orig: list[dict[str, str]] = ind1
-        messages_2_orig: list[dict[str, str]] = ind2
+        messages_1_orig: list[dict[str, MessageContent]] = ind1
+        messages_2_orig: list[dict[str, MessageContent]] = ind2
 
         for i, message_1 in enumerate(messages_1_orig):
             role: str = message_1["role"]
-            message_1_str: str = message_1["content"]
+            content_1 = message_1["content"]
+
             if (len(messages_2_orig) >= i + 1) and (messages_2_orig[i]["role"] == role):
                 message_2 = messages_2_orig[i]
-                message_2_str: str = message_2["content"]
+                content_2 = message_2["content"]
+
+                # Extract text for crossover (handles both string and structured content)
+                message_1_str = extract_text_from_content(content_1)
+                message_2_str = extract_text_from_content(content_2)
+
                 try:
                     child1_str, child2_str = self._deap_crossover_chunking_strategy(
                         message_1_str, message_2_str
@@ -84,8 +164,10 @@ class CrossoverOps:
                     child1_str, child2_str = self._deap_crossover_word_level(
                         message_1_str, message_2_str
                     )
-                messages_1_orig[i]["content"] = child1_str
-                messages_2_orig[i]["content"] = child2_str
+
+                # Rebuild content with crossed-over text, preserving images
+                messages_1_orig[i]["content"] = rebuild_content_with_mutated_text(content_1, child1_str)
+                messages_2_orig[i]["content"] = rebuild_content_with_mutated_text(content_2, child2_str)
             else:
                 pass
 
