@@ -1036,11 +1036,20 @@ class Opik:
             return search_functor()
 
         # do synchronization with backend if wait_for_at_least is provided until a specific number of traces are found
-        return helpers.search_and_wait_for_done(
+        result = helpers.search_and_wait_for_done(
             search_functor=search_functor,
             wait_for_at_least=wait_for_at_least,
             wait_for_timeout=wait_for_timeout,
         )
+        if len(result) < wait_for_at_least:
+            LOGGER.warning(
+                "Failed to find expected number of traces (%d) within timeout (%d sec). Found %d traces.",
+                wait_for_at_least,
+                wait_for_timeout,
+                len(result),
+            )
+
+        return result
 
     def search_spans(
         self,
@@ -1118,11 +1127,20 @@ class Opik:
             return search_functor()
 
         # do synchronization with backend if wait_for_at_least is provided until a specific number of spans are found
-        return helpers.search_and_wait_for_done(
+        result = helpers.search_and_wait_for_done(
             search_functor=search_functor,
             wait_for_at_least=wait_for_at_least,
             wait_for_timeout=wait_for_timeout,
         )
+        if len(result) < wait_for_at_least:
+            LOGGER.warning(
+                "Failed to find expected number of spans (%d) within timeout (%d sec). Found %d spans.",
+                wait_for_at_least,
+                wait_for_timeout,
+                len(result),
+            )
+
+        return result
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
