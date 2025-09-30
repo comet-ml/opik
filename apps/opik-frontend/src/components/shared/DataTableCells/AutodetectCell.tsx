@@ -3,7 +3,7 @@ import isPlainObject from "lodash/isPlainObject";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import { toString } from "@/lib/utils";
-import { processInputData } from "@/lib/images";
+import { isImageBase64String, processInputData } from "@/lib/images";
 import ImagePreviewCell from "@/components/shared/DataTableCells/ImagePreviewCell";
 
 const getImagesFromValue = (value: unknown) => {
@@ -66,12 +66,16 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
 
   const looksLikeImageString =
     typeof value === "string" &&
-    (/^data:image\//i.test(value) ||
-      foundMarkdown ||
-      /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(value));
+    (foundMarkdown ||
+      /\.\w{1,6}(\?|$)/i.test(value) ||
+      /^data:image\//i.test(value));
+
+  const isBase64String =
+    typeof value === "string" &&
+    (value.startsWith("data:image/") || isImageBase64String(value));
 
   const shouldMergeRowImages =
-    (placeholderLabel !== undefined || combinedImages.length > 0 || looksLikeImageString) &&
+    (placeholderLabel !== undefined || combinedImages.length > 0 || looksLikeImageString || isBase64String) &&
     rowImages.length > 0;
 
   if (shouldMergeRowImages && rowImages.length) {
@@ -100,8 +104,8 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
 
     const fallbackText =
       typeof value === "string"
-        ? isImagePlaceholder
-          ? "Image"
+        ? isImagePlaceholder || looksLikeImageString || isBase64String
+          ? combinedImages[0]?.name ?? "Image"
           : value
         : combinedImages[0]?.name ?? "";
 

@@ -3,6 +3,7 @@ import isString from "lodash/isString";
 import uniq from "lodash/uniq";
 import mustache from "mustache";
 
+import modelPricing from "@/data/model_prices_and_context_window.json";
 import {
   LLM_MESSAGE_ROLE,
   LLMMessage,
@@ -243,43 +244,65 @@ export const renderMessageContent = (
   });
 };
 
-const IMAGE_MODEL_KEYWORDS = ["gpt-4o", "gpt-4.1", "gpt-5", "o1", "o3", "o4"];
+type ModelPricingEntry = {
+  supports_vision?: boolean;
+  [key: string]: unknown;
+};
 
-const IMAGE_MODEL_EXACT = new Set(
-  [
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4o-2024-08-06",
-    "gpt-4o-2024-05-13",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    "gpt-4-turbo",
-    "gpt-4-turbo-preview",
-    "gpt-4-turbo-2024-04-09",
-    "gpt-4o-mini-2024-07-18",
-    "gpt-4o-mini",
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-chat-latest",
-    "o1",
-    "o1-mini",
-    "o3",
-    "o3-mini",
-    "o4-mini",
-  ].map((model) => model.toLowerCase()),
-);
+const normalizeModelName = (value: string) => value.trim().toLowerCase();
+
+const modelEntries = modelPricing as Record<string, ModelPricingEntry>;
+
+const VISION_CAPABILITIES = new Map<string, boolean>();
+const NORMALIZED_VISION_CAPABILITIES = new Map<string, boolean>();
+
+Object.entries(modelEntries).forEach(([modelName, entry]) => {
+  if (!modelName) {
+    return;
+  }
+
+  const supportsVision = Boolean(entry?.supports_vision);
+  VISION_CAPABILITIES.set(modelName, supportsVision);
+  NORMALIZED_VISION_CAPABILITIES.set(normalizeModelName(modelName), supportsVision);
+});
+
+const candidateKeys = (modelName: string): string[] => {
+  const normalized = normalizeModelName(modelName);
+  const candidates = new Set<string>([normalized]);
+
+  const slashIndex = normalized.lastIndexOf("/") + 1;
+  if (slashIndex > 0 && slashIndex < normalized.length) {
+    candidates.add(normalized.slice(slashIndex));
+  }
+
+  const colonIndex = normalized.indexOf(":");
+  if (colonIndex > 0) {
+    candidates.add(normalized.slice(0, colonIndex));
+
+    if (slashIndex > 0 && slashIndex < colonIndex) {
+      candidates.add(normalized.slice(slashIndex, colonIndex));
+    }
+  }
+
+  return Array.from(candidates);
+};
 
 export const supportsImageInput = (model?: string | null): boolean => {
   if (!model) {
     return false;
   }
 
-  const normalized = model.toLowerCase();
-
-  if (IMAGE_MODEL_EXACT.has(normalized)) {
-    return true;
+  const exact = VISION_CAPABILITIES.get(model);
+  if (exact !== undefined) {
+    return exact;
   }
 
-  return IMAGE_MODEL_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  for (const key of candidateKeys(model)) {
+    const capability = NORMALIZED_VISION_CAPABILITIES.get(key);
+    if (capability !== undefined) {
+      return capability;
+    }
+  }
+
+  return false;
 };
