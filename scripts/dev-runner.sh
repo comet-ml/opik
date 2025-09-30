@@ -173,7 +173,7 @@ lint_backend() {
 print_migrations_recovery_message() {
     log_error "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
     log_error "  1. Stop all services: ./scripts/dev-runner.sh --stop"
-    log_error "  2. Remove Docker volumes: docker volume prune -f"
+    log_error "  2. Remove Docker volumes: docker volume prune -a -f"
     log_error "  3. Continue your current flow: $ORIGINAL_COMMAND"
 }
 
