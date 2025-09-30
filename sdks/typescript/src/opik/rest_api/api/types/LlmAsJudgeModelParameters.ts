@@ -5,5 +5,5 @@
 export interface LlmAsJudgeModelParameters {
     name: string;
     temperature: number;
-    seed?: number | null;
+    seed?: number;
 }
