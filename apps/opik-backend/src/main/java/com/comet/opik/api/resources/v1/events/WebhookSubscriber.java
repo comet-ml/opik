@@ -24,6 +24,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
 public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     private static final String METRICS_BASE_NAME = "webhook";
+    private static final String METRICS_NAMESPACE = "opik.webhook";
 
     private final WebhookHttpClient webhookHttpClient;
     private final WebhookConfig webhookConfig;
@@ -39,7 +40,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     @Override
     protected String getMetricNamespace() {
-        return "opik.webhook";
+        return METRICS_NAMESPACE;
     }
 
     @Override

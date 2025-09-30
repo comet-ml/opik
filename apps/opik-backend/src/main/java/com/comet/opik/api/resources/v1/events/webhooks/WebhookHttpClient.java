@@ -12,6 +12,7 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.InvocationCallback;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -32,6 +33,8 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Slf4j
 @Singleton
 public class WebhookHttpClient {
+
+    private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
 
     private final @NonNull Client httpClient;
     private final @NonNull WebhookConfig webhookConfig;
@@ -68,7 +71,7 @@ public class WebhookHttpClient {
 
     private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {
         try (var logContext = wrapWithMdc(Map.of(
-                UserLog.MARKER, UserLog.EVENT_HANDLER_LOGS.name(),
+                UserLog.MARKER, UserLog.ALERT_EVENT.name(),
                 UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.EVENT_ID, event.getId(),
                 UserLog.ALERT_ID, event.getAlertId().toString()))) {
@@ -78,7 +81,7 @@ public class WebhookHttpClient {
 
     private void logError(WebhookEvent<?> event, String workspaceId, String message, Throwable throwable) {
         try (var logContext = wrapWithMdc(Map.of(
-                UserLog.MARKER, UserLog.EVENT_HANDLER_LOGS.name(),
+                UserLog.MARKER, UserLog.ALERT_EVENT.name(),
                 UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.EVENT_ID, event.getId(),
                 UserLog.ALERT_ID, event.getAlertId().toString()))) {
@@ -98,8 +101,8 @@ public class WebhookHttpClient {
                 }
 
                 // Add default headers
-                requestBuilder.header("User-Agent", "Opik-Webhook/1.0");
-                requestBuilder.header("Content-Type", MediaType.APPLICATION_JSON);
+                requestBuilder.header(HttpHeaders.USER_AGENT, USER_AGENT_VALUE);
+                requestBuilder.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
 
                 // Serialize payload using JsonUtils.MAPPER to handle Instant fields properly
                 var jsonPayload = JsonUtils.writeValueAsString(event);

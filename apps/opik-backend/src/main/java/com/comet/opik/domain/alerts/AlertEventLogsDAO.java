@@ -1,4 +1,4 @@
-package com.comet.opik.domain.evaluators;
+package com.comet.opik.domain.alerts;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.api.LogCriteria;
@@ -29,13 +29,13 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
-@ImplementedBy(EventLogsDAOImpl.class)
-public interface EventLogsDAO extends UserLogTableDAO {
+@ImplementedBy(AlertEventLogsDAOImpl.class)
+public interface AlertEventLogsDAO extends UserLogTableDAO {
 
     List<String> CUSTOM_MARKER_KEYS = List.of("event_id", "alert_id");
 
-    static EventLogsDAO create(ConnectionFactory factory) {
-        return new EventLogsDAOImpl(factory);
+    static AlertEventLogsDAO create(ConnectionFactory factory) {
+        return new AlertEventLogsDAOImpl(factory);
     }
 
     Flux<LogItem> findLogs(LogCriteria criteria);
@@ -45,15 +45,16 @@ public interface EventLogsDAO extends UserLogTableDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class EventLogsDAOImpl implements EventLogsDAO {
+class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
 
     private static final String INSERT_STATEMENT = """
-            INSERT INTO logs (timestamp, level, workspace_id, message, markers)
+            INSERT INTO alert_logs (timestamp, level, workspace_id, alert_id, message, markers)
             VALUES <items:{item |
                 (
                     parseDateTime64BestEffort(:timestamp<item.index>, 9),
                     :level<item.index>,
                     :workspace_id<item.index>,
+                    :alert_id<item.index>,
                     :message<item.index>,
                     mapFromArrays(:marker_keys<item.index>, :marker_values<item.index>)
                 )
@@ -63,7 +64,7 @@ class EventLogsDAOImpl implements EventLogsDAO {
             """;
 
     public static final String FIND_ALL = """
-            SELECT * FROM logs
+            SELECT * FROM alert_logs
             WHERE workspace_id = :workspace_id
             <if(level)> AND level = :level <endif>
             <if(items)>
@@ -81,7 +82,7 @@ class EventLogsDAOImpl implements EventLogsDAO {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
-                    log.info("Finding webhook logs with criteria: {}", criteria);
+                    log.info("Finding alert logs with criteria: {}", criteria);
 
                     var template = new ST(FIND_ALL);
 
@@ -101,7 +102,7 @@ class EventLogsDAOImpl implements EventLogsDAO {
                 .timestamp(row.get("timestamp", Instant.class))
                 .level(LogLevel.valueOf(row.get("level", String.class)))
                 .workspaceId(row.get("workspace_id", String.class))
-                .ruleId(null) // Webhook logs don't have rule IDs
+                .ruleId(null) // Alert logs don't have rule IDs
                 .message(row.get("message", String.class))
                 .markers(getStringStringMap(row.get("markers", Map.class)))
                 .build();
@@ -173,6 +174,8 @@ class EventLogsDAOImpl implements EventLogsDAO {
                         String logLevel = event.getLevel().toString();
                         String workspaceId = Optional.ofNullable(event.getMDCPropertyMap().get("workspace_id"))
                                 .orElseThrow(() -> failWithMessage("workspace_id is not set"));
+                        String alertId = Optional.ofNullable(event.getMDCPropertyMap().get("alert_id"))
+                                .orElseThrow(() -> failWithMessage("alert_id is not set"));
 
                         Map<String, String> makers = CUSTOM_MARKER_KEYS.stream()
                                 .map(key -> Map.entry(key, event.getMDCPropertyMap().getOrDefault(key, "")))
@@ -186,6 +189,7 @@ class EventLogsDAOImpl implements EventLogsDAO {
                                 .bind("timestamp" + i, event.getInstant().toString())
                                 .bind("level" + i, logLevel)
                                 .bind("workspace_id" + i, workspaceId)
+                                .bind("alert_id" + i, alertId)
                                 .bind("message" + i, event.getFormattedMessage())
                                 .bind("marker_keys" + i, markerKeys)
                                 .bind("marker_values" + i, markerValues);
