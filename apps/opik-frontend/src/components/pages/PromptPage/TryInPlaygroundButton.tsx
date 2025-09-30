@@ -47,11 +47,17 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
   const isPlaygroundEmpty = useMemo(() => {
     const keys = Object.keys(promptMap);
 
-    return (
-      keys.length === 1 &&
-      promptMap[keys[0]]?.messages?.length === 1 &&
-      isMessageContentEmpty(promptMap[keys[0]]?.messages[0]?.content ?? "")
-    );
+    if (keys.length !== 1) {
+      return false;
+    }
+
+    const activePrompt = promptMap[keys[0]];
+    if (!activePrompt?.messages || activePrompt.messages.length !== 1) {
+      return false;
+    }
+
+    const [firstMessage] = activePrompt.messages;
+    return isMessageContentEmpty(firstMessage?.content ?? "");
   }, [promptMap]);
 
   const providerKeys = useMemo(() => {
