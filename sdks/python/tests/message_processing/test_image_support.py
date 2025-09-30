@@ -1,14 +1,12 @@
 from opik.message_processing import image_support
 
 
-def test_supports_image_input_matches_keywords():
+def test_supports_image_input_accepts_any_named_model():
     assert image_support.supports_image_input("gpt-4o-mini")
-    assert image_support.supports_image_input("awesome-vision-model")
-    assert image_support.supports_image_input("o1-preview")
+    assert image_support.supports_image_input("text-davinci-003")
 
 
-def test_supports_image_input_negative_case():
-    assert not image_support.supports_image_input("text-davinci-003")
+def test_supports_image_input_rejects_missing_name():
     assert not image_support.supports_image_input(None)
 
 

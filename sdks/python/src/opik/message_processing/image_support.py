@@ -3,41 +3,8 @@ from __future__ import annotations
 from typing import Any, Iterable, List, Optional
 
 
-_EXACT_MODELS = {
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4o-2024-08-06",
-    "gpt-4o-2024-05-13",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
-    "gpt-4-turbo",
-    "gpt-4-turbo-preview",
-    "gpt-4-turbo-2024-04-09",
-    "gpt-4o-mini-2024-07-18",
-    "gpt-4o-mini",
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-chat-latest",
-    "o1",
-    "o1-mini",
-    "o3",
-    "o3-mini",
-    "o4-mini",
-}
-
-_KEYWORD_MODELS = ("gpt-4o", "gpt-4.1", "gpt-5", "o1", "o3", "o4")
-
-
 def supports_image_input(model_name: Optional[str]) -> bool:
-    if not model_name:
-        return False
-
-    normalized = model_name.lower()
-    if normalized in _EXACT_MODELS:
-        return True
-
-    return any(keyword in normalized for keyword in _KEYWORD_MODELS)
+    return bool(model_name)
 
 
 def flatten_multimodal_content(value: Any) -> Any:
@@ -56,7 +23,7 @@ def flatten_multimodal_content(value: Any) -> Any:
                     else None
                 )
                 if url:
-                    parts.append(f"![image]({url})")
+                    parts.append(f"<<<image>>>{url}<<<\\/image>>>")
         return "\n\n".join(part for part in parts if part)
 
     if isinstance(value, dict):
