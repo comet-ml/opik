@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Description } from "@/components/ui/description";
 import { Textarea } from "@/components/ui/textarea";
-import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import {
   AccordionContent,
@@ -150,19 +149,12 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
               <Label htmlFor="template">Prompt</Label>
-              <CodeMirror
-                className="min-h-44"
-                theme={theme}
+              <Textarea
+                id="template"
+                className="comet-code"
+                placeholder="Prompt"
                 value={template}
-                onChange={setTemplate}
-                placeholder="Type your prompt here"
-                extensions={[EditorView.lineWrapping, mustachePlugin]}
-                basicSetup={{
-                  foldGutter: false,
-                  allowMultipleSelections: false,
-                  lineNumbers: false,
-                  highlightActiveLine: false,
-                }}
+                onChange={(event) => setTemplate(event.target.value)}
               />
               <Description>
                 {
