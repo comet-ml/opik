@@ -6,7 +6,7 @@ set -euo pipefail
 
 # Variables
 DEBUG_MODE=${DEBUG_MODE:-false}
-ORIGINAL_COMMAND="$0 \"$@\""
+ORIGINAL_COMMAND="$0 $@"
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
