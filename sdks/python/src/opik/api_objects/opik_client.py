@@ -1043,9 +1043,9 @@ class Opik:
         )
         if len(result) < wait_for_at_least:
             LOGGER.warning(
-                "Failed to find expected number of traces (%d) within timeout (%d sec). Found %d traces.",
-                wait_for_at_least,
+                "Timeout after %d seconds: expected %d traces, but only %d were found.",
                 wait_for_timeout,
+                wait_for_at_least,
                 len(result),
             )
 
@@ -1134,9 +1134,9 @@ class Opik:
         )
         if len(result) < wait_for_at_least:
             LOGGER.warning(
-                "Failed to find expected number of spans (%d) within timeout (%d sec). Found %d spans.",
-                wait_for_at_least,
+                "Timeout after %d seconds: expected %d spans, but only %d were found.",
                 wait_for_timeout,
+                wait_for_at_least,
                 len(result),
             )
 
