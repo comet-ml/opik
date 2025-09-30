@@ -21,8 +21,11 @@ const AnthropicModelConfigs = ({
   onChange,
   model,
 }: AnthropicModelConfigsProps) => {
-  const isOpus41Model = useMemo(() => {
-    return model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1;
+  const isExclusiveParamModel = useMemo(() => {
+    return (
+      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
+      model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5
+    );
   }, [model]);
 
   const hasTemperatureValue = useMemo(() => {
@@ -34,40 +37,40 @@ const AnthropicModelConfigs = ({
   }, [configs.topP]);
 
   const temperatureDisabled = useMemo(() => {
-    return isOpus41Model && hasTopPValue && !hasTemperatureValue;
-  }, [isOpus41Model, hasTopPValue, hasTemperatureValue]);
+    return isExclusiveParamModel && hasTopPValue && !hasTemperatureValue;
+  }, [isExclusiveParamModel, hasTopPValue, hasTemperatureValue]);
 
   const topPDisabled = useMemo(() => {
-    return isOpus41Model && hasTemperatureValue && !hasTopPValue;
-  }, [isOpus41Model, hasTemperatureValue, hasTopPValue]);
+    return isExclusiveParamModel && hasTemperatureValue && !hasTopPValue;
+  }, [isExclusiveParamModel, hasTemperatureValue, hasTopPValue]);
 
   const handleTemperatureChange = useCallback(
     (v: number) => {
-      if (isOpus41Model && hasTopPValue) {
-        // Clear topP when setting temperature for Opus 4.1
+      if (isExclusiveParamModel && hasTopPValue) {
+        // Clear topP when setting temperature for models that require exclusive params
         onChange({ temperature: v, topP: undefined });
       } else {
         onChange({ temperature: v });
       }
     },
-    [isOpus41Model, hasTopPValue, onChange],
+    [isExclusiveParamModel, hasTopPValue, onChange],
   );
 
   const handleTopPChange = useCallback(
     (v: number) => {
-      if (isOpus41Model && hasTemperatureValue) {
-        // Clear temperature when setting topP for Opus 4.1
+      if (isExclusiveParamModel && hasTemperatureValue) {
+        // Clear temperature when setting topP for models that require exclusive params
         onChange({ topP: v, temperature: undefined });
       } else {
         onChange({ topP: v });
       }
     },
-    [isOpus41Model, hasTemperatureValue, onChange],
+    [isExclusiveParamModel, hasTemperatureValue, onChange],
   );
 
   const handleClearTemperature = useCallback(() => {
-    if (isOpus41Model) {
-      // For Opus 4.1, clearing temperature should enable topP by setting a default
+    if (isExclusiveParamModel) {
+      // For models requiring exclusive params, clearing temperature should enable topP by setting a default
       onChange({
         temperature: undefined,
         topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
@@ -75,11 +78,11 @@ const AnthropicModelConfigs = ({
     } else {
       onChange({ temperature: undefined });
     }
-  }, [isOpus41Model, onChange]);
+  }, [isExclusiveParamModel, onChange]);
 
   const handleClearTopP = useCallback(() => {
-    if (isOpus41Model) {
-      // For Opus 4.1, clearing topP should enable temperature by setting a default
+    if (isExclusiveParamModel) {
+      // For models requiring exclusive params, clearing topP should enable temperature by setting a default
       onChange({
         topP: undefined,
         temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
@@ -87,7 +90,7 @@ const AnthropicModelConfigs = ({
     } else {
       onChange({ topP: undefined });
     }
-  }, [isOpus41Model, onChange]);
+  }, [isExclusiveParamModel, onChange]);
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -114,15 +117,15 @@ const AnthropicModelConfigs = ({
             tooltip={
               <PromptModelConfigsTooltipContent
                 text={`Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive.${
-                  isOpus41Model
-                    ? " Note: Claude Opus 4.1 requires using either Temperature OR Top P, not both."
+                  isExclusiveParamModel
+                    ? " Note: This model requires using either Temperature OR Top P, not both."
                     : ""
                 }`}
               />
             }
           />
         </div>
-        {isOpus41Model && hasTemperatureValue && (
+        {isExclusiveParamModel && hasTemperatureValue && (
           <div className="flex justify-end">
             <Button
               variant="ghost"
@@ -171,15 +174,15 @@ const AnthropicModelConfigs = ({
             tooltip={
               <PromptModelConfigsTooltipContent
                 text={`Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered.${
-                  isOpus41Model
-                    ? " Note: Claude Opus 4.1 requires using either Temperature OR Top P, not both."
+                  isExclusiveParamModel
+                    ? " Note: This model requires using either Temperature OR Top P, not both."
                     : ""
                 }`}
               />
             }
           />
         </div>
-        {isOpus41Model && hasTopPValue && (
+        {isExclusiveParamModel && hasTopPValue && (
           <div className="flex justify-end">
             <Button
               variant="ghost"
