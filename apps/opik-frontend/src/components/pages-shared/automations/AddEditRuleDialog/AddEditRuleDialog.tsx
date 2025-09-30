@@ -43,6 +43,7 @@ import {
   PythonCodeObject,
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
+import { Filter } from "@/types/filters";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
@@ -178,7 +179,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         (formScope === EVALUATORS_RULE_SCOPE.thread
           ? THREAD_FILTER_COLUMNS
           : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
-      ),
+      ) as Filter[],
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)
@@ -207,6 +208,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
         form.setValue("scope", value);
         form.setValue("type", type);
+
+        // Reset filters when scope changes as columns are different
+        form.setValue("filters", []);
 
         form.setValue(
           "llmJudgeDetails",
@@ -285,12 +289,32 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
+    // Filter out empty/incomplete filters
+    const validFilters = formData.filters.filter((filter) => {
+      const hasField = filter.field && filter.field.trim().length > 0;
+      const hasOperator = filter.operator && filter.operator.trim().length > 0;
+
+      // For operators that don't require value
+      if (
+        filter.operator === "is_empty" ||
+        filter.operator === "is_not_empty"
+      ) {
+        return hasField && hasOperator;
+      }
+
+      // For operators that require value
+      const valueString = String(filter.value || "").trim();
+      const hasValue = valueString.length > 0;
+
+      return hasField && hasOperator && hasValue;
+    });
+
     const ruleData = {
       name: formData.ruleName,
       project_id: formData.projectId,
       sampling_rate: formData.samplingRate,
       enabled: formData.enabled,
-      filters: formData.filters,
+      filters: validFilters,
       type: ruleType,
     };
 

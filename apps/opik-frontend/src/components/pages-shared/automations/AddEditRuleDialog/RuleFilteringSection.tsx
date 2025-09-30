@@ -284,36 +284,81 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             <FormField
               control={form.control}
               name="filters"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium">Filters</Label>
+              render={({ field }) => {
+                const filterErrors = form.formState.errors.filters;
+                const hasErrors =
+                  Array.isArray(filterErrors) &&
+                  filterErrors.some((err) => err);
 
-                    {field.value.length > 0 && (
-                      <FiltersContent
-                        filters={field.value}
-                        setFilters={setFilters}
-                        columns={currentFilterColumns}
-                        config={filtersConfig}
-                        className="py-0"
-                      />
-                    )}
+                return (
+                  <FormItem>
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Filters</Label>
 
-                    <div className="pt-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddFilter}
-                        className="w-fit"
-                      >
-                        <Plus className="mr-1 size-3.5" />
-                        Add filter
-                      </Button>
+                      {field.value.length > 0 && (
+                        <FiltersContent
+                          filters={field.value}
+                          setFilters={setFilters}
+                          columns={currentFilterColumns}
+                          config={filtersConfig}
+                          className="py-0"
+                        />
+                      )}
+
+                      {hasErrors && (
+                        <div className="space-y-1">
+                          {filterErrors.map((filterError, index) => {
+                            if (!filterError) return null;
+                            const errors: string[] = [];
+                            if (filterError.field?.message) {
+                              errors.push(
+                                `Filter ${index + 1}: ${
+                                  filterError.field.message
+                                }`,
+                              );
+                            }
+                            if (filterError.operator?.message) {
+                              errors.push(
+                                `Filter ${index + 1}: ${
+                                  filterError.operator.message
+                                }`,
+                              );
+                            }
+                            if (filterError.value?.message) {
+                              errors.push(
+                                `Filter ${index + 1}: ${
+                                  filterError.value.message
+                                }`,
+                              );
+                            }
+                            return errors.map((error, errorIndex) => (
+                              <p
+                                key={`${index}-${errorIndex}`}
+                                className="text-sm font-medium text-destructive"
+                              >
+                                {error}
+                              </p>
+                            ));
+                          })}
+                        </div>
+                      )}
+
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddFilter}
+                          className="w-fit"
+                        >
+                          <Plus className="mr-1 size-3.5" />
+                          Add filter
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </FormItem>
-              )}
+                  </FormItem>
+                );
+              }}
             />
 
             {/* Sampling Rate */}

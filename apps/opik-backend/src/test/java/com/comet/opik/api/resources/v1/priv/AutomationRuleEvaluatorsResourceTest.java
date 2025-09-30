@@ -998,9 +998,11 @@ class AutomationRuleEvaluatorsResourceTest {
 
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
-                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
-                        .map(Object::toString)
-                        .orElseThrow();
+
+                // Wait for threadModelId to be populated by async thread processing
+                assertThat(traceThread.threadModelId()).isNotNull();
+
+                String threadModelId = traceThread.threadModelId().toString();
 
                 Map<String, String> markers = Map.of("thread_model_id", threadModelId);
                 String message = "The threadModelId '.*' will be sampled for rule: '.*' with sampling rate '.*'";
@@ -1108,9 +1110,10 @@ class AutomationRuleEvaluatorsResourceTest {
                 TraceThread traceThread = traceResourceClient.getTraceThread(trace.threadId(), projectId, API_KEY,
                         WORKSPACE_NAME);
 
-                String threadModelId = Optional.ofNullable(traceThread.threadModelId())
-                        .map(Object::toString)
-                        .orElseThrow();
+                // Wait for threadModelId to be populated by async thread processing
+                assertThat(traceThread.threadModelId()).isNotNull();
+
+                String threadModelId = traceThread.threadModelId().toString();
 
                 Map<String, String> markers = Map.of("thread_model_id", threadModelId);
                 String message = "The threadModelId '.*' will be sampled for rule: '.*' with sampling rate '.*'";

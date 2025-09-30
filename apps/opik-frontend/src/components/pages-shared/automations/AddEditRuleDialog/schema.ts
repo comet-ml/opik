@@ -56,7 +56,45 @@ export const FilterSchema = z.object({
   error: z.string().optional(),
 });
 
-export const FiltersSchema = z.array(FilterSchema);
+export const FiltersSchema = z
+  .array(FilterSchema)
+  .superRefine((filters, ctx) => {
+    filters.forEach((filter, index) => {
+      // Validate field
+      if (!filter.field || filter.field.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Field is required",
+          path: [index, "field"],
+        });
+      }
+
+      // Validate operator
+      if (!filter.operator || filter.operator.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Operator is required",
+          path: [index, "operator"],
+        });
+      }
+
+      // Validate value (only for operators that require it)
+      if (
+        filter.operator &&
+        filter.operator !== "is_empty" &&
+        filter.operator !== "is_not_empty"
+      ) {
+        const valueString = String(filter.value || "").trim();
+        if (valueString.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Value is required for this operator",
+            path: [index, "value"],
+          });
+        }
+      }
+    });
+  });
 
 const LLMJudgeBaseSchema = z.object({
   model: z
