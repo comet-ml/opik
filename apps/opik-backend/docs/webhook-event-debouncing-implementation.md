@@ -4,43 +4,67 @@
 
 This document describes the implementation of webhook event debouncing and aggregation based on the Alerting MVP design document. The implementation provides a mechanism to aggregate multiple webhook events within a configurable time window and send consolidated notifications.
 
-## Architecture
+## Architecture Principle
 
-### Key Components
+**WebhookSubscriber ONLY sends webhooks via HTTP** - it has no knowledge of aggregation or debouncing logic. All event grouping and aggregation happens in Redis, managed by dedicated services.
 
-1. **WebhookEventAggregationService**
-   - **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookEventAggregationService`
-   - **Purpose**: Manages event aggregation with timestamp-based debouncing in Redis
-   - **Key Features**:
-     - Stores events with first-seen timestamp
-     - Groups events by alert ID and event type
-     - Checks if events are ready to be published based on debouncing window
-     - Key pattern: `webhook_pending:{alertId}:{eventType}`
+## Key Components
 
-2. **WebhookBucketProcessorJob**
-   - **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookBucketProcessorJob`
-   - **Purpose**: Scheduled job that runs every 5 seconds to check for pending events
-   - **Key Features**:
-     - Runs as a Quartz job with `@Every("5s")` annotation
-     - Prevents concurrent execution with `@DisallowConcurrentExecution`
-     - Processes events that have exceeded the debouncing window
-     - Continues processing even if individual events fail
+### 1. WebhookEventStorageService (NEW)
+- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookEventStorageService`
+- **Purpose**: Entry point for webhook events - decides whether to aggregate or send immediately
+- **Responsibilities**:
+  - Receives webhook events from the application
+  - If debouncing enabled → stores in Redis via WebhookEventAggregationService
+  - If debouncing disabled → sends immediately via WebhookSubscriber
+  - Single responsibility: routing events based on configuration
 
-3. **WebhookBucketProcessor**
-   - **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookBucketProcessor`
-   - **Purpose**: Sends consolidated webhook notifications
-   - **Key Features**:
-     - Creates consolidated events with aggregated event IDs
-     - Sends one notification per alert+event type combination
-     - Includes metadata about aggregation (event count, event IDs)
+### 2. WebhookEventAggregationService
+- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookEventAggregationService`
+- **Purpose**: Manages event aggregation with timestamp-based debouncing in Redis
+- **Responsibilities**:
+  - Stores events with first-seen timestamp in Redis
+  - Groups events by alert ID and event type
+  - Checks if events are ready to be published based on debouncing window
+  - Key pattern: `webhook_pending:{alertId}:{eventType}`
+  - **Does NOT send webhooks** - only manages Redis storage
 
-4. **WebhookConfig.DebouncingConfig**
-   - **Location**: `com.comet.opik.infrastructure.WebhookConfig.DebouncingConfig`
-   - **Purpose**: Configuration for debouncing behavior
-   - **Properties**:
-     - `enabled`: Enable/disable debouncing (default: `true`)
-     - `windowSize`: Debouncing time window (default: 60 seconds)
-     - `bucketTtl`: TTL for pending events in Redis (default: 3 minutes)
+### 3. WebhookBucketProcessorJob
+- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookBucketProcessorJob`
+- **Purpose**: Scheduled job that processes pending events
+- **Configuration**: Runs every 5 seconds (`@Every("5s")`)
+- **Responsibilities**:
+  - Checks Redis for events past debouncing window
+  - Processes aggregated events via WebhookBucketProcessor
+  - Prevents concurrent execution using `@DisallowConcurrentExecution`
+  - Continues processing even if individual events fail
+
+### 4. WebhookBucketProcessor
+- **Location**: `com.comet.opik.api.resources.v1.events.webhooks.WebhookBucketProcessor`
+- **Purpose**: Creates and sends consolidated webhook notifications
+- **Responsibilities**:
+  - Retrieves aggregated event data from Redis
+  - Creates consolidated webhook event with all event IDs
+  - **Sends via WebhookSubscriber** (not directly via HTTP client)
+  - Cleans up processed events from Redis
+
+### 5. WebhookSubscriber (SIMPLIFIED)
+- **Location**: `com.comet.opik.api.resources.v1.events.WebhookSubscriber`
+- **Purpose**: **ONLY sends webhooks via HTTP** - no aggregation logic
+- **Responsibilities**:
+  - Single public method: `sendWebhook(WebhookEvent event)` 
+  - Validates webhook URLs and event data
+  - Sends webhooks via WebhookHttpClient
+  - **No knowledge of debouncing or aggregation**
+  - **No Redis subscription** - just a service that sends HTTP requests
+
+### 6. WebhookConfig.DebouncingConfig
+- **Location**: `com.comet.opik.infrastructure.WebhookConfig.DebouncingConfig`
+- **Purpose**: Configuration for debouncing behavior
+- **Properties**:
+  - `enabled`: Enable/disable debouncing (default: `true`)
+  - `windowSize`: Debouncing time window (default: 60 seconds)
+  - `bucketTtl`: TTL for pending events in Redis (default: 3 minutes)
 
 ## Data Flow
 
@@ -51,37 +75,50 @@ This document describes the implementation of webhook event debouncing and aggre
 └────────┬────────┘
          │
          ▼
-┌─────────────────────────┐
-│  WebhookSubscriber      │
-│  (aggregateEvent)       │
-└────────┬────────────────┘
-         │
-         ▼
-┌──────────────────────────────────────┐
-│  WebhookEventAggregationService      │
-│  Store event with timestamp in Redis │
-│  Key: webhook_pending:{alertId}:     │
-│       {eventType}                    │
-│  Data:                               │
-│    - event_timestamps: first_seen    │
-│    - eventIds: [id1, id2, ...]       │
-└──────────────────────────────────────┘
-         │
-         │  (Background Job - Every 5 seconds)
-         ▼
-┌──────────────────────────────────────┐
-│  WebhookBucketProcessorJob           │
-│  Check for pending events            │
-│  If (now - first_seen) >= window:   │
-└────────┬─────────────────────────────┘
-         │ YES: Ready to publish
-         ▼
-┌──────────────────────────────────────┐
-│  WebhookBucketProcessor              │
-│  Create consolidated event           │
-│  Send via WebhookHttpClient          │
-│  Delete pending key from Redis       │
-└──────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  WebhookEventStorageService     │
+│  (Entry Point)                  │
+│  - Check if debouncing enabled  │
+└────────┬─────────────┬──────────┘
+         │             │
+ Debouncing ON   Debouncing OFF
+         │             │
+         │             └──────────────────────┐
+         ▼                                    │
+┌──────────────────────────────────────┐     │
+│  WebhookEventAggregationService      │     │
+│  Store event with timestamp in Redis │     │
+│  Key: webhook_pending:{alertId}:     │     │
+│       {eventType}                    │     │
+│  Data:                               │     │
+│    - event_timestamps: first_seen    │     │
+│    - eventIds: [id1, id2, ...]       │     │
+└──────────────────────────────────────┘     │
+         │                                    │
+         │  (Background Job - Every 5 seconds)│
+         ▼                                    │
+┌──────────────────────────────────────┐     │
+│  WebhookBucketProcessorJob           │     │
+│  Check for pending events            │     │
+│  If (now - first_seen) >= window:   │     │
+└────────┬─────────────────────────────┘     │
+         │ YES: Ready to publish              │
+         ▼                                    │
+┌──────────────────────────────────────┐     │
+│  WebhookBucketProcessor              │     │
+│  - Create consolidated event         │     │
+│  - Call WebhookSubscriber            │     │
+│  - Delete pending key from Redis     │     │
+└────────┬─────────────────────────────┘     │
+         │                                    │
+         └──────────────┬─────────────────────┘
+                        ▼
+         ┌──────────────────────────┐
+         │   WebhookSubscriber      │
+         │   sendWebhook(event)     │
+         │   - Validate             │
+         │   - Send via HTTP        │
+         └──────────────────────────┘
 ```
 
 ## Implementation Details
@@ -101,12 +138,17 @@ TTL: 3 minutes (configurable)
 
 ### Debouncing Logic
 
-1. **Event Arrives**: When a new event arrives:
-   - Check if pending key exists
-   - If **first event**: Store current timestamp as `event_timestamps`
-   - If **subsequent event**: Keep original timestamp, add event ID to list
+1. **Event Arrives**: 
+   - Application calls `WebhookEventStorageService.storeEvent(event)`
+   - If debouncing enabled:
+     - Check if pending key exists in Redis
+     - If **first event**: Store current timestamp as `event_timestamps`
+     - If **subsequent event**: Keep original timestamp, add event ID to list
+   - If debouncing disabled:
+     - Immediately call `WebhookSubscriber.sendWebhook(event)`
 
 2. **Background Check** (Every 5 seconds):
+   - `WebhookBucketProcessorJob` runs
    - Scan all keys matching `webhook_pending:*`
    - For each key:
      - Get `event_timestamps` value
@@ -114,12 +156,23 @@ TTL: 3 minutes (configurable)
      - If `elapsed >= windowSize`: Mark as ready to publish
 
 3. **Publishing**:
-   - Create consolidated webhook event with:
+   - `WebhookBucketProcessor` creates consolidated webhook event with:
      - All aggregated event IDs
      - Event count
      - Aggregation metadata
-   - Send via `WebhookHttpClient`
+   - Calls `WebhookSubscriber.sendWebhook(consolidatedEvent)`
+   - `WebhookSubscriber` validates and sends via HTTP
    - Delete pending key from Redis
+
+### Separation of Concerns
+
+| Component | Responsible For | NOT Responsible For |
+|-----------|----------------|---------------------|
+| **WebhookEventStorageService** | Routing events based on config | Sending webhooks, Redis storage |
+| **WebhookEventAggregationService** | Redis storage and grouping | Sending webhooks, scheduling |
+| **WebhookBucketProcessorJob** | Scheduling and triggering processing | Creating events, sending webhooks |
+| **WebhookBucketProcessor** | Creating consolidated events | Sending HTTP requests |
+| **WebhookSubscriber** | **ONLY sending HTTP webhooks** | Aggregation, debouncing, Redis, scheduling |
 
 ### Configuration Example
 
@@ -139,6 +192,7 @@ webhook:
 3. **Non-Blocking**: Events are stored immediately, processing happens asynchronously
 4. **Fault Tolerant**: Individual failures don't affect other events
 5. **Scalable**: Background job frequency (5s) is independent of debouncing window
+6. **Clean Architecture**: Clear separation between aggregation and sending
 
 ## Example Scenarios
 
@@ -161,13 +215,11 @@ Time 15s: Event C arrives → Add to same key (keeps timestamp T0)
 Time 60s: Background check → Ready! → Publish consolidated (3 events) → Delete key
 ```
 
-### Scenario 3: Events Spanning Multiple Windows
+### Scenario 3: Debouncing Disabled
 ```
-Time 0s:  Event A arrives → Store with timestamp T0
-Time 65s: Event B arrives (after 65s)
-          - Previous key published at Time 60s
-          - New key created with timestamp T65
-Time 125s: Event B published (T125 - T65 = 60s)
+Time 0s:  Event A arrives → Immediately sent via WebhookSubscriber
+Time 10s: Event B arrives → Immediately sent via WebhookSubscriber
+(No aggregation, each event sent individually)
 ```
 
 ## Testing
@@ -190,6 +242,7 @@ Required tests (to be implemented):
 - Multiple concurrent events
 - TTL expiration behavior
 - Job scheduling and execution
+- WebhookSubscriber HTTP sending
 
 ## Known Limitations & Future Enhancements
 
@@ -199,15 +252,13 @@ Required tests (to be implemented):
    - Custom headers
    - **TODO**: Integrate with alert management service
 
-2. **Deprecation Warning**: `getKeysByPattern()` is deprecated in Redisson
-   - **TODO**: Update to use non-deprecated API
-
-3. **Monitoring**: Add metrics for:
+2. **Monitoring**: Add metrics for:
    - Events aggregated count
    - Publish latency
    - Failed publications
+   - WebhookSubscriber success/failure rates
 
-4. **Rate Limiting**: Consider adding:
+3. **Rate Limiting**: Consider adding:
    - Maximum events per pending key
    - Maximum pending keys per workspace
 
@@ -248,3 +299,4 @@ debouncing:
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
 | 1.0     | 2025-01-30 | System | Initial implementation with timestamp-based debouncing |
+| 2.0     | 2025-01-30 | System | **Architecture redesign**: WebhookSubscriber only sends HTTP requests, added WebhookEventStorageService |

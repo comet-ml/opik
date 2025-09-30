@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.events.webhooks.WebhookEventTypes;
+import com.comet.opik.api.resources.v1.events.WebhookSubscriber;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -18,14 +19,14 @@ import java.util.UUID;
 /**
  * Processor for pending webhook events that sends consolidated notifications.
  * For each pending key (alert ID + event type combination),
- * it sends one consolidated notification containing all aggregated event IDs.
+ * it sends one consolidated notification containing all aggregated event IDs via WebhookSubscriber.
  */
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class WebhookBucketProcessor {
 
-    private final @NonNull WebhookHttpClient webhookHttpClient;
+    private final @NonNull WebhookSubscriber webhookSubscriber;
     private final @NonNull WebhookEventAggregationService aggregationService;
 
     /**
@@ -84,8 +85,8 @@ public class WebhookBucketProcessor {
         // For now, this is a placeholder implementation
         log.debug("Consolidated event created: '{}'", consolidatedEvent.getId());
 
-        // Send the notification via HTTP client
-        return webhookHttpClient.sendWebhook(consolidatedEvent)
+        // Send the notification via WebhookSubscriber
+        return webhookSubscriber.sendWebhook(consolidatedEvent)
                 .doOnSuccess(__ -> log.info("Successfully sent consolidated notification for '{}' with '{}' events",
                         pendingKey, eventIds.size()))
                 .doOnError(error -> log.error("Failed to send consolidated notification for '{}': {}",
