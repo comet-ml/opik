@@ -48,7 +48,8 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
   const combinedImages = [...valueImages];
 
   let foundMarkdown = false;
-  const markdownRegex = typeof value === "string" ? /!\[image\]\((.+?)\)/gi : null;
+  const markdownRegex =
+    typeof value === "string" ? /!\[image\]\((.+?)\)/gi : null;
   if (markdownRegex) {
     const stringValue = value as string;
     let match: RegExpExecArray | null;
@@ -75,7 +76,10 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
     (value.startsWith("data:image/") || isImageBase64String(value));
 
   const shouldMergeRowImages =
-    (placeholderLabel !== undefined || combinedImages.length > 0 || looksLikeImageString || isBase64String) &&
+    (placeholderLabel !== undefined ||
+      combinedImages.length > 0 ||
+      looksLikeImageString ||
+      isBase64String) &&
     rowImages.length > 0;
 
   if (shouldMergeRowImages && rowImages.length) {
@@ -100,7 +104,7 @@ const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
   if (combinedImages.length > 0) {
     const isImagePlaceholder =
       typeof value === "string" &&
-      (/[\[]image.*?\]/i.test(value) || /!\[image\]/i.test(value));
+      (/\[image.*?\]/i.test(value) || /!\[image\]/i.test(value));
 
     const fallbackText =
       typeof value === "string"

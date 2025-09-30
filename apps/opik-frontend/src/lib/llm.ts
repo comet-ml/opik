@@ -98,10 +98,7 @@ const isMessageContentImageUrlItem = (
 
   const { url, detail } = imageUrl;
 
-  return (
-    isString(url) &&
-    (detail === undefined || isString(detail))
-  );
+  return isString(url) && (detail === undefined || isString(detail));
 };
 
 const isMessageContentItemArray = (
@@ -263,7 +260,10 @@ Object.entries(modelEntries).forEach(([modelName, entry]) => {
 
   const supportsVision = Boolean(entry?.supports_vision);
   VISION_CAPABILITIES.set(modelName, supportsVision);
-  NORMALIZED_VISION_CAPABILITIES.set(normalizeModelName(modelName), supportsVision);
+  NORMALIZED_VISION_CAPABILITIES.set(
+    normalizeModelName(modelName),
+    supportsVision,
+  );
 });
 
 const candidateKeys = (modelName: string): string[] => {

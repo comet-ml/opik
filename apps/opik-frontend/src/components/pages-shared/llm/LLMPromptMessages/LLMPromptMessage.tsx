@@ -254,22 +254,22 @@ const LLMPromptMessage = ({
             </Button>
           </div>
 
-          {item.type === "image_url"
-            ? (
-                <Input
-                  value={item.image_url.url}
-                  onChange={(event) =>
-                    handleStructuredImageUrlChange(index, event.target.value)
-                  }
-                  placeholder="Image URL or {{input.image_url}}"
-                  onFocus={(event) => event.stopPropagation()}
-                  onClick={(event) => event.stopPropagation()}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  data-prevent-editor-focus="true"
-                  aria-label={`Image URL for message part ${ordinal}`}
-                />
-              )
-            : partContent}
+          {item.type === "image_url" ? (
+            <Input
+              value={item.image_url.url}
+              onChange={(event) =>
+                handleStructuredImageUrlChange(index, event.target.value)
+              }
+              placeholder="Image URL or {{input.image_url}}"
+              onFocus={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onMouseDown={(event) => event.stopPropagation()}
+              data-prevent-editor-focus="true"
+              aria-label={`Image URL for message part ${ordinal}`}
+            />
+          ) : (
+            partContent
+          )}
         </div>
       );
     });

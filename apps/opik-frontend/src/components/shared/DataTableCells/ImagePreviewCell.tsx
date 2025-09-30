@@ -32,9 +32,7 @@ const ImagePreviewCell = <TData,>({
       })
     : undefined;
 
-  const [firstImage, ...restImages] = matchedImage
-    ? [matchedImage]
-    : images;
+  const [firstImage, ...restImages] = matchedImage ? [matchedImage] : images;
   const remainingCount = restImages.length;
   const fullLabel = fallbackText || firstImage?.name || "";
   const label =
@@ -59,7 +57,7 @@ const ImagePreviewCell = <TData,>({
             <img
               src={firstImage.url}
               alt={firstImage.name}
-              className="h-12 w-12 rounded-md border border-border object-cover"
+              className="size-12 rounded-md border border-border object-cover"
             />
             {remainingCount > 0 ? (
               <span className="absolute -bottom-1 -right-1 rounded-full bg-background px-1 text-xs font-medium text-foreground shadow-sm">
@@ -68,7 +66,9 @@ const ImagePreviewCell = <TData,>({
             ) : null}
           </div>
           {label ? (
-            <span className={cn("truncate text-xs text-muted-slate")}>{label}</span>
+            <span className={cn("truncate text-xs text-muted-slate")}>
+              {label}
+            </span>
           ) : null}
         </div>
       </TooltipWrapper>

@@ -322,7 +322,11 @@ def _render_message_content(
                     }
                 )
             elif part_type == "image_url":
-                image_dict = part.get("image_url", {}) if isinstance(part.get("image_url"), dict) else {}
+                image_dict = (
+                    part.get("image_url", {})
+                    if isinstance(part.get("image_url"), dict)
+                    else {}
+                )
                 url_template = str(image_dict.get("url", ""))
 
                 rendered_image = dict(image_dict)
