@@ -6,12 +6,12 @@ import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +67,9 @@ class AlertServiceImpl implements AlertService {
 
     @Override
     public void update(@NonNull UUID id, @NonNull Alert alert) {
-        Preconditions.checkArgument(id.compareTo(alert.id()) == 0, "Payload alert ID must match the path ID");
+        if (id.compareTo(alert.id()) != 0) {
+            throw new BadRequestException("Payload alert ID must match the path ID");
+        }
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();

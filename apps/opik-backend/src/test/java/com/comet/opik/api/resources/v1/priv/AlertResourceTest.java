@@ -130,7 +130,7 @@ class AlertResourceTest {
         void createAlert() {
             var mock = prepareMockWorkspace();
 
-            var alert = factory.manufacturePojo(Alert.class);
+            var alert = generateAlert();
 
             var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
@@ -177,12 +177,12 @@ class AlertResourceTest {
         void createAlert__whenAlertIdAlreadyExists__thenReturnConflict() {
             var mock = prepareMockWorkspace();
 
-            var alert = factory.manufacturePojo(Alert.class);
+            var alert = generateAlert();
 
             // Create first alert
             alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
-            // Try to create alert with same name
+            // Try to create alert with same id
             try (var actualResponse = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
                     mock.getRight())) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
@@ -276,7 +276,7 @@ class AlertResourceTest {
             var mock = prepareMockWorkspace();
 
             // Create an alert first
-            var alert = factory.manufacturePojo(Alert.class);
+            var alert = generateAlert();
             var createdAlertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
 
@@ -295,6 +295,66 @@ class AlertResourceTest {
 
             alertResourceClient.getAlertById(nonExistentId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("Update Alert:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdateAlert {
+
+        @Test
+        @DisplayName("Success: should update alert with all fields")
+        void updateAlert() {
+            var mock = prepareMockWorkspace();
+
+            // Create an alert first
+            var originalAlert = generateAlert();
+            var createdAlertId = alertResourceClient.createAlert(originalAlert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var updatedAlert = generateAlertUpdate(actualAlert);
+
+            alertResourceClient.updateAlert(createdAlertId, updatedAlert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+
+            // Verify the update
+            var actualUpdatedAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            compareAlerts(updatedAlert, actualUpdatedAlert);
+        }
+
+        @Test
+        @DisplayName("when alert does not exist, then return not found")
+        void updateAlert__whenAlertDoesNotExist__thenReturnNotFound() {
+            var mock = prepareMockWorkspace();
+
+            UUID nonExistentId = UUID.randomUUID();
+            var alert = generateAlert().toBuilder()
+                    .id(nonExistentId)
+                    .build();
+
+            alertResourceClient.updateAlert(nonExistentId, alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("when alert id in path differs from alert id in body, then update using path id")
+        void updateAlert__whenAlertIdInPathDiffersFromBody__thenUsePathId() {
+            var mock = prepareMockWorkspace();
+
+            // Create an alert first
+            var alert = generateAlert();
+
+            // Update with different id in body
+            var differentId = UUID.randomUUID();
+
+            alertResourceClient.updateAlert(differentId, alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_BAD_REQUEST);
         }
     }
 
@@ -341,7 +401,7 @@ class AlertResourceTest {
                     .build();
 
             alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
-                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                    422); // Unprocessable Entity
         }
 
         @Test
@@ -414,6 +474,82 @@ class AlertResourceTest {
 
         return alert.toBuilder()
                 .triggers(sortedTriggers)
+                .build();
+    }
+
+    private Alert generateAlert() {
+        var alert = factory.manufacturePojo(Alert.class);
+
+        var webhook = alert.webhook().toBuilder()
+                .createdBy(null)
+                .createdAt(null)
+                .build();
+
+        var triggers = alert.triggers().stream()
+                .map(trigger -> {
+                    var configs = trigger.triggerConfigs().stream()
+                            .map(config -> config.toBuilder()
+                                    .createdBy(null)
+                                    .createdAt(null)
+                                    .build())
+                            .toList();
+                    return trigger.toBuilder()
+                            .triggerConfigs(configs)
+                            .createdBy(null)
+                            .createdAt(null)
+                            .build();
+                })
+                .toList();
+
+        return alert.toBuilder()
+                .webhook(webhook)
+                .createdBy(null)
+                .createdAt(null)
+                .triggers(triggers)
+                .build();
+    }
+
+    private Alert generateAlertUpdate(Alert existingAlert) {
+        var alert = generateAlert();
+
+        var webhook = alert.webhook().toBuilder()
+                .id(existingAlert.webhook().id())
+                .createdBy(existingAlert.webhook().createdBy())
+                .createdAt(existingAlert.webhook().createdAt())
+                .build();
+
+        // add one new trigger, update one existing trigger, keep one existing trigger unchanged
+        var unchangedTrigger = existingAlert.triggers().get(0);
+        var newTrigger = alert.triggers().get(0);
+        var updatedTrigger = generateAlertTriggerUpdate(existingAlert.triggers().get(1), alert.triggers().get(1));
+
+        return alert.toBuilder()
+                .id(existingAlert.id())
+                .webhook(webhook)
+                .createdBy(existingAlert.createdBy())
+                .createdAt(existingAlert.createdAt())
+                .triggers(List.of(unchangedTrigger, newTrigger, updatedTrigger))
+                .build();
+    }
+
+    private AlertTrigger generateAlertTriggerUpdate(AlertTrigger existingTrigger, AlertTrigger updatedTrigger) {
+        // add one new config, update one existing config, keep one existing config unchanged
+
+        var unchangedConfig = existingTrigger.triggerConfigs().get(0);
+        var newConfig = updatedTrigger.triggerConfigs().get(0);
+
+        var updatedConfigs = updatedTrigger.triggerConfigs().get(1).toBuilder()
+                .id(existingTrigger.triggerConfigs().get(1).id())
+                .createdBy(existingTrigger.triggerConfigs().get(1).createdBy())
+                .createdAt(existingTrigger.triggerConfigs().get(1).createdAt())
+                .build();
+
+        return updatedTrigger.toBuilder()
+                .id(existingTrigger.id())
+                .alertId(existingTrigger.alertId())
+                .createdBy(existingTrigger.createdBy())
+                .createdAt(existingTrigger.createdAt())
+                .triggerConfigs(List.of(unchangedConfig, newConfig, updatedConfigs))
                 .build();
     }
 }

@@ -91,7 +91,7 @@ public class AlertResource {
 
         log.info("Updating alert with id '{}', on workspace_id '{}'", id, workspaceId);
 
-        var alertId = alertService.create(alert);
+        alertService.update(id, alert);
 
         log.info("Updated alert with id '{}', on workspace_id '{}'", id, workspaceId);
 
