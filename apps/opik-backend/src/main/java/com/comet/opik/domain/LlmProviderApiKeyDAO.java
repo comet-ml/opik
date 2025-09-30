@@ -24,15 +24,16 @@ import java.util.UUID;
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 public interface LlmProviderApiKeyDAO {
 
-    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, created_by, last_updated_by, headers, base_url, configuration) "
+    @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, provider_name, created_by, last_updated_by, headers, base_url, configuration) "
             +
-            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :bean.createdBy, :bean.lastUpdatedBy, :bean.headers, :bean.baseUrl, :bean.configuration)")
+            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :bean.providerName, :bean.createdBy, :bean.lastUpdatedBy, :bean.headers, :bean.baseUrl, :bean.configuration)")
     void save(@Bind("workspaceId") String workspaceId,
             @BindMethods("bean") ProviderApiKey providerApiKey);
 
     @SqlUpdate("UPDATE llm_provider_api_key SET " +
             "api_key = CASE WHEN :bean.apiKey IS NULL THEN api_key ELSE :bean.apiKey END, " +
             "name = CASE WHEN :bean.name IS NULL THEN name ELSE :bean.name END, " +
+            "provider_name = CASE WHEN :bean.providerName IS NULL THEN provider_name ELSE :bean.providerName END, " +
             "headers = CASE WHEN :bean.headers IS NULL THEN headers ELSE :bean.headers END, " +
             "base_url = CASE WHEN :bean.baseUrl IS NULL THEN base_url ELSE :bean.baseUrl END, " +
             "configuration = CASE WHEN :bean.configuration IS NULL THEN configuration ELSE :bean.configuration END, " +
@@ -49,6 +50,12 @@ public interface LlmProviderApiKeyDAO {
     @SqlQuery("SELECT * FROM llm_provider_api_key " +
             " WHERE workspace_id = :workspaceId ")
     List<ProviderApiKey> find(@Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("SELECT * FROM llm_provider_api_key WHERE workspace_id = :workspaceId AND provider = :provider AND provider_name = :providerName")
+    Optional<ProviderApiKey> findByProviderAndName(
+            @Bind("workspaceId") String workspaceId,
+            @Bind("provider") String provider,
+            @Bind("providerName") String providerName);
 
     @SqlUpdate("DELETE FROM llm_provider_api_key WHERE id IN (<ids>) AND workspace_id = :workspaceId")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
