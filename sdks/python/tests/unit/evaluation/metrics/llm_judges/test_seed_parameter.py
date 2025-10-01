@@ -57,10 +57,12 @@ class TestSeedParameter:
                     context=["France is a country in Europe."],
                 )
 
-                # Verify seed was passed to generate_string
+                # Verify seed was passed to model factory during initialization
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -89,8 +91,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -119,8 +123,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -151,10 +157,10 @@ class TestSeedParameter:
                 # GEval calls generate_string multiple times (for chain of thought and evaluation)
                 assert mock_model.generate_string.call_count >= 1
 
-                # Check that seed was passed in at least one call
-                calls = mock_model.generate_string.call_args_list
-                seed_passed = any(call[1].get("seed") == test_seed for call in calls)
-                assert seed_passed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -182,8 +188,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -207,8 +215,10 @@ class TestSeedParameter:
                 result = metric.score(output="This is a test message.")
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -244,8 +254,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -272,8 +284,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -299,8 +313,10 @@ class TestSeedParameter:
                 result = metric.score(output='{"name": "John", "age": 30}')
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -430,8 +446,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.agenerate_string.assert_called_once()
-                call_kwargs = mock_model.agenerate_string.call_args[1]
-                assert call_kwargs.get("seed") == test_seed
+                # Check that the seed was passed to the model factory
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") == test_seed
 
     def test_seed_parameter_documentation(self) -> None:
         """Test that seed parameter is properly documented in docstrings."""
