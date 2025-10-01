@@ -212,7 +212,7 @@ optimization_result.display()
 print("\n" + "=" * 80)
 print("BEST PROMPT")
 print("=" * 80)
-print(optimization_result.best_prompt.get_messages())
+print(optimization_result.prompt)
 print("\n" + "=" * 80)
 
 # Example of how to use the optimized prompt with new images:
