@@ -48,17 +48,17 @@ class ChrF(BaseMetric):
                 )
 
             def _compute(candidate: Sequence[str], references: Sequence[str]) -> float:
-                return float(
-                    nltk_chrf_score.sentence_chrf(
-                        references,
-                        candidate,
-                        beta=self._beta,
-                        ignore_whitespace=self._ignore_whitespace,
-                        lowercase=self._lowercase,
-                        char_order=self._char_order,
-                        word_order=self._word_order,
+                try:
+                    return float(
+                        nltk_chrf_score.sentence_chrf(
+                            references,
+                            candidate,
+                            beta=self._beta,
+                        )
                     )
-                )
+                except TypeError:
+                    # Older NLTK versions expose the helper with fewer keyword arguments.
+                    return float(nltk_chrf_score.sentence_chrf(references, candidate))
 
             self._chrf_fn = _compute
 
