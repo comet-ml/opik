@@ -13,6 +13,9 @@ while preserving the image inputs throughout the evolutionary process.
 """
 
 from typing import Any
+import os
+import sys
+import logging
 
 from opik_optimizer import EvolutionaryOptimizer, ChatPrompt
 from opik_optimizer.datasets import driving_hazard_50
@@ -26,19 +29,33 @@ from opik.evaluation.metrics.score_result import ScoreResult
 # ============================================================================
 
 # Optimization settings (smaller values = faster, fewer API calls, less context usage)
-POPULATION_SIZE = 6  # Number of prompt variations per generation
-NUM_GENERATIONS = 2  # Number of evolutionary iterations
-N_SAMPLES = 3  # Number of dataset samples to use for optimization
+POPULATION_SIZE = 10  # Number of prompt variations per generation
+NUM_GENERATIONS = 5  # Number of evolutionary iterations
+N_SAMPLES = 5  # Number of dataset samples to use for optimization
 
-# Image settings (smaller = less tokens, but lower quality)
-# Note: These are configured in the dataset loader, defaults are:
-# - Image size: 512x384 pixels
-# - JPEG quality: 60
-# These settings keep each image under ~15-20k tokens
+# Image settings - Optimized for GPT-5's 400k context
+# Adjust these when loading the dataset below
+MAX_IMAGE_SIZE = (640, 480)  # Width, height in pixels. Options: (400,300) small, (512,384) medium, (640,480) large
+IMAGE_QUALITY = 75  # JPEG quality 1-100. Options: 40-50 (small), 60-70 (balanced), 85+ (high)
+# Note: (640x480, quality=75) gives ~25-35k tokens per image, fits well in 400k context
+# If using GPT-4o (128k context), reduce to: MAX_IMAGE_SIZE = (512, 384), IMAGE_QUALITY = 60
 
-# Model settings
-VISION_MODEL = "gpt-4o-mini"  # Vision-capable model (gpt-4o-mini, gpt-4o, claude-3-sonnet, etc.)
-JUDGE_MODEL = "gpt-4o-mini"  # Model for evaluation (can be same or different)
+# Model settings - Training cheaper model with better judge
+# Using GPT-5 models (400k context)
+
+# PRIMARY: GPT-5 models (400k context)
+VISION_MODEL = "gpt-5-nano"  # Vision model being optimized (fast, cheap, 400k context)
+JUDGE_MODEL = "gpt-5"  # Evaluation model (powerful judge with reasoning, 400k context)
+
+# FALLBACK: If GPT-5 is not available via your API provider, use GPT-4o:
+# VISION_MODEL = "gpt-4o-mini"  # 128k context
+# JUDGE_MODEL = "gpt-4o"  # 128k context
+# Then reduce image quality: MAX_IMAGE_SIZE = (512, 384), IMAGE_QUALITY = 60
+
+# ALTERNATIVE: Via OpenRouter (if you have GPT-5 access there)
+# VISION_MODEL = "openrouter/openai/gpt-5-nano"
+# JUDGE_MODEL = "openrouter/openai/gpt-5"
+# export OPENROUTER_API_KEY="your-key"
 
 # ============================================================================
 
@@ -49,7 +66,11 @@ JUDGE_MODEL = "gpt-4o-mini"  # Model for evaluation (can be same or different)
 # - image_content: Structured content with text and base64-encoded image
 # - hazard: Expected hazard description (ground truth)
 # - question_id: Unique identifier
-dataset = driving_hazard_50(test_mode=True)  # Use test_mode=True for quick testing (5 samples)
+dataset = driving_hazard_50(
+    test_mode=True,  # Use test_mode=True for quick testing (5 samples)
+    max_image_size=MAX_IMAGE_SIZE,  # Resize images to reduce token usage
+    image_quality=IMAGE_QUALITY,  # JPEG compression quality
+)
 
 
 def multimodal_hazard_judge(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -69,13 +90,35 @@ def multimodal_hazard_judge(dataset_item: dict[str, Any], llm_output: str) -> Sc
     metric = MultimodalLLMJudge(
         model=JUDGE_MODEL,  # Vision-capable judge model
         evaluation_criteria="""
-Evaluate the hazard detection output based on:
-1. Accuracy: Does it identify the correct hazard?
-2. Completeness: Does it cover all key safety concerns?
-3. Specificity: Is it specific and actionable?
-4. Visual understanding: Does it correctly interpret the image?
+Evaluate hazard detection with strict requirements:
 
-Consider semantically equivalent descriptions as correct matches.
+1. **Accuracy (40%)**: Did it identify the EXACT hazard type?
+   - Pedestrian vs vehicle vs obstacle specificity
+   - Correct location (left/right/center/ahead)
+   - Distance estimation if applicable
+
+2. **Completeness (30%)**: All hazards mentioned?
+   - Primary hazard (MUST catch this)
+   - Secondary hazards (bonus points)
+   - Environmental factors (weather, lighting, road conditions)
+
+3. **Actionability (20%)**: Clear driver guidance?
+   - Urgency level (immediate/moderate/low)
+   - Recommended action (brake/slow/monitor/stop)
+   - Timing (now vs approaching)
+
+4. **Visual Understanding (10%)**: Correct image interpretation?
+   - Scene context (highway, city, parking, intersection)
+   - Traffic flow understanding
+   - Spatial relationships between objects
+
+**Scoring Guidelines:**
+- Score 1.0: ALL critical hazards identified with precise locations and actionable details
+- Score 0.7-0.9: Primary hazard caught with good details, minor omissions acceptable
+- Score 0.5-0.6: Partial detection but missing key details or secondary hazards
+- Score below 0.5: Missed critical hazards or major inaccuracies
+
+Consider semantically equivalent descriptions as correct matches, but reward specificity.
 """,
     )
 
