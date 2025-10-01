@@ -17,23 +17,40 @@ from . import opik_monitor, warning_filters
 LOGGER = logging.getLogger(__name__)
 
 
-def _relay_warning_to_root(message: str, *args: Any) -> None:
-    """Forward warnings to pytest's LogCaptureHandler when present."""
-
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers:
-        handler_class = handler.__class__
-        if (
-            handler_class.__module__.startswith("pytest")
-            and handler_class.__name__ == "LogCaptureHandler"
-        ):
-            root_logger.log(logging.WARNING, message, *args)
-            break
-
-
 def _log_warning(message: str, *args: Any) -> None:
     LOGGER.warning(message, *args)
-    _relay_warning_to_root(message, *args)
+    root_logger = logging.getLogger()
+    if root_logger is not LOGGER:
+        root_logger.log(logging.WARNING, message, *args)
+
+
+def _normalise_choice(choice: Any) -> Dict[str, Any]:
+    if isinstance(choice, dict):
+        return choice
+    if hasattr(choice, "model_dump") and callable(choice.model_dump):
+        try:
+            return choice.model_dump()
+        except TypeError:
+            pass
+    normalised: Dict[str, Any] = {}
+    message = getattr(choice, "message", None)
+    if message is not None:
+        normalised["message"] = message
+    logprobs = getattr(choice, "logprobs", None)
+    if logprobs is not None:
+        normalised["logprobs"] = logprobs
+    return normalised
+
+
+def _extract_message_content(choice: Dict[str, Any]) -> Optional[str]:
+    message = choice.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+    else:
+        content = getattr(message, "content", None)
+    if content is not None and not isinstance(content, str):
+        raise ValueError("LLM choice contains non-text content")
+    return content
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):
@@ -217,19 +234,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             messages=request,
             **valid_litellm_params,
         ) as response:
-            choice = response.choices[0]
-            message = None
-            if isinstance(choice, dict):
-                message = choice.get("message")
-            else:
-                message = getattr(choice, "message", None)
-
-            content: Optional[str]
-            if isinstance(message, dict):
-                content = message.get("content")
-            else:
-                content = getattr(message, "content", None)
-
+            choice = _normalise_choice(response.choices[0])
+            content = _extract_message_content(choice)
             return base_model.check_model_output_string(content)
 
     def generate_provider_response(
