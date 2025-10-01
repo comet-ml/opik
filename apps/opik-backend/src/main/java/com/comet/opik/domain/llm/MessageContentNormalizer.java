@@ -20,8 +20,7 @@ public final class MessageContentNormalizer {
     public static final String IMAGE_PLACEHOLDER_START = "<<<image>>>";
     public static final String IMAGE_PLACEHOLDER_END = "<<</image>>>";
 
-    private MessageContentNormalizer() {
-    }
+    private MessageContentNormalizer() { }
 
     public static ChatCompletionRequest normalizeRequest(ChatCompletionRequest request,
             boolean allowStructuredContent) {
