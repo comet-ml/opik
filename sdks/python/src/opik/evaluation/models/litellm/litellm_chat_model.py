@@ -1,8 +1,10 @@
 import importlib.metadata
+import inspect
 import logging
 import warnings
+from contextlib import contextmanager, nullcontext
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Type
+from typing import Any, Dict, Iterator, List, Optional, Set, TYPE_CHECKING, Type
 import time
 import pydantic
 
@@ -22,6 +24,39 @@ def _log_warning(message: str, *args: Any) -> None:
     root_logger = logging.getLogger()
     if root_logger is not LOGGER:
         root_logger.log(logging.WARNING, message, *args)
+
+
+def _ensure_response_context(result: Any) -> Any:
+    """Normalise provider responses to something we can use with ``with``.
+
+    The production path returns a context manager, while several unit tests stub
+    ``get_provider_response`` with a generator that simply yields a value. This
+    helper hides those differences so the call site can always use a single
+    ``with`` block without bespoke branching.
+    """
+    if hasattr(result, "__enter__") and hasattr(result, "__exit__"):
+        return result
+    if inspect.isgenerator(result):
+
+        @contextmanager
+        def _generator_context(gen: Iterator[Any]) -> Iterator[Any]:
+            try:
+                value = next(gen)
+            except StopIteration as error:
+                raise RuntimeError(
+                    "Provider response generator yielded no value"
+                ) from error
+            try:
+                yield value
+            finally:
+                try:
+                    next(gen)
+                except StopIteration:
+                    pass
+
+        return _generator_context(result)
+
+    return nullcontext(result)
 
 
 def _normalise_choice(choice: Any) -> Dict[str, Any]:
@@ -229,11 +264,15 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             },
         ]
 
-        with base_model.get_provider_response(
-            model_provider=self,
-            messages=request,
-            **valid_litellm_params,
-        ) as response:
+        response_context = _ensure_response_context(
+            base_model.get_provider_response(
+                model_provider=self,
+                messages=request,
+                **valid_litellm_params,
+            )
+        )
+
+        with response_context as response:
             choice = _normalise_choice(response.choices[0])
             content = _extract_message_content(choice)
             return base_model.check_model_output_string(content)
