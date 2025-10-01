@@ -55,7 +55,7 @@ import { Opik } from "opik";
 const client = new Opik();
 const dataset = await client.getOrCreateDataset("My dataset");
 
-````
+```
 
 ```python title="Python SDK" language="python"
 from opik import Opik
@@ -63,7 +63,7 @@ from opik import Opik
 # Create a dataset
 client = Opik()
 dataset = client.get_or_create_dataset(name="My dataset")
-````
+```
 
 </CodeBlocks>
 
@@ -86,7 +86,7 @@ dataset.insert([
 { user_question: "What is the capital of France?", expected_output: { assistant_answer: "Paris" } },
 ]);
 
-````
+```
 
 ```python title="Python" language="python"
 import opik
@@ -100,7 +100,7 @@ dataset.insert([
     {"user_question": "Hello, world!", "expected_output": {"assistant_answer": "Hello, world!"}},
     {"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}},
 ])
-````
+```
 
 </CodeBlocks>
 
@@ -129,7 +129,7 @@ You can also insert items from a JSONL file:
 
 dataset.read_jsonl_from_file("path/to/file.jsonl")
 
-````
+```
 </CodeBlocks>
 
 #### Inserting items from a Pandas DataFrame
@@ -147,7 +147,7 @@ dataset.insert_from_pandas(dataframe=df)
 
 # You can also specify an optional keys_mapping parameter
 dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
-````
+```
 
 </CodeBlocks>
 
@@ -170,7 +170,7 @@ await dataset.delete(["123", "456"])
 
 await dataset.clear()
 
-````
+```
 
 ```python title="Python" language="python"
 from opik import Opik
@@ -183,7 +183,7 @@ dataset.delete(items_ids=["123", "456"])
 
 # Or to delete all items
 dataset.clear()
-````
+```
 
 </CodeBlocks>
 
@@ -201,7 +201,7 @@ const dataset = await client.getDataset("My dataset");
 const items = await dataset.getItems();
 console.log(items);
 
-````
+```
 
 ```python title="Python" language="python"
 from opik import Opik
@@ -217,7 +217,7 @@ dataset.to_pandas()
 
 # Convert to a JSON array
 dataset.to_json()
-````
+```
 
 </CodeBlocks>
 

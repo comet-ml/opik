@@ -86,14 +86,14 @@ const { input } = datasetItem;
 
 };
 
-````
+```
 
 ```python title="Python" language="python"
 def evaluation_task(x):
     return {
         "output": your_llm_application(x['user_question'])
     }
-````
+```
 
 </CodeBlocks>
 
@@ -167,13 +167,13 @@ import { ExactMatch } from "opik";
 
 const exact_match_metric = new ExactMatch();
 
-````
+```
 
 ```python title="Python" language="python"
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination()
-````
+```
 
 </CodeBlocks>
 

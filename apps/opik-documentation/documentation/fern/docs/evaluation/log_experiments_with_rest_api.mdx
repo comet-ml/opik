@@ -50,7 +50,7 @@ expected_output: "Brasília"
 }
 ]);
 
-````
+```
 
 ```python title="Python" language="python" maxLines=1000
 from opik import Opik
@@ -81,7 +81,7 @@ dataset = client.get_or_create_dataset(name="geography-questions")
 
 # Add dataset items
 dataset.insert(dataset_items)
-````
+```
 
 ```bash title="REST API" maxLines=1000
 # First, create the dataset
@@ -154,7 +154,7 @@ feedback_scores: [{ name: "accuracy", value: response.includes(item.expected_out
 }
 });
 
-````
+```
 
 ```python title="Python" language="python" maxLines=1000
 # Get dataset items from the dataset object
@@ -199,7 +199,7 @@ for item in dataset_items[:3]:  # Process first 3 items for this example
     })
 
 print(f"Prepared {len(evaluation_items)} evaluation items")
-````
+```
 
 ```bash title="REST API"
   {
@@ -277,7 +277,7 @@ feedback_scores: [{ name: "accuracy", value: 1.0, source: "sdk" }]
 ];
 await client.api.experiments.experimentItemsBulk({ experimentName, datasetName, items });
 
-````
+```
 
 ```python title="Python" language="python" maxLines=1000
 experiment_name = "Bulk experiment upload"
@@ -297,7 +297,7 @@ client.rest_client.experiments.experiment_items_bulk(
         for item in evaluation_items
     ]
 )
-````
+```
 
 ```bash title="REST API" maxLines=1000
 curl -X PUT 'https://www.comet.com/opik/api/v1/private/experiments/items/bulk' \
@@ -381,7 +381,7 @@ source: "sdk"
 });
 }
 
-````
+```
 
 ```python title="Python" language="python" maxLines=1000
 experiment_id = str(uuid6.uuid7())
@@ -411,7 +411,7 @@ for half in halves:
             for item in half
         ]
     )
-````
+```
 
 </CodeBlocks>
 
@@ -493,7 +493,7 @@ source: "sdk"
 
 console.log(`Experiment '${experimentName}' created successfully!`);
 
-````
+```
 
 ```python title="Python" language="python"
 from opik import Opik
@@ -565,7 +565,7 @@ rest_client.experiments.experiment_items_bulk(
 )
 
 print(f"Experiment '{experiment_name}' created successfully!")
-````
+```
 
 ```bash title="REST API"
 # Set environment variables
