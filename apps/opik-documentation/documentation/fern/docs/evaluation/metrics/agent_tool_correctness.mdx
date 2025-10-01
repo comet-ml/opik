@@ -1,0 +1,39 @@
+---
+description: Evaluate whether an agent invoked and interpreted tools correctly
+---
+
+# Agent Tool Correctness Judge
+
+`AgentToolCorrectnessJudge` checks if an agent called the right tools with valid arguments and interpreted the outputs accurately. It’s invaluable for diagnosing production agents that orchestrate APIs, databases, or internal services.
+
+```python title="Inspect tool usage"
+from opik.evaluation.metrics import AgentToolCorrectnessJudge
+
+run_report = (
+    "TOOL weather_api(city='Paris') -> 12°C and raining. Agent responded 'Sunny and warm'."
+)
+
+metric = AgentToolCorrectnessJudge()
+score = metric.score(output=run_report)
+
+print(score.value)
+print(score.reason)
+```
+
+## Inputs
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `str` | **Yes** | Narrative or structured log describing tool invocations. |
+| `input` | `str` | Optional | Original user task or instructions. |
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Upgrade to a larger evaluator if analysing lengthy traces. |
+| `temperature` | `0.0` | Keep low for repeatable scoring. |
+| `track` | `True` | Controls Opik tracking. |
+| `project_name` | `None` | Override logging destination. |
+
+The judge’s metadata lists incorrect calls, missing validations, and misinterpreted outputs so you can pinpoint where guardrails or schema validation should be tightened.

@@ -1,0 +1,44 @@
+---
+description: Run retrieval-augmented evaluation with RevisEvalJudge
+---
+
+# RevisEval Judge
+
+`RevisEvalJudge` extends GEval with an additional retrieval step. Before scoring the answer, it pulls supporting evidence (via LiteLLM’s retrieval-enabled models) and suggests revisions alongside the final score. This is ideal when you want the evaluator to fact-check the answer against fresh context, not just the original prompt.
+
+```python title="Retrieval-augmented scoring"
+from opik.evaluation.metrics import RevisEvalJudge
+
+metric = RevisEvalJudge(model="gpt-4o")
+
+score = metric.score(
+    input="Document: ...",
+    output="Summary: ...",
+)
+
+print(score.value)
+print(score.reason)
+print(score.metadata.get("revision_suggestion"))
+```
+
+## Inputs
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `input` | `str` | Optional | Source content to evaluate against. |
+| `output` | `str` | **Yes** | Response to review. |
+| `context` | `str | list[str]` | Optional | Extra documents to bias retrieval. |
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Choose a model that supports retrieval or RAI-style tools. |
+| `temperature` | `0.0` | Slightly higher temperatures (0.2–0.3) can generate more creative revision tips. |
+
+The judge returns additional metadata fields:
+
+- `revision_suggestion` – a short recommendation for how to improve the answer.
+- `supporting_evidence` – the snippets retrieved during evaluation (when the provider exposes them).
+
+Use these fields to auto-generate feedback for content authors or to gate responses that require human review.

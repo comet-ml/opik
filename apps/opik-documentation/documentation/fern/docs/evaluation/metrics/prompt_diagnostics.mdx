@@ -1,0 +1,42 @@
+---
+description: Estimate prompt difficulty and ambiguity with PromptPerplexityJudge and PromptUncertaintyJudge
+---
+
+# Prompt Diagnostics
+
+Prompt diagnostics help you triage risky or underspecified user requests before they reach your production model. Opik ships two complementary judges:
+
+- **`PromptPerplexityJudge`** – estimates how difficult the prompt is likely to be for the downstream model family.
+- **`PromptUncertaintyJudge`** – flags ambiguity, missing context, or conflicting instructions that could confuse an assistant.
+
+Run them on raw prompts to decide whether to request clarification, route to a human, or fan out to more capable models.
+
+```python title="Triaging tricky prompts"
+from opik.evaluation.metrics import PromptPerplexityJudge, PromptUncertaintyJudge
+
+prompt = (
+    "Summarise the attached 200-page legal agreement into a single bullet, "
+    "guaranteeing there are no omissions."
+)
+
+perplexity = PromptPerplexityJudge().score(input=prompt)
+uncertainty = PromptUncertaintyJudge().score(input=prompt)
+
+print(perplexity.value, perplexity.reason)
+print(uncertainty.value, uncertainty.reason)
+```
+
+## Inputs
+
+Both judges accept a single string via the `input` keyword. You can optionally pass additional metadata (dataset row contents, prompt IDs) via keyword arguments – these will be forwarded to the underlying base metric for tracking.
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Swap to any LiteLLM chat model if you need a larger evaluator. |
+| `temperature` | `0.0` | Lower values improve reproducibility; higher values explore more interpretations. |
+| `track` | `True` | Disable to skip logging evaluations. |
+| `project_name` | `None` | Override the project when logging results. |
+
+The metadata returned by each judge contains rationale text and per-criterion scores. You can feed these into dashboards or trigger follow-up automations when scores cross a threshold.

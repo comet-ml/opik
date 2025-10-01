@@ -2,21 +2,37 @@
 description: Describes all the built-in heuristic metrics provided by Opik
 ---
 
-Heuristic metrics are rule-based evaluation methods that allow you to check specific aspects of language model outputs. These metrics use predefined criteria or patterns to assess the quality, consistency, or characteristics of generated text.
+Heuristic metrics are rule-based evaluation methods that allow you to check specific aspects of language model outputs. These metrics use predefined criteria or patterns to assess the quality, consistency, or characteristics of generated text. They come in two flavours:
 
-You can use the following heuristic metrics:
+- **Token or string heuristics** – operate on a single turn and compare the candidate output to a reference or handcrafted rule.
+- **Conversation heuristics** – aggregate classical NLP scores across assistant turns in a dialogue.
 
-| Metric       | Description                                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------------- |
-| Equals       | Checks if the output exactly matches an expected string                                           |
-| Contains     | Check if the output contains a specific substring, can be both case sensitive or case insensitive |
-| RegexMatch   | Checks if the output matches a specified regular expression pattern                               |
-| IsJson       | Checks if the output is a valid JSON object                                                       |
-| Levenshtein  | Calculates the Levenshtein distance between the output and an expected string                     |
-| SentenceBLEU | Calculates a single-sentence BLEU score for a candidate vs. one or more references                |
-| CorpusBLEU   | Calculates a corpus-level BLEU score for multiple candidates vs. their references                 |
-| ROUGE        | Calculates the ROUGE score for a candidate vs. one or more references                             |
-| Sentiment    | Analyzes the sentiment of text using NLTK's VADER sentiment analyzer                              |
+### String and token heuristics
+
+| Metric | Description |
+| --- | --- |
+| Equals | Checks if the output exactly matches an expected string. |
+| Contains | Checks if the output contains a specific substring (case-sensitive or insensitive). |
+| RegexMatch | Validates the output against a regular expression pattern. |
+| IsJson | Ensures the output can be parsed as JSON. |
+| LevenshteinRatio | Computes the normalised Levenshtein similarity between output and reference. |
+| SentenceBLEU | Calculates a single-sentence BLEU score against one or more references. |
+| CorpusBLEU | Calculates a corpus-level BLEU score across many candidates. |
+| ROUGE | Calculates ROUGE-N / ROUGE-L variants for free-form comparisons. |
+| Sentiment | Scores sentiment using NLTK's VADER lexicon (compound, pos/neu/neg). |
+
+### Conversation heuristics
+
+| Metric | Description |
+| --- | --- |
+| KnowledgeRetentionMetric | Checks whether the last assistant reply preserves user-provided facts from earlier turns. |
+| RougeCMetric | Aggregates ROUGE scores across assistant turns in a thread. |
+| BleuCMetric | Aggregates BLEU scores across assistant turns. |
+| MeteorCMetric | Aggregates METEOR scores across assistant turns. |
+| ConversationDegenerationMetric | Detects repetition and low-entropy responses over a conversation. |
+
+> [!TIP]
+> Conversation heuristics accept full transcripts as input. Refer to the [Conversation metrics guide](/evaluation/metrics/conversation_threads_metrics) for detailed examples and configuration options.
 
 ## Score an LLM response
 
@@ -88,7 +104,7 @@ print(score)
 
 ### LevenshteinRatio
 
-The `LevenshteinRatio` metric can be used to check if the output of an LLM is valid. It can be used in the following way:
+The `LevenshteinRatio` metric measures how similar the output is to a reference string on a 0–1 scale (1.0 means identical). It is useful when exact matches are too strict but you still want to penalise large deviations.
 
 ```python
 from opik.evaluation.metrics import LevenshteinRatio

@@ -1,0 +1,40 @@
+---
+description: Verify whether an agent fulfilled its assigned objective
+---
+
+# Agent Task Completion Judge
+
+`AgentTaskCompletionJudge` reviews an agent run (often a natural-language summary of what happened) and decides whether the high-level objective was met. It is particularly helpful for multi-step agents where success cannot be inferred from the final response alone.
+
+```python title="Did the agent finish the job?"
+from opik.evaluation.metrics import AgentTaskCompletionJudge
+
+metric = AgentTaskCompletionJudge()
+
+score = metric.score(
+    input="Task: Extract company name, address, and tax ID from the invoice.",
+    output="Agent retrieved company name and address but failed to extract tax ID.",
+)
+
+print(score.value)
+print(score.reason)
+```
+
+## Inputs
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `input` | `str` | Optional | High-level task description. |
+| `output` | `str` | **Yes** | Summary of what the agent accomplished. |
+| `context` | `str | list[str]` | Optional | Additional evidence (e.g., tool logs). |
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Switch to heavier evaluators for complex workflows. |
+| `temperature` | `0.0` | Increase slightly if you want more creative feedback. |
+| `track` | `True` | Toggle evaluation logging. |
+| `project_name` | `None` | Override project for logging. |
+
+The judge returns a `ScoreResult` where the metadata often includes bullet-point evidence describing completed and missing sub-tasks. Feed this into dashboards to monitor agent success rates over time.
