@@ -26,20 +26,6 @@ const detectProvider = (sdk: object): string => {
  * @param opikConfig - Configuration for Opik tracking
  * @returns Proxied SDK instance with flush() method
  *
- * @example
- * ```typescript
- * import { GoogleGenerativeAI } from "@google/genai";
- * import { trackGemini } from "@opik/opik-gemini";
- *
- * const genAI = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
- * const trackedGenAI = trackGemini(genAI, { projectName: "my-project" });
- *
- * const model = trackedGenAI.getGenerativeModel({ model: "gemini-pro" });
- * const result = await model.generateContent("Hello, world!");
- *
- * // Flush traces before process exit
- * await trackedGenAI.flush();
- * ```
  */
 export const trackGemini = <SDKType extends object>(
   sdk: SDKType,

@@ -80,8 +80,13 @@ async function streamExample() {
   });
 
   // Stream is automatically tracked
+  let streamedContent = "";
   for await (const chunk of response) {
-    process.stdout.write(chunk.text);
+    const chunkText = chunk.text;
+    if (chunkText) {
+      process.stdout.write(chunkText);
+      streamedContent += chunkText;
+    }
   }
 
   console.log("\n");

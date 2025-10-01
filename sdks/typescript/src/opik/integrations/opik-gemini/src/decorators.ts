@@ -239,21 +239,26 @@ function wrapAsyncIterable<T>(
       }
 
       // After stream completes:
-      // 1. Parse final output from all chunks
-      // Gemini includes usage_metadata in the final response/chunk
+      // Parse usage and metadata from final chunk (Gemini includes usage_metadata in final response)
       const finalChunk = chunks[chunks.length - 1];
 
       if (finalChunk) {
         usage = parseUsage(finalChunk);
         modelMetadata = parseModelDataFromResponse(finalChunk);
-        aggregatedOutput = parseCompletionOutput(finalChunk) || {
-          message: textChunks.join(""),
-        };
-      } else {
-        // No chunks, use text aggregation
-        aggregatedOutput = {
-          message: textChunks.join(""),
-        };
+
+        const accumulatedText = textChunks.join("");
+        const finalChunkParsed = parseCompletionOutput(finalChunk);
+
+        if (finalChunkParsed?.candidates) {
+          aggregatedOutput = {
+            candidates: structuredClone(finalChunkParsed.candidates),
+          };
+
+          if (aggregatedOutput.candidates?.[0]?.content?.parts?.[0]) {
+            aggregatedOutput.candidates[0].content.parts[0].text =
+              accumulatedText;
+          }
+        }
       }
 
       // 2. Create main span with aggregated data
