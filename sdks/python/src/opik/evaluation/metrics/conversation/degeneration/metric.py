@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.exceptions import MetricComputationError
 from .phrases import DEFAULT_FALLBACK_PHRASES
 
 
@@ -37,7 +38,7 @@ class ConversationDegenerationMetric(BaseMetric):
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         if ngram_size < 2:
-            raise ValueError("ngram_size must be >= 2")
+            raise MetricComputationError("ngram_size must be >= 2")
         self._ngram_size = ngram_size
         phrases = (
             fallback_phrases
@@ -57,7 +58,9 @@ class ConversationDegenerationMetric(BaseMetric):
             if turn.get("role") == "assistant" and turn.get("content")
         ]
         if not assistant_turns:
-            raise ValueError("Conversation contains no assistant messages")
+            raise MetricComputationError(
+                "Conversation contains no assistant messages"
+            )
 
         per_turn_metadata: List[Dict[str, float]] = []
         degeneracy_scores: List[float] = []
@@ -93,7 +96,9 @@ class ConversationDegenerationMetric(BaseMetric):
             prev_tokens = tokens
 
         if not degeneracy_scores:
-            raise ValueError("Assistant messages were empty after tokenization")
+            raise MetricComputationError(
+                "Assistant messages were empty after tokenization"
+            )
 
         average_score = sum(degeneracy_scores) / len(degeneracy_scores)
         peak_score = max(degeneracy_scores)
