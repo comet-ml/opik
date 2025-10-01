@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -198,6 +198,8 @@ GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
 
 
 class GEval(base_metric.BaseMetric):
+    _CHAIN_OF_THOUGHT_CACHE: Dict[Tuple[str, str, str], str] = {}
+
     def __init__(
         self,
         task_introduction: str,
@@ -239,16 +241,31 @@ class GEval(base_metric.BaseMetric):
         self._init_model(model, temperature=temperature)
 
     def llm_chain_of_thought(self) -> str:
+        cache_key = (
+            self.task_introduction,
+            self.evaluation_criteria,
+            getattr(self._model, "model_name", "unknown"),
+        )
+        if cache_key in self._CHAIN_OF_THOUGHT_CACHE:
+            self._chain_of_thought_response = self._CHAIN_OF_THOUGHT_CACHE[cache_key]
         if self._chain_of_thought_response is None:
             prompt = template.G_EVAL_COT_TEMPLATE.format(
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
             )
             self._chain_of_thought_response = self._model.generate_string(input=prompt)
+            self._CHAIN_OF_THOUGHT_CACHE[cache_key] = self._chain_of_thought_response
 
         return self._chain_of_thought_response
 
     async def allm_chain_of_thought(self) -> str:
+        cache_key = (
+            self.task_introduction,
+            self.evaluation_criteria,
+            getattr(self._model, "model_name", "unknown"),
+        )
+        if cache_key in self._CHAIN_OF_THOUGHT_CACHE:
+            self._chain_of_thought_response = self._CHAIN_OF_THOUGHT_CACHE[cache_key]
         if self._chain_of_thought_response is None:
             prompt = template.G_EVAL_COT_TEMPLATE.format(
                 task_introduction=self.task_introduction,
@@ -257,6 +274,7 @@ class GEval(base_metric.BaseMetric):
             self._chain_of_thought_response = await self._model.agenerate_string(
                 input=prompt
             )
+            self._CHAIN_OF_THOUGHT_CACHE[cache_key] = self._chain_of_thought_response
 
         return self._chain_of_thought_response
 
