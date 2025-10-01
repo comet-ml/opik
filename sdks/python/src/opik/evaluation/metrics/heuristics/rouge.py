@@ -144,7 +144,9 @@ class ROUGE(base_metric.BaseMetric):
         reference_tokens = reference.split()
 
         if not candidate_tokens or not reference_tokens:
-            raise MetricComputationError("Empty tokens encountered for ROUGE-W computation.")
+            raise MetricComputationError(
+                "Empty tokens encountered for ROUGE-W computation."
+            )
 
         wlcs = _weighted_lcs(candidate_tokens, reference_tokens)
         cand_norm = _weighted_lcs(candidate_tokens, candidate_tokens)
@@ -153,10 +155,10 @@ class ROUGE(base_metric.BaseMetric):
         precision = wlcs / cand_norm if cand_norm > 0 else 0.0
         recall = wlcs / ref_norm if ref_norm > 0 else 0.0
         beta = 1.2
-        denom = recall + beta ** 2 * precision
+        denom = recall + beta**2 * precision
         if denom == 0:
             return 0.0
-        return (1 + beta ** 2) * precision * recall / denom
+        return (1 + beta**2) * precision * recall / denom
 
 
 def _weighted_lcs(tokens_a: List[str], tokens_b: List[str]) -> float:

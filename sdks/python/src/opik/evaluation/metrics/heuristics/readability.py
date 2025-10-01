@@ -63,18 +63,16 @@ class ReadabilityGuard(BaseMetric):
         sentences = _split_sentences(output)
         words = re.findall(r"\b\w+\b", output)
         if not sentences or not words:
-            raise MetricComputationError("Unable to parse text for readability metrics.")
+            raise MetricComputationError(
+                "Unable to parse text for readability metrics."
+            )
 
         syllables = sum(_count_syllables(word) for word in words)
         words_per_sentence = len(words) / len(sentences)
         syllables_per_word = syllables / len(words)
 
-        reading_ease = (
-            206.835 - 1.015 * words_per_sentence - 84.6 * syllables_per_word
-        )
-        fk_grade = (
-            0.39 * words_per_sentence + 11.8 * syllables_per_word - 15.59
-        )
+        reading_ease = 206.835 - 1.015 * words_per_sentence - 84.6 * syllables_per_word
+        fk_grade = 0.39 * words_per_sentence + 11.8 * syllables_per_word - 15.59
 
         within_bounds = self._is_within_grade_bounds(fk_grade)
         value = 1.0 if within_bounds else 0.0
@@ -93,7 +91,9 @@ class ReadabilityGuard(BaseMetric):
             "max_grade": self._max_grade,
         }
 
-        return ScoreResult(value=value, name=self.name, reason=reason, metadata=metadata)
+        return ScoreResult(
+            value=value, name=self.name, reason=reason, metadata=metadata
+        )
 
     def _is_within_grade_bounds(self, grade: float) -> bool:
         if self._min_grade is not None and grade < self._min_grade:

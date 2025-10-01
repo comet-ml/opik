@@ -15,5 +15,7 @@ def parse_model_output(content: str) -> tuple[float, str]:
     score = float(parsed["score"])
     reason = str(parsed.get("reason", ""))
     if not (0.0 <= score <= 1.0):
-        raise exceptions.MetricComputationError("RevisEval score must be between 0 and 1")
+        raise exceptions.MetricComputationError(
+            "RevisEval score must be between 0 and 1"
+        )
     return score, reason

@@ -27,9 +27,13 @@ class SpearmanRanking(BaseMetric):
         **ignored_kwargs: Any,
     ) -> ScoreResult:
         if len(output) != len(reference):
-            raise MetricComputationError("output and reference rankings must have the same length.")
+            raise MetricComputationError(
+                "output and reference rankings must have the same length."
+            )
         if len(output) == 0:
-            raise MetricComputationError("Rankings cannot be empty for Spearman correlation.")
+            raise MetricComputationError(
+                "Rankings cannot be empty for Spearman correlation."
+            )
 
         ref_ranks = {item: idx for idx, item in enumerate(reference)}
         if set(output) != set(reference):

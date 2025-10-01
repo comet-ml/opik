@@ -29,7 +29,9 @@ class VADERSentiment(BaseMetric):
         if analyzer is not None:
             self._analyzer = analyzer
         else:
-            if SentimentIntensityAnalyzer is None:  # pragma: no cover - optional dependency
+            if (
+                SentimentIntensityAnalyzer is None
+            ):  # pragma: no cover - optional dependency
                 raise ImportError(
                     "VADER sentiment metric requires the optional 'nltk' package. Install via"
                     " `pip install nltk` or provide a custom analyzer."

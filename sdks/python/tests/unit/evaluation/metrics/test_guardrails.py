@@ -1,7 +1,9 @@
 import pytest
 
 from opik.evaluation.metrics.heuristics.prompt_injection import PromptInjectionGuard
-from opik.evaluation.metrics.heuristics.language_adherence import LanguageAdherenceMetric
+from opik.evaluation.metrics.heuristics.language_adherence import (
+    LanguageAdherenceMetric,
+)
 from opik.evaluation.metrics.conversation.knowledge_retention.metric import (
     KnowledgeRetentionMetric,
 )
@@ -24,14 +26,18 @@ def test_language_adherence_with_stub():
     def detector(text: str):
         return ("en", 0.95)
 
-    metric = LanguageAdherenceMetric(expected_language="en", detector=detector, track=False)
+    metric = LanguageAdherenceMetric(
+        expected_language="en", detector=detector, track=False
+    )
     res = metric.score("This is a simple sentence.")
 
     assert isinstance(res, ScoreResult)
     assert res.value == 1.0
     assert res.metadata["detected_language"] == "en"
 
-    metric_mismatch = LanguageAdherenceMetric(expected_language="fr", detector=detector, track=False)
+    metric_mismatch = LanguageAdherenceMetric(
+        expected_language="fr", detector=detector, track=False
+    )
     res_mismatch = metric_mismatch.score("This is a simple sentence.")
     assert res_mismatch.value == 0.0
 

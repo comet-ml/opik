@@ -122,8 +122,7 @@ class JSDivergence(_DistributionMetricBase):
             mixture[token] = 0.5 * (p_val + q_val)
 
         return 0.5 * (
-            self._kl_divergence(p_dist, mixture)
-            + self._kl_divergence(q_dist, mixture)
+            self._kl_divergence(p_dist, mixture) + self._kl_divergence(q_dist, mixture)
         )
 
     def _kl_divergence(

@@ -64,7 +64,9 @@ class LanguageAdherenceMetric(BaseMetric):
             else f"Detected language '{language}' differs from expected '{self._expected_language}'"
         )
 
-        return ScoreResult(value=adherence, name=self.name, reason=reason, metadata=metadata)
+        return ScoreResult(
+            value=adherence, name=self.name, reason=reason, metadata=metadata
+        )
 
     def _detect_language(self, text: str) -> tuple[str, float]:
         if callable(self._detector):

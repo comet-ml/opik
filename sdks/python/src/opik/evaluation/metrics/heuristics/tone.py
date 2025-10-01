@@ -34,8 +34,12 @@ class ToneGuard(BaseMetric):
         self._min_sentiment = min_sentiment
         self._max_upper_ratio = max_upper_ratio
         self._max_exclamations = max_exclamations
-        self._positive = set(word.lower() for word in (positive_lexicon or POSITIVE_LEXICON))
-        self._negative = set(word.lower() for word in (negative_lexicon or NEGATIVE_LEXICON))
+        self._positive = set(
+            word.lower() for word in (positive_lexicon or POSITIVE_LEXICON)
+        )
+        self._negative = set(
+            word.lower() for word in (negative_lexicon or NEGATIVE_LEXICON)
+        )
         phrases = forbidden_phrases or FORBIDDEN_PHRASES
         self._forbidden = [phrase.lower() for phrase in phrases]
 
@@ -71,9 +75,15 @@ class ToneGuard(BaseMetric):
             },
         }
 
-        reason = "Tone is within configured guardrails" if passes else "Tone violates guardrails"
+        reason = (
+            "Tone is within configured guardrails"
+            if passes
+            else "Tone violates guardrails"
+        )
         value = 1.0 if passes else 0.0
-        return ScoreResult(value=value, name=self.name, reason=reason, metadata=metadata)
+        return ScoreResult(
+            value=value, name=self.name, reason=reason, metadata=metadata
+        )
 
     def _compute_sentiment(self, tokens: Sequence[str]) -> float:
         pos_hits = sum(token in self._positive for token in tokens)

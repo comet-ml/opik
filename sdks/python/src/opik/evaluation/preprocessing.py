@@ -68,7 +68,9 @@ def _strip_accents(text: str) -> str:
 def _remove_punctuation(text: str) -> str:
     translator = str.maketrans("", "", string.punctuation)
     stripped = text.translate(translator)
-    return re.sub(r"[\u2010-\u2015\u2018-\u201f\u2020-\u2027\u2030-\u2043]", "", stripped)
+    return re.sub(
+        r"[\u2010-\u2015\u2018-\u201f\u2020-\u2027\u2030-\u2043]", "", stripped
+    )
 
 
 def _collapse_whitespace(text: str) -> str:

@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -50,7 +50,9 @@ class GLEU(base_metric.BaseMetric):
                     " `pip install nltk` or provide `gleu_fn`."
                 )
 
-            def _scorer(references: Sequence[Sequence[str]], hypothesis: Sequence[str]) -> float:
+            def _scorer(
+                references: Sequence[Sequence[str]], hypothesis: Sequence[str]
+            ) -> float:
                 return float(
                     nltk_gleu_score.sentence_gleu(
                         references,
@@ -80,7 +82,9 @@ class GLEU(base_metric.BaseMetric):
             references = [ref.split() for ref in ref_list]
 
         if any(len(ref) == 0 for ref in references):
-            raise MetricComputationError("Reference contains empty segment (GLEU metric).")
+            raise MetricComputationError(
+                "Reference contains empty segment (GLEU metric)."
+            )
 
         score = self._gleu_fn(references, hypothesis_tokens)
         return score_result.ScoreResult(

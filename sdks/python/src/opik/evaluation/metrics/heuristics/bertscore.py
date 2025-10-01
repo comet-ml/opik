@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -11,7 +11,9 @@ except ImportError:  # pragma: no cover - optional dependency
     bert_score_fn = None
 
 
-BertScoreFn = Callable[[Sequence[str], Union[Sequence[str], Sequence[Sequence[str]]]], Tuple[Any, Any, Any]]
+BertScoreFn = Callable[
+    [Sequence[str], Union[Sequence[str], Sequence[Sequence[str]]]], Tuple[Any, Any, Any]
+]
 
 
 class BERTScore(base_metric.BaseMetric):
@@ -52,7 +54,10 @@ class BERTScore(base_metric.BaseMetric):
                     "Install via `pip install bert-score` or provide `scorer_fn`."
                 )
 
-            def _score(candidates: Sequence[str], references: Union[Sequence[str], Sequence[Sequence[str]]]):
+            def _score(
+                candidates: Sequence[str],
+                references: Union[Sequence[str], Sequence[Sequence[str]]],
+            ):
                 return bert_score_fn(
                     candidates,
                     references,

@@ -10,7 +10,6 @@ from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.llm_judges.reviseval import templates, parser
 from opik.evaluation.models import base_model, models_factory
-import opik.exceptions as exceptions
 
 
 class RevisEvalResponseFormat(pydantic.BaseModel):
@@ -31,7 +30,9 @@ class RevisEvalJudge(BaseMetric):
         super().__init__(name=name, track=track, project_name=project_name)
         self._init_model(model)
 
-    def _init_model(self, model: Optional[Union[str, base_model.OpikBaseModel]]) -> None:
+    def _init_model(
+        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+    ) -> None:
         if model is None or isinstance(model, str):
             self._model = models_factory.get(model_name=model)
             return
@@ -52,7 +53,9 @@ class RevisEvalJudge(BaseMetric):
         context: Optional[List[str]] = None,
         **ignored_kwargs: Any,
     ) -> ScoreResult:
-        prompt = templates.build_prompt(question=question, answer=answer, context=context)
+        prompt = templates.build_prompt(
+            question=question, answer=answer, context=context
+        )
         model_output = self._model.generate_string(
             input=prompt,
             response_format=RevisEvalResponseFormat,
@@ -67,7 +70,9 @@ class RevisEvalJudge(BaseMetric):
         context: Optional[List[str]] = None,
         **ignored_kwargs: Any,
     ) -> ScoreResult:
-        prompt = templates.build_prompt(question=question, answer=answer, context=context)
+        prompt = templates.build_prompt(
+            question=question, answer=answer, context=context
+        )
         model_output = await self._model.agenerate_string(
             input=prompt,
             response_format=RevisEvalResponseFormat,

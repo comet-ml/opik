@@ -10,4 +10,3 @@ DEFAULT_FALLBACK_PHRASES = [
     "i don't understand",
     "could you please clarify",
 ]
-

@@ -39,7 +39,11 @@ class ConversationDegenerationMetric(BaseMetric):
         if ngram_size < 2:
             raise ValueError("ngram_size must be >= 2")
         self._ngram_size = ngram_size
-        phrases = fallback_phrases if fallback_phrases is not None else DEFAULT_FALLBACK_PHRASES
+        phrases = (
+            fallback_phrases
+            if fallback_phrases is not None
+            else DEFAULT_FALLBACK_PHRASES
+        )
         self._fallback_phrases = [phrase.lower() for phrase in phrases]
 
     def score(

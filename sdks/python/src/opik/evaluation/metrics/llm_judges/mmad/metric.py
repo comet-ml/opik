@@ -42,4 +42,6 @@ class MMADJudge(BaseMetric):
             "judge_scores": {res.name: res.value for res in scores},
         }
         reason = f"Averaged {len(scores)} judge scores"
-        return ScoreResult(value=average, name=self.name, reason=reason, metadata=metadata)
+        return ScoreResult(
+            value=average, name=self.name, reason=reason, metadata=metadata
+        )

@@ -268,7 +268,7 @@ def test_meteor_metric_with_custom_fn():
     res = metric.score(output="hello world", reference="hello world")
 
     assert res.value == pytest.approx(0.88)
-    assert captured == [(('hello world',), 'hello world')]
+    assert captured == [(("hello world",), "hello world")]
 
 
 def test_meteor_rejects_empty_inputs():
@@ -326,6 +326,7 @@ def test_bertscore_rejects_empty_candidate():
     with pytest.raises(MetricComputationError):
         metric.score(output="   ", reference="ref")
 
+
 def test_chrf_metric_uses_custom_fn():
     def chrf_fn(candidate, references):
         assert candidate == "hello world"
@@ -377,7 +378,10 @@ def test_readability_guard_pass_and_fail():
     guard = ReadabilityGuard(min_grade=None, max_grade=threshold, track=False)
     strict_guard = ReadabilityGuard(min_grade=threshold, max_grade=None, track=False)
 
-    assert hard_result.metadata["flesch_kincaid_grade"] > easy_result.metadata["flesch_kincaid_grade"]
+    assert (
+        hard_result.metadata["flesch_kincaid_grade"]
+        > easy_result.metadata["flesch_kincaid_grade"]
+    )
     assert guard.score(output=easy_text).value == 1.0
     assert strict_guard.score(output=easy_text).value == 0.0
 
@@ -390,6 +394,7 @@ def test_tone_guard_detects_shouting_and_negativity():
 
     assert guard.score(output=polite).value == 1.0
     assert guard.score(output=rude).value == 0.0
+
 
 class _StubRougeMetric:
     def __init__(self, scores):
@@ -404,7 +409,9 @@ class _StubRougeMetric:
 
 def test_rouge_c_metric_average_and_penalty():
     rouge_stub = _StubRougeMetric(scores=[0.8, 0.6])
-    metric = RougeCMetric(rouge_metric=rouge_stub, missing_turn_penalty=0.1, track=False)
+    metric = RougeCMetric(
+        rouge_metric=rouge_stub, missing_turn_penalty=0.1, track=False
+    )
 
     conversation = [
         {"role": "user", "content": "Hi"},
@@ -482,6 +489,8 @@ def test_meteor_c_metric_with_stub():
 
     result = metric.score(conversation=convo, reference_conversation=ref)
     assert result.value == pytest.approx(0.3)
+
+
 # ROUGE score tests
 
 

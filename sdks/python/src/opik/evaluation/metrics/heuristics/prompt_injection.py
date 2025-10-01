@@ -17,7 +17,7 @@ _INJECTION_PATTERNS = [
     r"what is the system prompt",
     r"print the prompt",
     r"leak the instructions",
-    r"###"  # common delimiter used in leaked prompts
+    r"###",  # common delimiter used in leaked prompts
 ]
 
 _SUSPICIOUS_KEYWORDS = {
@@ -43,13 +43,17 @@ class PromptInjectionGuard(BaseMetric):
         keywords: Optional[Iterable[str]] = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
-        self._patterns = [re.compile(pat, re.IGNORECASE) for pat in (patterns or _INJECTION_PATTERNS)]
+        self._patterns = [
+            re.compile(pat, re.IGNORECASE) for pat in (patterns or _INJECTION_PATTERNS)
+        ]
         self._keywords = [kw.lower() for kw in (keywords or _SUSPICIOUS_KEYWORDS)]
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
         processed = self._preprocess(output)
         if not processed.strip():
-            return ScoreResult(value=0.0, name=self.name, reason="Empty output", metadata={})
+            return ScoreResult(
+                value=0.0, name=self.name, reason="Empty output", metadata={}
+            )
 
         matches: List[str] = []
         for pattern in self._patterns:
@@ -74,4 +78,6 @@ class PromptInjectionGuard(BaseMetric):
             "keyword_hits": keyword_hits,
         }
 
-        return ScoreResult(value=score, name=self.name, reason=reason, metadata=metadata)
+        return ScoreResult(
+            value=score, name=self.name, reason=reason, metadata=metadata
+        )

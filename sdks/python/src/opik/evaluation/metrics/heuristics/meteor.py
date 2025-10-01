@@ -1,4 +1,4 @@
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 try:
     import nltk  # type: ignore
@@ -61,7 +61,9 @@ class METEOR(base_metric.BaseMetric):
             if nltk is not None and wordnet is not None:
                 try:
                     wordnet.ensure_loaded()  # type: ignore[attr-defined]
-                except LookupError:  # pragma: no cover - download path relies on network access
+                except (
+                    LookupError
+                ):  # pragma: no cover - download path relies on network access
                     try:
                         nltk.download("wordnet", quiet=True)
                         nltk.download("omw-1.4", quiet=True)

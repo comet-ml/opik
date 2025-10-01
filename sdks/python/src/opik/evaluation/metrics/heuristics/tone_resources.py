@@ -35,4 +35,3 @@ FORBIDDEN_PHRASES = {
     "not my problem",
     "i refuse to assist",
 }
-

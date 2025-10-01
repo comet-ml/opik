@@ -22,7 +22,9 @@ class StubJudge(ScoreResult):
 
 def test_reviseval_judge_with_stub_model():
     judge = RevisEvalJudge(model=StubModel(), track=False)
-    result = judge.score(question="What is X?", answer="X is Y", context=["Y is correct."])
+    result = judge.score(
+        question="What is X?", answer="X is Y", context=["Y is correct."]
+    )
 
     assert isinstance(result, ScoreResult)
     assert result.value == pytest.approx(0.75)
