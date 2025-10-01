@@ -324,50 +324,11 @@ class GEval(base_metric.BaseMetric):
 
         return parser.parse_model_output_string(model_output_string, self.name)
 
-
-class GEvalPreset(GEval):
-    """Pre-configured G-Eval variant with author-provided prompt templates."""
-
-    def __init__(
-        self,
-        preset: str,
-        model: Optional[Union[str, models.base_model.OpikBaseModel]] = None,
-        track: bool = True,
-        project_name: Optional[str] = None,
-        temperature: float = 0.0,
-        name: Optional[str] = None,
-    ):
-        try:
-            definition = GEVAL_PRESETS[preset]
-        except KeyError as error:
-            raise ValueError(
-                f"Unknown GEval preset '{preset}'. Available presets: {list(GEVAL_PRESETS)}"
-            ) from error
-
-        super().__init__(
-            task_introduction=definition.task_introduction,
-            evaluation_criteria=definition.evaluation_criteria,
-            model=model,
-            name=name or definition.name,
-            track=track,
-            project_name=project_name,
-            temperature=temperature,
-        )
-
     async def ascore(
-        self, output: str, **ignored_kwargs: Any
+        self,
+        output: str,
+        **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
-        """
-        Calculate the G-Eval score for the given LLM's output.
-
-        Args:
-            output: The LLM's output to evaluate.
-            **ignored_kwargs: Additional keyword arguments that are ignored.
-
-        Returns:
-            score_result.ScoreResult: A ScoreResult object containing the G-Eval score
-            (between 0.0 and 1.0) and a reason for the score.
-        """
         llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
@@ -400,3 +361,33 @@ class GEvalPreset(GEval):
         )
 
         return parser.parse_model_output_string(model_output_string, self.name)
+
+
+class GEvalPreset(GEval):
+    """Pre-configured G-Eval variant with author-provided prompt templates."""
+
+    def __init__(
+        self,
+        preset: str,
+        model: Optional[Union[str, models.base_model.OpikBaseModel]] = None,
+        track: bool = True,
+        project_name: Optional[str] = None,
+        temperature: float = 0.0,
+        name: Optional[str] = None,
+    ):
+        try:
+            definition = GEVAL_PRESETS[preset]
+        except KeyError as error:
+            raise ValueError(
+                f"Unknown GEval preset '{preset}'. Available presets: {list(GEVAL_PRESETS)}"
+            ) from error
+
+        super().__init__(
+            task_introduction=definition.task_introduction,
+            evaluation_criteria=definition.evaluation_criteria,
+            model=model,
+            name=name or definition.name,
+            track=track,
+            project_name=project_name,
+            temperature=temperature,
+        )

@@ -16,6 +16,8 @@ class BaseMetric(abc.ABC):
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when
             there is no parent span/trace to inherit project name from.
+        preprocessor: Optional callable to normalize text inputs before scoring. When provided,
+            `_preprocess` will run the hook before handing text to the metric implementation.
 
     Example:
         >>> from opik.evaluation.metrics import base_metric, score_result

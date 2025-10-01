@@ -1,4 +1,4 @@
-from typing import Any, List, Union, Optional
+from typing import Any, List, Optional, Union
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -54,12 +54,6 @@ class ROUGE(base_metric.BaseMetric):
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
-        if rouge_scorer is None and rouge_type != "rougeW":
-            raise ImportError(
-                "`rouge-score` libraries are required for ROUGE score calculation. "
-                "Install via `pip install rouge-score`."
-            )
-
         valid_rouge_types = {"rouge1", "rouge2", "rougeL", "rougeLsum", "rougeW"}
         if rouge_type not in valid_rouge_types:
             raise MetricComputationError(
@@ -67,15 +61,12 @@ class ROUGE(base_metric.BaseMetric):
             )
 
         self._rouge_type = rouge_type
-        if rouge_type != "rougeW":
-            self._rouge = rouge_scorer.RougeScorer(
-                [rouge_type],
-                use_stemmer=use_stemmer,
-                split_summaries=split_summaries,
-                tokenizer=tokenizer,
-            )
-        else:
-            self._rouge = None
+        self._rouge = self._build_rouge_backend(
+            rouge_type=rouge_type,
+            use_stemmer=use_stemmer,
+            split_summaries=split_summaries,
+            tokenizer=tokenizer,
+        )
 
     def score(
         self,
@@ -137,6 +128,30 @@ class ROUGE(base_metric.BaseMetric):
             value=rouge_f1_value,
             name=self.name,
             reason=f"{rouge_score_type} score: {rouge_f1_value:.4f}",
+        )
+
+    @staticmethod
+    def _build_rouge_backend(
+        *,
+        rouge_type: str,
+        use_stemmer: bool,
+        split_summaries: bool,
+        tokenizer: Optional[Any],
+    ) -> Optional[Any]:
+        if rouge_type == "rougeW":
+            return None
+
+        if rouge_scorer is None:
+            raise ImportError(
+                "`rouge-score` libraries are required for ROUGE score calculation. "
+                "Install via `pip install rouge-score`."
+            )
+
+        return rouge_scorer.RougeScorer(
+            [rouge_type],
+            use_stemmer=use_stemmer,
+            split_summaries=split_summaries,
+            tokenizer=tokenizer,
         )
 
     def _compute_rouge_w(self, output: str, reference: str) -> float:

@@ -1,5 +1,6 @@
 import warnings
-from typing import Any, List, Optional, Tuple, Union
+from contextlib import contextmanager
+from typing import Any, Iterator, List, Optional, Tuple, Union
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -72,6 +73,18 @@ class BaseBLEU(base_metric.BaseMetric):
         total = sum(used_weights) or 1.0
         normalized = [w / total for w in used_weights]
         return tuple(normalized)
+
+
+@contextmanager
+def _suppress_bleu_warnings() -> Iterator[None]:
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"The hypothesis contains 0 counts of 2-gram overlaps\.",
+            category=UserWarning,
+            module="nltk\\.translate\\.bleu_score",
+        )
+        yield
 
 
 class SentenceBLEU(BaseBLEU):
@@ -152,13 +165,7 @@ class SentenceBLEU(BaseBLEU):
         smoothing_func = self._get_smoothing_func()
 
         try:
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message=r"The hypothesis contains 0 counts of 2-gram overlaps\.",
-                    category=UserWarning,
-                    module="nltk\\.translate\\.bleu_score",
-                )
+            with _suppress_bleu_warnings():
                 bleu_val = nltk_bleu_score.sentence_bleu(
                     ref_lists,
                     candidate_tokens,
@@ -276,12 +283,13 @@ class CorpusBLEU(BaseBLEU):
         smoothing_func = self._get_smoothing_func()
 
         try:
-            bleu_val = nltk_bleu_score.corpus_bleu(
-                all_references,
-                all_candidates,
-                weights=used_weights,
-                smoothing_function=smoothing_func,
-            )
+            with _suppress_bleu_warnings():
+                bleu_val = nltk_bleu_score.corpus_bleu(
+                    all_references,
+                    all_candidates,
+                    weights=used_weights,
+                    smoothing_function=smoothing_func,
+                )
         except ZeroDivisionError:
             bleu_val = 0.0
 
