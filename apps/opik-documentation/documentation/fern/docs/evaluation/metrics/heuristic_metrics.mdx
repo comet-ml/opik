@@ -11,35 +11,35 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 
 | Metric | Description |
 | --- | --- |
-| Equals | Checks if the output exactly matches an expected string. |
-| Contains | Checks if the output contains a specific substring (case-sensitive or insensitive). |
-| RegexMatch | Validates the output against a regular expression pattern. |
-| IsJson | Ensures the output can be parsed as JSON. |
-| LevenshteinRatio | Computes the normalised Levenshtein similarity between output and reference. |
-| SentenceBLEU | Calculates a single-sentence BLEU score against one or more references. |
-| CorpusBLEU | Calculates a corpus-level BLEU score across many candidates. |
-| ROUGE | Calculates ROUGE variants (rouge1, rouge2, rougeL, rougeLsum, rougeW). |
-| GLEU | Estimates fluency and grammatical correctness on a 0–1 scale. |
 | BERTScore | Contextual embedding similarity; robust alternative to Levenshtein. |
 | ChrF | Character n-gram F-score (supports chrF and chrF++). |
+| Contains | Checks if the output contains a specific substring (case-sensitive or insensitive). |
+| CorpusBLEU | Calculates a corpus-level BLEU score across many candidates. |
+| Equals | Checks if the output exactly matches an expected string. |
+| GLEU | Estimates fluency and grammatical correctness on a 0–1 scale. |
+| IsJson | Ensures the output can be parsed as JSON. |
 | JSDivergence | Jensen–Shannon similarity between token distributions. |
 | JSDistance | Raw Jensen–Shannon divergence between token distributions. |
 | KLDivergence | Kullback–Leibler divergence between token distributions. |
-| SpearmanRanking | Spearman's rank correlation for two equal-length rankings. |
 | LanguageAdherenceMetric | Checks whether text adheres to an expected language code. |
+| LevenshteinRatio | Computes the normalised Levenshtein similarity between output and reference. |
 | ReadabilityGuard | Deterministic readability guard using Flesch–Kincaid bounds. |
-| ToneGuard | Flags tone issues such as negativity, shouting, or forbidden phrases. |
+| RegexMatch | Validates the output against a regular expression pattern. |
+| ROUGE | Calculates ROUGE variants (rouge1, rouge2, rougeL, rougeLsum, rougeW). |
+| SentenceBLEU | Calculates a single-sentence BLEU score against one or more references. |
 | Sentiment | Scores sentiment using NLTK's VADER lexicon (compound, pos/neu/neg). |
+| SpearmanRanking | Spearman's rank correlation for two equal-length rankings. |
+| ToneGuard | Flags tone issues such as negativity, shouting, or forbidden phrases. |
 
 ### Conversation heuristics
 
 | Metric | Description |
 | --- | --- |
-| Knowledge Retention | Checks whether the last assistant reply preserves user-provided facts from earlier turns. |
-| ROUGEC | Aggregates ROUGE scores across assistant turns (implemented by `RougeCMetric`). |
 | BLEUC | Aggregates sentence-level BLEU across assistant turns (implemented by `BleuCMetric`). |
-| METEORC | Aggregates METEOR scores across assistant turns (implemented by `MeteorCMetric`). |
 | DegenerationC | Detects repetition and low-entropy responses over a conversation (implemented by `ConversationDegenerationMetric`). |
+| Knowledge Retention | Checks whether the last assistant reply preserves user-provided facts from earlier turns. |
+| METEORC | Aggregates METEOR scores across assistant turns (implemented by `MeteorCMetric`). |
+| ROUGEC | Aggregates ROUGE scores across assistant turns (implemented by `RougeCMetric`). |
 
 > [!TIP]
 > Conversation heuristics accept full transcripts as input. Refer to the [Conversation metrics guide](/evaluation/metrics/conversation_threads_metrics) for detailed examples and configuration options.
