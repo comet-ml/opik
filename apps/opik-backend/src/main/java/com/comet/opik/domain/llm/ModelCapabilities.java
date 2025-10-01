@@ -21,16 +21,10 @@ import java.util.Set;
 public final class ModelCapabilities {
 
     private static final String PRICES_FILE = "model_prices_and_context_window.json";
-    private static final Map<String, ModelCapability> CAPABILITIES_BY_NAME = loadCapabilities();
-    private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = buildNormalizedIndex(
-            CAPABILITIES_BY_NAME);
+    private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME =
+            buildNormalizedIndex(loadCapabilities());
 
-    private ModelCapabilities() {
-    }
-
-    public static Map<String, ModelCapability> capabilities() {
-        return CAPABILITIES_BY_NAME;
-    }
+    private ModelCapabilities() { }
 
     public static Optional<ModelCapability> find(String modelName) {
         if (modelName == null || modelName.isBlank()) {
@@ -39,11 +33,11 @@ public final class ModelCapabilities {
 
         for (String candidate : candidateKeys(modelName)) {
             ModelCapability match = CAPABILITIES_BY_NORMALIZED_NAME.get(candidate);
-            if (match != null) {
-                return Optional.of(match);
+            Optional<ModelCapability> found = Optional.ofNullable(match);
+            if (found.isPresent()) {
+                return found;
             }
         }
-
         return Optional.empty();
     }
 
