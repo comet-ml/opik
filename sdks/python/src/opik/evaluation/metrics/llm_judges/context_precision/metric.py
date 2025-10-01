@@ -29,6 +29,7 @@ class ContextPrecision(base_metric.BaseMetric):
         project_name: Optional project name to track the metric in for the cases when
             there are no parent span/trace to inherit project name from.
         seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
+        temperature: Optional temperature value for model generation. If provided, this temperature will be passed to the model. If not provided, the model's default temperature will be used.
 
     Example:
         >>> from opik.evaluation.metrics import ContextPrecision
@@ -50,6 +51,7 @@ class ContextPrecision(base_metric.BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
         seed: Optional[int] = None,
+        temperature: Optional[float] = None,
     ):
         super().__init__(
             name=name,
@@ -57,16 +59,23 @@ class ContextPrecision(base_metric.BaseMetric):
             project_name=project_name,
         )
         self._seed = seed
-        self._init_model(model)
+        self._init_model(model, temperature=temperature)
         self.few_shot_examples = few_shot_examples or template.FEW_SHOT_EXAMPLES
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]],
+        temperature: Optional[float],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            if temperature is not None:
+                self._model = models_factory.get(
+                    model_name=model, temperature=temperature
+                )
+            else:
+                self._model = models_factory.get(model_name=model)
 
     def score(
         self,

@@ -46,7 +46,9 @@ class TestSeedParameterIntegration:
         num_runs = 3
 
         # Test with AnswerRelevance metric
-        metric = metrics.AnswerRelevance(model=model, seed=seed, track=False)
+        metric = metrics.AnswerRelevance(
+            model=model, seed=seed, temperature=0.0, track=False
+        )
 
         results = []
         for _ in range(num_runs):
@@ -169,7 +171,9 @@ class TestSeedParameterIntegration:
             results = []
 
             for _ in range(num_runs):
-                metric = metric_class(model=model, seed=seed, track=False)
+                metric = metric_class(
+                    model=model, seed=seed, temperature=0.0, track=False
+                )
                 result = metric.score(**score_kwargs)
                 results.append(result)
                 # Longer delay between runs
@@ -193,10 +197,14 @@ class TestSeedParameterIntegration:
     ) -> None:
         """Test behavioral differences between seed=None and seed=integer."""
         # Test with seed=None (should be non-deterministic)
-        metric_none = metrics.AnswerRelevance(model=model, seed=None, track=False)
+        metric_none = metrics.AnswerRelevance(
+            model=model, seed=None, temperature=0.0, track=False
+        )
 
         # Test with seed=42 (should be deterministic)
-        metric_seeded = metrics.AnswerRelevance(model=model, seed=42, track=False)
+        metric_seeded = metrics.AnswerRelevance(
+            model=model, seed=42, temperature=0.0, track=False
+        )
 
         # Run multiple times with seed=None
         results_none = []
@@ -359,7 +367,9 @@ class TestSeedParameterIntegration:
             chat_model=langchain_openai.ChatOpenAI(model="gpt-4o")
         )
 
-        metric = metrics.AnswerRelevance(model=langchain_model, seed=seed, track=False)
+        metric = metrics.AnswerRelevance(
+            model=langchain_model, seed=seed, temperature=0.0, track=False
+        )
 
         results = []
         for _ in range(num_runs):
@@ -389,7 +399,9 @@ class TestSeedParameterIntegration:
 
         # Test without seed
         start_time = time.time()
-        metric_no_seed = metrics.AnswerRelevance(model=model, track=False)
+        metric_no_seed = metrics.AnswerRelevance(
+            model=model, temperature=0.0, track=False
+        )
         result_no_seed = metric_no_seed.score(
             input=test_inputs["input"],
             output=test_inputs["output"],
@@ -402,7 +414,9 @@ class TestSeedParameterIntegration:
 
         # Test with seed
         start_time = time.time()
-        metric_with_seed = metrics.AnswerRelevance(model=model, seed=42, track=False)
+        metric_with_seed = metrics.AnswerRelevance(
+            model=model, seed=42, temperature=0.0, track=False
+        )
         result_with_seed = metric_with_seed.score(
             input=test_inputs["input"],
             output=test_inputs["output"],
@@ -426,7 +440,9 @@ class TestSeedParameterIntegration:
     ) -> None:
         """Test edge cases for seed parameter."""
         # Test with seed=0
-        metric_zero = metrics.AnswerRelevance(model=model, seed=0, track=False)
+        metric_zero = metrics.AnswerRelevance(
+            model=model, seed=0, temperature=0.0, track=False
+        )
         result_zero = metric_zero.score(
             input=test_inputs["input"],
             output=test_inputs["output"],
@@ -437,7 +453,9 @@ class TestSeedParameterIntegration:
         time.sleep(0.5)
 
         # Test with large seed
-        metric_large = metrics.AnswerRelevance(model=model, seed=999999, track=False)
+        metric_large = metrics.AnswerRelevance(
+            model=model, seed=999999, temperature=0.0, track=False
+        )
         result_large = metric_large.score(
             input=test_inputs["input"],
             output=test_inputs["output"],
@@ -448,7 +466,9 @@ class TestSeedParameterIntegration:
         time.sleep(0.5)
 
         # Test with negative seed (should work but might not be deterministic)
-        metric_negative = metrics.AnswerRelevance(model=model, seed=-42, track=False)
+        metric_negative = metrics.AnswerRelevance(
+            model=model, seed=-42, temperature=0.0, track=False
+        )
         result_negative = metric_negative.score(
             input=test_inputs["input"],
             output=test_inputs["output"],

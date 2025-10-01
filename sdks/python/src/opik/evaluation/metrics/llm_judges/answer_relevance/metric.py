@@ -33,6 +33,7 @@ class AnswerRelevance(base_metric.BaseMetric):
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
         seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
+        temperature: Optional temperature value for model generation. If provided, this temperature will be passed to the model. If not provided, the model's default temperature will be used.
 
     Example:
         >>> from opik.evaluation.metrics import AnswerRelevance
@@ -58,6 +59,7 @@ class AnswerRelevance(base_metric.BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
         seed: Optional[int] = None,
+        temperature: Optional[float] = None,
     ):
         super().__init__(
             name=name,
@@ -66,19 +68,26 @@ class AnswerRelevance(base_metric.BaseMetric):
         )
         self._require_context = require_context
         self._seed = seed
-        self._init_model(model)
+        self._init_model(model, temperature=temperature)
         self._init_few_shot_examples(
             few_shot_examples_with_context=few_shot_examples,
             few_shot_examples_no_context=few_shot_examples_no_context,
         )
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]],
+        temperature: Optional[float],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            if temperature is not None:
+                self._model = models_factory.get(
+                    model_name=model, temperature=temperature
+                )
+            else:
+                self._model = models_factory.get(model_name=model)
 
     def _init_few_shot_examples(
         self,
