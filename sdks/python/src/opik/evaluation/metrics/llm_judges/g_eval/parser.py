@@ -48,7 +48,7 @@ def parse_litellm_model_output(
     the score token is always the fourth token in the response (first token is `{"`, followed by `score` and `":`).
     """
     try:
-        choice_dict = _normalise_choice(content.choices[0])
+        choice_dict = _normalise_first_choice(content)
 
         if not log_probs_supported:
             return _extract_score_from_text_content(choice_dict, name=name)
@@ -132,6 +132,15 @@ def _normalise_choice(choice: Any) -> Dict[str, Any]:
         "message": getattr(choice, "message", None),
         "logprobs": getattr(choice, "logprobs", None),
     }
+
+
+def _normalise_first_choice(response: Any) -> Dict[str, Any]:
+    choices = getattr(response, "choices", None)
+    if not isinstance(choices, list) or not choices:
+        raise exceptions.MetricComputationError(
+            "LLM response did not contain any choices to parse."
+        )
+    return _normalise_choice(choices[0])
 
 
 def _to_dict(value: Any) -> Dict[str, Any]:

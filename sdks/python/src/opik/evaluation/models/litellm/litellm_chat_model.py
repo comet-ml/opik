@@ -13,6 +13,7 @@ import opik.semantic_version as semantic_version
 
 from .. import base_model
 from . import opik_monitor, warning_filters
+from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +52,15 @@ def _extract_message_content(choice: Dict[str, Any]) -> Optional[str]:
     if content is not None and not isinstance(content, str):
         raise ValueError("LLM choice contains non-text content")
     return content
+
+
+def _first_choice(response: Any) -> Dict[str, Any]:
+    choices = getattr(response, "choices", None)
+    if not isinstance(choices, list) or not choices:
+        raise exceptions.BaseLLMError(
+            "LLM response did not contain any choices to parse."
+        )
+    return _normalise_choice(choices[0])
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):
@@ -234,7 +244,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             messages=request,
             **valid_litellm_params,
         ) as response:
-            choice = _normalise_choice(response.choices[0])
+            choice = _first_choice(response)
             content = _extract_message_content(choice)
             return base_model.check_model_output_string(content)
 
