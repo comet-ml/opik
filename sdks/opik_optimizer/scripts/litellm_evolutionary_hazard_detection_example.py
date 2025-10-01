@@ -195,12 +195,24 @@ print("\n" + "=" * 80 + "\n")
 # Optimize the prompt
 # The optimizer will evolve prompts to maximize the match score
 # between the model's hazard detection and the ground truth hazards
-optimization_result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=multimodal_hazard_judge,
-    n_samples=N_SAMPLES,  # Use fewer samples to avoid context overflow with images
-)
+#
+# Note: If you encounter network errors, the optimization will automatically
+# retry failed operations. Just re-run the script if it fails completely.
+try:
+    optimization_result = optimizer.optimize_prompt(
+        prompt=prompt,
+        dataset=dataset,
+        metric=multimodal_hazard_judge,
+        n_samples=N_SAMPLES,  # Use fewer samples to avoid context overflow with images
+    )
+except Exception as e:
+    print(f"\n❌ Optimization failed with error: {e}")
+    print("\n💡 This is often a transient network error. Try:")
+    print("   1. Re-run the script (usually works)")
+    print("   2. Check your internet connection")
+    print("   3. Check Opik API status")
+    print("\n   The optimization was making progress - your last best score was shown above!")
+    raise
 
 print("\n" + "=" * 80)
 print("OPTIMIZATION COMPLETE")
