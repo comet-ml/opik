@@ -34,7 +34,7 @@ class MessageContentNormalizerTest {
                 .model("gpt-3.5-turbo")
                 .build();
 
-        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request, false);
+        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request);
 
         assertThat(normalized.messages()).hasSize(1);
         Message normalizedMessage = normalized.messages().get(0);
@@ -64,7 +64,7 @@ class MessageContentNormalizerTest {
                 .model("gpt-3.5-turbo")
                 .build();
 
-        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request, false);
+        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request);
 
         assertThat(normalized.messages()).hasSize(1);
         Message normalizedMessage = normalized.messages().get(0);
@@ -94,7 +94,7 @@ class MessageContentNormalizerTest {
                 .model("gpt-4-vision-preview")
                 .build();
 
-        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request, true);
+        ChatCompletionRequest normalized = MessageContentNormalizer.normalizeRequest(request);
 
         assertThat(normalized).isSameAs(request);
     }
