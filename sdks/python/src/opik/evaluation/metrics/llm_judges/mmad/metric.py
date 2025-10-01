@@ -27,12 +27,19 @@ class MMADJudge(BaseMetric):
     def score(self, *args: Any, **kwargs: Any) -> ScoreResult:
         scores: List[ScoreResult] = []
         for judge in self._judges:
-            result = judge.score(*args, **kwargs)
-            if result.value < 0 or result.value > 1:
-                raise exceptions.MetricComputationError(
-                    f"Judge {judge.name} returned out-of-range score {result.value}"
-                )
-            scores.append(result)
+            raw_result = judge.score(*args, **kwargs)
+            judge_results = raw_result if isinstance(raw_result, list) else [raw_result]
+
+            for result in judge_results:
+                if not isinstance(result, ScoreResult):
+                    raise exceptions.MetricComputationError(
+                        f"Judge {judge.name} returned unexpected result type {type(result)!r}"
+                    )
+                if result.value < 0 or result.value > 1:
+                    raise exceptions.MetricComputationError(
+                        f"Judge {judge.name} returned out-of-range score {result.value}"
+                    )
+                scores.append(result)
 
         if not scores:
             raise exceptions.MetricComputationError("No judge scores produced")

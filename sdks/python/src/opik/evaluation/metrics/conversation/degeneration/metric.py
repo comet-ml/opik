@@ -50,7 +50,7 @@ class ConversationDegenerationMetric(BaseMetric):
         self,
         conversation: conversation_types.Conversation,
         **ignored_kwargs: object,
-    ) -> score_result.ScoreResult:
+    ) -> ScoreResult:
         assistant_turns = [
             turn["content"]
             for turn in conversation

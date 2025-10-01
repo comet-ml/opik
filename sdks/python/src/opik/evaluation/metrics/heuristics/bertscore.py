@@ -57,7 +57,7 @@ class BERTScore(base_metric.BaseMetric):
             def _score(
                 candidates: Sequence[str],
                 references: Union[Sequence[str], Sequence[Sequence[str]]],
-            ):
+            ) -> Tuple[Any, Any, Any]:
                 return bert_score_fn(
                     candidates,
                     references,

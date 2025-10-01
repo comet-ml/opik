@@ -43,7 +43,7 @@ class ToneGuard(BaseMetric):
         phrases = forbidden_phrases or FORBIDDEN_PHRASES
         self._forbidden = [phrase.lower() for phrase in phrases]
 
-    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+    def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
         if not output or not output.strip():
             raise MetricComputationError("Text is empty (ToneGuard).")
 

@@ -13,7 +13,7 @@ class ConversationReferenceMetric(BaseMetric):
 
     def __init__(
         self,
-        turn_metric: base_metric.BaseMetric,
+        turn_metric: BaseMetric,
         target_role: str = "assistant",
         missing_turn_penalty: float = 0.0,
         name: str = "conversation_reference_metric",
@@ -33,7 +33,7 @@ class ConversationReferenceMetric(BaseMetric):
         conversation: conversation_types.Conversation,
         reference_conversation: conversation_types.Conversation,
         **kwargs: object,
-    ) -> score_result.ScoreResult:
+    ) -> ScoreResult:
         candidate_turns = self._extract_role_turns(conversation)
         reference_turns = self._extract_role_turns(reference_conversation)
 
@@ -54,9 +54,22 @@ class ConversationReferenceMetric(BaseMetric):
 
         per_turn_scores = []
         for idx in range(overlap):
-            result = self._turn_metric.score(
+            raw_result = self._turn_metric.score(
                 output=candidate_turns[idx], reference=reference_turns[idx]
             )
+            if isinstance(raw_result, list):
+                if not raw_result:
+                    raise exceptions.MetricComputationError(
+                        "Turn metric returned an empty result list."
+                    )
+                result = raw_result[0]
+            else:
+                result = raw_result
+
+            if not isinstance(result, ScoreResult):
+                raise exceptions.MetricComputationError(
+                    "Turn metric returned an unexpected result type."
+                )
             per_turn_scores.append(result.value)
 
         average_score = sum(per_turn_scores) / overlap

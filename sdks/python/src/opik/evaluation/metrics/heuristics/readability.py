@@ -56,7 +56,7 @@ class ReadabilityGuard(BaseMetric):
         self,
         output: str,
         **ignored_kwargs: Any,
-    ) -> score_result.ScoreResult:
+    ) -> ScoreResult:
         if not output or not output.strip():
             raise MetricComputationError("Text is empty (ReadabilityGuard).")
 

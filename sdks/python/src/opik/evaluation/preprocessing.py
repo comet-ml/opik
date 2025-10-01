@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import string
 import unicodedata
-from typing import Callable
+from typing import Callable, Literal
 
 try:  # optional dependency for emoji detection
     import emoji
@@ -22,7 +22,7 @@ def normalize_text(
     strip_accents: bool = False,
     remove_punctuation: bool = False,
     keep_emoji: bool = True,
-    normalize_form: str = "NFKC",
+    normalize_form: Literal["NFC", "NFD", "NFKC", "NFKD"] = "NFKC",
 ) -> str:
     """Normalize text before metric processing.
 
@@ -78,9 +78,15 @@ def _collapse_whitespace(text: str) -> str:
 
 
 DEFAULT_NORMALIZER: _Normalizer = normalize_text
-ASCII_NORMALIZER: _Normalizer = lambda text: normalize_text(
-    text,
-    strip_accents=True,
-    remove_punctuation=True,
-    keep_emoji=False,
-)
+
+
+def ascii_normalizer(text: str) -> str:
+    return normalize_text(
+        text,
+        strip_accents=True,
+        remove_punctuation=True,
+        keep_emoji=False,
+    )
+
+
+ASCII_NORMALIZER: _Normalizer = ascii_normalizer
