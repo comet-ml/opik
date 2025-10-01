@@ -39,37 +39,37 @@ By default, the `gpt-5-nano` model is used, but you can change this to any model
 
 Opik ships opinionated presets for common evaluation needs. Each class inherits from `GEval` and exposes the same constructor parameters (`model`, `track`, `temperature`, etc.).
 
-### Compliance Risk Judge {#compliance-risk-judge}
+### Compliance Risk Judge
 Flags statements that may be non-factual, non-compliant, or risky (e.g. finance, healthcare, legal). Useful for regulated workflows.
 
-### Prompt Diagnostics {#prompt-diagnostics}
+### Prompt Diagnostics
 `PromptPerplexityJudge` and `PromptUncertaintyJudge` estimate how difficult or ambiguous a user prompt is before it reaches your model. You can run them on raw prompts to triage risky requests.
 
-### Summarization Consistency Judge {#summarization-consistency-judge}
+### Summarization Consistency Judge
 Checks whether a generated summary is faithful to the source material.
 
-### Summarization Coherence Judge {#summarization-coherence-judge}
+### Summarization Coherence Judge
 Scores the structure, clarity, and organisation of a summary.
 
-### Dialogue Helpfulness Judge {#dialogue-helpfulness-judge}
+### Dialogue Helpfulness Judge
 Examines how helpful an assistant reply is in the context of the preceding dialogue.
 
-### QA Relevance Judge {#qa-relevance-judge}
+### QA Relevance Judge
 Determines whether an answer directly addresses the user’s question.
 
-### Agent Task Completion Judge {#agent-task-completion-judge}
+### Agent Task Completion Judge
 Evaluates if an agent fulfilled its assigned high-level task.
 
-### Agent Tool Correctness Judge {#agent-tool-correctness-judge}
+### Agent Tool Correctness Judge
 Assesses whether an agent invoked tools appropriately and interpreted outputs correctly.
 
-### RevisEval Judge {#reviseval-judge}
+### RevisEval Judge
 Runs a retrieval-augmented verification pass before scoring. The judge may suggest revisions based on the fetched evidence.
 
-### Trajectory Accuracy {#trajectory-accuracy}
+### Trajectory Accuracy
 Scores whether an agent’s trajectory (series of states or actions) matches the expected path.
 
-## LLM Juries Judge {#llm-juries-judge}
+## LLM Juries Judge
 
 `LLMJuriesJudge` is an ensemble wrapper that averages the outputs of multiple judge metrics. This is useful when you want to combine bespoke criteria—e.g. take the mean of hallucination, helpfulness, and compliance scores.
 
