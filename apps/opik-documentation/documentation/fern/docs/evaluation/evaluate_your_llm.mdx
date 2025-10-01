@@ -71,15 +71,18 @@ expected: string;
 };
 
 const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
-const { question } = datasetItem;
+const { input } = datasetItem;
 
-    const response = await openai.responses.create({
+    const openai = new OpenAI();
+    const response = await openai.chat.completions.create({
         model: "gpt-4o",
-        instructions: "You are a coding assistant",
-        input: input,
+        messages: [
+            { role: "system", content: "You are a coding assistant" },
+            { role: "user", content: input }
+        ],
     });
 
-    return { output: response.output_text };
+    return { output: response.choices[0].message.content };
 
 };
 
@@ -187,6 +190,7 @@ we want to evaluate with, we can run the evaluation:
 <CodeBlocks>
     ```typescript title="TypeScript" language="typescript" maxLines=1000
     import { EvaluationTask, Opik, ExactMatch, evaluate } from "opik";
+    import { OpenAI } from "openai";
 
     // Define dataset item type
     type DatasetItem = {
@@ -198,13 +202,16 @@ we want to evaluate with, we can run the evaluation:
     const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
         const { input } = datasetItem;
 
-        const response = await openai.responses.create({
+        const openai = new OpenAI();
+        const response = await openai.chat.completions.create({
             model: "gpt-4o",
-            instructions: "You are a coding assistant",
-            input: input,
+            messages: [
+                { role: "system", content: "You are a coding assistant" },
+                { role: "user", content: input }
+            ],
         });
 
-        return { output: response.output_text };
+        return { output: response.choices[0].message.content };
     };
 
     // Get or create the dataset - items are automatically deduplicated
