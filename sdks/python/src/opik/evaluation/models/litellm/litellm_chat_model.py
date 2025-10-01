@@ -3,6 +3,7 @@ import logging
 import warnings
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Type
+import time
 import pydantic
 
 if TYPE_CHECKING:
@@ -193,7 +194,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         ]
 
         with base_model.get_provider_response(
-            model_provider=self, messages=request, **valid_litellm_params
+            model_provider=self,
+            messages=request,
+            **valid_litellm_params,
         ) as response:
             return base_model.check_model_output_string(
                 response.choices[0].message.content
@@ -230,11 +233,23 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         ):
             all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
-        response = self._engine.completion(
-            model=self.model_name, messages=messages, **all_kwargs
-        )
+        retries = kwargs.pop("__opik_retries", 3)
+        backoff = 0.5
 
-        return response
+        last_exception: Optional[Exception] = None
+        for attempt in range(retries):
+            try:
+                return self._engine.completion(
+                    model=self.model_name, messages=messages, **all_kwargs
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exception = exc
+                if attempt == retries - 1:
+                    raise
+                time.sleep(backoff)
+                backoff *= 2
+
+        raise last_exception if last_exception else RuntimeError("Unknown LLM error")
 
     async def agenerate_string(
         self,
