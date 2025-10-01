@@ -5,6 +5,12 @@ import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.SortingFactoryPrompts;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -21,6 +27,7 @@ import org.jdbi.v3.core.Handle;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -34,6 +41,8 @@ public interface AlertService {
     UUID create(Alert alert);
 
     void update(UUID id, Alert alert);
+
+    Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     Alert getById(UUID id);
 
@@ -51,6 +60,9 @@ class AlertServiceImpl implements AlertService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull SortingFactoryPrompts sortingFactory;
 
     @Override
     public UUID create(@NonNull Alert alert) {
@@ -89,6 +101,39 @@ class AlertServiceImpl implements AlertService {
             saveAlert(handle, newAlert, workspaceId);
 
             return null;
+        });
+    }
+
+    @Override
+    public Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
+
+        String filtersSQL = Optional.ofNullable(filters)
+                .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.ALERT))
+                .orElse(null);
+
+        Map<String, Object> filterMapping = Optional.ofNullable(filters)
+                .map(filterQueryBuilder::toStateSQLMapping)
+                .orElse(Map.of());
+
+        return transactionTemplate.inTransaction(handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+
+            long total = alertDAO.count(workspaceId, filtersSQL, filterMapping);
+
+            var offset = (page - 1) * size;
+
+            List<Alert> content = alertDAO.find(workspaceId, offset, size, sortingFieldsSql, filtersSQL,
+                    filterMapping);
+
+            return Alert.AlertPage.builder()
+                    .page(page)
+                    .size(content.size())
+                    .content(content)
+                    .total(total)
+                    .sortableBy(sortingFactory.getSortableFields())
+                    .build();
         });
     }
 
