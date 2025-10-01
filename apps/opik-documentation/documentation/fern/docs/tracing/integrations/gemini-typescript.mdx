@@ -57,13 +57,13 @@ const genAI = new GoogleGenAI({
 // Wrap the client with Opik tracking
 const trackedGenAI = trackGemini(genAI);
 
-// Get a model and generate content
-const model = trackedGenAI.getGenerativeModel({
+// Generate content
+const response = await trackedGenAI.models.generateContent({
   model: "gemini-2.0-flash-001",
+  contents: "Hello, how can you help me today?",
 });
-const result = await model.generateContent("Hello, how can you help me today?");
 
-console.log(result.response.text());
+console.log(response.text);
 
 // Ensure all traces are sent before your app terminates
 await trackedGenAI.flush();
@@ -81,20 +81,16 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const trackedGenAI = trackGemini(genAI);
 
 async function streamingExample() {
-  // Get a model configured for streaming
-  const model = trackedGenAI.getGenerativeModel({
-    model: "gemini-2.0-flash-001",
-  });
-
   // Create a streaming generation
-  const result = await model.generateContentStream(
-    "Write a short story about AI observability"
-  );
+  const response = await trackedGenAI.models.generateContentStream({
+    model: "gemini-2.0-flash-001",
+    contents: "Write a short story about AI observability",
+  });
 
   // Process the stream
   let streamedContent = "";
-  for await (const chunk of result.stream) {
-    const chunkText = chunk.text();
+  for await (const chunk of response) {
+    const chunkText = chunk.text;
     process.stdout.write(chunkText);
     streamedContent += chunkText;
   }
@@ -161,10 +157,12 @@ const trackedGenAI = trackGemini(genAI, {
 });
 
 // Use the tracked client with your configured options
-const model = trackedGenAI.getGenerativeModel({
+const response = await trackedGenAI.models.generateContent({
   model: "gemini-2.0-flash-001",
+  contents: "Generate a creative story",
 });
-const result = await model.generateContent("Generate a creative story");
+
+console.log(response.text);
 
 // Close the existing trace
 existingOpikTrace.end();
@@ -190,14 +188,12 @@ const genAI = new GoogleGenAI({
 
 const trackedGenAI = trackGemini(genAI);
 
-const model = trackedGenAI.getGenerativeModel({
+const response = await trackedGenAI.models.generateContent({
   model: "gemini-2.0-flash-001",
+  contents: "Write a short story about AI observability",
 });
-const result = await model.generateContent(
-  "Write a short story about AI observability"
-);
 
-console.log(result.response.text());
+console.log(response.text);
 
 // Flush before your application exits
 await trackedGenAI.flush();
@@ -215,13 +211,10 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const trackedGenAI = trackGemini(genAI);
 
 async function chatExample() {
-  const model = trackedGenAI.getGenerativeModel({
+  // Multi-turn conversation using generateContent with history
+  const response = await trackedGenAI.models.generateContent({
     model: "gemini-2.0-flash-001",
-  });
-
-  // Start a chat session
-  const chat = model.startChat({
-    history: [
+    contents: [
       {
         role: "user",
         parts: [{ text: "Hello, I want to learn about AI observability." }],
@@ -234,15 +227,14 @@ async function chatExample() {
           },
         ],
       },
+      {
+        role: "user",
+        parts: [{ text: "What are the key benefits of using Opik?" }],
+      },
     ],
   });
 
-  // Send a message
-  const result = await chat.sendMessage(
-    "What are the key benefits of using Opik?"
-  );
-
-  console.log(result.response.text());
+  console.log(response.text);
 
   await trackedGenAI.flush();
 }

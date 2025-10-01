@@ -50,14 +50,12 @@ const trackedGenAI = trackGemini(genAI, {
 
 // Use normally - all calls are automatically tracked
 async function main() {
-  const model = trackedGenAI.getGenerativeModel({
+  const response = await trackedGenAI.models.generateContent({
     model: "gemini-2.0-flash-001",
+    contents: "What is the capital of France?",
   });
 
-  const result = await model.generateContent("What is the capital of France?");
-  const response = result.response;
-
-  console.log(response.text());
+  console.log(response.text);
 
   // Ensure all traces are sent before exit
   await trackedGenAI.flush();
@@ -76,16 +74,14 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const trackedGenAI = trackGemini(genAI);
 
 async function streamExample() {
-  const model = trackedGenAI.getGenerativeModel({
+  const response = await trackedGenAI.models.generateContentStream({
     model: "gemini-2.0-flash-001",
+    contents: "Write a haiku about AI",
   });
 
-  const result = await model.generateContentStream("Write a haiku about AI");
-
   // Stream is automatically tracked
-  for await (const chunk of result.stream) {
-    const text = chunk.text();
-    process.stdout.write(text);
+  for await (const chunk of response) {
+    process.stdout.write(chunk.text);
   }
 
   console.log("\n");
@@ -116,10 +112,12 @@ const trackedGenAI = trackGemini(genAI, {
 });
 
 // All calls will be logged to "gemini-project"
-const model = trackedGenAI.getGenerativeModel({
+const response = await trackedGenAI.models.generateContent({
   model: "gemini-2.0-flash-001",
+  contents: "Hello, Gemini!",
 });
-const result = await model.generateContent("Hello, Gemini!");
+
+console.log(response.text);
 ```
 
 ### Custom Generation Names
@@ -156,18 +154,17 @@ async function processQuery(query: string) {
     client: opikClient,
   });
 
-  const model = trackedGenAIWithParent.getGenerativeModel({
+  const response = await trackedGenAIWithParent.models.generateContent({
     model: "gemini-2.0-flash-001",
+    contents: query,
   });
 
-  const result = await model.generateContent(query);
-
   trace.update({
-    output: { response: result.response.text() },
+    output: { response: response.text },
   });
   trace.end();
 
-  return result;
+  return response;
 }
 ```
 
