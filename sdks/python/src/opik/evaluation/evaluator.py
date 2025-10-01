@@ -64,7 +64,8 @@ def evaluate(
             If no value provided, the experiment won't have any scoring metrics.
 
         verbose: an integer value that controls evaluation output logs such as summary and tqdm progress bar.
-            0 - no outputs, 1 - outputs are enabled (default).
+            0 - no outputs, 1 - outputs are enabled (default), 2 - outputs are enabled and detailed statistics
+            are displayed.
 
         nb_samples: number of samples to evaluate. If no value is provided, all samples in the dataset will be evaluated.
 
@@ -162,7 +163,7 @@ def _evaluate_task(
 
     total_time = time.time() - start_time
 
-    if verbose == 1:
+    if verbose >= 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
     experiment_url = url_helpers.get_experiment_url_by_id(
@@ -183,6 +184,12 @@ def _evaluate_task(
         experiment_url=experiment_url,
         trial_count=trial_count,
     )
+
+    if verbose >= 2:
+        report.display_evaluation_scores_statistics(
+            dataset_name=dataset.name,
+            evaluation_results=evaluation_result_,
+        )
 
     return evaluation_result_
 
@@ -256,7 +263,7 @@ def evaluate_experiment(
 
     total_time = time.time() - start_time
 
-    if verbose == 1:
+    if verbose >= 1:
         report.display_experiment_results(
             experiment.dataset_name, total_time, test_results
         )
@@ -278,6 +285,12 @@ def evaluate_experiment(
         trial_count=1,
     )
 
+    if verbose >= 2:
+        report.display_evaluation_scores_statistics(
+            dataset_name=experiment.dataset_name,
+            evaluation_results=evaluation_result_,
+        )
+
     return evaluation_result_
 
 
@@ -298,12 +311,13 @@ def _build_prompt_evaluation_task(
                 }
             )
 
-        llm_output = model.generate_provider_response(messages=processed_messages)
-
-        return {
-            "input": processed_messages,
-            "output": llm_output.choices[0].message.content,
-        }
+        with base_model.get_provider_response(
+            model_provider=model, messages=processed_messages
+        ) as llm_output:
+            return {
+                "input": processed_messages,
+                "output": llm_output.choices[0].message.content,
+            }
 
     return _prompt_evaluation_task
 
@@ -359,18 +373,23 @@ def evaluate_prompt(
         trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
     """
     if isinstance(model, str):
-        model = models_factory.get(model_name=model)
+        opik_model = models_factory.get(model_name=model)
     elif not isinstance(model, base_model.OpikBaseModel):
         raise ValueError("`model` must be either a string or an OpikBaseModel instance")
+    else:
+        opik_model = model
 
     if experiment_config is None:
-        experiment_config = {"prompt_template": messages, "model": model.model_name}
+        experiment_config = {
+            "prompt_template": messages,
+            "model": opik_model.model_name,
+        }
     else:
         if "prompt_template" not in experiment_config:
             experiment_config["prompt_template"] = messages
 
         if "model" not in experiment_config:
-            experiment_config["model"] = model.model_name
+            experiment_config["model"] = opik_model.model_name
 
     if scoring_metrics is None:
         scoring_metrics = []
@@ -400,7 +419,7 @@ def evaluate_prompt(
         )
         test_results = evaluation_engine.evaluate_llm_tasks(
             dataset_=dataset,
-            task=_build_prompt_evaluation_task(model=model, messages=messages),
+            task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
@@ -409,7 +428,7 @@ def evaluate_prompt(
 
     total_time = time.time() - start_time
 
-    if verbose == 1:
+    if verbose >= 1:
         report.display_experiment_results(dataset.name, total_time, test_results)
 
     experiment_url = url_helpers.get_experiment_url_by_id(
@@ -430,6 +449,12 @@ def evaluate_prompt(
         experiment_url=experiment_url,
         trial_count=trial_count,
     )
+
+    if verbose >= 2:
+        report.display_evaluation_scores_statistics(
+            dataset_name=dataset.name,
+            evaluation_results=evaluation_result_,
+        )
 
     return evaluation_result_
 

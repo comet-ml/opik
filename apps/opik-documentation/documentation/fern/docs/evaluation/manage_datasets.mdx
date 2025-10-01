@@ -15,34 +15,31 @@ on the test cases in the dataset using an evaluation metric and report the resul
 
 ## Create a dataset via the UI
 
-The simplest and fastest way to create a dataset is directly in the Opik UI. 
+The simplest and fastest way to create a dataset is directly in the Opik UI.
 This is ideal for quickly bootstrapping datasets from CSV files without needing to write any code.
 
 Steps:
-	1. Navigate to Evaluation > Datasets in the Opik UI.
-	2. Click Create new dataset.
-	3. In the pop-up modal:
-    * Provide a name and an optional description
-    * Optionally, upload a CSV file with your data
-	4. Click Create dataset.
+
+1. Navigate to **Evaluation > Datasets** in the Opik UI.
+2. Click **Create new dataset**.
+3. In the pop-up modal:
+   - Provide a name and an optional description
+   - Optionally, upload a CSV file with your data
+4. Click **Create dataset**.
 
 <Frame>
   <img src="/img/evaluation/create_dataset.png" />
 </Frame>
 
-CSV Format Requirements:
-* Your CSV must contain exactly two columns:
-    * input
-    * output
-* Maximum of 1,000 rows per upload.
+If you need to create a dataset with more than 1,000 rows, you [can use the SDK](/evaluation/manage_datasets#creating-a-dataset-using-the-sdk).
 
 <Tip>
   The UI dataset creation has some limitations:
-    * Only two columns are allowed.
     * File size is limited to 1,000 rows via the UI.
     * No support for nested JSON structures in the CSV itself.
 
-  For datasets requiring rich metadata, complex schemas, or programmatic control, use the SDK instead (see the next section).
+For datasets requiring rich metadata, complex schemas, or programmatic control, use the SDK instead (see the next section).
+
 </Tip>
 
 ## Creating a dataset using the SDK
@@ -95,7 +92,7 @@ Once the items have been inserted, you can view them in the Opik UI:
 
 You can also insert items from a JSONL file:
 
-```python {pytest_codeblocks_skip=true}
+```python
 dataset.read_jsonl_from_file("path/to/file.jsonl")
 ```
 
@@ -110,13 +107,13 @@ The format of the JSONL file should be a JSON object per line. For example:
 
 You can also insert items from a Pandas DataFrame:
 
-```python {pytest_codeblocks_skip=true}
+```python
 dataset.insert_from_pandas(dataframe=df)
 ```
 
 The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, this can be useful if you want to rename columns before inserting them into the dataset:
 
-```python {pytest_codeblocks_skip=true}
+```python
 dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
 ```
 
@@ -124,7 +121,7 @@ dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expec
 
 You can delete items in a dataset by using the `delete` method:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 # Get or create a dataset
@@ -137,7 +134,7 @@ dataset.delete(items_ids=["123", "456"])
 <Tip>
 You can also remove all the items in a dataset by using the `clear` method:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 # Get or create a dataset
@@ -153,7 +150,7 @@ dataset.clear()
 
 You can download a dataset from Opik using the `get_dataset` method:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 client = Opik()
@@ -162,7 +159,7 @@ dataset = client.get_dataset(name="My dataset")
 
 Once the dataset has been retrieved, you can access its items using the `to_pandas()` or `to_json` methods:
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik import Opik
 
 client = Opik()
@@ -212,6 +209,7 @@ To expand a dataset with AI:
 **Preserve Fields**: Use this to maintain consistency in certain fields while allowing variation in others. For example, preserve the `category` field while varying the `input` and `expected_output`.
 
 **Variation Instructions**: Provide specific guidance such as:
+
 - "Create variations with different difficulty levels"
 - "Generate edge cases and error scenarios"
 - "Add examples with different input formats"
@@ -226,6 +224,6 @@ To expand a dataset with AI:
 - **Iterate and refine**: Use the custom prompt option to fine-tune generation for your specific needs
 
 <Tip>
-Dataset expansion works best when you have at least 5-10 high-quality examples in your original dataset. The AI uses these examples to understand the patterns and generate similar but varied content.
+  Dataset expansion works best when you have at least 5-10 high-quality examples in your original dataset. The AI uses
+  these examples to understand the patterns and generate similar but varied content.
 </Tip>
-

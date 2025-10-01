@@ -2,7 +2,6 @@
 title: "MetaPrompt Optimizer"
 subtitle: "Refine and improve LLM prompts with systematic analysis."
 description: "Learn how to use the MetaPrompt Optimizer to refine and improve your LLM prompts through systematic analysis and iterative refinement."
-pytest_codeblocks_skip: true
 ---
 
 The MetaPrompter is a specialized optimizer designed for meta-prompt optimization. It focuses on improving the structure and effectiveness of prompts through systematic analysis and refinement of prompt templates, instructions, and examples.
@@ -131,6 +130,7 @@ results = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
+    n_samples=100
 )
 
 # Access results
@@ -180,6 +180,18 @@ optimizer = MetaPromptOptimizer(
    - Focus on one component at a time
    - Track changes systematically
    - Validate improvements
+
+## MCP Tool Calling Support
+
+The MetaPrompt Optimizer is the only optimizer that currently supports **MCP (Model Context Protocol) tool calling optimization**. This means you can optimize prompts that include MCP tools and function calls.
+
+<Note>
+  MCP tool calling optimization is a specialized feature that allows the optimizer to understand and optimize prompts
+  that use external tools and functions through the Model Context Protocol. This is particularly useful for complex
+  agent workflows that require tool usage.
+</Note>
+
+For comprehensive information about tool optimization, see the [Tool Optimization Guide](/agent_optimization/algorithms/tool_optimization).
 
 ## Research and References
 

@@ -1,13 +1,13 @@
 [project]
 name = "opik_optimizer"
-version = "1.0.6"
+version = "1.1.0"
 description = "Agent optimization with Opik"
 authors = [
     {name = "Comet ML", email = "support@comet.com"}
 ]
 license = {text = "Apache 2.0"}
 readme = "README.md"
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "datasets",
     "deap>=1.4.3",
@@ -16,6 +16,7 @@ dependencies = [
     "ujson",
     "hf_xet",
     "litellm",
+    "mcp>=1.0.0",
     "opik>=1.7.17",
     "optuna",
     "pandas",
@@ -31,7 +32,14 @@ dev = [
     "pytest-cov",
     # "google-adk",
     "langgraph",
+    "gepa>=0.0.7",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+opik_optimizer = ["data/*.json", "data/*.jsonl"]
 
 [project.urls]
 Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"
@@ -47,3 +55,19 @@ exclude = "src/opik_optimizer/mipro_optimizer/"
 
 [tool.uv]
 managed = false
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::UserWarning:pydantic.main",
+    "ignore::pytest.PytestConfigWarning",
+    "ignore::RuntimeWarning:litellm.integrations.opik.opik",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["opik_optimizer"]
+omit = ["opik_optimizer/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

@@ -143,7 +143,7 @@ You can start the guardrails backend by running:
   <img src="/img/production/guardrails_editor.gif" />
 </Frame>
 
-```python {pytest_codeblocks_skip=true}
+```python
 from opik.guardrails import Guardrail, PII, Topic
 from opik import exceptions
 
@@ -171,7 +171,7 @@ The call is blocking, since the main purpose of the guardrail is to prevent the 
 You can call `guardrail.validate` repeatedly to validate the response chunk by chunk, or their parts or combinations.
 The results will be added as additional spans to the same trace.
 
-```python {pytest_codeblocks_skip=true}
+```python
 for chunk in response:
     try:
         guardrail.validate(chunk)

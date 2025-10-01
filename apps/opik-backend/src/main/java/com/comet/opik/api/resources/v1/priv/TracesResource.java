@@ -17,6 +17,7 @@ import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadBatchIdentifier;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -41,7 +42,6 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
-import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -77,6 +77,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
@@ -651,7 +652,8 @@ public class TracesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        UUID projectId = validateProjectIdentifier(identifier, workspaceId);
+        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
+                workspaceId);
 
         log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}'", projectId,
                 identifier.threadId(), workspaceId);
@@ -664,20 +666,6 @@ public class TracesResource {
                 projectId, workspaceId);
 
         return Response.ok(thread).build();
-    }
-
-    private UUID validateProjectIdentifier(TraceThreadIdentifier identifier, String workspaceId) {
-        // Verify project visibility
-        if (identifier.projectId() != null) {
-            return projectService.get(identifier.projectId()).id();
-        }
-
-        // If the project name is provided, find the project by name
-        return projectService.findByNames(workspaceId, List.of(identifier.projectName()))
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", identifier.projectName()))
-                .id();
     }
 
     @POST
@@ -711,7 +699,8 @@ public class TracesResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         // Validate project identifier and get projectId
-        UUID projectId = validateProjectIdentifier(identifier, workspaceId);
+        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
+                workspaceId);
 
         log.info("Open trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
@@ -728,26 +717,32 @@ public class TracesResource {
 
     @PUT
     @Path("/threads/close")
-    @Operation(operationId = "closeTraceThread", summary = "Close trace thread", description = "Close trace thread", responses = {
+    @Operation(operationId = "closeTraceThread", summary = "Close trace thread(s)", description = "Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response closeTraceThread(
-            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadBatchIdentifier.class))) @NotNull @Valid TraceThreadBatchIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         // Validate project identifier and get projectId
-        UUID projectId = validateProjectIdentifier(identifier, workspaceId);
+        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
+                workspaceId);
 
-        log.info("Close trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
+        // Handle both single and batch operations
+        Set<String> threadIds = CollectionUtils.isNotEmpty(identifier.threadIds())
+                ? Set.copyOf(identifier.threadIds())
+                : Set.of(identifier.threadId());
+
+        log.info("Close trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
                 projectId, workspaceId);
 
-        traceThreadService.closeThread(projectId, identifier.threadId())
+        traceThreadService.closeThreads(projectId, threadIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Closed trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
+        log.info("Closed trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
                 projectId, workspaceId);
 
         return Response.noContent().build();

@@ -37,7 +37,7 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
 
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
     setThreadFeedbackScore({
-      ...data,
+      scores: [data],
       threadId,
       projectId,
       projectName,

@@ -100,6 +100,8 @@ public interface ProjectService {
 
     Mono<UUID> resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
 
+    UUID validateProjectIdentifier(UUID projectId, String projectName, String workspaceId);
+
     ProjectStatsSummary getStats(int page, int size, @NonNull ProjectCriteria criteria,
             @NonNull List<SortingField> sortingFields);
 
@@ -718,5 +720,20 @@ class ProjectServiceImpl implements ProjectService {
                     .subscribeOn(Schedulers.boundedElastic());
             default -> Mono.error(exception);
         };
+    }
+
+    @Override
+    public UUID validateProjectIdentifier(UUID projectId, String projectName, String workspaceId) {
+        // Verify project visibility
+        if (projectId != null) {
+            return get(projectId).id();
+        }
+
+        // If the project name is provided, find the project by name
+        return findByNames(workspaceId, List.of(projectName))
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", projectName))
+                .id();
     }
 }

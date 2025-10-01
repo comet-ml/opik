@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.filter.ExperimentFilter;
@@ -58,6 +59,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -276,6 +278,25 @@ public class ExperimentsResource {
         log.info("Created experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 id, experiment.name(), experiment.datasetName(), workspaceId);
         return Response.created(uri).build();
+    }
+
+    @PATCH
+    @Path("/{id}")
+    @Operation(operationId = "updateExperiment", summary = "Update experiment by id", description = "Update experiment by id", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response update(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentUpdate.class))) @NotNull @Valid ExperimentUpdate experimentUpdate) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Updating experiment with id '{}', workspaceId '{}'", id, workspaceId);
+        experimentService.update(id, experimentUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Updated experiment with id '{}', workspaceId '{}'", id, workspaceId);
+        return Response.noContent().build();
     }
 
     @POST

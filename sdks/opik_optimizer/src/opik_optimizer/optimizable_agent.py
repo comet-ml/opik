@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 import json
 import os
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .optimization_config.chat_prompt import ChatPrompt
 
 
-def tools_to_dict(tools: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+def tools_to_dict(tools: dict[str, dict[str, Any]]) -> dict[str, Any]:
     retval = {}
     for name in tools:
         parts = {}
@@ -38,11 +38,11 @@ class OptimizableAgent:
         project_name (Optional[str]): The project name for tracking
     """
 
-    model: Optional[str] = None
-    model_kwargs: Dict[str, Any] = {}
-    project_name: Optional[str] = "Default Project"
-    input_dataset_field: Optional[str] = None
-    prompts: Dict[str, "ChatPrompt"]
+    model: str | None = None
+    model_kwargs: dict[str, Any] = {}
+    project_name: str | None = "Default Project"
+    input_dataset_field: str | None = None
+    prompts: dict[str, "ChatPrompt"]
     prompt: "ChatPrompt"
 
     def __init__(self, prompt: "ChatPrompt") -> None:
@@ -71,8 +71,8 @@ class OptimizableAgent:
     @_throttle.rate_limited(_limiter)
     def _llm_complete(
         self,
-        messages: List[Dict[str, str]],
-        tools: Optional[List[Dict[str, str]]],
+        messages: list[dict[str, str]],
+        tools: list[dict[str, str]] | None,
         seed: int,
     ) -> Any:
         response = litellm.completion(
@@ -91,10 +91,10 @@ class OptimizableAgent:
 
     def llm_invoke(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Dict[str, str]]] = None,
-        seed: Optional[int] = None,
-        allow_tool_use: Optional[bool] = False,
+        query: str | None = None,
+        messages: list[dict[str, str]] | None = None,
+        seed: int | None = None,
+        allow_tool_use: bool | None = False,
     ) -> str:
         """
         NOTE: this is the default LiteLLM API. It is used
@@ -147,6 +147,11 @@ class OptimizableAgent:
                                 "content": str(tool_result),
                             }
                         )
+                        # Increment tool call counter if we have access to the optimizer
+                        if hasattr(self, "optimizer") and hasattr(
+                            self.optimizer, "increment_tool_counter"
+                        ):
+                            self.optimizer.increment_tool_counter()
                 else:
                     final_response = msg["content"]
                     break
@@ -156,14 +161,14 @@ class OptimizableAgent:
             result = response.choices[0].message.content
         return result
 
-    def invoke_dataset_item(self, dataset_item: Dict[str, str]) -> str:
+    def invoke_dataset_item(self, dataset_item: dict[str, str]) -> str:
         messages = self.prompt.get_messages(dataset_item)
         return self.invoke(messages)
 
     def invoke(
         self,
-        messages: List[Dict[str, str]],
-        seed: Optional[int] = None,
+        messages: list[dict[str, str]],
+        seed: int | None = None,
     ) -> str:
         """
         Invoke the agent with a dataset item.

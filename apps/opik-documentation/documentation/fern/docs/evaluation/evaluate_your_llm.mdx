@@ -313,6 +313,7 @@ evaluation = evaluate(
     dataset_sampler=samplers.RandomDatasetSampler(max_samples=10),
 )
 ```
+
 In the example above, the evaluation will sample 10 random items from the dataset.
 
 Also, you can implement your own dataset sampler by extending the `BaseDatasetSampler` and overriding the `sample` method.
@@ -348,13 +349,35 @@ evaluation = evaluate(
 Implementing your own dataset sampler is useful if you want to implement a custom sampling strategy. For instance,
 you can implement a dataset sampler that samples the dataset using some filtering criteria as in the example above.
 
+### Analyzing the evaluation results
+
+The `evaluate` function returns an `EvaluationResult` object that contains the evaluation results.
+You can create aggregated statistics for each metric by calling its `aggregate_evaluation_scores` method:
+
+```python
+evaluation = evaluate(
+    experiment_name="My experiment",
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[hallucination_metric],
+)
+
+# Retrieve and print the aggregated scores statistics (mean, min, max, std) per metric
+scores = evaluation.aggregate_evaluation_scores()
+for metric_name, statistics in scores.aggregated_scores.items():
+    print(f"{metric_name}: {statistics}")
+
+```
+
+Aggregated statistics can help analyze evaluation results and are useful for comparing the performance of different models or different versions of the same model, for example.
+
 ### Disabling threading
 
 In order to evaluate datasets more efficiently, Opik uses multiple background threads to evaluate the dataset. If this is causing issues, you can disable these by setting `task_threads` and `scoring_threads` to `1` which will lead Opik to run all calculations in the main thread.
 
 ### Passing additional arguments to `evaluation_task`
 
-Sometimes your evaluation task needs extra context besides the dataset item (commonly referred to as `x`). For example, you may want to pass a model name, a system prompt, or a pre-initialized client. 
+Sometimes your evaluation task needs extra context besides the dataset item (commonly referred to as `x`). For example, you may want to pass a model name, a system prompt, or a pre-initialized client.
 Since `evaluate` calls the task as `task(x)` for each dataset item, the recommended pattern is to create a wrapper (or use `functools.partial`) that closes over any additional arguments.
 
 Using a wrapper function:
@@ -402,7 +425,7 @@ evaluation = evaluate(
 
 You can access all the experiments logged to the platform from the SDK with the [`Opik.get_experiments_by_name`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_name) and [`Opik.get_experiment_by_id`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_experiment_by_id) methods:
 
-```python {pytest_codeblocks_skip=true}
+```python
 import opik
 
 # Get the experiment

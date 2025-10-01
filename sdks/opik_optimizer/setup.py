@@ -12,9 +12,9 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     package_data={
-        "opik_optimizer": ["data/*.json"],
+        "opik_optimizer": ["data/*.json", "data/*.jsonl"],
     },
-    python_requires=">=3.9,<3.13",
+    python_requires=">=3.10,<3.13",
     install_requires=[
         "datasets",
         "deap>=1.4.3",
@@ -38,6 +38,7 @@ setup(
             "pytest-cov",
             # "google-adk",
             "langgraph",
+            "gepa>=0.0.7",
         ],
     },
     classifiers=[
@@ -45,5 +46,8 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
 )

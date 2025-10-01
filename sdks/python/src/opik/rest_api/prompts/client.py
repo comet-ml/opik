@@ -343,6 +343,35 @@ class PromptsClient:
         _response = self._raw_client.get_prompt_versions(id, page=page, size=size, request_options=request_options)
         return _response.data
 
+    def restore_prompt_version(
+        self, prompt_id: str, version_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptVersionDetail:
+        """
+        Restore a prompt version by creating a new version with the content from the specified version
+
+        Parameters
+        ----------
+        prompt_id : str
+
+        version_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptVersionDetail
+            OK
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.prompts.restore_prompt_version(prompt_id='promptId', version_id='versionId', )
+        """
+        _response = self._raw_client.restore_prompt_version(prompt_id, version_id, request_options=request_options)
+        return _response.data
+
     def retrieve_prompt_version(
         self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
     ) -> PromptVersionDetail:
@@ -730,6 +759,40 @@ class AsyncPromptsClient:
         """
         _response = await self._raw_client.get_prompt_versions(
             id, page=page, size=size, request_options=request_options
+        )
+        return _response.data
+
+    async def restore_prompt_version(
+        self, prompt_id: str, version_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptVersionDetail:
+        """
+        Restore a prompt version by creating a new version with the content from the specified version
+
+        Parameters
+        ----------
+        prompt_id : str
+
+        version_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptVersionDetail
+            OK
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.prompts.restore_prompt_version(prompt_id='promptId', version_id='versionId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.restore_prompt_version(
+            prompt_id, version_id, request_options=request_options
         )
         return _response.data
 

@@ -96,6 +96,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
         this.rootTrace.update({
           output: testResult.testCase.taskOutput,
+          endTime: new Date(),
         });
       } catch (error) {
         logger.error(`Error processing dataset item: ${datasetItem.id}`);
@@ -107,11 +108,11 @@ export class EvaluationEngine<T = Record<string, unknown>> {
               exceptionType: error.name,
               traceback: error.stack ?? "",
             },
+            endTime: new Date(),
           });
         }
       }
 
-      this.rootTrace.end();
       experimentItemReferences.push(
         new ExperimentItemReferences({
           datasetItemId: datasetItem.id,

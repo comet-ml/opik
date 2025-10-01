@@ -1,11 +1,67 @@
 ---
 title: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
-pytest_codeblocks_skip: true
 ---
 
-The Opik Agent Optimizer SDK provides a set of tools for optimizing LLM prompts. This reference
-guide will help you understand the available APIs and how to use them effectively.
+The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
+
+## Key Features
+
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+
+## Core Classes
+
+The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
+
+- **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
+- **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
+- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
+- **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
+- **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
+
+## Standardized Method Signatures
+
+All optimizers implement these core methods with identical signatures:
+
+### optimize_prompt()
+```python
+def optimize_prompt(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+```
+
+### optimize_mcp()
+```python
+def optimize_mcp(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    *,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+    fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+    allow_tool_use_on_second_pass: bool = False,
+    **kwargs: Any,
+) -> OptimizationResult
+```
 
 ## FewShotBayesianOptimizer
 
@@ -21,32 +77,53 @@ FewShotBayesianOptimizer(
 )
 ```
 
+
 **Parameters:**
 
-<ParamField path="model" type="str">
-  The model to used to evaluate the prompt
-</ParamField>
-<ParamField path="min_examples" type="int" optional={true} defaultValue="2">
-  Minimum number of examples to include
-</ParamField>
-<ParamField path="max_examples" type="int" optional={true} defaultValue="8">
-  Maximum number of examples to include
-</ParamField>
-<ParamField path="seed" type="int" optional={true} defaultValue="42">
-  Random seed for reproducibility
-</ParamField>
-<ParamField path="n_threads" type="int" optional={true} defaultValue="8">
-  Number of threads for parallel evaluation
-</ParamField>
-<ParamField path="verbose" type="int" optional={true} defaultValue="1">
-  Controls internal logging/progress bars (0=off, 1=on).
-</ParamField>
+<ParamField path="model" type="str">The model to used to evaluate the prompt</ParamField>
+<ParamField path="min_examples" type="int" optional={true} defaultValue="2">Minimum number of examples to include</ParamField>
+<ParamField path="max_examples" type="int" optional={true} defaultValue="8">Maximum number of examples to include</ParamField>
+<ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility</ParamField>
+<ParamField path="n_threads" type="int" optional={true} defaultValue="8">Number of threads for parallel evaluation</ParamField>
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
 <ParamField path="model_kwargs" type="Any" />
 
 ### Methods
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### configure_prompt_model
+```python
+configure_prompt_model(
+    prompt: ChatPrompt
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to configure</ParamField>
+
+#### create_optimization_context
+```python
+create_optimization_context(
+    dataset: Dataset,
+    metric: Callable,
+    metadata: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset" type="Dataset">The dataset being optimized</ParamField>
+<ParamField path="metric" type="Callable">The metric function</ParamField>
+<ParamField path="metadata" type="Optional" optional={true}>Additional metadata</ParamField>
 
 #### evaluate_prompt
-
 ```python
 evaluate_prompt(
     prompt: ChatPrompt,
@@ -62,6 +139,7 @@ evaluate_prompt(
 )
 ```
 
+
 **Parameters:**
 
 <ParamField path="prompt" type="ChatPrompt" />
@@ -76,141 +154,60 @@ evaluate_prompt(
 <ParamField path="agent_class" type="Optional" optional={true} />
 
 #### get_history
-
 ```python
 get_history()
 ```
 
-#### optimize_prompt
 
+#### increment_llm_counter
 ```python
-optimize_prompt(
+increment_llm_counter()
+```
+
+
+#### increment_tool_counter
+```python
+increment_tool_counter()
+```
+
+
+#### optimize_mcp
+```python
+optimize_mcp(
     prompt: ChatPrompt,
     dataset: Dataset,
     metric: Callable,
-    n_trials: int = 10,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
     agent_class: Optional = None,
-    experiment_config: Optional = None,
-    n_samples: Optional = None
+    fallback_invoker: Optional = None,
+    fallback_arguments: Optional = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
 )
 ```
 
-**Parameters:**
-
-<ParamField path="prompt" type="ChatPrompt" />
-<ParamField path="dataset" type="Dataset">
-  Opik Dataset to optimize on
-</ParamField>
-<ParamField path="metric" type="Callable">
-  Metric function to evaluate on
-</ParamField>
-<ParamField path="n_trials" type="int" optional={true} defaultValue="10">
-  Number of trials for Bayesian Optimization
-</ParamField>
-<ParamField path="agent_class" type="Optional" optional={true} />
-<ParamField path="experiment_config" type="Optional" optional={true}>
-  Optional configuration for the experiment, useful to log additional metadata
-</ParamField>
-<ParamField path="n_samples" type="Optional" optional={true}>
-  Optional number of items to test in the dataset
-</ParamField>
-
-#### update_optimization
-
-```python
-update_optimization(
-    optimization: Optimization,
-    status: str
-)
-```
 
 **Parameters:**
 
-<ParamField path="optimization" type="Optimization" />
-<ParamField path="status" type="str" />
-
-## MetaPromptOptimizer
-
-```python
-MetaPromptOptimizer(
-    model: str,
-    reasoning_model: Optional = None,
-    rounds: int = 3,
-    num_prompts_per_round: int = 4,
-    num_threads: Optional = None,
-    verbose: int = 1,
-    enable_context: bool = True,
-    n_threads: int = 12,
-    model_kwargs: Any
-)
-```
-
-**Parameters:**
-
-<ParamField path="model" type="str">
-  The model to use for evaluation
-</ParamField>
-<ParamField path="reasoning_model" type="Optional" optional={true}>
-  The model to use for reasoning and prompt generation
-</ParamField>
-<ParamField path="rounds" type="int" optional={true} defaultValue="3">
-  Number of optimization rounds
-</ParamField>
-<ParamField path="num_prompts_per_round" type="int" optional={true} defaultValue="4">
-  Number of prompts to generate per round
-</ParamField>
-<ParamField path="num_threads" type="Optional" optional={true} />
-<ParamField path="verbose" type="int" optional={true} defaultValue="1">
-  Controls internal logging/progress bars (0=off, 1=on).
-</ParamField>
-<ParamField path="enable_context" type="bool" optional={true} defaultValue="True">
-  Whether to include task-specific context (metrics, examples) in the reasoning prompt.
-</ParamField>
-<ParamField path="n_threads" type="int" optional={true} defaultValue="12">
-  Number of threads for parallel evaluation
-</ParamField>
-<ParamField path="model_kwargs" type="Any" />
-
-### Methods
-
-#### evaluate_prompt
-
-```python
-evaluate_prompt(
-    prompt: ChatPrompt,
-    dataset: Dataset,
-    metric: Callable,
-    n_threads: int,
-    verbose: int = 1,
-    dataset_item_ids: Optional = None,
-    experiment_config: Optional = None,
-    n_samples: Optional = None,
-    seed: Optional = None,
-    agent_class: Optional = None
-)
-```
-
-**Parameters:**
-
-<ParamField path="prompt" type="ChatPrompt" />
-<ParamField path="dataset" type="Dataset" />
-<ParamField path="metric" type="Callable" />
-<ParamField path="n_threads" type="int" />
-<ParamField path="verbose" type="int" optional={true} defaultValue="1" />
-<ParamField path="dataset_item_ids" type="Optional" optional={true} />
-<ParamField path="experiment_config" type="Optional" optional={true} />
-<ParamField path="n_samples" type="Optional" optional={true} />
-<ParamField path="seed" type="Optional" optional={true} />
-<ParamField path="agent_class" type="Optional" optional={true} />
-
-#### get_history
-
-```python
-get_history()
-```
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to optimize, must include tools</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset containing evaluation data</ParamField>
+<ParamField path="metric" type="Callable">Evaluation function that takes (dataset_item, llm_output) and returns a score</ParamField>
+<ParamField path="tool_name" type="str">Name of the MCP tool to use for optimization</ParamField>
+<ParamField path="second_pass" type="Any">MCPSecondPassCoordinator for handling second-pass tool calls</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Number of samples to use for optimization (default: None)</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization (default: False)</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Custom agent class to use (default: None)</ParamField>
+<ParamField path="fallback_invoker" type="Optional" optional={true}>Fallback function for tool invocation (default: None)</ParamField>
+<ParamField path="fallback_arguments" type="Optional" optional={true}>Function to extract tool arguments (default: None)</ParamField>
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} defaultValue="False">Whether to allow tool use on second pass (default: False)</ParamField>
+<ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
-
 ```python
 optimize_prompt(
     prompt: ChatPrompt,
@@ -224,29 +221,39 @@ optimize_prompt(
 )
 ```
 
+
 **Parameters:**
 
-<ParamField path="prompt" type="ChatPrompt" />
-<ParamField path="dataset" type="Dataset">
-  The dataset to evaluate against
-</ParamField>
-<ParamField path="metric" type="Callable">
-  The metric to use for evaluation
-</ParamField>
-<ParamField path="experiment_config" type="Optional" optional={true}>
-  A dictionary to log with the experiments
-</ParamField>
-<ParamField path="n_samples" type="Optional" optional={true}>
-  The number of dataset items to use for evaluation
-</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">
-  If True, the algorithm may continue if goal not met
-</ParamField>
-<ParamField path="agent_class" type="Optional" optional={true} />
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
+<ParamField path="metric" type="Callable">Metric function to evaluate on</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment, useful to log additional metadata</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Optional number of items to test in the dataset</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="kwargs" type="Any" />
 
-#### update_optimization
+#### reset_counters
+```python
+reset_counters()
+```
 
+
+#### setup_agent_class
+```python
+setup_agent_class(
+    prompt: ChatPrompt,
+    agent_class: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional custom agent class</ParamField>
+
+#### update_optimization
 ```python
 update_optimization(
     optimization: Optimization,
@@ -254,10 +261,525 @@ update_optimization(
 )
 ```
 
+
 **Parameters:**
 
 <ParamField path="optimization" type="Optimization" />
 <ParamField path="status" type="str" />
+
+#### validate_optimization_inputs
+```python
+validate_optimization_inputs(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to validate</ParamField>
+<ParamField path="dataset" type="Dataset">The dataset to validate</ParamField>
+<ParamField path="metric" type="Callable">The metric function to validate</ParamField>
+
+## MetaPromptOptimizer
+
+```python
+MetaPromptOptimizer(
+    model: str,
+    reasoning_model: Optional = None,
+    rounds: int = 3,
+    num_prompts_per_round: int = 4,
+    num_threads: Optional = None,
+    verbose: int = 1,
+    enable_context: bool = True,
+    n_threads: int = 12,
+    seed: int = 42,
+    model_kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="model" type="str">The model to use for evaluation</ParamField>
+<ParamField path="reasoning_model" type="Optional" optional={true}>The model to use for reasoning and prompt generation</ParamField>
+<ParamField path="rounds" type="int" optional={true} defaultValue="3">Number of optimization rounds</ParamField>
+<ParamField path="num_prompts_per_round" type="int" optional={true} defaultValue="4">Number of prompts to generate per round</ParamField>
+<ParamField path="num_threads" type="Optional" optional={true} />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
+<ParamField path="enable_context" type="bool" optional={true} defaultValue="True">Whether to include task-specific context (metrics, examples) in the reasoning prompt.</ParamField>
+<ParamField path="n_threads" type="int" optional={true} defaultValue="12">Number of threads for parallel evaluation</ParamField>
+<ParamField path="seed" type="int" optional={true} defaultValue="42" />
+<ParamField path="model_kwargs" type="Any" />
+
+### Methods
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### configure_prompt_model
+```python
+configure_prompt_model(
+    prompt: ChatPrompt
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to configure</ParamField>
+
+#### create_optimization_context
+```python
+create_optimization_context(
+    dataset: Dataset,
+    metric: Callable,
+    metadata: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset" type="Dataset">The dataset being optimized</ParamField>
+<ParamField path="metric" type="Callable">The metric function</ParamField>
+<ParamField path="metadata" type="Optional" optional={true}>Additional metadata</ParamField>
+
+#### evaluate_prompt
+```python
+evaluate_prompt(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    n_threads: int,
+    verbose: int = 1,
+    dataset_item_ids: Optional = None,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    seed: Optional = None,
+    agent_class: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="n_threads" type="int" />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1" />
+<ParamField path="dataset_item_ids" type="Optional" optional={true} />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="n_samples" type="Optional" optional={true} />
+<ParamField path="seed" type="Optional" optional={true} />
+<ParamField path="agent_class" type="Optional" optional={true} />
+
+#### get_history
+```python
+get_history()
+```
+
+
+#### increment_llm_counter
+```python
+increment_llm_counter()
+```
+
+
+#### increment_tool_counter
+```python
+increment_tool_counter()
+```
+
+
+#### optimize_mcp
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: MCPSecondPassCoordinator,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    fallback_invoker: Optional = None,
+    fallback_arguments: Optional = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to optimize, must include tools</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset containing evaluation data</ParamField>
+<ParamField path="metric" type="Callable">Evaluation function that takes (dataset_item, llm_output) and returns a score</ParamField>
+<ParamField path="tool_name" type="str">Name of the MCP tool to use for optimization</ParamField>
+<ParamField path="second_pass" type="MCPSecondPassCoordinator">MCPSecondPassCoordinator for handling second-pass tool calls</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Number of samples to use for optimization (default: None)</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization (default: False)</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Custom agent class to use (default: None)</ParamField>
+<ParamField path="fallback_invoker" type="Optional" optional={true}>Fallback function for tool invocation (default: None)</ParamField>
+<ParamField path="fallback_arguments" type="Optional" optional={true}>Function to extract tool arguments (default: None)</ParamField>
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} defaultValue="False">Whether to allow tool use on second pass (default: False)</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+#### optimize_prompt
+```python
+optimize_prompt(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset">Opik dataset name, or Opik dataset</ParamField>
+<ParamField path="metric" type="Callable">A metric function, this function should have two arguments:</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="n_samples" type="Optional" optional={true} />
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
+<ParamField path="agent_class" type="Optional" optional={true} />
+<ParamField path="kwargs" type="Any" />
+
+#### reset_counters
+```python
+reset_counters()
+```
+
+
+#### setup_agent_class
+```python
+setup_agent_class(
+    prompt: ChatPrompt,
+    agent_class: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional custom agent class</ParamField>
+
+#### update_optimization
+```python
+update_optimization(
+    optimization: Optimization,
+    status: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="optimization" type="Optimization" />
+<ParamField path="status" type="str" />
+
+#### validate_optimization_inputs
+```python
+validate_optimization_inputs(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to validate</ParamField>
+<ParamField path="dataset" type="Dataset">The dataset to validate</ParamField>
+<ParamField path="metric" type="Callable">The metric function to validate</ParamField>
+
+## MiproOptimizer
+
+```python
+MiproOptimizer(
+    model: Any,
+    project_name: Optional = None,
+    verbose: int = 1,
+    model_kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="model" type="Any">LiteLLM model name</ParamField>
+<ParamField path="project_name" type="Optional" optional={true} />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
+<ParamField path="model_kwargs" type="Any">additional args for model (eg, temperature)</ParamField>
+
+### Methods
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### configure_prompt_model
+```python
+configure_prompt_model(
+    prompt: ChatPrompt
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to configure</ParamField>
+
+#### continue_optimize_prompt
+```python
+continue_optimize_prompt()
+```
+
+
+#### create_optimization_context
+```python
+create_optimization_context(
+    dataset: Dataset,
+    metric: Callable,
+    metadata: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset" type="Dataset">The dataset being optimized</ParamField>
+<ParamField path="metric" type="Callable">The metric function</ParamField>
+<ParamField path="metadata" type="Optional" optional={true}>Additional metadata</ParamField>
+
+#### evaluate_prompt
+```python
+evaluate_prompt(
+    dataset: str | opik.api_objects.dataset.dataset.Dataset,
+    metric: Callable,
+    task_config: TaskConfig,
+    prompt: Union = None,
+    n_samples: int = 10,
+    dataset_item_ids: Optional = None,
+    experiment_config: Optional = None,
+    verbose: int = 1,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset" type="str | opik.api_objects.dataset.dataset.Dataset">Opik dataset name or dataset</ParamField>
+<ParamField path="metric" type="Callable">Metric function to optimize</ParamField>
+<ParamField path="task_config" type="TaskConfig">A TaskConfig instance</ParamField>
+<ParamField path="prompt" type="Union" optional={true}>The prompt to evaluate</ParamField>
+<ParamField path="n_samples" type="int" optional={true} defaultValue="10">number of items to test in the dataset</ParamField>
+<ParamField path="dataset_item_ids" type="Optional" optional={true}>Optional list of dataset item IDs to evaluate</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Verbosity level</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+#### get_best
+```python
+get_best(
+    position: int = 0
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="position" type="int" optional={true} defaultValue="0" />
+
+#### get_history
+```python
+get_history()
+```
+
+
+#### increment_llm_counter
+```python
+increment_llm_counter()
+```
+
+
+#### increment_tool_counter
+```python
+increment_tool_counter()
+```
+
+
+#### load_from_checkpoint
+```python
+load_from_checkpoint(
+    filename: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="filename" type="Any" />
+
+#### optimize_mcp
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    fallback_invoker: Optional = None,
+    fallback_arguments: Optional = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to optimize, must include tools</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset containing evaluation data</ParamField>
+<ParamField path="metric" type="Callable">Evaluation function that takes (dataset_item, llm_output) and returns a score</ParamField>
+<ParamField path="tool_name" type="str">Name of the MCP tool to use for optimization</ParamField>
+<ParamField path="second_pass" type="Any">MCPSecondPassCoordinator for handling second-pass tool calls</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Number of samples to use for optimization (default: None)</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization (default: False)</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Custom agent class to use (default: None)</ParamField>
+<ParamField path="fallback_invoker" type="Optional" optional={true}>Fallback function for tool invocation (default: None)</ParamField>
+<ParamField path="fallback_arguments" type="Optional" optional={true}>Function to extract tool arguments (default: None)</ParamField>
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} defaultValue="False">Whether to allow tool use on second pass (default: False)</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+#### optimize_prompt
+```python
+optimize_prompt(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: Optional = None,
+    n_samples: int | None = 10,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset containing evaluation data</ParamField>
+<ParamField path="metric" type="Callable">Evaluation function that takes (dataset_item, llm_output) and returns a score</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true} defaultValue="10">Number of samples to use for optimization (default: 10)</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization (default: False)</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Custom agent class to use (default: None)</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+#### prepare_optimize_prompt
+```python
+prepare_optimize_prompt(
+    dataset: Any,
+    metric: Any,
+    task_config: Any,
+    num_candidates: int = 10,
+    experiment_config: Optional = None,
+    optimization_id: Optional = None,
+    num_trials: int | None = 3,
+    n_samples: int | None = 10,
+    auto: Optional = 'light',
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset" type="Any" />
+<ParamField path="metric" type="Any" />
+<ParamField path="task_config" type="Any" />
+<ParamField path="num_candidates" type="int" optional={true} defaultValue="10" />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="optimization_id" type="Optional" optional={true} />
+<ParamField path="num_trials" type="int | None" optional={true} defaultValue="3" />
+<ParamField path="n_samples" type="int | None" optional={true} defaultValue="10" />
+<ParamField path="auto" type="Optional" optional={true} defaultValue="light" />
+<ParamField path="kwargs" type="Any" />
+
+#### reset_counters
+```python
+reset_counters()
+```
+
+
+#### setup_agent_class
+```python
+setup_agent_class(
+    prompt: ChatPrompt,
+    agent_class: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional custom agent class</ParamField>
+
+#### update_optimization
+```python
+update_optimization(
+    optimization: Optimization,
+    status: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="optimization" type="Optimization" />
+<ParamField path="status" type="str" />
+
+#### validate_optimization_inputs
+```python
+validate_optimization_inputs(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to validate</ParamField>
+<ParamField path="dataset" type="Dataset">The dataset to validate</ParamField>
+<ParamField path="metric" type="Callable">The metric function to validate</ParamField>
 
 ## EvolutionaryOptimizer
 
@@ -274,7 +796,7 @@ EvolutionaryOptimizer(
     adaptive_mutation: bool = True,
     enable_moo: bool = True,
     enable_llm_crossover: bool = True,
-    seed: Optional = 42,
+    seed: int | None = 42,
     output_style_guidance: Optional = None,
     infer_output_style: bool = False,
     verbose: int = 1,
@@ -283,61 +805,63 @@ EvolutionaryOptimizer(
 )
 ```
 
+
 **Parameters:**
 
-<ParamField path="model" type="str">
-  The model to use for evaluation
-</ParamField>
-<ParamField path="population_size" type="int" optional={true} defaultValue="30">
-  Number of prompts in the population
-</ParamField>
-<ParamField path="num_generations" type="int" optional={true} defaultValue="15">
-  Number of generations to run
-</ParamField>
-<ParamField path="mutation_rate" type="float" optional={true} defaultValue="0.2">
-  Mutation rate for genetic operations
-</ParamField>
-<ParamField path="crossover_rate" type="float" optional={true} defaultValue="0.8">
-  Crossover rate for genetic operations
-</ParamField>
-<ParamField path="tournament_size" type="int" optional={true} defaultValue="4">
-  Tournament size for selection
-</ParamField>
+<ParamField path="model" type="str">The model to use for evaluation</ParamField>
+<ParamField path="population_size" type="int" optional={true} defaultValue="30">Number of prompts in the population</ParamField>
+<ParamField path="num_generations" type="int" optional={true} defaultValue="15">Number of generations to run</ParamField>
+<ParamField path="mutation_rate" type="float" optional={true} defaultValue="0.2">Mutation rate for genetic operations</ParamField>
+<ParamField path="crossover_rate" type="float" optional={true} defaultValue="0.8">Crossover rate for genetic operations</ParamField>
+<ParamField path="tournament_size" type="int" optional={true} defaultValue="4">Tournament size for selection</ParamField>
 <ParamField path="num_threads" type="Optional" optional={true} />
-<ParamField path="elitism_size" type="int" optional={true} defaultValue="3">
-  Number of elitism prompts
-</ParamField>
-<ParamField path="adaptive_mutation" type="bool" optional={true} defaultValue="True">
-  Whether to use adaptive mutation
-</ParamField>
-<ParamField path="enable_moo" type="bool" optional={true} defaultValue="True">
-  Whether to enable multi-objective optimization - When enable optimizes for both the supplied metric and the length of
-  the prompt
-</ParamField>
-<ParamField path="enable_llm_crossover" type="bool" optional={true} defaultValue="True">
-  Whether to enable LLM crossover
-</ParamField>
-<ParamField path="seed" type="Optional" optional={true} defaultValue="42">
-  Random seed for reproducibility
-</ParamField>
-<ParamField path="output_style_guidance" type="Optional" optional={true}>
-  Output style guidance for prompts
-</ParamField>
-<ParamField path="infer_output_style" type="bool" optional={true} defaultValue="False">
-  Whether to infer output style
-</ParamField>
-<ParamField path="verbose" type="int" optional={true} defaultValue="1">
-  Controls internal logging/progress bars (0=off, 1=on).
-</ParamField>
-<ParamField path="n_threads" type="int" optional={true} defaultValue="12">
-  Number of threads for parallel evaluation
-</ParamField>
+<ParamField path="elitism_size" type="int" optional={true} defaultValue="3">Number of elitism prompts</ParamField>
+<ParamField path="adaptive_mutation" type="bool" optional={true} defaultValue="True">Whether to use adaptive mutation</ParamField>
+<ParamField path="enable_moo" type="bool" optional={true} defaultValue="True">Whether to enable multi-objective optimization - When enable optimizes for both the supplied metric and the length of the prompt</ParamField>
+<ParamField path="enable_llm_crossover" type="bool" optional={true} defaultValue="True">Whether to enable LLM crossover</ParamField>
+<ParamField path="seed" type="int | None" optional={true} defaultValue="42">Random seed for reproducibility</ParamField>
+<ParamField path="output_style_guidance" type="Optional" optional={true}>Output style guidance for prompts</ParamField>
+<ParamField path="infer_output_style" type="bool" optional={true} defaultValue="False">Whether to infer output style</ParamField>
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
+<ParamField path="n_threads" type="int" optional={true} defaultValue="12">Number of threads for parallel evaluation</ParamField>
 <ParamField path="model_kwargs" type="Any" />
 
 ### Methods
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### configure_prompt_model
+```python
+configure_prompt_model(
+    prompt: ChatPrompt
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to configure</ParamField>
+
+#### create_optimization_context
+```python
+create_optimization_context(
+    dataset: Dataset,
+    metric: Callable,
+    metadata: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset" type="Dataset">The dataset being optimized</ParamField>
+<ParamField path="metric" type="Callable">The metric function</ParamField>
+<ParamField path="metadata" type="Optional" optional={true}>Additional metadata</ParamField>
 
 #### evaluate_prompt
-
 ```python
 evaluate_prompt(
     prompt: ChatPrompt,
@@ -353,6 +877,7 @@ evaluate_prompt(
 )
 ```
 
+
 **Parameters:**
 
 <ParamField path="prompt" type="ChatPrompt" />
@@ -367,19 +892,66 @@ evaluate_prompt(
 <ParamField path="agent_class" type="Optional" optional={true} />
 
 #### get_history
-
 ```python
 get_history()
 ```
 
-#### get_llm_crossover_system_prompt
 
+#### get_llm_crossover_system_prompt
 ```python
 get_llm_crossover_system_prompt()
 ```
 
-#### optimize_prompt
 
+#### increment_llm_counter
+```python
+increment_llm_counter()
+```
+
+
+#### increment_tool_counter
+```python
+increment_tool_counter()
+```
+
+
+#### optimize_mcp
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    fallback_invoker: Optional = None,
+    fallback_arguments: Optional = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to optimize, must include tools</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset containing evaluation data</ParamField>
+<ParamField path="metric" type="Callable">Evaluation function that takes (dataset_item, llm_output) and returns a score</ParamField>
+<ParamField path="tool_name" type="str">Name of the MCP tool to use for optimization</ParamField>
+<ParamField path="second_pass" type="Any">MCPSecondPassCoordinator for handling second-pass tool calls</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Number of samples to use for optimization (default: None)</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization (default: False)</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Custom agent class to use (default: None)</ParamField>
+<ParamField path="fallback_invoker" type="Optional" optional={true}>Fallback function for tool invocation (default: None)</ParamField>
+<ParamField path="fallback_arguments" type="Optional" optional={true}>Function to extract tool arguments (default: None)</ParamField>
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} defaultValue="False">Whether to allow tool use on second pass (default: False)</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+#### optimize_prompt
 ```python
 optimize_prompt(
     prompt: ChatPrompt,
@@ -393,31 +965,39 @@ optimize_prompt(
 )
 ```
 
+
 **Parameters:**
 
-<ParamField path="prompt" type="ChatPrompt">
-  The prompt to optimize
-</ParamField>
-<ParamField path="dataset" type="Dataset">
-  The dataset to use for evaluation
-</ParamField>
-<ParamField path="metric" type="Callable">
-  Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`
-</ParamField>
-<ParamField path="experiment_config" type="Optional" optional={true}>
-  Optional experiment configuration
-</ParamField>
-<ParamField path="n_samples" type="Optional" optional={true}>
-  Optional number of samples to use
-</ParamField>
-<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">
-  Whether to automatically continue optimization
-</ParamField>
-<ParamField path="agent_class" type="Optional" optional={true} />
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">The dataset to use for evaluation</ParamField>
+<ParamField path="metric" type="Callable">Metric function to optimize with, should have the arguments `dataset_item` and `llm_output`</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional experiment configuration</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Optional number of samples to use</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to automatically continue optimization</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="kwargs" type="Any" />
 
-#### update_optimization
+#### reset_counters
+```python
+reset_counters()
+```
 
+
+#### setup_agent_class
+```python
+setup_agent_class(
+    prompt: ChatPrompt,
+    agent_class: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional custom agent class</ParamField>
+
+#### update_optimization
 ```python
 update_optimization(
     optimization: Optimization,
@@ -425,10 +1005,245 @@ update_optimization(
 )
 ```
 
+
 **Parameters:**
 
 <ParamField path="optimization" type="Optimization" />
 <ParamField path="status" type="str" />
+
+#### validate_optimization_inputs
+```python
+validate_optimization_inputs(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to validate</ParamField>
+<ParamField path="dataset" type="Dataset">The dataset to validate</ParamField>
+<ParamField path="metric" type="Callable">The metric function to validate</ParamField>
+
+## GepaOptimizer
+
+```python
+GepaOptimizer(
+    model: str,
+    project_name: Optional = None,
+    reflection_model: Optional = None,
+    verbose: int = 1,
+    seed: int = 42,
+    model_kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="model" type="str">LiteLLM model name</ParamField>
+<ParamField path="project_name" type="Optional" optional={true} />
+<ParamField path="reflection_model" type="Optional" optional={true} />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
+<ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>
+<ParamField path="model_kwargs" type="Any">additional args for model (eg, temperature)</ParamField>
+
+### Methods
+#### cleanup
+```python
+cleanup()
+```
+
+
+#### configure_prompt_model
+```python
+configure_prompt_model(
+    prompt: ChatPrompt
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to configure</ParamField>
+
+#### create_optimization_context
+```python
+create_optimization_context(
+    dataset: Dataset,
+    metric: Callable,
+    metadata: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset" type="Dataset">The dataset being optimized</ParamField>
+<ParamField path="metric" type="Callable">The metric function</ParamField>
+<ParamField path="metadata" type="Optional" optional={true}>Additional metadata</ParamField>
+
+#### evaluate_prompt
+```python
+evaluate_prompt(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    n_threads: int,
+    verbose: int = 1,
+    dataset_item_ids: Optional = None,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    seed: Optional = None,
+    agent_class: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt" />
+<ParamField path="dataset" type="Dataset" />
+<ParamField path="metric" type="Callable" />
+<ParamField path="n_threads" type="int" />
+<ParamField path="verbose" type="int" optional={true} defaultValue="1" />
+<ParamField path="dataset_item_ids" type="Optional" optional={true} />
+<ParamField path="experiment_config" type="Optional" optional={true} />
+<ParamField path="n_samples" type="Optional" optional={true} />
+<ParamField path="seed" type="Optional" optional={true} />
+<ParamField path="agent_class" type="Optional" optional={true} />
+
+#### get_history
+```python
+get_history()
+```
+
+
+#### increment_llm_counter
+```python
+increment_llm_counter()
+```
+
+
+#### increment_tool_counter
+```python
+increment_tool_counter()
+```
+
+
+#### optimize_mcp
+```python
+optimize_mcp(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    fallback_invoker: Optional = None,
+    fallback_arguments: Optional = None,
+    allow_tool_use_on_second_pass: bool = False,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to optimize, must include tools</ParamField>
+<ParamField path="dataset" type="Dataset">Opik dataset containing evaluation data</ParamField>
+<ParamField path="metric" type="Callable">Evaluation function that takes (dataset_item, llm_output) and returns a score</ParamField>
+<ParamField path="tool_name" type="str">Name of the MCP tool to use for optimization</ParamField>
+<ParamField path="second_pass" type="Any">MCPSecondPassCoordinator for handling second-pass tool calls</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Number of samples to use for optimization (default: None)</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization (default: False)</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Custom agent class to use (default: None)</ParamField>
+<ParamField path="fallback_invoker" type="Optional" optional={true}>Fallback function for tool invocation (default: None)</ParamField>
+<ParamField path="fallback_arguments" type="Optional" optional={true}>Function to extract tool arguments (default: None)</ParamField>
+<ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} defaultValue="False">Whether to allow tool use on second pass (default: False)</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+#### optimize_prompt
+```python
+optimize_prompt(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: Optional = None,
+    n_samples: Optional = None,
+    auto_continue: bool = False,
+    agent_class: Optional = None,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
+<ParamField path="metric" type="Callable">Metric function to evaluate on</ParamField>
+<ParamField path="experiment_config" type="Optional" optional={true}>Optional configuration for the experiment</ParamField>
+<ParamField path="n_samples" type="Optional" optional={true}>Optional number of items to test in the dataset</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="kwargs" type="Any" />
+
+#### reset_counters
+```python
+reset_counters()
+```
+
+
+#### setup_agent_class
+```python
+setup_agent_class(
+    prompt: ChatPrompt,
+    agent_class: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt</ParamField>
+<ParamField path="agent_class" type="Optional" optional={true}>Optional custom agent class</ParamField>
+
+#### update_optimization
+```python
+update_optimization(
+    optimization: Optimization,
+    status: str
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="optimization" type="Optimization" />
+<ParamField path="status" type="str" />
+
+#### validate_optimization_inputs
+```python
+validate_optimization_inputs(
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="ChatPrompt">The chat prompt to validate</ParamField>
+<ParamField path="dataset" type="Dataset">The dataset to validate</ParamField>
+<ParamField path="metric" type="Callable">The metric function to validate</ParamField>
 
 ## ChatPrompt
 
@@ -442,10 +1257,11 @@ ChatPrompt(
     function_map: Optional = None,
     model: Optional = None,
     invoke: Optional = None,
-    project_name: Optional = 'Default Project',
+    project_name: str | None = 'Default Project',
     model_kwargs: Any
 )
 ```
+
 
 **Parameters:**
 
@@ -457,81 +1273,171 @@ ChatPrompt(
 <ParamField path="function_map" type="Optional" optional={true} />
 <ParamField path="model" type="Optional" optional={true} />
 <ParamField path="invoke" type="Optional" optional={true} />
-<ParamField path="project_name" type="Optional" optional={true} defaultValue="Default Project" />
+<ParamField path="project_name" type="str | None" optional={true} defaultValue="Default Project" />
 <ParamField path="model_kwargs" type="Any" />
 
 ### Methods
-
 #### copy
-
 ```python
 copy()
 ```
 
-#### get_messages
 
+#### get_messages
 ```python
 get_messages(
     dataset_item: Optional = None
 )
 ```
 
+
 **Parameters:**
 
 <ParamField path="dataset_item" type="Optional" optional={true} />
 
 #### set_messages
-
 ```python
 set_messages(
-    messages: List
+    messages: list
 )
 ```
 
+
 **Parameters:**
 
-<ParamField path="messages" type="List" />
+<ParamField path="messages" type="list" />
 
 #### to_dict
-
 ```python
 to_dict()
 ```
+
+
+#### with_messages
+```python
+with_messages(
+    messages: list
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="messages" type="list" />
 
 ## OptimizationResult
 
 ```python
 OptimizationResult(
     optimizer: <class 'str'> = 'Optimizer',
-    prompt: List[Dict[str, str]],
+    prompt: list[dict[str, str]],
     score: <class 'float'>,
     metric_name: <class 'str'>,
-    optimization_id: Optional[str] = None,
-    dataset_id: Optional[str] = None,
-    initial_prompt: Optional[List[Dict[str, str]]] = None,
-    initial_score: Optional[float] = None,
-    details: Dict[str, Any] = PydanticUndefined,
-    history: List[Dict[str, Any]] = [],
-    llm_calls: Optional[int] = None,
-    demonstrations: Optional[List[Dict[str, Any]]] = None,
-    mipro_prompt: Optional[str] = None,
-    tool_prompts: Optional[Dict[str, str]] = None
+    optimization_id: str | None = None,
+    dataset_id: str | None = None,
+    initial_prompt: list[dict[str, str]] | None = None,
+    initial_score: float | None = None,
+    details: dict[str, Any] = PydanticUndefined,
+    history: list[dict[str, Any]] = [],
+    llm_calls: int | None = None,
+    demonstrations: list[dict[str, Any]] | None = None,
+    mipro_prompt: str | None = None,
+    tool_prompts: dict[str, str] | None = None
 )
 ```
+
 
 **Parameters:**
 
 <ParamField path="optimizer" type="<class 'str'>" optional={true} defaultValue="Optimizer" />
-<ParamField path="prompt" type="List[Dict[str, str]]" defaultValue="PydanticUndefined" />
+<ParamField path="prompt" type="list[dict[str, str]]" defaultValue="PydanticUndefined" />
 <ParamField path="score" type="<class 'float'>" defaultValue="PydanticUndefined" />
 <ParamField path="metric_name" type="<class 'str'>" defaultValue="PydanticUndefined" />
-<ParamField path="optimization_id" type="Optional[str]" optional={true} />
-<ParamField path="dataset_id" type="Optional[str]" optional={true} />
-<ParamField path="initial_prompt" type="Optional[List[Dict[str, str]]]" optional={true} />
-<ParamField path="initial_score" type="Optional[float]" optional={true} />
-<ParamField path="details" type="Dict[str, Any]" optional={true} defaultValue="PydanticUndefined" />
-<ParamField path="history" type="List[Dict[str, Any]]" optional={true} defaultValue="[]" />
-<ParamField path="llm_calls" type="Optional[int]" optional={true} />
-<ParamField path="demonstrations" type="Optional[List[Dict[str, Any]]]" optional={true} />
-<ParamField path="mipro_prompt" type="Optional[str]" optional={true} />
-<ParamField path="tool_prompts" type="Optional[Dict[str, str]]" optional={true} />
+<ParamField path="optimization_id" type="str | None" optional={true} />
+<ParamField path="dataset_id" type="str | None" optional={true} />
+<ParamField path="initial_prompt" type="list[dict[str, str]] | None" optional={true} />
+<ParamField path="initial_score" type="float | None" optional={true} />
+<ParamField path="details" type="dict[str, Any]" optional={true} defaultValue="PydanticUndefined" />
+<ParamField path="history" type="list[dict[str, Any]]" optional={true} defaultValue="[]" />
+<ParamField path="llm_calls" type="int | None" optional={true} />
+<ParamField path="demonstrations" type="list[dict[str, Any]] | None" optional={true} />
+<ParamField path="mipro_prompt" type="str | None" optional={true} />
+<ParamField path="tool_prompts" type="dict[str, str] | None" optional={true} />
+
+## OptimizableAgent
+
+```python
+OptimizableAgent(
+    prompt: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="Any">a chat prompt</ParamField>
+
+### Methods
+#### init_agent
+```python
+init_agent(
+    prompt: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="prompt" type="Any" />
+
+#### init_llm
+```python
+init_llm()
+```
+
+
+#### invoke
+```python
+invoke(
+    messages: list,
+    seed: Optional = None
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="messages" type="list" />
+<ParamField path="seed" type="Optional" optional={true} />
+
+#### invoke_dataset_item
+```python
+invoke_dataset_item(
+    dataset_item: dict
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="dataset_item" type="dict" />
+
+#### llm_invoke
+```python
+llm_invoke(
+    query: Optional = None,
+    messages: Optional = None,
+    seed: Optional = None,
+    allow_tool_use: bool | None = False
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="query" type="Optional" optional={true} />
+<ParamField path="messages" type="Optional" optional={true} />
+<ParamField path="seed" type="Optional" optional={true} />
+<ParamField path="allow_tool_use" type="bool | None" optional={true} defaultValue="False" />
+
+

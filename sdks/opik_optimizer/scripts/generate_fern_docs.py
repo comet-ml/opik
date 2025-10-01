@@ -1,6 +1,6 @@
 import inspect
 import re
-from typing import Any, Dict, List, Optional, get_type_hints
+from typing import Any, get_type_hints
 import opik_optimizer
 
 from pydantic import BaseModel
@@ -8,36 +8,36 @@ from pydantic import BaseModel
 
 class ParameterInfo(BaseModel):
     path: str
-    type: Optional[str]
-    default: Optional[Any]
+    type: str | None
+    default: Any | None
     required: bool
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class MethodInfo(BaseModel):
     name: str
-    docstring: Optional[str]
-    parameters: List[ParameterInfo]
+    docstring: str | None
+    parameters: list[ParameterInfo]
 
 
 class ClassInfo(BaseModel):
-    class_docstring: Optional[str]
-    init_parameters: List[ParameterInfo]
-    public_methods: List[MethodInfo]
+    class_docstring: str | None
+    init_parameters: list[ParameterInfo]
+    public_methods: list[MethodInfo]
 
 
 class ClassInspector:
     def __init__(self, cls: type):
         self.cls = cls
 
-    def get_docstring(self) -> Optional[str]:
+    def get_docstring(self) -> str | None:
         return inspect.getdoc(self.cls)
 
-    def parse_param_descriptions(self, docstring: str) -> Dict[str, str]:
+    def parse_param_descriptions(self, docstring: str) -> dict[str, str]:
         """
         Parses the 'Args:' section of a docstring and extracts parameter descriptions.
         """
-        param_desc: Dict[str, str] = {}
+        param_desc: dict[str, str] = {}
         if not docstring:
             return param_desc
 
@@ -59,7 +59,7 @@ class ClassInspector:
 
         return param_desc
 
-    def get_pydantic_model_fields(self) -> List[ParameterInfo]:
+    def get_pydantic_model_fields(self) -> list[ParameterInfo]:
         fields = []
         for name, model_field in self.cls.model_fields.items():  # type: ignore
             default = model_field.default if model_field.default is not None else None
@@ -87,8 +87,8 @@ class ClassInspector:
     def parse_signature(
         self,
         func: Any,
-        docstring: Optional[str] = None,
-    ) -> List[ParameterInfo]:
+        docstring: str | None = None,
+    ) -> list[ParameterInfo]:
         sig = inspect.signature(func)
         try:
             type_hints = get_type_hints(func, globalns=vars(inspect.getmodule(func)))
@@ -125,7 +125,7 @@ class ClassInspector:
 
         return parameters
 
-    def get_public_methods(self) -> List[MethodInfo]:
+    def get_public_methods(self) -> list[MethodInfo]:
         if issubclass(self.cls, BaseModel):
             return []
 
@@ -177,7 +177,7 @@ class ClassInspector:
         return field
 
     def format_method_signature(
-        self, name: str, parameters: List[ParameterInfo]
+        self, name: str, parameters: list[ParameterInfo]
     ) -> str:
         if len(parameters) == 0:
             lines = [f"{name}()"]
@@ -239,9 +239,12 @@ class ClassInspector:
 classes_to_document = [
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
+    opik_optimizer.MiproOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
+    opik_optimizer.GepaOptimizer,
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
+    opik_optimizer.OptimizableAgent,
     # opik_optimizer.datasets
 ]
 
@@ -249,11 +252,100 @@ classes_to_document = [
 res = """---
 title: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
-pytest_codeblocks_skip: true
 ---
 
-The Opik Agent Optimizer SDK provides a set of tools for optimizing LLM prompts. This reference
-guide will help you understand the available APIs and how to use them effectively.
+The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
+
+## Key Features
+
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+- **Backward Compatibility**: All original parameters preserved through kwargs extraction
+- **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
+
+## Core Classes
+
+The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
+
+- **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
+- **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
+- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
+- **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
+- **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
+
+## Standardized Method Signatures
+
+All optimizers implement these core methods with identical signatures:
+
+### optimize_prompt()
+```python
+def optimize_prompt(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+```
+
+### optimize_mcp()
+```python
+def optimize_mcp(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    *,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+    fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+    allow_tool_use_on_second_pass: bool = False,
+    **kwargs: Any,
+) -> OptimizationResult
+```
+
+## Deprecation Warnings
+
+The following parameters are deprecated and will be removed in future versions:
+
+### Constructor Parameters
+
+- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
+- **`num_threads`** in optimizer constructors: Use `n_threads` instead
+
+### Example Migration
+
+```python
+# ❌ Deprecated
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    project_name="my-project",  # Deprecated
+    num_threads=16,             # Deprecated
+)
+
+# ✅ Correct
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    n_threads=16,  # Use n_threads instead
+)
+
+prompt = ChatPrompt(
+    project_name="my-project",  # Set here instead
+    messages=[...]
+)
+```
 
 """
 

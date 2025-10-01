@@ -3,7 +3,8 @@ import pyrate_limiter
 import time
 import opik.config
 
-from typing import Callable, Any
+from typing import Any
+from collections.abc import Callable
 
 
 class RateLimiter:

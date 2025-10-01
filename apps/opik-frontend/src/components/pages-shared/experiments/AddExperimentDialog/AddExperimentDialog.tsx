@@ -11,6 +11,9 @@ import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
+import { buildDocsUrl } from "@/lib/utils";
+import { SquareArrowOutUpRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -202,6 +205,8 @@ const AddExperimentDialog: React.FunctionComponent<
 from opik import Opik
 from opik.evaluation import evaluate
 
+# os.environ["OPENAI_API_KEY"] = "OpenAI API key goes here"
+
 # INJECT_OPIK_CONFIGURATION
 
 ${importString}
@@ -316,6 +321,19 @@ eval_results = evaluate(
             <div className="comet-title-s">Select evaluators</div>
             {generateList("Heuristics metrics", HEURISTICS_MODELS_OPTIONS)}
             {generateList("LLM Judges", LLM_JUDGES_MODELS_OPTIONS)}
+            <div className="mt-4">
+              <Button variant="secondary" asChild>
+                <a
+                  href={buildDocsUrl("/evaluation/metrics/custom_metric")}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center"
+                >
+                  Learn about custom metrics
+                  <SquareArrowOutUpRight className="ml-1 size-4" />
+                </a>
+              </Button>
+            </div>
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">

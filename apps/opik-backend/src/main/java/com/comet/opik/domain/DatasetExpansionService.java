@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Singleton
@@ -42,7 +43,15 @@ public class DatasetExpansionService {
         log.info("Starting dataset expansion for datasetId '{}', workspaceId '{}', sampleCount: '{}'",
                 datasetId, workspaceId, request.sampleCount());
         // Get existing dataset items to analyze
-        var existingItems = datasetItemService.getItems(datasetId, 1, 10, false)
+        var searchCriteria = DatasetItemSearchCriteria.builder()
+                .datasetId(datasetId)
+                .experimentIds(Set.of()) // Empty set for no experiment filtering
+                .entityType(EntityType.TRACE)
+                .filters(null) // No filters needed
+                .truncate(false)
+                .build();
+
+        var existingItems = datasetItemService.getItems(1, 10, searchCriteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();

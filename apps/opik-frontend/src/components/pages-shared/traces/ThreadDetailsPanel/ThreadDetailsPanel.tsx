@@ -31,7 +31,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
-import TraceMessages from "@/components/pages-shared/traces/ThreadDetailsPanel/TraceMessages";
+import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceMessages";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import {
   ButtonLayoutSize,
@@ -65,6 +65,7 @@ import { Separator } from "@/components/ui/separator";
 import ThreadDetailsTags from "./ThreadDetailsTags";
 import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/types";
 import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
+import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 
 type ThreadDetailsPanelProps = {
@@ -135,6 +136,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const threadFeedbackScores = thread?.feedback_scores ?? [];
   const threadComments = thread?.comments ?? [];
   const threadTags = thread?.tags ?? [];
+
+  const rows = useMemo(() => (thread ? [thread] : []), [thread]);
 
   let currentActiveTab = activeTab!;
   if (activeTab === "feedback_scores" && !isInactiveThread) {
@@ -479,6 +482,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           </Button>
         </div>
         <div className="flex gap-2 pl-6">
+          <AddToDropdown rows={rows} />
           <DetailsActionSectionToggle
             activeSection={currentActiveSection}
             setActiveSection={setActiveSection}

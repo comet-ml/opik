@@ -666,6 +666,7 @@ class RawDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetItemPagePublic]:
@@ -679,6 +680,8 @@ class RawDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -696,6 +699,7 @@ class RawDatasetsClient:
             params={
                 "page": page,
                 "size": size,
+                "filters": filters,
                 "truncate": truncate,
             },
             request_options=request_options,
@@ -1465,6 +1469,7 @@ class AsyncRawDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetItemPagePublic]:
@@ -1478,6 +1483,8 @@ class AsyncRawDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1495,6 +1502,7 @@ class AsyncRawDatasetsClient:
             params={
                 "page": page,
                 "size": size,
+                "filters": filters,
                 "truncate": truncate,
             },
             request_options=request_options,

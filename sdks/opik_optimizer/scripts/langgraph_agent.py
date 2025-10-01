@@ -1,4 +1,4 @@
-from typing import Any, List, Dict
+from typing import Any
 from typing_extensions import TypedDict
 
 from opik.integrations.langchain import OpikTracer
@@ -15,7 +15,17 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import Tool, create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 
-search_wikipedia = track(type="tool")(search_wikipedia)
+
+# Create a wrapper function without optional parameters for LangChain compatibility
+def search_wikipedia_tool(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    return search_wikipedia(query, use_api=False)
+
+
+search_wikipedia_tool = track(type="tool")(search_wikipedia_tool)
 
 
 class InputState(TypedDict):
@@ -38,11 +48,17 @@ def create_graph(project_name: str, prompt_template: str) -> Any:
     agent_tools = [
         Tool(
             name="search_wikipedia",
-            func=search_wikipedia,
+            func=search_wikipedia_tool,
             description="""This agent is used to search wikipedia. It can retrieve additional details about a topic.""",
         )
     ]
-    # We'll use the prompt in the chat-prompt:
+
+    # Ensure the prompt template has the required ReAct format placeholders
+    if "{tools}" not in prompt_template:
+        prompt_template += "\n\nYou have access to the following tools:\n\n{tools}"
+    if "{tool_names}" not in prompt_template:
+        prompt_template += '\n\nUse the following format:\n\nQuestion: "the input question you must answer"\nThought: "you should always think about what to do"\nAction: "the action to take" --- should be one of [{tool_names}]\nAction Input: "the input to the action"\nObservation: "the result of the action"\n... (this Thought/Action/Action Input/Observation can repeat N times)\nThought: "I now know the final answer"\nFinal Answer: "the final answer to the original input question"\n\nBegin!\n\nQuestion: {input}\nThought: {agent_scratchpad}'
+
     prompt = PromptTemplate.from_template(prompt_template)
     agent = create_react_agent(llm, tools=agent_tools, prompt=prompt)
     agent_executor = AgentExecutor(
@@ -88,7 +104,7 @@ class LangGraphAgent(OptimizableAgent):
             self.prompt.get_messages()[0]["content"],
         )
 
-    def invoke(self, messages: List[Dict[str, str]], seed: int | None = None) -> str:
+    def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         if len(messages) > 1:
             # Skip the system prompt
             messages = messages[1:]
