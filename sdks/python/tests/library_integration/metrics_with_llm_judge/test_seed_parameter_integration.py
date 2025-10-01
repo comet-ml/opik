@@ -252,6 +252,7 @@ class TestSeedParameterIntegration:
             evaluation_criteria="Check for accuracy, completeness, and clarity.",
             model=model,
             seed=seed,
+            temperature=0.0,
             track=False,
         )
 
@@ -279,6 +280,7 @@ class TestSeedParameterIntegration:
         metric = metrics.StructuredOutputCompliance(
             model=model,
             seed=seed,
+            temperature=0.0,
             track=False,
         )
 
@@ -308,6 +310,7 @@ class TestSeedParameterIntegration:
         metric = metrics.TrajectoryAccuracy(
             model=model,
             seed=seed,
+            temperature=0.0,
             track=False,
         )
 
