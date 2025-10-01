@@ -388,6 +388,8 @@ def update_span(
         total_cost=total_cost,
     )
 
+    message_streamer.put(update_span_message)
+
     if attachments is not None:
         for attachment_data in attachments:
             create_attachment_message = attachment_converters.attachment_to_message(
@@ -398,5 +400,3 @@ def update_span(
                 url_override=url_override,
             )
             message_streamer.put(create_attachment_message)
-
-    message_streamer.put(update_span_message)
