@@ -71,10 +71,6 @@ tabs:
     display-name: SDK & API reference
     icon: fa-regular fa-square-terminal
     slug: /reference
-  contributing:
-    display-name: Contributing
-    icon: fa-regular fa-code-branch
-    slug: /contributing
   opik-university:
     display-name: Opik University
     icon: fa-regular fa-graduation-cap
@@ -158,33 +154,24 @@ navigation:
           - page: Concepts
             path: docs/evaluation/concepts.mdx
             slug: concepts
-          - page: Evaluate prompts
-            path: docs/evaluation/evaluate_prompt.mdx
-            slug: evaluate_prompt
-          - page: Evaluate your LLM application
-            path: docs/evaluation/evaluate_your_llm.mdx
-            slug: evaluate_your_llm
-          - page: Evaluate agents
-            path: docs/evaluation/evaluate_agents.mdx
-            slug: evaluate_agents
-          - page: Evaluate threads
-            path: docs/evaluation/evaluate_threads.mdx
-            slug: evaluate_threads
-          - page: Log experiments with REST API
-            path: docs/evaluation/log_experiments_with_rest_api.mdx
-            slug: log_experiments_with_rest_api
-          - page: Update existing experiment
-            path: docs/evaluation/update_existing_experiment.mdx
-            slug: update_existing_experiment
           - page: Manage datasets
             path: docs/evaluation/manage_datasets.mdx
             slug: manage_datasets
-          - page: Cookbook - Evaluate hallucination metric
-            path: docs/cookbook/evaluate_hallucination_metric.mdx
-            slug: evaluate_hallucination_metric
-          - page: Cookbook - Evaluate moderation metric
-            path: docs/cookbook/evaluate_moderation_metric.mdx
-            slug: evaluate_moderation_metric
+          - page: Evaluate single prompts
+            path: docs/evaluation/evaluate_prompt.mdx
+            slug: evaluate_prompt
+          - page: Evaluate your agent
+            path: docs/evaluation/evaluate_your_llm.mdx
+            slug: evaluate_your_llm
+          - page: Evaluate multi-turn conversations
+            path: docs/evaluation/evaluate_threads.mdx
+            slug: evaluate_threads
+          - page: Manually logging experiments
+            path: docs/evaluation/log_experiments_with_rest_api.mdx
+            slug: log_experiments_with_rest_api
+          - page: Re-running an existing experiment
+            path: docs/evaluation/update_existing_experiment.mdx
+            slug: update_existing_experiment
           - section: Metrics
             slug: /metrics
             contents:
@@ -224,6 +211,19 @@ navigation:
               - page: Custom metric
                 path: docs/evaluation/metrics/custom_metric.mdx
                 slug: custom_metric
+          - section: Tutorials
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Best practices for evaluating agents
+                path: docs/evaluation/evaluate_agents.mdx
+                slug: evaluate_agents
+              - page: Cookbook - Evaluate hallucination metric
+                path: docs/cookbook/evaluate_hallucination_metric.mdx
+                slug: evaluate_hallucination_metric
+              - page: Cookbook - Evaluate moderation metric
+                path: docs/cookbook/evaluate_moderation_metric.mdx
+                slug: evaluate_moderation_metric
       - section: Prompt engineering
         slug: /prompt_engineering
         contents:
@@ -266,6 +266,47 @@ navigation:
           - page: AI Providers
             path: docs/configuration/ai_providers.mdx
             slug: ai_providers
+      - section: Contributing
+        slug: /contributing
+        contents:
+          - page: Contribution Overview
+            path: docs/contributing/overview.mdx
+            slug: overview
+            icon: fa-regular fa-compass
+          - section: Specific Contribution Guides
+            slug: /guides
+            contents:
+              - page: Documentation
+                path: docs/contributing/documentation.mdx
+                slug: documentation
+                icon: fa-regular fa-book
+              - page: Python SDK
+                path: docs/contributing/python-sdk.mdx
+                slug: python-sdk
+                icon: fa-brands fa-python
+              - page: TypeScript SDK
+                path: docs/contributing/typescript-sdk.mdx
+                slug: typescript-sdk
+                icon: fa-brands fa-js
+              - page: Opik Optimizer
+                path: docs/contributing/agent-optimizer-sdk.mdx
+                slug: agent-optimizer-sdk
+                icon: fa-regular fa-gauge-high
+              - page: Frontend
+                path: docs/contributing/frontend.mdx
+                slug: frontend
+                icon: fa-regular fa-window-maximize
+              - page: Backend
+                path: docs/contributing/backend.mdx
+                slug: backend
+                icon: fa-regular fa-server
+          - section: Developer Programs
+            slug: /developer-programs
+            contents:
+              - page: Bounty Program
+                path: docs/contributing/bounties.mdx
+                slug: bounties
+                icon: fa-regular fa-gem
   - tab: integrations
     layout:
       - page: Overview
@@ -645,46 +686,6 @@ navigation:
           - api: API Reference
             slug: /
             display-errors: true
-  - tab: contributing
-    layout:
-      - page: Contribution Overview
-        path: docs/contributing/overview.mdx
-        slug: overview
-        icon: fa-regular fa-compass
-      - section: Specific Contribution Guides
-        slug: /guides
-        contents:
-          - page: Documentation
-            path: docs/contributing/documentation.mdx
-            slug: documentation
-            icon: fa-regular fa-book
-          - page: Python SDK
-            path: docs/contributing/python-sdk.mdx
-            slug: python-sdk
-            icon: fa-brands fa-python
-          - page: TypeScript SDK
-            path: docs/contributing/typescript-sdk.mdx
-            slug: typescript-sdk
-            icon: fa-brands fa-js
-          - page: Opik Optimizer
-            path: docs/contributing/agent-optimizer-sdk.mdx
-            slug: agent-optimizer-sdk
-            icon: fa-regular fa-gauge-high
-          - page: Frontend
-            path: docs/contributing/frontend.mdx
-            slug: frontend
-            icon: fa-regular fa-window-maximize
-          - page: Backend
-            path: docs/contributing/backend.mdx
-            slug: backend
-            icon: fa-regular fa-server
-      - section: Developer Programs
-        slug: /developer-programs
-        contents:
-          - page: Bounty Program
-            path: docs/contributing/bounties.mdx
-            slug: bounties
-            icon: fa-regular fa-gem
   - tab: opik-university
     layout:
       - page: Overview

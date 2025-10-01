@@ -24,7 +24,7 @@ and our [REST API](/reference/rest-api/overview).
 We won't be covering how to track chat conversations in this guide, you can learn more about this in the
 [Logging conversations](/tracing/log_chat_conversations) guide.
 
-## Getting started
+## Enable agent observability
 
 ### 1. Installing the SDK
 
@@ -401,6 +401,19 @@ Once you have installed and configured the Opik SDK, you can start using it to t
 If you would like more control over the logging process, you can use the low-level SDKs to log
 your traces and spans.
 
+### 3. Analyzing your agents
+
+Now that you have observability enabled for your agents, you can start to review and analyze the
+agent calls in Opik. In the Opik UI, you can review each agent call, see the
+[agent graph](/tracing/log_agent_graph) and review all the tool calls made by the agent.
+
+<Frame>
+  <img src="/img/tracing/tracing_agent_overview.png" />
+</Frame>
+
+As a next step, you can create an [offline evaluation](/evaluation/evaluate_prompt) to evaluate your
+agent's performance on a fixed set of samples.
+
 ## Advanced usage
 
 ### Using function decorators
@@ -574,7 +587,12 @@ If you need full control over the logging process, you can use the low-level SDK
         ```typescript
         import { Opik } from "opik";
 
-        const client = new Opik();
+        const client = new Opik({
+            apiUrl: "https://www.comet.com/opik/api",
+            apiKey: "your-api-key", // Only required if you are using Opik Cloud
+            projectName: "your-project-name",
+            workspaceName: "your-workspace-name", // Only required if you are using Opik Cloud
+        });
 
         // Log a trace with an LLM span
         const trace = client.trace({
