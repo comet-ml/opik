@@ -1,7 +1,7 @@
 import os
 import random
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from collections.abc import Callable
 import logging
 
@@ -15,9 +15,9 @@ from opik.integrations.dspy.callback import OpikCallback
 from opik.opik_context import get_current_span_data
 
 from ..optimization_result import OptimizationResult
-from ..utils import optimization_context
 from ..base_optimizer import BaseOptimizer
 from ..optimization_config.configs import TaskConfig
+from ..optimization_config import chat_prompt
 from ._lm import LM
 from ._mipro_optimizer_v2 import MIPROv2
 from .utils import (
@@ -45,13 +45,25 @@ class MiproOptimizer(BaseOptimizer):
         super().__init__(model=model, verbose=verbose, **model_kwargs)
         self.tools = []
         self.project_name = project_name
+        if "n_threads" in self.model_kwargs:
+            # To allow compatibility with other optimizers:
+            self.model_kwargs["num_threads"] = self.model_kwargs["n_threads"]
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self.model_kwargs["model"] = self.model
         # FIXME: add mipro_optimizer=True - It does not count the LLM calls made internally by DSPy during MiproOptimizer.optimizer.compile().
         self.lm = LM(**self.model_kwargs)
+        setattr(self.lm, "parent_optimizer", self)
         opik_callback = OpikCallback(project_name=self.project_name, log_graph=True)
         dspy.configure(lm=self.lm, callbacks=[opik_callback])
         logger.debug(f"Initialized MiproOptimizer with model: {model}")
+
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return self._drop_none(
+            {
+                "project_name": self.project_name,
+                "num_threads": self.num_threads,
+            }
+        )
 
     def evaluate_prompt(
         self,
@@ -84,7 +96,7 @@ class MiproOptimizer(BaseOptimizer):
         """
         # FIMXE: call super when it is ready
         # FIXME: Intermediate values:
-        self.llm_call_counter += 1
+        self.increment_llm_counter()
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all inputs
         output_key = task_config.output_dataset_field
 
@@ -239,23 +251,57 @@ class MiproOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
+        prompt: chat_prompt.ChatPrompt,
         dataset: str | Dataset,
         metric: Callable,
-        task_config: TaskConfig,
-        num_candidates: int = 10,
         experiment_config: dict | None = None,
-        num_trials: int | None = 3,
         n_samples: int | None = 10,
-        auto: Literal["light", "medium", "heavy"] | None = "light",
+        auto_continue: bool = False,
+        agent_class: str | None = None,
         **kwargs,
     ) -> OptimizationResult:
-        self._opik_client = opik.Opik()
-        with optimization_context(
-            client=self._opik_client,
-            dataset_name=dataset.name,
-            objective_name=metric.__name__,
-            metadata={"optimizer": self.__class__.__name__},
-        ) as optimization:
+        """
+        Optimize a prompt using MIPRO (Multi-Input Prompt Optimization).
+
+        Args:
+            prompt: The chat prompt to optimize
+            dataset: Opik dataset (or dataset name) containing evaluation data
+            metric: Evaluation function that takes (dataset_item, llm_output) and returns a score
+            experiment_config: Optional configuration for the experiment
+            n_samples: Number of samples to use for optimization (default: 10)
+            auto_continue: Whether to auto-continue optimization (default: False)
+            agent_class: Custom agent class to use (default: None)
+            **kwargs: Additional arguments including:
+                task_config: TaskConfig instance (required)
+                num_candidates: Number of candidates to generate (default: 10)
+                num_trials: Number of trials to run (default: 3)
+                auto: Optimization mode - "light", "medium", or "heavy" (default: "light")
+
+        Returns:
+            OptimizationResult: The optimization result containing the optimized prompt and metrics
+
+        Raises:
+            ValueError: If task_config is not provided
+        """
+        # Resolve dataset names to Dataset objects for validation compatibility
+        if isinstance(dataset, str):
+            dataset_name = dataset
+            client = opik.Opik(project_name=self.project_name)
+            dataset = client.get_dataset(dataset_name)
+
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+
+        # Extract MIPRO-specific parameters from kwargs
+        task_config = kwargs.pop("task_config", None)
+        if task_config is None:
+            raise ValueError("task_config is required for MiproOptimizer")
+
+        num_candidates = kwargs.pop("num_candidates", 10)
+        num_trials = kwargs.pop("num_trials", 3)
+        auto = kwargs.pop("auto", "light")
+
+        with self.create_optimization_context(dataset, metric) as optimization:
             result = self._optimize_prompt(
                 dataset=dataset,
                 metric=metric,
@@ -315,19 +361,18 @@ class MiproOptimizer(BaseOptimizer):
         **kwargs,
     ) -> None:
         # FIXME: Intermediate values:
-        self.llm_call_counter = 0
+        self.reset_counters()  # Reset counters for run
         prompt = task_config.instruction_prompt
         input_key = task_config.input_dataset_fields[0]  # FIXME: allow all
         output_key = task_config.output_dataset_field
         self.tools = task_config.tools
         self.num_candidates = num_candidates
-        self.seed = 42
+        self.auto = auto
         self.input_key = input_key
         self.output_key = output_key
         self.prompt = prompt
         self.num_trials = num_trials
         self.n_samples = n_samples
-        self.auto = auto
 
         # Convert to values for MIPRO:
         if isinstance(dataset, str):
@@ -395,6 +440,19 @@ class MiproOptimizer(BaseOptimizer):
         logger.debug("Created DSPy training set.")
         logger.debug(f"Using DSPy module: {type(self.module).__name__}")
         logger.debug(f"Using metric function: {self.metric_function.__name__}")
+
+    def cleanup(self) -> None:
+        """
+        Clean up MIPRO-specific resources.
+        """
+        # Call parent cleanup
+        super().cleanup()
+
+        # Clear MIPRO-specific resources
+        self.tools = None
+        self.prompt = None
+
+        logger.debug("Cleaned up MIPRO-specific resources")
 
     def load_from_checkpoint(self, filename):
         """
@@ -516,7 +574,8 @@ class MiproOptimizer(BaseOptimizer):
                 ),
                 details={"error": "No candidate programs generated by MIPRO"},
                 history=mipro_history_processed,
-                llm_calls=self.lm.llm_call_counter,
+                llm_calls=self.llm_call_counter,
+                tool_calls=self.tool_call_counter,
             )
 
         self.module = self.get_best().details["program"]
@@ -548,7 +607,8 @@ class MiproOptimizer(BaseOptimizer):
             demonstrations=best_program_details.demonstrations,
             details=best_program_details.details,
             history=mipro_history_processed,
-            llm_calls=self.lm.llm_call_counter,
+            llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
         )
 
     def get_best(self, position: int = 0) -> OptimizationResult:
@@ -556,6 +616,14 @@ class MiproOptimizer(BaseOptimizer):
             logger.error(
                 "get_best() called but no best_programs found. MIPRO compile might have failed or yielded no results."
             )
+            # Get LLM call count from the optimizer if available
+            dspy_llm_calls = (
+                getattr(self.optimizer, "total_calls", 0)
+                if hasattr(self, "optimizer") and self.optimizer
+                else 0
+            )
+            actual_llm_calls = max(self.llm_call_counter, dspy_llm_calls)
+
             return OptimizationResult(
                 optimizer="MiproOptimizer",
                 prompt=[
@@ -574,7 +642,8 @@ class MiproOptimizer(BaseOptimizer):
                 ),
                 details={"error": "No programs generated or compile failed"},
                 history=[],
-                llm_calls=self.lm.llm_call_counter,
+                llm_calls=actual_llm_calls,
+                tool_calls=self.tool_call_counter,
             )
 
         score = self.best_programs[position]["score"]
@@ -592,6 +661,11 @@ class MiproOptimizer(BaseOptimizer):
             best_prompt = state["signature"]["instructions"]
             demos = [x.toDict() for x in state["demos"]]
 
+        # Get LLM call count from the DSPy program module
+        dspy_llm_calls = getattr(program_module, "total_calls", 0)
+        # Use the higher of our counter or DSPy's counter
+        actual_llm_calls = max(self.llm_call_counter, dspy_llm_calls)
+
         print(best_prompt)
         return OptimizationResult(
             optimizer="MiproOptimizer",
@@ -601,5 +675,6 @@ class MiproOptimizer(BaseOptimizer):
             metric_name=self.opik_metric.__name__,
             demonstrations=demos,
             details={"program": program_module},
-            llm_calls=self.lm.llm_call_counter,
+            llm_calls=actual_llm_calls,
+            tool_calls=self.tool_call_counter,
         )

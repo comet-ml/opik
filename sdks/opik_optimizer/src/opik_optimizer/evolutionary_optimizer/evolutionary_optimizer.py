@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import random
@@ -13,15 +14,22 @@ import opik
 # DEAP imports
 from deap import base, tools
 from deap import creator as _creator
-from opik.api_objects import opik_client, optimization
+from opik.api_objects import optimization
 from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from opik_optimizer.optimization_config import chat_prompt
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.optimizable_agent import OptimizableAgent
+from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator
+from opik_optimizer.mcp_utils.mcp_workflow import (
+    MCPExecutionConfig,
+    extract_tool_arguments,
+)
+from opik_optimizer.utils.prompt_segments import extract_prompt_segments
 
-from .. import utils
+from .mcp import EvolutionaryMCPContext, finalize_mcp_result
+
 from . import reporting
 from .llm_support import LlmSupport
 from .mutation_ops import MutationOps
@@ -135,8 +143,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 RuntimeWarning,
             )
         if "project_name" in model_kwargs:
-            print(
-                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            warnings.warn(
+                "The 'project_name' parameter in optimizer constructor is deprecated. "
+                "Set project_name in the ChatPrompt instead.",
+                DeprecationWarning,
+                stacklevel=2,
             )
             del model_kwargs["project_name"]
 
@@ -147,22 +158,25 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.crossover_rate = crossover_rate
         self.tournament_size = tournament_size
         if num_threads is not None:
-            print("num_threads is deprecated; use n_threads instead")
+            warnings.warn(
+                "The 'num_threads' parameter is deprecated and will be removed in a future version. "
+                "Use 'n_threads' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             n_threads = num_threads
         self.num_threads = n_threads
         self.elitism_size = elitism_size
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
-        self.seed = seed
+        self.seed = seed if seed is not None else self.DEFAULT_SEED
         self.output_style_guidance = (
             output_style_guidance
             if output_style_guidance is not None
             else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         )
         self.infer_output_style = infer_output_style
-        self.llm_call_counter = 0
-        self._opik_client = opik_client.get_client_cached()
         self._current_optimization_id: str | None = None
         self._current_generation = 0
         self._best_fitness_history: list[float] = []
@@ -202,13 +216,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         # Attach methods from helper mixin modules to this instance to avoid
         # multiple inheritance while preserving behavior.
         self._attach_helper_methods()
-        self.toolbox.register(
-            "default_individual", lambda: creator.Individual("placeholder")
-        )
-        self.toolbox.register(
-            "population", tools.initRepeat, list, self.toolbox.default_individual
-        )
-
         if self.enable_llm_crossover:
             self.toolbox.register("mate", self._llm_deap_crossover)
         else:
@@ -232,6 +239,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # (methods already attached above)
+        self._mcp_context: EvolutionaryMCPContext | None = None
 
     def _attach_helper_methods(self) -> None:
         """Bind selected methods from mixin modules onto this instance."""
@@ -289,6 +297,35 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Style inference
         bind(StyleOps, ["_infer_output_style_from_dataset"])
+
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {
+            "population_size": self.population_size,
+            "num_generations": self.num_generations,
+            "mutation_rate": self.mutation_rate,
+            "crossover_rate": self.crossover_rate,
+            "tournament_size": self.tournament_size,
+            "elitism_size": self.elitism_size,
+            "adaptive_mutation": self.adaptive_mutation,
+            "enable_moo": self.enable_moo,
+            "enable_llm_crossover": self.enable_llm_crossover,
+            "infer_output_style": self.infer_output_style,
+            "output_style_guidance": self.output_style_guidance,
+        }
+
+    def _create_individual_from_prompt(
+        self, prompt_candidate: chat_prompt.ChatPrompt
+    ) -> Any:
+        individual = creator.Individual(prompt_candidate.get_messages())
+        setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
+        return individual
+
+    def _update_individual_with_prompt(
+        self, individual: Any, prompt_candidate: chat_prompt.ChatPrompt
+    ) -> Any:
+        individual[:] = prompt_candidate.get_messages()
+        setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
+        return individual
 
     def _get_adaptive_mutation_rate(self) -> float:
         """Calculate adaptive mutation rate based on population diversity and progress."""
@@ -387,7 +424,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         prompt_variants = self._initialize_population(seed_prompt)
-        new_pop = [creator.Individual(p.get_messages()) for p in prompt_variants]
+        new_pop = [self._create_individual_from_prompt(p) for p in prompt_variants]
 
         for ind, fit in zip(new_pop, map(self.toolbox.evaluate, new_pop)):
             ind.fitness.values = fit
@@ -495,35 +532,27 @@ class EvolutionaryOptimizer(BaseOptimizer):
             experiment_config: Optional experiment configuration
             n_samples: Optional number of samples to use
             auto_continue: Whether to automatically continue optimization
-            **kwargs: Additional keyword arguments
+            agent_class: Optional agent class to use
+            **kwargs: Additional keyword arguments including:
+                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
         """
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+        self.configure_prompt_model(prompt)
+        self.agent_class = self.setup_agent_class(prompt, agent_class)
 
-        if not isinstance(dataset, opik.Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
-
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
-
-        if agent_class is None:
-            self.agent_class = utils.create_litellm_agent_class(prompt)
-        else:
-            self.agent_class = agent_class
+        # Extract MCP config from kwargs (for optional MCP workflows)
+        mcp_config = kwargs.pop("mcp_config", None)
+        evaluation_kwargs: dict[str, Any] = {}
+        if mcp_config is not None:
+            evaluation_kwargs["mcp_config"] = mcp_config
 
         self.project_name = self.agent_class.project_name
 
         # Step 0. Start Opik optimization run
         opik_optimization_run: optimization.Optimization | None = None
         try:
-            opik_optimization_run = self._opik_client.create_optimization(
+            opik_optimization_run = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
@@ -554,7 +583,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # Step 1. Step variables and define fitness function
-        self.llm_call_counter = 0
+        self.reset_counters()  # Reset counters for run
         self._history: list[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
@@ -576,6 +605,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self._current_optimization_id,
                     verbose=0,
+                    **evaluation_kwargs,
                 )
                 prompt_length = float(len(str(json.dumps(messages))))
                 return (primary_fitness_score, prompt_length)
@@ -594,6 +624,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     experiment_config=(experiment_config or {}).copy(),
                     optimization_id=self._current_optimization_id,
                     verbose=0,
+                    **evaluation_kwargs,
                 )
                 return (fitness_score, 0.0)
 
@@ -646,7 +677,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         deap_population = [
-            creator.Individual(p.get_messages()) for p in initial_prompts
+            self._create_individual_from_prompt(p) for p in initial_prompts
         ]
         deap_population = deap_population[: self.population_size]
 
@@ -939,6 +970,19 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose,
             tools=getattr(final_best_prompt, "tools", None),
         )
+
+        final_tools = getattr(final_best_prompt, "tools", None)
+        if final_tools:
+            final_details["final_tools"] = final_tools
+            tool_prompts = {
+                (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
+                    "function", {}
+                ).get("description")
+                for idx, tool in enumerate(final_tools)
+            }
+        else:
+            tool_prompts = None
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=final_best_prompt.get_messages(),
@@ -949,9 +993,105 @@ class EvolutionaryOptimizer(BaseOptimizer):
             details=final_details,
             history=[x.model_dump() for x in self.get_history()],
             llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
             optimization_id=self._current_optimization_id,
+            tool_prompts=tool_prompts,
         )
+
+    def optimize_mcp(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
+        metric: Callable,
+        *,
+        tool_name: str,
+        second_pass: MCPSecondPassCoordinator,
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: type[OptimizableAgent] | None = None,
+        fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+        fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+        allow_tool_use_on_second_pass: bool = False,
+        **kwargs: Any,
+    ) -> OptimizationResult:
+        if prompt.tools is None or not prompt.tools:
+            raise ValueError("Prompt must include tools for MCP optimization")
+
+        panel_style = kwargs.pop("tool_panel_style", "bright_magenta")
+
+        segments = extract_prompt_segments(prompt)
+        tool_segment_id = f"tool:{tool_name}"
+        segment_lookup = {segment.segment_id: segment for segment in segments}
+        if tool_segment_id not in segment_lookup:
+            raise ValueError(f"Tool '{tool_name}' not present in prompt tools")
+
+        fallback_args_fn = fallback_arguments or extract_tool_arguments
+
+        if fallback_invoker is None:
+            function_map = getattr(prompt, "function_map", {}) or {}
+            default_invoker_candidate = function_map.get(tool_name)
+            if default_invoker_candidate is not None:
+                typed_invoker = cast(Callable[..., str], default_invoker_candidate)
+
+                def _fallback_invoker(args: dict[str, Any]) -> str:
+                    return typed_invoker(**args)
+
+                fallback_invoker = _fallback_invoker
+
+        tool_entry = None
+        for entry in prompt.tools or []:
+            function = entry.get("function", {})
+            if (function.get("name") or entry.get("name")) == tool_name:
+                tool_entry = entry
+                break
+        if tool_entry is None:
+            raise ValueError(f"Tool '{tool_name}' not present in prompt.tools")
+
+        original_description = tool_entry.get("function", {}).get("description", "")
+        tool_metadata = segment_lookup[tool_segment_id].metadata.get("raw_tool", {})
+
+        mcp_config = MCPExecutionConfig(
+            coordinator=second_pass,
+            tool_name=tool_name,
+            fallback_arguments=fallback_args_fn,
+            fallback_invoker=fallback_invoker,
+            allow_tool_use_on_second_pass=allow_tool_use_on_second_pass,
+        )
+
+        previous_context = getattr(self, "_mcp_context", None)
+        previous_crossover = self.enable_llm_crossover
+
+        context = EvolutionaryMCPContext(
+            tool_name=tool_name,
+            tool_segment_id=tool_segment_id,
+            original_description=original_description,
+            tool_metadata=tool_metadata,
+            panel_style=panel_style,
+        )
+
+        self._mcp_context = context
+        self.enable_llm_crossover = False
+
+        try:
+            result = self.optimize_prompt(
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                experiment_config=experiment_config,
+                n_samples=n_samples,
+                auto_continue=auto_continue,
+                agent_class=agent_class,
+                mcp_config=mcp_config,
+                **kwargs,
+            )
+        finally:
+            self._mcp_context = previous_context
+            self.enable_llm_crossover = previous_crossover
+
+        finalize_mcp_result(result, context, panel_style)
+        return result
 
     # Evaluation is provided by EvaluationOps
 
