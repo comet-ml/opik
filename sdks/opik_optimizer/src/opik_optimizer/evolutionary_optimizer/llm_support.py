@@ -52,10 +52,14 @@ class LlmSupport:
         optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response string."""
+        # For reasoning calls (prompt generation), use higher max_tokens to avoid truncation
+        # For evaluation calls (task output), use user-configurable max_tokens
+        default_max_tokens = 8000 if is_reasoning else 1000
+
         # Build base call params
         llm_config_params: dict[str, Any] = {
             "temperature": getattr(self, "temperature", 0.3),
-            "max_tokens": getattr(self, "max_tokens", 1000),
+            "max_tokens": getattr(self, "max_tokens", default_max_tokens),
             "top_p": getattr(self, "top_p", 1.0),
             "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
             "presence_penalty": getattr(self, "presence_penalty", 0.0),
