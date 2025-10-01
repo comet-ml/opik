@@ -33,6 +33,11 @@ $GUARDRAILS_CONTAINERS = @(
     "opik-guardrails-backend-1"
 )
 
+$LOCAL_BE_CONTAINERS = @(
+    "opik-python-backend-1",
+    "opik-frontend-1"
+)
+
 function Get-Containers {
     $containers = @()
     
@@ -40,6 +45,8 @@ function Get-Containers {
         $containers = $INFRA_CONTAINERS
     } elseif ($BACKEND) {
         $containers = $INFRA_CONTAINERS + $BACKEND_CONTAINERS
+    } elseif ($LOCAL_BE) {
+        $containers = $INFRA_CONTAINERS + $LOCAL_BE_CONTAINERS
     } else {
         # Full Opik (default)
         $containers = $INFRA_CONTAINERS + $BACKEND_CONTAINERS + $OPIK_CONTAINERS
@@ -73,6 +80,7 @@ function Show-Usage {
     Write-Host '  --port-mapping    Enable port mapping for all containers by using the override file (can be combined with other flags)'
     Write-Host '  --infra           Start only infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.)'
     Write-Host '  --backend         Start only infrastructure + backend services (Backend, Python Backend etc.)'
+    Write-Host '  --local-be        Start all services EXCEPT backend (for local backend development)'
     Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
     Write-Host '  --help            Show this help message'
     Write-Host ''
@@ -235,6 +243,9 @@ function Start-MissingContainers {
         # No profile needed - infrastructure services start by default
     } elseif ($BACKEND) {
         $dockerArgs += "--profile", "backend"
+    } elseif ($LOCAL_BE) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
+        $dockerArgs += "--profile", "local-be"
     } else {
         # Full Opik (default) - includes all dependencies
         $dockerArgs += "--profile", "opik"
@@ -319,6 +330,9 @@ function Stop-Containers {
         # No profile needed - infrastructure services start by default
     } elseif ($BACKEND) {
         $dockerArgs += "--profile", "backend"
+    } elseif ($LOCAL_BE) {
+        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be.yaml")
+        $dockerArgs += "--profile", "local-be"
     } else {
         # Full Opik (default) - includes all dependencies
         $dockerArgs += "--profile", "opik"
@@ -382,6 +396,17 @@ function Show-Banner {
     } elseif ($BACKEND) {
         Write-Host '║  ✅ Backend services started successfully!                      ║'
         Write-Host '║                                                                 ║'
+    } elseif ($LOCAL_BE) {
+        Write-Host '║  ✅ Local backend mode services started successfully!           ║'
+        Write-Host '║                                                                 ║'
+        Write-Host '║  ⚙️  Backend Configuration:                                      ║'
+        Write-Host '║     Backend is NOT running in Docker                            ║'
+        Write-Host '║     Start your local backend on port 8080                       ║'
+        Write-Host '║     Frontend will proxy to: http://localhost:8080               ║'
+        Write-Host '║                                                                 ║'
+        Write-Host '║  📊 Access the UI (start backend first):                        ║'
+        Write-Host "║     $uiUrl                                       ║"
+        Write-Host '║                                                                 ║'
     } else {
         Write-Host '║  ✅ All services started successfully!                          ║'
         Write-Host '║                                                                 ║'
@@ -400,6 +425,32 @@ function Show-Banner {
     Write-Host '╚═════════════════════════════════════════════════════════════════╝'
 }
 
+function Get-StartCommand {
+    $cmd = ".\opik.ps1"
+    
+    if ($BUILD_MODE) {
+        $cmd += " --build"
+    }
+    if ($DEBUG_MODE) {
+        $cmd += " --debug"
+    }
+    if ($PORT_MAPPING) {
+        $cmd += " --port-mapping"
+    }
+    if ($INFRA) {
+        $cmd += " --infra"
+    } elseif ($BACKEND) {
+        $cmd += " --backend"
+    } elseif ($LOCAL_BE) {
+        $cmd += " --local-be"
+    }
+    if ($GUARDRAILS_ENABLED) {
+        $cmd += " --guardrails"
+    }
+    
+    return $cmd
+}
+
 function Get-VerifyCommand {
     $cmd = ".\opik.ps1"
     
@@ -407,6 +458,8 @@ function Get-VerifyCommand {
         $cmd += " --infra"
     } elseif ($BACKEND) {
         $cmd += " --backend"
+    } elseif ($LOCAL_BE) {
+        $cmd += " --local-be"
     }
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
@@ -424,6 +477,7 @@ $env:TOGGLE_GUARDRAILS_ENABLED = "false"
 # Default: full opik (all profiles)
 $INFRA = $false
 $BACKEND = $false
+$LOCAL_BE = $false
 
 if ($options -contains '--build') {
     $BUILD_MODE = $true
@@ -464,19 +518,34 @@ if ($options -contains '--backend') {
     $options = $options | Where-Object { $_ -ne '--backend' }
 }
 
+if ($options -contains '--local-be') {
+    $LOCAL_BE = $true
+    $env:OPIK_FRONTEND_FLAVOR = "local_be"
+    $options = $options | Where-Object { $_ -ne '--local-be' }
+}
+
 if ($options -contains '--guardrails') {
     $GUARDRAILS_ENABLED = $true
-    $env:OPIK_FRONTEND_FLAVOR = "guardrails"
+    # Only override flavor if not already set by local-be
+    if ($env:OPIK_FRONTEND_FLAVOR -eq "default") {
+        $env:OPIK_FRONTEND_FLAVOR = "guardrails"
+    }
     $env:TOGGLE_GUARDRAILS_ENABLED = "true"
     $options = $options | Where-Object { $_ -ne '--guardrails' }
 }
 
 # Validate mutually exclusive profile flags
-if ($INFRA -and $BACKEND) {
-    Write-Host "❌ Error: --infra and --backend flags are mutually exclusive."
+$profileCount = 0
+if ($INFRA) { $profileCount++ }
+if ($BACKEND) { $profileCount++ }
+if ($LOCAL_BE) { $profileCount++ }
+
+if ($profileCount -gt 1) {
+    Write-Host "❌ Error: --infra, --backend, and --local-be flags are mutually exclusive."
     Write-Host "   Choose one of the following:"
     Write-Host "   • .\opik.ps1 --infra      (infrastructure services only)"
     Write-Host "   • .\opik.ps1 --backend    (infrastructure + backend services)"
+    Write-Host "   • .\opik.ps1 --local-be   (all services except backend - for local backend development)"
     Write-Host "   • .\opik.ps1              (full Opik suite - default)"
     exit 1
 }
@@ -496,7 +565,7 @@ switch ($option) {
             Show-Banner
             exit 0
         } else {
-            Write-Host "[WARN] Some containers are not running/healthy. Please run '$(Get-VerifyCommand)'."
+            Write-Host "[WARN] Some containers are not running/healthy. Please run '$(Get-StartCommand)' to start them."
             exit 1
         }
     }
@@ -509,10 +578,10 @@ switch ($option) {
         exit 0
     }
     '' {
-        Write-DebugLog '[DEBUG] Checking container status and starting missing ones...'
+        Write-Host '🔍 Checking container status and starting missing ones...'
         Start-MissingContainers
         Start-Sleep -Seconds 2
-        Write-DebugLog '[DEBUG] Re-checking container status...'
+        Write-Host '🔄 Re-checking container status...'
         if (Test-ContainersStatus -ShowOutput:$true) {
             Show-Banner
         } else {
