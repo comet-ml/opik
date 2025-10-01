@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -25,9 +25,15 @@ class MMADJudge(BaseMetric):
             raise ValueError("MMADJudge requires at least one judge metric.")
 
     def score(self, *args: Any, **kwargs: Any) -> ScoreResult:
+        precomputed: Optional[Dict[BaseMetric, ScoreResult]] = kwargs.pop(
+            "precomputed", None
+        )
         scores: List[ScoreResult] = []
         for judge in self._judges:
-            raw_result = judge.score(*args, **kwargs)
+            if precomputed is not None and judge in precomputed:
+                raw_result: Any = precomputed[judge]
+            else:
+                raw_result = judge.score(*args, **kwargs)
             judge_results = raw_result if isinstance(raw_result, list) else [raw_result]
 
             for result in judge_results:
