@@ -284,6 +284,7 @@ def verify_attachments(
     entity_id: str,
     attachments: Dict[str, Attachment],
     data_sizes: Dict[str, int],
+    timeout: int = 10,
 ) -> None:
     if not synchronization.until(
         lambda: (
@@ -293,6 +294,7 @@ def verify_attachments(
             is not None
         ),
         allow_errors=True,
+        max_try_seconds=timeout,
     ):
         raise AssertionError(f"Failed to get {entity_type} with id {entity_id}.")
 
@@ -314,6 +316,7 @@ def verify_attachments(
         )
         == len(attachments),
         allow_errors=True,
+        max_try_seconds=timeout,
     ):
         raise AssertionError(
             f"Failed to get all expected attachments for {entity_type} with id {entity_id}."
