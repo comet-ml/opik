@@ -18,8 +18,8 @@ import java.util.List;
 interface AlertTriggerDAO {
 
     @SqlBatch("""
-            INSERT INTO alert_triggers (id, alert_id, event_type, created_by)
-            VALUES (:id, :alertId, :eventType, :createdBy)
+            INSERT INTO alert_triggers (id, alert_id, event_type, created_by, created_at)
+            VALUES (:id, :alertId, :eventType, :createdBy, COALESCE(:createdAt, CURRENT_TIMESTAMP(6)))
             """)
     void saveBatch(@BindMethods List<AlertTrigger> alertTriggers);
 

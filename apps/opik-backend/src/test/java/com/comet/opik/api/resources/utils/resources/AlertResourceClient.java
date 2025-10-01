@@ -85,6 +85,19 @@ public class AlertResourceClient {
         }
     }
 
+    public void updateAlert(UUID id, Alert alert, String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(alert))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
     public void deleteAlertBatch(BatchDelete batchDelete, String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
