@@ -866,9 +866,6 @@ redirects:
   - source: "/docs/opik/tracing/integrations/gemini"
     destination: "/docs/opik/integrations/gemini"
     permanent: true
-  - source: "/docs/opik/tracing/integrations/gemini-typescript"
-    destination: "/docs/opik/integrations/gemini-typescript"
-    permanent: true
   - source: "/docs/opik/tracing/integrations/groq"
     destination: "/docs/opik/integrations/groq"
     permanent: true

@@ -19,13 +19,13 @@ Seamlessly integrate [Opik](https://www.comet.com/docs/opik/) observability with
 ## Installation
 
 ```bash
-npm install opik-gemini @google/generative-ai
+npm install opik-gemini @google/genai
 ```
 
 ### Requirements
 
 - Node.js ≥ 18
-- @google/generative-ai SDK (≥ 0.21.0)
+- @google/genai SDK (≥ 1.0.0)
 - Opik SDK (automatically installed as peer dependency)
 
 ## Quick Start
@@ -33,7 +33,7 @@ npm install opik-gemini @google/generative-ai
 ### Basic Usage
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
 // Initialize Gemini client
@@ -65,7 +65,7 @@ main();
 ### Streaming Support
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);

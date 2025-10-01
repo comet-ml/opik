@@ -28,7 +28,7 @@ const detectProvider = (sdk: object): string => {
  *
  * @example
  * ```typescript
- * import { GoogleGenerativeAI } from "@google/generative-ai";
+ * import { GoogleGenerativeAI } from "@google/genai";
  * import { trackGemini } from "@opik/opik-gemini";
  *
  * const genAI = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
