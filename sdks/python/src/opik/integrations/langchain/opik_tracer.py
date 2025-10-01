@@ -122,6 +122,14 @@ class OpikTracer(BaseTracer):
         )
 
     def _persist_run(self, run: Run) -> None:
+        if run.id not in self._span_data_map:
+            LOGGER.warning(
+                f"Span data for run '{run.id}' not found in the span data map. Skipping processing of _persist_run."
+            )
+            return
+
+        span_data = self._span_data_map[run.id]
+
         run_dict: Dict[str, Any] = run.dict()
 
         error_info: Optional[ErrorInfoDict]
@@ -138,8 +146,6 @@ class OpikTracer(BaseTracer):
                 langchain_helpers.split_big_langgraph_outputs(run_dict["outputs"])
             )
             error_info = None
-
-        span_data = self._span_data_map[run.id]
 
         if (
             span_data.parent_span_id is not None
@@ -393,8 +399,13 @@ class OpikTracer(BaseTracer):
     def _process_end_span(self, run: Run) -> None:
         span_data = None
         try:
-            run_dict: Dict[str, Any] = run.dict()
+            if run.id not in self._span_data_map:
+                LOGGER.warning(
+                    f"Span data for run '{run.id}' not found in the span data map. Skipping processing of end span."
+                )
+                return
             span_data = self._span_data_map[run.id]
+            run_dict: Dict[str, Any] = run.dict()
 
             usage_info = provider_usage_extractors.try_extract_provider_usage_data(
                 run_dict
@@ -436,6 +447,12 @@ class OpikTracer(BaseTracer):
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
 
     def _process_end_span_with_error(self, run: Run) -> None:
+        if run.id not in self._span_data_map:
+            LOGGER.warning(
+                f"Span data for run '{run.id}' not found in the span data map. Skipping processing of _process_end_span_with_error."
+            )
+            return
+
         span_data = None
         try:
             run_dict: Dict[str, Any] = run.dict()
