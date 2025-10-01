@@ -1,6 +1,7 @@
 package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.ModelCostData;
+import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.NonNull;
@@ -20,7 +21,6 @@ import java.util.Set;
 @Slf4j
 public final class ModelCapabilities {
 
-    private static final String PRICES_FILE = "model_prices_and_context_window.json";
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME =
             buildNormalizedIndex(loadCapabilities());
 
@@ -32,8 +32,7 @@ public final class ModelCapabilities {
         }
 
         for (String candidate : candidateKeys(modelName)) {
-            ModelCapability match = CAPABILITIES_BY_NORMALIZED_NAME.get(candidate);
-            Optional<ModelCapability> found = Optional.ofNullable(match);
+            Optional<ModelCapability> found = Optional.ofNullable(CAPABILITIES_BY_NORMALIZED_NAME.get(candidate));
             if (found.isPresent()) {
                 return found;
             }
@@ -47,11 +46,12 @@ public final class ModelCapabilities {
 
     private static Map<String, ModelCapability> loadCapabilities() {
         try {
-            Map<String, ModelCostData> rawData = JsonUtils.readJsonFile(PRICES_FILE, new TypeReference<>() {
+            Map<String, ModelCostData> rawData = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
+                    new TypeReference<>() {
             });
             if (rawData.isEmpty()) {
-                log.warn("Model prices file '{}' did not contain any entries", PRICES_FILE);
-                return Map.of();
+                throw new IllegalStateException(
+                        "Model prices file '" + CostService.MODEL_PRICES_FILE + "' did not contain any entries");
             }
 
             Map<String, ModelCapability> capabilities = new HashMap<>();
@@ -69,7 +69,8 @@ public final class ModelCapabilities {
 
             return Collections.unmodifiableMap(capabilities);
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to load model capabilities from '" + PRICES_FILE + "'", exception);
+            throw new IllegalStateException(
+                    "Failed to load model capabilities from '" + CostService.MODEL_PRICES_FILE + "'", exception);
         }
     }
 
