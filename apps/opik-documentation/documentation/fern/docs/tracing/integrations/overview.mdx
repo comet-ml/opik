@@ -1,45 +1,64 @@
+---
+layout: overview
+---
+
 Opik helps you easily log, visualize, and evaluate everything from raw LLM calls to advanced RAG pipelines and complex agentic systems through a robust set of integrations with popular frameworks and tools.
 
-## Frameworks
+## <Icon icon="fa-brands fa-js" /> TypeScript
 
-Build and deploy AI applications with comprehensive observability
+### Frameworks
+
+<CardGroup cols={3}>
+  <Card title="Agno" href="/docs/opik/integrations/agno" />
+  <Card title="BeeAI" href="/docs/opik/integrations/beeai" />
+  <Card title="LangChain" href="/docs/opik/integrations/langchainjs" />
+  <Card title="Mastra" href="/docs/opik/integrations/mastra" />
+  <Card title="Vercel AI SDK" href="/docs/opik/integrations/vercel-ai-sdk" />
+</CardGroup>
+
+### Model Providers
+
+<CardGroup cols={3}>
+  <Card title="Cloudflare Workers AI" href="/docs/opik/integrations/cloudflare-workers-ai" />
+  <Card title="OpenAI" href="/docs/opik/integrations/openai-typescript" />
+</CardGroup>
+
+### Manual Integration
+
+<CardGroup cols={3}>
+  <Card title="TypeScript SDK" href="/docs/opik/reference/typescript-sdk" />
+</CardGroup>
+
+## <Icon icon="fa-brands fa-python" /> Python
+
+### Frameworks
 
 <CardGroup cols={3}>
   <Card title="AG2" href="/docs/opik/integrations/ag2" />
-  <Card title="Agno" href="/docs/opik/integrations/agno" />
   <Card title="Autogen" href="/docs/opik/integrations/autogen" />
-  <Card title="BeeAI" href="/docs/opik/integrations/beeai" />
   <Card title="CrewAI" href="/docs/opik/integrations/crewai" />
   <Card title="DSPy" href="/docs/opik/integrations/dspy" />
   <Card title="Google Agent Development Kit" href="/docs/opik/integrations/adk" />
   <Card title="Haystack" href="/docs/opik/integrations/haystack" />
   <Card title="Instructor" href="/docs/opik/integrations/instructor" />
-  <Card title="LangChain (Python)" href="/docs/opik/integrations/langchain" />
-  <Card title="LangChain (JS/TS)" href="/docs/opik/integrations/langchainjs" />
+  <Card title="LangChain" href="/docs/opik/integrations/langchain" />
   <Card title="LangGraph" href="/docs/opik/integrations/langgraph" />
   <Card title="LiveKit Agents" href="/docs/opik/integrations/livekit" />
   <Card title="Llama Index" href="/docs/opik/integrations/llama_index" />
-  <Card title="Mastra" href="/docs/opik/integrations/mastra" />
   <Card title="OpenAI Agents" href="/docs/opik/integrations/openai_agents" />
   <Card title="Pipecat" href="/docs/opik/integrations/pipecat"/>
   <Card title="Pydantic AI" href="/docs/opik/integrations/pydantic-ai" />
-  <Card title="Semantic Kernel" href="/docs/opik/integrations/semantic-kernel" />
   <Card title="Smolagents" href="/docs/opik/integrations/smolagents" />
-  <Card title="Spring AI" href="/docs/opik/integrations/spring-ai" />
   <Card title="Strands Agents" href="/docs/opik/integrations/strands-agents" />
-  <Card title="Vercel AI SDK" href="/docs/opik/integrations/vercel-ai-sdk" />
   <Card title="VoltAgent" href="/docs/opik/integrations/voltagent" />
 </CardGroup>
 
-## Model Providers
-
-Direct integrations with AI model providers
+### Model Providers
 
 <CardGroup cols={3}>
   <Card title="Anthropic" href="/docs/opik/integrations/anthropic" />
   <Card title="Bedrock" href="/docs/opik/integrations/bedrock" />
   <Card title="BytePlus" href="/docs/opik/integrations/byteplus" />
-  <Card title="Cloudflare Workers AI" href="/docs/opik/integrations/cloudflare-workers-ai" />
   <Card title="Cohere" href="/docs/opik/integrations/cohere" />
   <Card title="DeepSeek" href="/docs/opik/integrations/deepseek" />
   <Card title="Fireworks AI" href="/docs/opik/integrations/fireworks-ai" />
@@ -48,44 +67,27 @@ Direct integrations with AI model providers
   <Card title="Mistral AI" href="/docs/opik/integrations/mistral" />
   <Card title="Novita AI" href="/docs/opik/integrations/novita-ai" />
   <Card title="Ollama" href="/docs/opik/integrations/ollama" />
-  <Card title="OpenAI (Python)" href="/docs/opik/integrations/openai" />
-  <Card title="OpenAI (JS/TS)" href="/docs/opik/integrations/openai-typescript" />
+  <Card title="OpenAI" href="/docs/opik/integrations/openai" />
   <Card title="Predibase" href="/docs/opik/integrations/predibase" />
   <Card title="Together AI" href="/docs/opik/integrations/together-ai" />
   <Card title="WatsonX" href="/docs/opik/integrations/watsonx" />
   <Card title="xAI Grok" href="/docs/opik/integrations/xai-grok" />
 </CardGroup>
 
-## Manual Integration
-
-Native integrations with Opik
-
-<CardGroup cols={3}>
-  <Card title="Python SDK" href="https://www.comet.com/docs/opik/python-sdk-reference/" />
-  <Card title="TypeScript SDK" href="/docs/opik/reference/typescript-sdk" />
-  <Card title="OpenTelemetry" href="/docs/opik/integrations/opentelemetry" />
-</CardGroup>
-
-## Dataset Management
-
-Create, convert, and import datasets for model evaluation and training
+### Dataset Management
 
 <CardGroup cols={3}>
   <Card title="Gretel" href="/docs/opik/integrations/gretel" />
   <Card title="Hugging Face Datasets" href="/docs/opik/integrations/huggingface-datasets" />
 </CardGroup>
 
-## Evaluation
-
-Evaluation and testing frameworks
+### Evaluation
 
 <CardGroup cols={3}>
   <Card title="Ragas" href="/docs/opik/integrations/ragas" />
 </CardGroup>
 
-## Gateways
-
-Connect through API gateways and proxies
+### Gateways
 
 <CardGroup cols={3}>
   <Card title="AISuite" href="/docs/opik/integrations/aisuite" />
@@ -93,9 +95,38 @@ Connect through API gateways and proxies
   <Card title="OpenRouter" href="/docs/opik/integrations/openrouter" />
 </CardGroup>
 
-## No-Code Tools
+### Other
 
-No-code agent builders and tools
+<CardGroup cols={3}>
+  <Card title="Guardrails AI" href="/docs/opik/integrations/guardrails-ai" />
+</CardGroup>
+
+### Manual Integration
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" href="https://www.comet.com/docs/opik/python-sdk-reference/" />
+  <Card title="OpenTelemetry Python SDK" href="/docs/opik/integrations/opentelemetry-python-sdk" />
+</CardGroup>
+
+## <Icon icon="fa-brands fa-java" /> Java
+
+<CardGroup cols={3}>
+  <Card title="Spring AI" href="/docs/opik/integrations/spring-ai" />
+</CardGroup>
+
+## <Icon icon="fa-solid fa-code" /> .NET
+
+<CardGroup cols={3}>
+  <Card title="Semantic Kernel" href="/docs/opik/integrations/semantic-kernel" />
+</CardGroup>
+
+## <Icon icon="fa-solid fa-gem" /> Ruby
+
+<CardGroup cols={3}>
+  <Card title="OpenTelemetry Ruby SDK" href="/docs/opik/integrations/opentelemetry-ruby-sdk" />
+</CardGroup>
+
+## <Icon icon="fa-solid fa-wand-magic-sparkles" /> No-Code
 
 <CardGroup cols={3}>
   <Card title="Cursor" href="/docs/opik/integrations/cursor" />
@@ -105,22 +136,10 @@ No-code agent builders and tools
   {/* <Card title="OpenWebUI" href="/docs/opik/integrations/openwebui" /> */}
 </CardGroup>
 
-## OpenTelemetry
-
-OpenTelemetry-based integrations
+## <Icon icon="fa-solid fa-globe" /> Multi-Language
 
 <CardGroup cols={3}>
-  <Card title="OpenTelemetry Overview" href="/docs/opik/integrations/opentelemetry" />
-  <Card title="OpenTelemetry Python SDK" href="/docs/opik/integrations/opentelemetry-python-sdk" />
-  <Card title="OpenTelemetry Ruby SDK" href="/docs/opik/integrations/opentelemetry-ruby-sdk" />
-</CardGroup>
-
-## Other
-
-Additional integrations and tools
-
-<CardGroup cols={3}>
-  <Card title="Guardrails AI" href="/docs/opik/integrations/guardrails-ai" />
+  <Card title="OpenTelemetry" href="/docs/opik/integrations/opentelemetry" />
 </CardGroup>
 
 If you would like to see more integrations, please open an issue on our [GitHub repository](https://github.com/comet-ml/opik/issues/new/choose).
