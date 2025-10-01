@@ -20,6 +20,18 @@ PANEL_WIDTH = 70
 console = get_console()
 
 
+def display_tool_description(description: str, title: str, style: str) -> None:
+    panel = Panel(
+        Text(description),
+        title=title,
+        title_align="left",
+        border_style=style,
+        width=PANEL_WIDTH,
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+
 @contextmanager
 def infer_output_style(verbose: int = 1) -> Any:
     class Reporter:

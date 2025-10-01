@@ -26,12 +26,12 @@ from opik.api_objects.optimization import Optimization
 
 from .colbert import ColBERTv2
 
-ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
-logger = logging.getLogger(__name__)
-
 if TYPE_CHECKING:
     from opik_optimizer.optimizable_agent import OptimizableAgent
     from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
+
+ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
+logger = logging.getLogger(__name__)
 
 
 class OptimizationContextManager:
@@ -200,52 +200,61 @@ def enable_experiment_reporting() -> None:
         pass
 
 
-def _strip_code_fence(candidate: str) -> str:
-    stripped = candidate
-    if stripped.startswith("```json"):
-        stripped = stripped[7:]
-        if stripped.endswith("```"):
-            stripped = stripped[:-3]
-    elif stripped.startswith("```"):
-        stripped = stripped[3:]
-        if stripped.endswith("```"):
-            stripped = stripped[:-3]
-    return stripped.strip()
-
-
 def json_to_dict(json_str: str) -> Any:
     cleaned_json_string = json_str.strip()
 
     try:
         return json.loads(cleaned_json_string)
-    except json.JSONDecodeError:
-        cleaned_json_string = _strip_code_fence(cleaned_json_string)
+    except json.JSONDecodeError as json_error:
+        if cleaned_json_string.startswith("```json"):
+            cleaned_json_string = cleaned_json_string[7:]
+            if cleaned_json_string.endswith("```"):
+                cleaned_json_string = cleaned_json_string[:-3]
+        elif cleaned_json_string.startswith("```"):
+            cleaned_json_string = cleaned_json_string[3:]
+            if cleaned_json_string.endswith("```"):
+                cleaned_json_string = cleaned_json_string[:-3]
 
         try:
             return json.loads(cleaned_json_string)
-        except json.JSONDecodeError as json_error:
+        except json.JSONDecodeError:
             try:
-                python_literal = ast.literal_eval(cleaned_json_string)
+                literal_result = ast.literal_eval(cleaned_json_string)
             except (ValueError, SyntaxError):
-                print(f"Failed to parse JSON string: {json_str}")
-                logger.debug(f"Failed to parse JSON string: {json_str}")
+                logger.debug("Failed to parse JSON string: %s", json_str)
                 raise json_error
 
-            if isinstance(python_literal, tuple):
-                python_literal = list(python_literal)
-
-            if isinstance(
-                python_literal,
-                (dict, list, str, int, float, bool, type(None)),
-            ):
-                return python_literal
+            normalized = _convert_literals_to_json_compatible(literal_result)
 
             try:
-                return json.loads(json.dumps(python_literal))
-            except (TypeError, ValueError):
-                print(f"Failed to parse JSON string: {json_str}")
-                logger.debug(f"Failed to parse JSON string: {json_str}")
+                return json.loads(json.dumps(normalized))
+            except (TypeError, ValueError) as serialization_error:
+                logger.debug(
+                    "Failed to serialise literal-evaluated payload %r: %s",
+                    literal_result,
+                    serialization_error,
+                )
                 raise json_error
+
+
+def _convert_literals_to_json_compatible(value: Any) -> Any:
+    """Convert Python literals to JSON-compatible structures."""
+    if isinstance(value, dict):
+        return {
+            key: _convert_literals_to_json_compatible(val) for key, val in value.items()
+        }
+    if isinstance(value, list):
+        return [_convert_literals_to_json_compatible(item) for item in value]
+    if isinstance(value, tuple):
+        return [_convert_literals_to_json_compatible(item) for item in value]
+    if isinstance(value, set):
+        return [
+            _convert_literals_to_json_compatible(item)
+            for item in sorted(value, key=repr)
+        ]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def optimization_context(
@@ -302,14 +311,14 @@ def get_optimization_run_url_by_id(
 
 
 def create_litellm_agent_class(
-    prompt: "ChatPrompt", optimizer: Any = None
+    prompt: "ChatPrompt", optimizer_ref: Any = None
 ) -> type["OptimizableAgent"]:
     """
     Create a LiteLLMAgent from a chat prompt.
 
     Args:
-        prompt: The chat prompt to create agent for
-        optimizer: Optional optimizer instance for counter tracking
+        prompt: The chat prompt to use
+        optimizer_ref: Optional optimizer instance to attach to the agent
     """
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
@@ -319,10 +328,7 @@ def create_litellm_agent_class(
             model = prompt.model
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
-
-            def __init__(self, prompt: Any) -> None:
-                super().__init__(prompt)
-                self.optimizer = optimizer
+            optimizer = optimizer_ref
 
             def invoke(
                 self, messages: list[dict[str, str]], seed: int | None = None
@@ -337,16 +343,13 @@ def create_litellm_agent_class(
             model = prompt.model
             model_kwargs = prompt.model_kwargs
             project_name = prompt.project_name
-
-            def __init__(self, prompt: Any) -> None:
-                super().__init__(prompt)
-                self.optimizer = optimizer
+            optimizer = optimizer_ref
 
     return LiteLLMAgent
 
 
 def function_to_tool_definition(
-    func: Callable[..., Any], description: str | None = None
+    func: Callable, description: str | None = None
 ) -> dict[str, Any]:
     sig = inspect.signature(func)
     doc = description or func.__doc__ or ""
@@ -395,14 +398,14 @@ def python_type_to_json_type(python_type: type) -> str:
         return "string"  # default fallback
 
 
-def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
+def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
     about a topic.
 
     Args:
         query: The search query string
-        use_api: If True, directly use Wikipedia API instead of ColBERTv2.
+        use_api: (Optional) If True, directly use Wikipedia API instead of ColBERTv2.
                 If False (default), try ColBERTv2 first with API fallback.
     """
     if use_api:
@@ -421,6 +424,7 @@ def search_wikipedia(query: str, use_api: bool = False) -> list[str]:
         results = colbert(query, k=3, max_retries=1)
         return [str(item.text) for item in results if hasattr(item, "text")]
     except Exception:
+        # Fallback to Wikipedia API
         try:
             return _search_wikipedia_api(query)
         except Exception as api_error:

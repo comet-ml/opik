@@ -33,6 +33,7 @@ dev = [
     # "google-adk",
     "langgraph",
     "gepa>=0.0.7",
+    "pre-commit",
 ]
 
 [tool.setuptools.packages.find]
