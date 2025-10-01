@@ -134,15 +134,15 @@ verify_infrastructure() {
     verify_docker_services "--infra"
 }
 
-start_infrastructure_and_docker_frontend() {
+start_local_be_docker_services() {
     start_docker_services "--local-be"
 }
 
-stop_infrastructure_and_docker_frontend() {
+stop_local_be_docker_services() {
     stop_docker_services "--local-be"
 }
 
-verify_infrastructure_and_docker_frontend() {
+verify_local_be_docker_services() {
     verify_docker_services "--local-be"
 }
 
@@ -573,7 +573,7 @@ verify_be_only_services() {
     
     # Infrastructure and Docker Frontend status
     local docker_services_running=false
-    if verify_infrastructure_and_docker_frontend; then
+    if verify_local_be_docker_services; then
         echo -e "Infrastructure + Docker Frontend: ${GREEN}RUNNING${NC} (Docker containers)"
         docker_services_running=true
     else
@@ -688,7 +688,7 @@ start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
     log_info "Step 1/3: Starting infrastructure and Docker frontend..."
-    start_infrastructure_and_docker_frontend
+    start_local_be_docker_services
     log_info "Step 2/3: Running DB migrations..."
     run_db_migrations
     log_info "Step 3/3: Starting backend process..."
@@ -703,7 +703,7 @@ stop_be_only_services() {
     log_info "Step 1/2: Stopping backend process..."
     stop_backend
     log_info "Step 2/2: Stopping infrastructure and Docker frontend..."
-    stop_infrastructure_and_docker_frontend
+    stop_local_be_docker_services
     log_success "=== BE-Only Stop Complete ==="
 }
 
@@ -713,9 +713,9 @@ restart_be_only_services() {
     log_info "Step 1/6: Stopping backend process..."
     stop_backend
     log_info "Step 2/6: Stopping infrastructure and Docker frontend..."
-    stop_infrastructure_and_docker_frontend
+    stop_local_be_docker_services
     log_info "Step 3/6: Starting infrastructure and Docker frontend..."
-    start_infrastructure_and_docker_frontend
+    start_local_be_docker_services
     log_info "Step 4/6: Building backend..."
     build_backend
     log_info "Step 5/6: Running DB migrations..."
