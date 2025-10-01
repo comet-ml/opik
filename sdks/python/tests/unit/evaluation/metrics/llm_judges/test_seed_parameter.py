@@ -344,8 +344,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") is None
+                # Check that the seed was passed to the model factory during initialization
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") is None
 
                 assert isinstance(result, score_result.ScoreResult)
 
@@ -373,8 +375,10 @@ class TestSeedParameter:
                 )
 
                 mock_model.generate_string.assert_called_once()
-                call_kwargs = mock_model.generate_string.call_args[1]
-                assert call_kwargs.get("seed") is None
+                # Check that the seed was passed to the model factory during initialization
+                mock_factory.assert_called_once()
+                factory_call_kwargs = mock_factory.call_args[1]
+                assert factory_call_kwargs.get("seed") is None
 
                 assert isinstance(result, score_result.ScoreResult)
 
