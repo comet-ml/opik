@@ -3,7 +3,7 @@ title: Observability for Google Gemini (TypeScript) with Opik
 description: Start here to integrate Opik into your Google Gemini-based genai application for end-to-end LLM observability, unit testing, and optimization.
 ---
 
-Opik provides seamless integration with the [Google Generative AI Node.js SDK](https://github.com/googleapis/generative-ai-js) through the `opik-gemini` package, allowing you to trace, monitor, and debug your Gemini API calls.
+Opik provides seamless integration with the [Google Generative AI Node.js SDK](https://github.com/googleapis/js-genai) (`@google/genai`) through the `opik-gemini` package, allowing you to trace, monitor, and debug your Gemini API calls.
 
 ## Features
 
@@ -14,6 +14,8 @@ Opik provides seamless integration with the [Google Generative AI Node.js SDK](h
 - **Custom Tagging**: Add custom tags to organize and filter your traces
 - **Streaming Support**: Full support for streamed responses with token-by-token tracing
 - **VertexAI Support**: Works with both Google AI Studio and Vertex AI endpoints
+
+![Gemini TypeScript Integration](/img/tracing/gemini_typescript_integration.png)
 
 ## Installation
 
@@ -35,6 +37,8 @@ yarn add opik-gemini @google/genai
 - Google Generative AI SDK (`@google/genai` ≥ 1.0.0)
 - Opik SDK (automatically installed as a dependency)
 
+**Note**: The official Google GenAI SDK package is `@google/genai` (not `@google/generative-ai`). This is Google Deepmind's unified SDK for both Gemini Developer API and Vertex AI.
+
 ## Basic Usage
 
 ### Using with Google Generative AI Client
@@ -42,11 +46,11 @@ yarn add opik-gemini @google/genai
 To trace your Gemini API calls, you need to wrap your Gemini client instance with the `trackGemini` function:
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
 // Initialize the original Gemini client
-const genAI = new GoogleGenerativeAI({
+const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
@@ -54,7 +58,9 @@ const genAI = new GoogleGenerativeAI({
 const trackedGenAI = trackGemini(genAI);
 
 // Get a model and generate content
-const model = trackedGenAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+const model = trackedGenAI.getGenerativeModel({
+  model: "gemini-2.0-flash-001",
+});
 const result = await model.generateContent("Hello, how can you help me today?");
 
 console.log(result.response.text());
@@ -68,16 +74,16 @@ await trackedGenAI.flush();
 The integration fully supports Gemini's streaming responses:
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
-const genAI = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const trackedGenAI = trackGemini(genAI);
 
 async function streamingExample() {
   // Get a model configured for streaming
   const model = trackedGenAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.0-flash-001",
   });
 
   // Create a streaming generation
@@ -107,7 +113,7 @@ streamingExample();
 The `trackGemini` function accepts an optional configuration object to customize the integration:
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 import { Opik } from "opik";
 
@@ -127,7 +133,7 @@ const existingOpikTrace = customOpikClient.trace({
   },
 });
 
-const genAI = new GoogleGenerativeAI({
+const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
@@ -155,7 +161,9 @@ const trackedGenAI = trackGemini(genAI, {
 });
 
 // Use the tracked client with your configured options
-const model = trackedGenAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+const model = trackedGenAI.getGenerativeModel({
+  model: "gemini-2.0-flash-001",
+});
 const result = await model.generateContent("Generate a creative story");
 
 // Close the existing trace
@@ -170,12 +178,11 @@ await trackedGenAI.flush();
 The integration also supports Google's VertexAI platform. Simply configure your Gemini client for VertexAI and wrap it with `trackGemini`:
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
 // Configure for VertexAI
-const genAI = new GoogleGenerativeAI({
-  apiKey: process.env.GEMINI_API_KEY,
+const genAI = new GoogleGenAI({
   vertexai: true,
   project: "your-project-id",
   location: "us-central1",
@@ -183,7 +190,9 @@ const genAI = new GoogleGenerativeAI({
 
 const trackedGenAI = trackGemini(genAI);
 
-const model = trackedGenAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+const model = trackedGenAI.getGenerativeModel({
+  model: "gemini-2.0-flash-001",
+});
 const result = await model.generateContent(
   "Write a short story about AI observability"
 );
@@ -199,14 +208,16 @@ await trackedGenAI.flush();
 Track multi-turn chat conversations with Gemini:
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
-const genAI = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const trackedGenAI = trackGemini(genAI);
 
 async function chatExample() {
-  const model = trackedGenAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = trackedGenAI.getGenerativeModel({
+    model: "gemini-2.0-flash-001",
+  });
 
   // Start a chat session
   const chat = model.startChat({

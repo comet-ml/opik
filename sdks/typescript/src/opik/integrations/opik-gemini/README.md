@@ -28,16 +28,18 @@ npm install opik-gemini @google/genai
 - @google/genai SDK (≥ 1.0.0)
 - Opik SDK (automatically installed as peer dependency)
 
+**Note**: The official Google GenAI SDK package is `@google/genai` (not `@google/generative-ai`). This is Google Deepmind's unified SDK for both Gemini Developer API and Vertex AI.
+
 ## Quick Start
 
 ### Basic Usage
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
 // Initialize Gemini client
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Wrap with Opik tracking
 const trackedGenAI = trackGemini(genAI, {
@@ -48,7 +50,9 @@ const trackedGenAI = trackGemini(genAI, {
 
 // Use normally - all calls are automatically tracked
 async function main() {
-  const model = trackedGenAI.getGenerativeModel({ model: "gemini-pro" });
+  const model = trackedGenAI.getGenerativeModel({
+    model: "gemini-2.0-flash-001",
+  });
 
   const result = await model.generateContent("What is the capital of France?");
   const response = result.response;
@@ -65,14 +69,16 @@ main();
 ### Streaming Support
 
 ```typescript
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const trackedGenAI = trackGemini(genAI);
 
 async function streamExample() {
-  const model = trackedGenAI.getGenerativeModel({ model: "gemini-pro" });
+  const model = trackedGenAI.getGenerativeModel({
+    model: "gemini-2.0-flash-001",
+  });
 
   const result = await model.generateContentStream("Write a haiku about AI");
 
@@ -93,14 +99,14 @@ streamExample();
 
 ```typescript
 import { Opik } from "opik";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { trackGemini } from "opik-gemini";
 
 const opikClient = new Opik({
   projectName: "gemini-project",
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const trackedGenAI = trackGemini(genAI, {
   client: opikClient,
   traceMetadata: {
@@ -110,7 +116,9 @@ const trackedGenAI = trackGemini(genAI, {
 });
 
 // All calls will be logged to "gemini-project"
-const model = trackedGenAI.getGenerativeModel({ model: "gemini-pro" });
+const model = trackedGenAI.getGenerativeModel({
+  model: "gemini-2.0-flash-001",
+});
 const result = await model.generateContent("Hello, Gemini!");
 ```
 
@@ -149,7 +157,7 @@ async function processQuery(query: string) {
   });
 
   const model = trackedGenAIWithParent.getGenerativeModel({
-    model: "gemini-pro",
+    model: "gemini-2.0-flash-001",
   });
 
   const result = await model.generateContent(query);
@@ -229,11 +237,14 @@ The integration automatically captures:
 
 This integration supports all Google Gemini models including:
 
-- `gemini-pro`
-- `gemini-pro-vision`
+- `gemini-2.0-flash-001` (Latest, recommended for most use cases)
 - `gemini-1.5-pro`
 - `gemini-1.5-flash`
+- `gemini-pro`
+- `gemini-pro-vision`
 - Any future Gemini models
+
+Refer to [Google's official documentation](https://ai.google.dev/models/gemini) for the complete list of available models and their capabilities.
 
 ## Development
 
