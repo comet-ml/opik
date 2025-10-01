@@ -75,8 +75,7 @@ public final class ModelCapabilities {
 
             return Collections.unmodifiableMap(capabilities);
         } catch (IOException exception) {
-            log.warn("Failed to load model capabilities from '{}'", PRICES_FILE, exception);
-            return Map.of();
+            throw new IllegalStateException("Failed to load model capabilities from '" + PRICES_FILE + "'", exception);
         }
     }
 
