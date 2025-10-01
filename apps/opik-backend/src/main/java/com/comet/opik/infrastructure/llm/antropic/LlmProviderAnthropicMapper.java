@@ -101,11 +101,8 @@ interface LlmProviderAnthropicMapper {
     }
 
     default AnthropicMessageContent toAnthropicMessageContent(@NonNull Object rawContent) {
-        if (rawContent instanceof String content) {
-            return new AnthropicTextContent(content);
-        }
-
-        throw new BadRequestException("only text content is supported");
+        String flattened = com.comet.opik.domain.llm.MessageContentNormalizer.flattenContent(rawContent);
+        return new AnthropicTextContent(flattened);
     }
 
     default AnthropicTextContent mapToSystemMessage(@NonNull Message message) {

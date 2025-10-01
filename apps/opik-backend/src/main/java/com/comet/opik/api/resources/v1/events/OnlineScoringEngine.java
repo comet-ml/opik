@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -14,7 +15,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -55,6 +58,10 @@ public class OnlineScoringEngine {
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
+    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile(
+            Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_START) + "(.*?)"
+                    + Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_END),
+            Pattern.DOTALL);
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -116,7 +123,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -150,7 +157,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -209,6 +216,97 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    static UserMessage buildUserMessage(String content) {
+        if (content.length() > 100_000) {
+            throw new IllegalArgumentException("Message content exceeds maximum allowed size of 100,000 characters");
+        }
+
+        Matcher matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
+        if (!matcher.find()) {
+            return UserMessage.from(content);
+        }
+
+        matcher.reset();
+        UserMessage.Builder builder = UserMessage.builder();
+        int lastIndex = 0;
+
+        while (matcher.find()) {
+            if (matcher.start() > lastIndex) {
+                String textSegment = content.substring(lastIndex, matcher.start());
+                appendTextContent(builder, textSegment);
+            }
+
+            String url = matcher.group(1).trim();
+            if (!url.isEmpty()) {
+                // HTML-unescape the URL to handle cases where JsonPath returns HTML-encoded strings
+                String unescapedUrl = unescapeHtml(url);
+                builder.addContent(ImageContent.from(unescapedUrl));
+            }
+
+            lastIndex = matcher.end();
+        }
+
+        if (lastIndex < content.length()) {
+            String trailingText = content.substring(lastIndex);
+            appendTextContent(builder, trailingText);
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Unescape HTML entities commonly found in URLs.
+     * Handles both named entities (&amp;) and numeric entities (&#61;).
+     */
+    private static String unescapeHtml(String text) {
+        if (text == null || (!text.contains("&") && !text.contains("&#"))) {
+            return text;
+        }
+
+        String result = text;
+        // Replace common named entities
+        result = result.replace("&amp;", "&");
+        result = result.replace("&lt;", "<");
+        result = result.replace("&gt;", ">");
+        result = result.replace("&quot;", "\"");
+        result = result.replace("&apos;", "'");
+
+        // Replace numeric entities (decimal: &#NNN;)
+        Pattern decimalPattern = Pattern.compile("&#(\\d+);");
+        Matcher matcher = decimalPattern.matcher(result);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            int codePoint = Integer.parseInt(matcher.group(1));
+            matcher.appendReplacement(sb, Character.toString((char) codePoint));
+        }
+        matcher.appendTail(sb);
+        result = sb.toString();
+
+        // Replace hex entities (hex: &#xHH;)
+        Pattern hexPattern = Pattern.compile("&#[xX]([0-9a-fA-F]+);");
+        matcher = hexPattern.matcher(result);
+        sb = new StringBuffer();
+        while (matcher.find()) {
+            int codePoint = Integer.parseInt(matcher.group(1), 16);
+            matcher.appendReplacement(sb, Character.toString((char) codePoint));
+        }
+        matcher.appendTail(sb);
+
+        return sb.toString();
+    }
+
+    private static void appendTextContent(UserMessage.Builder builder, String textSegment) {
+        if (textSegment == null) {
+            return;
+        }
+
+        if (textSegment.isBlank()) {
+            return;
+        }
+
+        builder.addContent(TextContent.from(textSegment));
     }
 
     private static String extractFromJson(JsonNode json, String path) {

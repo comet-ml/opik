@@ -15,6 +15,10 @@ import {
   ProviderMessageType,
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
+import {
+  getMessageContentTextSegments,
+  isMessageContentEmpty,
+} from "@/lib/llm";
 
 const RuleNameSchema = z
   .string({
@@ -31,6 +35,29 @@ const ProjectIdSchema = z
 const SamplingRateSchema = z.number();
 
 const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
+
+const TextMessageContentSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+
+const ImageMessageContentSchema = z.object({
+  type: z.literal("image_url"),
+  image_url: z.object({
+    url: z.string().min(1, { message: "Image URL is required" }),
+    detail: z.string().optional(),
+  }),
+});
+
+const StructuredMessageContentSchema = z.array(
+  z.union([TextMessageContentSchema, ImageMessageContentSchema]),
+);
+
+const MessageContentSchema = z
+  .union([z.string(), StructuredMessageContentSchema])
+  .refine((value) => !isMessageContentEmpty(value as never), {
+    message: "Message is required",
+  });
 
 const LLMJudgeBaseSchema = z.object({
   model: z
@@ -51,7 +78,7 @@ const LLMJudgeBaseSchema = z.object({
   messages: z.array(
     z.object({
       id: z.string(),
-      content: z.string().min(1, { message: "Message is required" }),
+      content: MessageContentSchema,
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
@@ -98,9 +125,10 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) =>
-    m.content.includes("{{context}}"),
-  ).length;
+  const contextCount = data.messages.filter((m) => {
+    const segments = getMessageContentTextSegments(m.content);
+    return segments.some((segment) => segment.includes("{{context}}"));
+  }).length;
 
   if (contextCount < 1) {
     ctx.addIssue({
@@ -119,8 +147,13 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   }
 
   data.messages.forEach((message, index) => {
-    const matches = message.content.match(/{{([^}]+)}}/g);
-    if (matches) {
+    const segments = getMessageContentTextSegments(message.content);
+    segments.forEach((segment) => {
+      const matches = segment.match(/{{([^}]+)}}/g);
+      if (!matches) {
+        return;
+      }
+
       matches.forEach((match) => {
         if (match !== "{{context}}") {
           ctx.addIssue({
@@ -130,7 +163,7 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
           });
         }
       });
-    }
+    });
   });
 });
 
@@ -212,11 +245,78 @@ export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
   messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
 
+type MessageContentItem =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+/**
+ * Deserialize message content from string to structured format.
+ * Converts `<<<image>>>URL<<</image>>>` placeholders back to structured content array.
+ */
+const deserializeMessageContent = (
+  content: string | MessageContentItem[],
+): string | MessageContentItem[] => {
+  if (typeof content !== "string") {
+    return content;
+  }
+
+  // Check if content contains image placeholders
+  // Note: closing tag has 3 angle brackets: <<</image>>>
+  const imagePattern = /<<<image>>>(.+?)<<<\/image>>>/g;
+  if (!imagePattern.test(content)) {
+    return content;
+  }
+
+  // Parse into structured content array
+  const parts: MessageContentItem[] = [];
+  let lastIndex = 0;
+  imagePattern.lastIndex = 0; // Reset regex state
+
+  let match;
+  while ((match = imagePattern.exec(content)) !== null) {
+    // Add text before the image placeholder
+    if (match.index > lastIndex) {
+      const textSegment = content.substring(lastIndex, match.index);
+      if (textSegment) {
+        parts.push({
+          type: "text",
+          text: textSegment,
+        });
+      }
+    }
+
+    // Add image content
+    const imageUrl = match[1];
+    parts.push({
+      type: "image_url",
+      image_url: {
+        url: imageUrl,
+      },
+    });
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last image
+  if (lastIndex < content.length) {
+    const trailingText = content.substring(lastIndex);
+    if (trailingText) {
+      parts.push({
+        type: "text",
+        text: trailingText,
+      });
+    }
+  }
+
+  return parts.length > 0 ? parts : content;
+};
+
 const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
   messages.map(
     (m) =>
       ({
         ...m,
+        content: deserializeMessageContent(m.content),
         role: m.role.toLowerCase(),
         id: generateRandomString(),
       }) as LLMMessage,

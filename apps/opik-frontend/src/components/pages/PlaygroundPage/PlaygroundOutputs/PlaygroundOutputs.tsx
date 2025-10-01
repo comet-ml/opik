@@ -29,7 +29,7 @@ const PlaygroundOutputs = ({
         datasetId: datasetId!,
         page: 1,
         size: 1000,
-        truncate: true,
+        truncate: false,
       },
       {
         enabled: !!datasetId,
