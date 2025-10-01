@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 
 from .litellm import litellm_chat_model
 from . import base_model
@@ -8,9 +8,19 @@ DEFAULT_GPT_MODEL_NAME = "gpt-5-nano"
 _MODEL_CACHE: dict[Any, base_model.OpikBaseModel] = {}
 
 
-def _make_cache_key(model_name: str, model_kwargs: Any) -> Any:
-    items = tuple(sorted(model_kwargs.items()))
-    return (model_name, items)
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return frozenset((k, _freeze(v)) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, set):
+        return frozenset(_freeze(v) for v in value)
+    return value
+
+
+def _make_cache_key(model_name: str, model_kwargs: Dict[str, Any]) -> Any:
+    frozen_kwargs = frozenset((k, _freeze(v)) for k, v in model_kwargs.items())
+    return (model_name, frozen_kwargs)
 
 
 def get(model_name: Optional[str], **model_kwargs: Any) -> base_model.OpikBaseModel:

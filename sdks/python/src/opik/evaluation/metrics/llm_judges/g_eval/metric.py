@@ -1,4 +1,6 @@
 import dataclasses
+from collections import OrderedDict
+from threading import Lock
 from typing import Any, Dict, Optional, Tuple, Union
 import pydantic
 
@@ -198,7 +200,9 @@ GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
 
 
 class GEval(base_metric.BaseMetric):
-    _CHAIN_OF_THOUGHT_CACHE: Dict[Tuple[str, str, str], str] = {}
+    _CHAIN_OF_THOUGHT_CACHE: "OrderedDict[Tuple[str, str, str], str]" = OrderedDict()
+    _CHAIN_OF_THOUGHT_LOCK: Lock = Lock()
+    _MAX_CHAIN_OF_THOUGHT_CACHE = 128
 
     def __init__(
         self,
@@ -236,7 +240,6 @@ class GEval(base_metric.BaseMetric):
         self.evaluation_criteria = evaluation_criteria
 
         self._log_probs_supported = False
-        self._chain_of_thought_response: Optional[str] = None
 
         self._init_model(model, temperature=temperature)
 
@@ -246,17 +249,17 @@ class GEval(base_metric.BaseMetric):
             self.evaluation_criteria,
             getattr(self._model, "model_name", "unknown"),
         )
-        if cache_key in self._CHAIN_OF_THOUGHT_CACHE:
-            self._chain_of_thought_response = self._CHAIN_OF_THOUGHT_CACHE[cache_key]
-        if self._chain_of_thought_response is None:
-            prompt = template.G_EVAL_COT_TEMPLATE.format(
-                task_introduction=self.task_introduction,
-                evaluation_criteria=self.evaluation_criteria,
-            )
-            self._chain_of_thought_response = self._model.generate_string(input=prompt)
-            self._CHAIN_OF_THOUGHT_CACHE[cache_key] = self._chain_of_thought_response
+        cached = self._get_cached_chain_of_thought(cache_key)
+        if cached is not None:
+            return cached
 
-        return self._chain_of_thought_response
+        prompt = template.G_EVAL_COT_TEMPLATE.format(
+            task_introduction=self.task_introduction,
+            evaluation_criteria=self.evaluation_criteria,
+        )
+        generated = self._model.generate_string(input=prompt)
+        self._store_chain_of_thought(cache_key, generated)
+        return generated
 
     async def allm_chain_of_thought(self) -> str:
         cache_key = (
@@ -264,19 +267,17 @@ class GEval(base_metric.BaseMetric):
             self.evaluation_criteria,
             getattr(self._model, "model_name", "unknown"),
         )
-        if cache_key in self._CHAIN_OF_THOUGHT_CACHE:
-            self._chain_of_thought_response = self._CHAIN_OF_THOUGHT_CACHE[cache_key]
-        if self._chain_of_thought_response is None:
-            prompt = template.G_EVAL_COT_TEMPLATE.format(
-                task_introduction=self.task_introduction,
-                evaluation_criteria=self.evaluation_criteria,
-            )
-            self._chain_of_thought_response = await self._model.agenerate_string(
-                input=prompt
-            )
-            self._CHAIN_OF_THOUGHT_CACHE[cache_key] = self._chain_of_thought_response
+        cached = self._get_cached_chain_of_thought(cache_key)
+        if cached is not None:
+            return cached
 
-        return self._chain_of_thought_response
+        prompt = template.G_EVAL_COT_TEMPLATE.format(
+            task_introduction=self.task_introduction,
+            evaluation_criteria=self.evaluation_criteria,
+        )
+        generated = await self._model.agenerate_string(input=prompt)
+        self._store_chain_of_thought(cache_key, generated)
+        return generated
 
     def _init_model(
         self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
@@ -292,6 +293,30 @@ class GEval(base_metric.BaseMetric):
             and "top_logprobs" in self._model.supported_params
         ):
             self._log_probs_supported = True
+
+    @classmethod
+    def _get_cached_chain_of_thought(
+        cls, cache_key: Tuple[str, str, str]
+    ) -> Optional[str]:
+        with cls._CHAIN_OF_THOUGHT_LOCK:
+            value = cls._CHAIN_OF_THOUGHT_CACHE.get(cache_key)
+            if value is not None:
+                cls._CHAIN_OF_THOUGHT_CACHE.move_to_end(cache_key)
+            return value
+
+    @classmethod
+    def _store_chain_of_thought(
+        cls, cache_key: Tuple[str, str, str], value: str
+    ) -> None:
+        with cls._CHAIN_OF_THOUGHT_LOCK:
+            existing = cls._CHAIN_OF_THOUGHT_CACHE.get(cache_key)
+            if existing is not None:
+                cls._CHAIN_OF_THOUGHT_CACHE.move_to_end(cache_key)
+                return
+            cls._CHAIN_OF_THOUGHT_CACHE[cache_key] = value
+            cls._CHAIN_OF_THOUGHT_CACHE.move_to_end(cache_key)
+            while len(cls._CHAIN_OF_THOUGHT_CACHE) > cls._MAX_CHAIN_OF_THOUGHT_CACHE:
+                cls._CHAIN_OF_THOUGHT_CACHE.popitem(last=False)
 
     def score(
         self,

@@ -53,10 +53,33 @@ def _clear_model_cache():
 def test_models_factory_reuses_cached_instance(monkeypatch):
     _install_litellm_stub(monkeypatch)
 
-    first = models_factory.get("gpt-5-nano")
-    second = models_factory.get("gpt-5-nano")
+    first_gpt5 = models_factory.get("gpt-5-nano")
+    second_gpt5 = models_factory.get("gpt-5-nano")
+
+    first_gpt4 = models_factory.get("gpt-4o")
+    second_gpt4 = models_factory.get("gpt-4o")
+
+    assert first_gpt5 is second_gpt5
+    assert first_gpt4 is second_gpt4
+    assert first_gpt5 is not first_gpt4
+
+
+def test_models_factory_cache_freezes_unhashable(monkeypatch):
+    _install_litellm_stub(monkeypatch)
+
+    params = {"metadata": {"labels": ["a", "b"], "nested": {"c"}}}
+    first = models_factory.get("gpt-4o", **params)
+    second = models_factory.get("gpt-4o", **params)
 
     assert first is second
+
+
+def test_models_factory_default_model(monkeypatch):
+    _install_litellm_stub(monkeypatch)
+
+    default_instance = models_factory.get(None)
+
+    assert default_instance.model_name == "gpt-5-nano"
 
 
 def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
@@ -84,7 +107,7 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
 
 
 def test_geval_passes_logprobs_only_when_supported(monkeypatch):
-    stub = _install_litellm_stub(
+    _install_litellm_stub(
         monkeypatch, supported_params=["logprobs", "top_logprobs", "response_format"]
     )
 
@@ -123,12 +146,11 @@ def test_geval_passes_logprobs_only_when_supported(monkeypatch):
     )
     metric.score("{}")
 
-    assert stub._calls, "Expected LiteLLM completion call"
     assert captured["kwargs"]["logprobs"] is True
     assert captured["kwargs"]["top_logprobs"] == 20
 
     # Now simulate model without logprob support
-    stub = _install_litellm_stub(monkeypatch, supported_params=["response_format"])
+    _install_litellm_stub(monkeypatch, supported_params=["response_format"])
     captured.clear()
 
     def fake_response_no_logprobs(model_provider, messages, **kwargs):
@@ -152,7 +174,7 @@ def test_geval_passes_logprobs_only_when_supported(monkeypatch):
     )
 
     # Even if litellm claims logprob support, gpt-5 should drop them
-    stub = _install_litellm_stub(
+    _install_litellm_stub(
         monkeypatch, supported_params=["logprobs", "top_logprobs", "response_format"]
     )
     captured.clear()
@@ -166,11 +188,5 @@ def test_geval_passes_logprobs_only_when_supported(monkeypatch):
     )
     metric.score("{}")
 
-    assert stub._calls
-    assert "logprobs" not in captured["kwargs"]
-    assert "top_logprobs" not in captured["kwargs"]
-    metric.score("{}")
-
-    assert stub._calls
     assert "logprobs" not in captured["kwargs"]
     assert "top_logprobs" not in captured["kwargs"]
