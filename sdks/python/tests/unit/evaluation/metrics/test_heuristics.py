@@ -349,7 +349,7 @@ def test_spearman_ranking_metric():
 
 def test_vader_sentiment_metric_uses_custom_analyzer():
     class StubAnalyzer:
-        def polarity_scores(self, text: str) -> dict[str, float]:
+        def polarity_scores(self, text: str) -> dict:
             assert text == "hello"
             return {"compound": -0.4, "pos": 0.2}
 
