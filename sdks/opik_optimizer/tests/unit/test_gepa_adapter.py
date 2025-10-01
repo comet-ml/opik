@@ -53,7 +53,7 @@ def test_adapter_evaluate_uses_metric(
 
     monkeypatch.setattr(
         "opik_optimizer.gepa_optimizer.adapter.create_litellm_agent_class",
-        lambda _prompt, optimizer=None: lambda prompt: DummyAgent(prompt),
+        lambda _prompt, optimizer_ref=None: lambda prompt: DummyAgent(prompt),
     )
 
     def metric(dataset_item: dict[str, Any], llm_output: str) -> DummyMetricResult:
