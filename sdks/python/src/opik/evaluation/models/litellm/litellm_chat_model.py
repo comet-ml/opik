@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
-        model_name: str = "gpt-4o",
+        model_name: str = "gpt-5-nano",
         must_support_arguments: Optional[List[str]] = None,
         **completion_kwargs: Any,
     ) -> None:
@@ -44,6 +44,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         self._check_model_name()
         self._check_must_support_arguments(must_support_arguments)
+
+        self._unsupported_warned: Set[str] = set()
 
         self._completion_kwargs: Dict[str, Any] = (
             self._remove_unnecessary_not_supported_params(completion_kwargs)
@@ -114,14 +116,32 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
     ) -> Dict[str, Any]:
         filtered_params = {**params}
 
-        if (
-            "response_format" in params
-            and "response_format" not in self.supported_params
-        ):
-            filtered_params.pop("response_format")
-            LOGGER.debug(
-                "This model does not support the response_format parameter and it will be ignored."
-            )
+        for key in list(filtered_params.keys()):
+            if key not in self.supported_params:
+                filtered_params.pop(key)
+                if key not in self._unsupported_warned:
+                    LOGGER.warning(
+                        "Parameter '%s' is not supported by model %s and will be ignored.",
+                        key,
+                        self.model_name,
+                    )
+                    self._unsupported_warned.add(key)
+
+        if "temperature" in filtered_params and self.model_name.startswith("gpt-5"):
+            value = filtered_params["temperature"]
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError):
+                numeric_value = None
+            if numeric_value is None or abs(numeric_value - 1.0) > 1e-6:
+                filtered_params.pop("temperature")
+                if "temperature" not in self._unsupported_warned:
+                    LOGGER.warning(
+                        "Model %s only supports temperature=1. Dropping temperature=%s.",
+                        self.model_name,
+                        value,
+                    )
+                    self._unsupported_warned.add("temperature")
 
         return filtered_params
 

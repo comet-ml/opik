@@ -3,7 +3,7 @@ from typing import Optional, Any
 from .litellm import litellm_chat_model
 from . import base_model
 
-DEFAULT_GPT_MODEL_NAME = "gpt-4o"
+DEFAULT_GPT_MODEL_NAME = "gpt-5-nano"
 
 _MODEL_CACHE: dict[Any, base_model.OpikBaseModel] = {}
 
