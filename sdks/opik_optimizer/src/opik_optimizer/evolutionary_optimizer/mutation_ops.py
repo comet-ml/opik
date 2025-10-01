@@ -157,6 +157,8 @@ class MutationOps:
     ) -> chat_prompt.ChatPrompt:
         """Enhanced semantic mutation with multiple strategies."""
         current_output_style_guidance = self.output_style_guidance
+        # Detect if we're working with multimodal prompts
+        is_multimodal = evo_prompts._is_multimodal_prompt(prompt.get_messages())
         if random.random() < 0.1:
             return self._radical_innovation_mutation(prompt, initial_prompt)
 
@@ -188,7 +190,7 @@ class MutationOps:
                     {
                         "role": "system",
                         "content": evo_prompts.semantic_mutation_system_prompt(
-                            current_output_style_guidance
+                            current_output_style_guidance, is_multimodal=is_multimodal
                         ),
                     },
                     {"role": "user", "content": user_prompt_for_semantic_mutation},
@@ -350,6 +352,8 @@ class MutationOps:
         )
         task_desc_for_llm = self._get_task_description_for_llm(initial_prompt)
         current_output_style_guidance = self.output_style_guidance
+        # Detect if we're working with multimodal prompts
+        is_multimodal = evo_prompts._is_multimodal_prompt(prompt.get_messages())
 
         user_prompt_for_radical_innovation = evo_prompts.radical_innovation_user_prompt(
             task_desc_for_llm, current_output_style_guidance, prompt.get_messages()
@@ -360,7 +364,7 @@ class MutationOps:
                     {
                         "role": "system",
                         "content": evo_prompts.radical_innovation_system_prompt(
-                            current_output_style_guidance
+                            current_output_style_guidance, is_multimodal=is_multimodal
                         ),
                     },
                     {"role": "user", "content": user_prompt_for_radical_innovation},

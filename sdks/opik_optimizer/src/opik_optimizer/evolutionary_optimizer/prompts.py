@@ -1,6 +1,64 @@
 # Centralized prompt templates used by EvolutionaryOptimizer. This file contains
 # only string builders and constants; it has no side effects.
 
+import json
+
+
+def _is_multimodal_prompt(messages: list[dict] | str | None) -> bool:
+    """
+    Detect if a prompt contains multimodal content (images).
+
+    Args:
+        messages: Prompt messages or content
+
+    Returns:
+        True if multimodal content detected
+    """
+    if not messages:
+        return False
+
+    # Check for structured content with image_url
+    if isinstance(messages, list):
+        for message in messages:
+            if isinstance(message, dict):
+                content = message.get("content", "")
+                # Check for structured content (list of parts)
+                if isinstance(content, list):
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "image_url":
+                            return True
+                # Check for image placeholders in string content
+                elif isinstance(content, str):
+                    if "{image" in content.lower() or "<<<image>>>" in content:
+                        return True
+
+    # Check in string
+    if isinstance(messages, str):
+        if "{image" in messages.lower() or "<<<image>>>" in messages:
+            return True
+
+    return False
+
+
+def _get_multimodal_guidance() -> str:
+    """
+    Get additional guidance for multimodal/vision tasks.
+
+    Returns:
+        String with multimodal-specific instructions
+    """
+    return """
+IMPORTANT - MULTIMODAL/VISION TASK GUIDANCE:
+- This task involves analyzing IMAGES along with text
+- Image content is provided via {image_content} placeholders or structured content
+- DO NOT modify or remove image placeholders - they are data, not instructions
+- Focus your prompt improvements on HOW to analyze the visual content
+- Consider: What aspects of the image should be examined? How should hazards/features be identified?
+- Visual tasks need clear guidance on: what to look for, where to look, how to describe findings
+- Example good additions: "Examine the entire frame for...", "Pay attention to movement/position/distance..."
+- Example bad changes: Removing {image_content}, adding text where images should be
+"""
+
 
 INFER_STYLE_SYSTEM_PROMPT = """You are an expert in linguistic analysis and prompt engineering. Your task is to analyze a few input-output examples from a dataset and provide a concise, actionable description of the desired output style. This description will be used to guide other LLMs in generating and refining prompts.
 
@@ -29,16 +87,19 @@ Return ONLY this descriptive string.
 """
 
 
-def semantic_mutation_system_prompt(output_style_guidance: str | None) -> str:
+def semantic_mutation_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
-    return (
+    base_prompt = (
         "You are a prompt engineering expert. Your goal is to modify prompts to improve their "
         f"effectiveness in eliciting specific types of answers, particularly matching the style: '{style}'. "
         "Follow the specific modification instruction provided."
     )
+    if is_multimodal:
+        return base_prompt + _get_multimodal_guidance()
+    return base_prompt
 
 
 def synonyms_system_prompt() -> str:
@@ -55,24 +116,27 @@ def rephrase_system_prompt() -> str:
     )
 
 
-def fresh_start_system_prompt(output_style_guidance: str | None) -> str:
+def fresh_start_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
-    return (
+    base_prompt = (
         "You are an expert prompt engineer. Your task is to generate novel, effective prompts from scratch "
         "based on a task description, specifically aiming for prompts that elicit answers in the style: "
-        f"'{style}'. Output ONLY a raw JSON list of strings."
+        f"'{style}'. Output ONLY a raw JSON list of message objects (with 'role' and 'content' fields)."
     )
+    if is_multimodal:
+        return base_prompt + _get_multimodal_guidance()
+    return base_prompt
 
 
-def variation_system_prompt(output_style_guidance: str | None) -> str:
+def variation_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
-    return f"""You are an expert prompt engineer specializing in creating diverse and effective prompts. Given an initial prompt, your task is to generate a diverse set of alternative prompts.
+    base_prompt = f"""You are an expert prompt engineer specializing in creating diverse and effective prompts. Given an initial prompt, your task is to generate a diverse set of alternative prompts.
 
 For each prompt variation, consider:
 1. Different levels of specificity and detail, including significantly more detailed and longer versions.
@@ -101,14 +165,17 @@ Return a JSON array of prompts with the following structure:
 }}
 Each prompt variation should aim to get the target LLM to produce answers matching the desired style: '{style}'.
 """
+    if is_multimodal:
+        return base_prompt + _get_multimodal_guidance()
+    return base_prompt
 
 
-def llm_crossover_system_prompt(output_style_guidance: str | None) -> str:
+def llm_crossover_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
-    return f"""You are an expert prompt engineer specializing in creating novel prompts by intelligently blending existing ones.
+    base_prompt = f"""You are an expert prompt engineer specializing in creating novel prompts by intelligently blending existing ones.
 Given two parent prompts, your task is to generate one or two new child prompts that effectively combine the strengths, styles, or core ideas of both parents.
 The children should be coherent and aim to explore a potentially more effective region of the prompt design space, with a key goal of eliciting responses from the target language model in the following style: '{style}'.
 
@@ -128,19 +195,25 @@ Return a JSON object that is a list of both child prompts. Each child prompt is 
 
 
 """
+    if is_multimodal:
+        return base_prompt + _get_multimodal_guidance()
+    return base_prompt
 
 
-def radical_innovation_system_prompt(output_style_guidance: str | None) -> str:
+def radical_innovation_system_prompt(output_style_guidance: str | None, is_multimodal: bool = False) -> str:
     style = (
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
-    return f"""You are an expert prompt engineer and a creative problem solver.
+    base_prompt = f"""You are an expert prompt engineer and a creative problem solver.
 Given a task description and an existing prompt for that task (which might be underperforming), your goal is to generate a new, significantly improved, and potentially very different prompt.
 Do not just make minor edits. Think about alternative approaches, structures, and phrasings that could lead to better performance.
 Consider clarity, specificity, constraints, and how to best guide the language model for the described task TO PRODUCE OUTPUTS IN THE FOLLOWING STYLE: '{style}'.
 Return only the new prompt string, with no preamble or explanation.
 """
+    if is_multimodal:
+        return base_prompt + _get_multimodal_guidance()
+    return base_prompt
 
 
 def llm_crossover_user_prompt(
