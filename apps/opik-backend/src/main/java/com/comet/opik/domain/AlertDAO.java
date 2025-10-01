@@ -36,9 +36,9 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface AlertDAO {
 
-    @SqlUpdate("INSERT INTO alerts (id, name, enabled, webhook_id, workspace_id, created_by, last_updated_by) "
+    @SqlUpdate("INSERT INTO alerts (id, name, enabled, webhook_id, workspace_id, created_by, last_updated_by, created_at) "
             +
-            "VALUES (:bean.id, :bean.name, :bean.enabled, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy)")
+            "VALUES (:bean.id, :bean.name, :bean.enabled, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))")
     @GetGeneratedKeys
     Alert save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
             @Bind("webhookId") UUID webhookId);
