@@ -162,16 +162,19 @@ public class SpansResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = Span.class)))})
     @JsonView(View.Public.class)
     @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
-    public Response getById(@PathParam("id") @NotNull UUID id) {
+    public Response getById(@PathParam("id") @NotNull UUID id,
+            @QueryParam("truncate") @DefaultValue("false") boolean truncate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting span by id '{}' on workspace_id '{}'", id, workspaceId);
-        var span = spanService.getById(id)
+        log.info("Getting span by id '{}' on workspace_id '{}' with truncate={}", id, workspaceId, truncate);
+
+        var span = spanService.getById(id, truncate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}'", span.id(), span.traceId(),
-                span.parentSpanId(), workspaceId);
+        log.info("Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}' with truncate={}",
+                span.id(), span.traceId(),
+                span.parentSpanId(), workspaceId, truncate);
 
         return Response.ok().entity(span).build();
     }

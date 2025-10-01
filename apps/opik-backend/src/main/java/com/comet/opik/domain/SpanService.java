@@ -10,6 +10,7 @@ import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -60,13 +61,27 @@ public class SpanService {
     private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentStripperService attachmentStripperService;
+    private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
         log.info("Finding span by '{}'", searchCriteria);
 
         return findProjectAndVerifyVisibility(searchCriteria)
-                .flatMap(it -> spanDAO.find(page, size, it));
+                .flatMap(resolvedCriteria -> spanDAO.find(page, size, resolvedCriteria)
+                        .flatMap(spanPage -> {
+                            // If truncate=false, reinject attachments into all spans
+                            if (!resolvedCriteria.truncate()) {
+                                return Flux.fromIterable(spanPage.content())
+                                        .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span,
+                                                resolvedCriteria.truncate()))
+                                        .collectList()
+                                        .map(reinjectedSpans -> spanPage.toBuilder()
+                                                .content(reinjectedSpans)
+                                                .build());
+                            }
+                            return Mono.just(spanPage);
+                        }));
     }
 
     private Mono<SpanSearchCriteria> findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
@@ -77,7 +92,11 @@ public class SpanService {
 
     @WithSpan
     public Mono<Span> getById(@NonNull UUID id) {
-        log.info("Getting span by id '{}'", id);
+        return getById(id, false);
+    }
+
+    @WithSpan
+    public Mono<Span> getById(@NonNull UUID id, boolean truncate) {
         return Mono.deferContextual(ctx -> spanDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
                 .flatMap(span -> {
@@ -85,7 +104,8 @@ public class SpanService {
                     return Mono.just(span.toBuilder()
                             .projectName(project.name())
                             .build());
-                }));
+                }))
+                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, truncate));
     }
 
     @WithSpan
@@ -281,7 +301,14 @@ public class SpanService {
                 .collectList()
                 .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
-        return resolveProjects
+        // Delete existing attachments for all spans in the batch before processing
+        // This prevents duplicate attachments when the SDK sends the same span data multiple times
+        Set<UUID> spanIds = dedupedSpans.stream()
+                .map(Span::id)
+                .collect(Collectors.toSet());
+
+        return attachmentService.deleteByEntityIds(SPAN, spanIds)
+                .then(resolveProjects)
                 .flatMap(this::stripAttachmentsFromSpanBatch)
                 .flatMap(spanDAO::batchInsert);
     }
@@ -358,7 +385,15 @@ public class SpanService {
     @WithSpan
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
-                .flatMapMany(it -> spanDAO.search(limit, it));
+                .flatMapMany(resolvedCriteria -> spanDAO.search(limit, resolvedCriteria)
+                        .flatMap(span -> {
+                            // If truncate=false, reinject attachments
+                            if (!resolvedCriteria.truncate()) {
+                                return attachmentReinjectorService.reinjectAttachments(span,
+                                        resolvedCriteria.truncate());
+                            }
+                            return Mono.just(span);
+                        }));
     }
 
     @WithSpan

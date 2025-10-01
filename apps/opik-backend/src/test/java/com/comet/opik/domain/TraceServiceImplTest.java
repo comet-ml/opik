@@ -4,6 +4,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.error.InvalidUUIDVersionException;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -65,6 +66,9 @@ class TraceServiceImplTest {
     @Mock
     private AttachmentService attachmentService;
 
+    @Mock
+    private AttachmentReinjectorService attachmentReinjectorService;
+
     private final PodamFactory factory = new PodamFactoryImpl();
     private final TraceThreadSortingFactory traceThreadSortingFactory = new TraceThreadSortingFactory();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
@@ -85,7 +89,8 @@ class TraceServiceImplTest {
                 traceThreadSortingFactory,
                 traceSortingFactory,
                 attachmentStripperService,
-                attachmentService);
+                attachmentService,
+                attachmentReinjectorService);
     }
 
     @Nested
