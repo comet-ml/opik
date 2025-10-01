@@ -20,6 +20,13 @@ import {
 import clack from './clack';
 import { getCloudUrl } from './urls';
 import { INTEGRATION_CONFIG } from '../lib/config';
+import {
+  getDefaultWorkspace,
+  isOpikAccessible,
+  DEFAULT_LOCAL_URL,
+  normalizeOpikUrl,
+  MAX_URL_VALIDATION_RETRIES,
+} from './api-helpers';
 
 // interface ProjectData {
 //   projectApiKey: string;
@@ -27,6 +34,12 @@ import { INTEGRATION_CONFIG } from '../lib/config';
 //   wizardHash: string;
 //   distinctId: string;
 // }
+
+export enum DeploymentType {
+  CLOUD = 'cloud',
+  SELF_HOSTED = 'self-hosted',
+  LOCAL = 'local',
+}
 
 export interface CliSetupConfig {
   filename: string;
@@ -511,6 +524,131 @@ export function isNodejsInstalled(): boolean {
 }
 
 /**
+ * Handles URL configuration for local deployment with validation and retries
+ * @returns The validated and normalized Opik URL
+ */
+async function handleLocalDeploymentConfig(): Promise<string> {
+  // Check if default local URL is already running
+  const isDefaultLocalRunning = await isOpikAccessible(DEFAULT_LOCAL_URL, 3000);
+
+  if (isDefaultLocalRunning) {
+    return normalizeOpikUrl(DEFAULT_LOCAL_URL);
+  }
+
+  // If not running, ask user for custom URL with retry logic
+  clack.log.warn(`Local Opik instance not found at ${DEFAULT_LOCAL_URL}`);
+
+  let attemptCount = 0;
+  while (attemptCount < MAX_URL_VALIDATION_RETRIES) {
+    const customUrl = await abortIfCancelled(
+      clack.text({
+        message: 'Please enter your Opik instance URL',
+        placeholder: 'http://localhost:5173/',
+        validate: (value) => {
+          if (!value || value.trim() === '') {
+            return 'URL cannot be empty. Please enter a valid URL...';
+          }
+          return undefined;
+        },
+      }),
+      'nodejs' as Integration,
+    );
+
+    // Validate URL format
+    try {
+      const normalizedUrl = normalizeOpikUrl(customUrl);
+
+      // Check if URL is accessible
+      const isAccessible = await isOpikAccessible(normalizedUrl, 5000);
+
+      if (isAccessible) {
+        return normalizedUrl;
+      } else {
+        attemptCount++;
+        if (attemptCount < MAX_URL_VALIDATION_RETRIES) {
+          clack.log.error(
+            `⚠ Opik is not accessible at ${normalizedUrl}. Please try again. (Attempt ${attemptCount}/${MAX_URL_VALIDATION_RETRIES})`,
+          );
+        }
+      }
+    } catch (error) {
+      attemptCount++;
+      if (attemptCount < MAX_URL_VALIDATION_RETRIES) {
+        clack.log.error(
+          `⚠ ${
+            error instanceof Error ? error.message : 'Invalid URL'
+          }. Please try again. (Attempt ${attemptCount}/${MAX_URL_VALIDATION_RETRIES})`,
+        );
+      }
+    }
+  }
+
+  // After max retries, abort
+  await abort(
+    `Failed to connect to Opik after ${MAX_URL_VALIDATION_RETRIES} attempts. Please check your URL and try again.`,
+  );
+  throw new Error('unreachable'); // This line is unreachable but needed for TypeScript
+}
+
+/**
+ * Handles URL configuration for self-hosted deployment with validation and retries
+ * @returns The validated and normalized Opik URL
+ */
+async function handleSelfHostedDeploymentConfig(): Promise<string> {
+  let attemptCount = 0;
+
+  while (attemptCount < MAX_URL_VALIDATION_RETRIES) {
+    const customUrl = await abortIfCancelled(
+      clack.text({
+        message: 'Please enter your Opik instance URL',
+        placeholder: 'https://your-opik-instance.com/',
+        validate: (value) => {
+          if (!value || value.trim() === '') {
+            return 'URL cannot be empty. Please enter a valid URL...';
+          }
+          return undefined;
+        },
+      }),
+      'nodejs' as Integration,
+    );
+
+    // Validate URL format
+    try {
+      const normalizedUrl = normalizeOpikUrl(customUrl);
+
+      // Check if URL is accessible
+      const isAccessible = await isOpikAccessible(normalizedUrl, 5000);
+
+      if (isAccessible) {
+        return normalizedUrl;
+      } else {
+        attemptCount++;
+        if (attemptCount < MAX_URL_VALIDATION_RETRIES) {
+          clack.log.error(
+            `⚠ Opik is not accessible at ${normalizedUrl}. Please try again, the URL should follow a format similar to http://localhost:5173/. (Attempt ${attemptCount}/${MAX_URL_VALIDATION_RETRIES})`,
+          );
+        }
+      }
+    } catch (error) {
+      attemptCount++;
+      if (attemptCount < MAX_URL_VALIDATION_RETRIES) {
+        clack.log.error(
+          `⚠ ${
+            error instanceof Error ? error.message : 'Invalid URL'
+          }. Please try again. (Attempt ${attemptCount}/${MAX_URL_VALIDATION_RETRIES})`,
+        );
+      }
+    }
+  }
+
+  // After max retries, abort
+  await abort(
+    `Failed to connect to Opik after ${MAX_URL_VALIDATION_RETRIES} attempts. Please check your URL and try again.`,
+  );
+  throw new Error('unreachable'); // This line is unreachable but needed for TypeScript
+}
+
+/**
  *
  * Use this function to get project data for the wizard.
  *
@@ -523,54 +661,137 @@ export async function getOrAskForProjectData(): Promise<{
   projectApiKey: string;
   workspaceName: string;
   projectName: string;
+  deploymentType: DeploymentType;
 }> {
   const cloudUrl = getCloudUrl();
 
-  // Simple terminal-based API key input
-  clack.log.info(
-    `${chalk.bold('You can find your Opik API key here:')}\n${chalk.cyan(
-      `${cloudUrl}account-settings/apiKeys`,
-    )}`,
-  );
+  // Step 1: Check if local Opik is running
+  const isLocalRunning = await isOpikAccessible(DEFAULT_LOCAL_URL, 3000);
 
-  const projectApiKey = await abortIfCancelled(
-    clack.text({
-      message: 'Enter your Opik API key',
-      placeholder: '...',
-      validate: (value) => {
-        if (!value || value.trim() === '') {
-          return 'API key is required';
-        }
-        return undefined;
-      },
+  // Step 2: Deployment Type Selection
+  const deploymentChoices: Array<{
+    value: DeploymentType;
+    label: string;
+    hint: string;
+  }> = [
+    {
+      value: DeploymentType.CLOUD,
+      label: 'Opik Cloud',
+      hint: 'https://www.comet.com',
+    },
+    {
+      value: DeploymentType.SELF_HOSTED,
+      label: 'Self-hosted Comet platform',
+      hint: 'Custom Opik instance',
+    },
+    {
+      value: DeploymentType.LOCAL,
+      label: isLocalRunning
+        ? `Local deployment ${chalk.dim(`(detected at ${DEFAULT_LOCAL_URL})`)}`
+        : 'Local deployment',
+      hint: isLocalRunning ? '✓ Running' : 'http://localhost:5173',
+    },
+  ];
+
+  const deploymentType = (await abortIfCancelled(
+    clack.select({
+      message: 'Which Opik deployment do you want to log your traces to?',
+      options: deploymentChoices as any,
+      initialValue: isLocalRunning
+        ? DeploymentType.LOCAL
+        : DeploymentType.CLOUD,
     }),
     'nodejs' as Integration,
-  );
+  )) as DeploymentType;
 
-  const workspaceName = await abortIfCancelled(
-    clack.text({
-      message: 'Enter your workspace name',
-      placeholder: 'your-workspace-name',
-      validate: (value) => {
-        if (!value || value.trim() === '') {
-          return 'Workspace name is required';
-        }
-        return undefined;
-      },
-    }),
-    'nodejs' as Integration,
-  );
+  // Step 3: Handle deployment type specific configuration
+  let host: string;
+  let projectApiKey: string = '';
+
+  if (deploymentType === DeploymentType.LOCAL) {
+    // Local deployment configuration
+    host = await handleLocalDeploymentConfig();
+  } else if (deploymentType === DeploymentType.SELF_HOSTED) {
+    // Self-hosted deployment configuration
+    host = await handleSelfHostedDeploymentConfig();
+  } else {
+    // Cloud deployment configuration
+    host = cloudUrl;
+  }
+
+  // Step 4: API Key (only for cloud and self-hosted)
+  if (deploymentType !== DeploymentType.LOCAL) {
+    clack.log.info(
+      `${chalk.bold('You can find your Opik API key here:')}\n${chalk.cyan(
+        `${host}account-settings/apiKeys`,
+      )}`,
+    );
+
+    projectApiKey = await abortIfCancelled(
+      clack.text({
+        message: 'Enter your Opik API key',
+        placeholder: '...',
+        validate: (value) => {
+          if (!value || value.trim() === '') {
+            return 'API key is required';
+          }
+          return undefined;
+        },
+      }),
+      'nodejs' as Integration,
+    );
+  }
+
+  // Step 5: Workspace Name (only for cloud and self-hosted)
+  let workspaceName: string;
+
+  if (deploymentType === DeploymentType.LOCAL) {
+    // Local deployment uses default workspace
+    workspaceName = 'default';
+  } else {
+    // Try to fetch the default workspace for cloud/self-hosted
+    let defaultWorkspaceName: string | undefined;
+    try {
+      defaultWorkspaceName = await getDefaultWorkspace(projectApiKey, host);
+    } catch (error) {
+      debug(
+        `Failed to fetch default workspace: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    // Ask for workspace name with default if available
+    workspaceName = await abortIfCancelled(
+      clack.text({
+        message: defaultWorkspaceName
+          ? `Enter your workspace name (press Enter to use: ${chalk.cyan(
+              defaultWorkspaceName,
+            )})`
+          : 'Enter your workspace name',
+        placeholder: defaultWorkspaceName || 'your-workspace-name',
+        defaultValue: defaultWorkspaceName,
+        validate: (value) => {
+          // Allow empty input if defaultValue is set (Enter key will use default)
+          if ((!value || value.trim() === '') && !defaultWorkspaceName) {
+            return 'Workspace name is required';
+          }
+          return undefined;
+        },
+      }),
+      'nodejs' as Integration,
+    );
+  }
 
   const projectName = await abortIfCancelled(
     clack.text({
       message: 'Enter your project name (optional)',
-      placeholder: 'Default',
-      defaultValue: 'Default',
+      placeholder: 'Default Project',
+      defaultValue: 'Default Project',
     }),
     'nodejs' as Integration,
   );
 
-  const host = DEFAULT_HOST_URL;
   const wizardHash = 'terminal-input-' + Date.now(); // Simple hash for tracking
 
   return {
@@ -578,7 +799,8 @@ export async function getOrAskForProjectData(): Promise<{
     host,
     projectApiKey,
     workspaceName,
-    projectName: projectName || 'Default',
+    projectName: projectName || 'Default Project',
+    deploymentType,
   };
 
   /* COMMENTED OUT: Browser-based authentication flow

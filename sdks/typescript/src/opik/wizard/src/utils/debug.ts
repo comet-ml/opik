@@ -14,6 +14,16 @@ export function debug(...args: unknown[]) {
   clack.log.info(chalk.dim(msg));
 }
 
+export function debugError(...args: unknown[]) {
+  // Always log errors, regardless of debug mode
+  const msg = args.map((a) => prepareMessage(a)).join(' ');
+  clack.log.error(chalk.red(msg));
+}
+
 export function enableDebugLogs() {
   debugEnabled = true;
+}
+
+export function disableDebugLogs() {
+  debugEnabled = false;
 }
