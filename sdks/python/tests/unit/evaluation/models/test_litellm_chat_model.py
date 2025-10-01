@@ -128,9 +128,7 @@ def test_geval_passes_logprobs_only_when_supported(monkeypatch):
     assert captured["kwargs"]["top_logprobs"] == 20
 
     # Now simulate model without logprob support
-    stub = _install_litellm_stub(
-        monkeypatch, supported_params=["response_format"]
-    )
+    stub = _install_litellm_stub(monkeypatch, supported_params=["response_format"])
     captured.clear()
 
     def fake_response_no_logprobs(model_provider, messages, **kwargs):
