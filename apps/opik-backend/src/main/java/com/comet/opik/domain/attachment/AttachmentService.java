@@ -57,6 +57,19 @@ public interface AttachmentService {
     Mono<Long> delete(DeleteAttachmentsRequest request);
 
     Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    /**
+     * Get existing attachments for a specific entity as AttachmentInfo objects.
+     * This is a convenience method for services that need to work with AttachmentInfo.
+     */
+    Mono<List<AttachmentInfo>> getAttachmentInfoByEntity(UUID entityId, EntityType entityType, UUID containerId);
+
+    /**
+     * Delete specific attachments by their filenames for a given entity.
+     * This method handles errors gracefully and continues processing other deletions.
+     */
+    Mono<Void> deleteSpecificAttachments(List<AttachmentInfo> attachments, UUID entityId, EntityType entityType,
+            UUID containerId);
 }
 
 @Slf4j
@@ -241,7 +254,7 @@ class AttachmentServiceImpl implements AttachmentService {
         String projectName = WorkspaceUtils.getProjectName(inputProjectName);
 
         var project = projectService.getOrCreate(projectName)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .block();
 
         return project.id();
@@ -301,4 +314,59 @@ class AttachmentServiceImpl implements AttachmentService {
             throw new BadRequestException("Invalid base URL format");
         }
     }
+
+    /**
+     * Get existing attachments for a specific entity as AttachmentInfo objects.
+     * This is a convenience method for services that need to work with AttachmentInfo.
+     */
+    public Mono<List<AttachmentInfo>> getAttachmentInfoByEntity(UUID entityId, EntityType entityType,
+            UUID containerId) {
+        AttachmentSearchCriteria criteria = AttachmentSearchCriteria.builder()
+                .entityId(entityId)
+                .entityType(entityType)
+                .containerId(containerId)
+                .build();
+
+        return list(1, Integer.MAX_VALUE, criteria, "")
+                .map(attachmentPage -> attachmentPage.content().stream()
+                        .map(attachment -> AttachmentInfo.builder()
+                                .fileName(attachment.fileName())
+                                .entityType(entityType)
+                                .entityId(entityId)
+                                .containerId(containerId)
+                                .mimeType(attachment.mimeType())
+                                .build())
+                        .toList());
+    }
+
+    /**
+     * Delete specific attachments by their filenames for a given entity.
+     * Makes a single delete call with all filenames.
+     */
+    public Mono<Void> deleteSpecificAttachments(List<AttachmentInfo> attachments, UUID entityId,
+            EntityType entityType, UUID containerId) {
+        if (attachments.isEmpty()) {
+            return Mono.empty();
+        }
+
+        Set<String> fileNames = attachments.stream()
+                .map(AttachmentInfo::fileName)
+                .collect(Collectors.toSet());
+
+        DeleteAttachmentsRequest deleteRequest = DeleteAttachmentsRequest.builder()
+                .entityId(entityId)
+                .entityType(entityType)
+                .containerId(containerId)
+                .fileNames(fileNames)
+                .build();
+
+        return delete(deleteRequest)
+                .onErrorResume(error -> {
+                    log.warn("Failed to delete old attachments for entity '{}' of type '{}', filenames: {}, error: {}",
+                            entityId, entityType, fileNames, error.getMessage());
+                    return Mono.empty(); // Continue processing
+                })
+                .then();
+    }
+
 }
