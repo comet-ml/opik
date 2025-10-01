@@ -2,14 +2,12 @@
 description: Describes Opik's built-in G-Eval metric which is a task agnostic LLM as a Judge metric
 ---
 
-G-Eval is a task agnostic LLM as a Judge metric that allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score. You can learn more about G-Eval in the [original paper](https://arxiv.org/abs/2303.16634).
+G-Eval is a task-agnostic LLM-as-a-judge metric that allows you to specify a task description and evaluation criteria. The model first drafts step-by-step evaluation instructions and then produces a score between 0 and 1. You can learn more about G-Eval in the [original paper](https://arxiv.org/abs/2303.16634).
 
-To use G-Eval, you need to specify just two pieces of information:
+To use G-Eval, supply two pieces of information:
 
-1. A task introduction: This describes the task you want to evaluate
-2. Evaluation criteria: This is a list of criteria that the LLM will use to evaluate the task.
-
-You can then use the `GEval` metric to score your LLM outputs:
+1. A task introduction describing what should be evaluated.
+2. Evaluation criteria outlining what “good” looks like.
 
 ```python
 from opik.evaluation.metrics import GEval
@@ -29,55 +27,81 @@ metric.score(
 
 ## How it works
 
-The way the G-Eval metric works is by first using the task introduction and evaluation criteria to create a set of evaluation steps. These evaluation steps are then combined with the task introduction and evaluation criteria to return a single score.
+G-Eval first expands your task description into a step-by-step Chain of Thought (CoT). This CoT becomes the rubric the judge will follow when scoring the provided answer. The model then evaluates the answer, returning a score in the 0–10 range which Opik normalises to 0–1.
 
-By default, the `gpt-4o` model is used to generate the final score, but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model` parameter. You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) section.
-
-The evaluation steps are generated using the following prompt:
-
-```markdown
-\*\*\* TASK:
-Based on the following task description and evaluation criteria,
-generate a detailed Chain of Thought (CoT) that outlines the necessary Evaluation Steps
-to assess the solution. The CoT should clarify the reasoning process for each step of evaluation.
-
-\*\*\* INPUT:
-
-TASK INTRODUCTION:
-{task_introduction}
-
-EVALUATION CRITERIA:
-{evaluation_criteria}
-
-FINAL SCORE:
-IF THE USER'S SCALE IS DIFFERENT FROM THE 0 TO 10 RANGE, RECALCULATE THE VALUE USING THIS SCALE.
-SCORE VALUE MUST BE AN INTEGER.
-```
-
-The LLM judge generates the final score above by integrating the evaluation steps returned by the prompt with the task
-introduction and the defined evaluation criteria.
-
-```markdown
-\*\*\* TASK INTRODUCTION:
-{task_introduction}
-
-\*\*\* EVALUATION CRITERIA:
-{evaluation_criteria}
-
-{chain_of_thought}
-
-\*\*\* INPUT:
-{input}
-
-\*\*\* OUTPUT:
-NO TEXT, ONLY SCORE
-```
+By default, the `gpt-5-nano` model is used, but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) via the `model` parameter. Learn more in the [custom model guide](/evaluation/metrics/custom_model).
 
 <Note>
-  In order to make the G-Eval metric more robust, we request the top 10 log_probs from the LLM and compute a weighted
-  average of the scores as recommended by the [original paper](https://arxiv.org/abs/2303.16634).
+  To make the metric more robust, Opik requests the top 10 log probabilities from the LLM and computes a weighted average of the scores, as recommended by the original paper. Newer models in the GPT-5 family and other providers may not expose log-probabilities, so scores can vary when switching models.
 </Note>
 
+## Built-in G-Eval judges
 
-The score produced by `GEval.score()` and `GEval.ascore()` lies within the range 0 to 1.0. This normalization is achieved by dividing
-the final score from the LLM judge by 10.
+Opik ships opinionated presets for common evaluation needs. Each class inherits from `GEval` and exposes the same constructor parameters (`model`, `track`, `temperature`, etc.).
+
+### Compliance Risk Judge {#compliance-risk-judge}
+Flags statements that may be non-factual, non-compliant, or risky (e.g. finance, healthcare, legal). Useful for regulated workflows.
+
+### Prompt Diagnostics {#prompt-diagnostics}
+`PromptPerplexityJudge` and `PromptUncertaintyJudge` estimate how difficult or ambiguous a user prompt is before it reaches your model. You can run them on raw prompts to triage risky requests.
+
+### Summarization Consistency Judge {#summarization-consistency-judge}
+Checks whether a generated summary is faithful to the source material.
+
+### Summarization Coherence Judge {#summarization-coherence-judge}
+Scores the structure, clarity, and organisation of a summary.
+
+### Dialogue Helpfulness Judge {#dialogue-helpfulness-judge}
+Examines how helpful an assistant reply is in the context of the preceding dialogue.
+
+### QA Relevance Judge {#qa-relevance-judge}
+Determines whether an answer directly addresses the user’s question.
+
+### Agent Task Completion Judge {#agent-task-completion-judge}
+Evaluates if an agent fulfilled its assigned high-level task.
+
+### Agent Tool Correctness Judge {#agent-tool-correctness-judge}
+Assesses whether an agent invoked tools appropriately and interpreted outputs correctly.
+
+### RevisEval Judge {#reviseval-judge}
+Runs a retrieval-augmented verification pass before scoring. The judge may suggest revisions based on the fetched evidence.
+
+### Trajectory Accuracy {#trajectory-accuracy}
+Scores whether an agent’s trajectory (series of states or actions) matches the expected path.
+
+## LLM Juries Judge {#llm-juries-judge}
+
+`LLMJuriesJudge` is an ensemble wrapper that averages the outputs of multiple judge metrics. This is useful when you want to combine bespoke criteria—e.g. take the mean of hallucination, helpfulness, and compliance scores.
+
+```python
+from opik.evaluation.metrics import LLMJuriesJudge, Hallucination, ComplianceRiskJudge
+
+jury = LLMJuriesJudge([
+    Hallucination(model="gpt-4o-mini"),
+    ComplianceRiskJudge(model="gpt-4o-mini"),
+])
+result = jury.score(input="...", output="...")
+print(result.value, result.metadata["judge_scores"])
+```
+
+## Conversation adapters
+
+Need to apply G-Eval-based judges to full conversations? Use the conversation adapters in `opik.evaluation.metrics.conversation.g_eval_wrappers`, exposed via `Conversation*` classes. They focus on the last assistant turn (or full transcript for summaries) and keep the original GEval reasoning.
+
+Refer to [Conversation-level GEval Metrics](/evaluation/metrics/g_eval_conversation_metrics) for available adapters and usage examples.
+
+## Customising models
+
+All GEval-derived metrics expose the `model` parameter so you can switch the underlying LLM. For example:
+
+```python
+from opik.evaluation.metrics import Hallucination
+
+metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+score = metric.score(
+    input="What is the capital of France?",
+    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+)
+```
+
+This functionality relies on LiteLLM. See the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide for a full list of supported providers and model identifiers.

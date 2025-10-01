@@ -4,38 +4,66 @@ description: Describes all the built-in evaluation metrics provided by Opik
 
 # Overview
 
-Opik provides a set of built-in evaluation metrics that can be used to evaluate the output of your LLM calls. These metrics are broken down into two main categories:
+Opik provides a set of built-in evaluation metrics that you can mix and match to evaluate LLM behaviour. These metrics are broken down into two main categories:
 
-1. Heuristic metrics
-2. LLM as a Judge metrics
+1. **Heuristic metrics** – deterministic checks that rely on rules, statistics, or classical NLP algorithms.
+2. **LLM as a Judge metrics** – delegate scoring to an LLM so you can capture semantic, task-specific, or conversation-level quality signals.
 
-Heuristic metrics are deterministic and are often statistical in nature. LLM as a Judge metrics are non-deterministic and are based on the idea of using an LLM to evaluate the output of another LLM.
+Heuristic metrics are ideal when you need reproducible checks such as exact matching, regex validation, or similarity scores against a reference. LLM as a Judge metrics are useful when you want richer qualitative feedback (hallucination detection, helpfulness, summarisation quality, regulatory risk, etc.).
 
-Opik provides the following built-in evaluation metrics:
+## Built-in metrics
 
-| Metric                       | Type           | Description                                                                                       | Documentation                                                                                             |
-| ---------------------------- | -------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Equals                       | Heuristic      | Checks if the output exactly matches an expected string                                           | [Equals](/evaluation/metrics/heuristic_metrics#equals)                                                    |
-| Contains                     | Heuristic      | Check if the output contains a specific substring, can be both case sensitive or case insensitive | [Contains](/evaluation/metrics/heuristic_metrics#contains)                                                |
-| RegexMatch                   | Heuristic      | Checks if the output matches a specified regular expression pattern                               | [RegexMatch](/evaluation/metrics/heuristic_metrics#regexmatch)                                            |
-| IsJson                       | Heuristic      | Checks if the output is a valid JSON object                                                       | [IsJson](/evaluation/metrics/heuristic_metrics#isjson)                                                    |
-| Levenshtein                  | Heuristic      | Calculates the Levenshtein distance between the output and an expected string                     | [Levenshtein](/evaluation/metrics/heuristic_metrics#levenshteinratio)                                     |
-| Hallucination                | LLM as a Judge | Check if the output contains any hallucinations                                                   | [Hallucination](/evaluation/metrics/hallucination)                                                        |
-| G-Eval                       | LLM as a Judge | Task agnostic LLM as a Judge metric                                                               | [G-Eval](/evaluation/metrics/g_eval)                                                                      |
-| Moderation                   | LLM as a Judge | Check if the output contains any harmful content                                                  | [Moderation](/evaluation/metrics/moderation)                                                              |
-| AnswerRelevance              | LLM as a Judge | Check if the output is relevant to the question                                                   | [AnswerRelevance](/evaluation/metrics/answer_relevance)                                                   |
-| Usefulness                   | LLM as a Judge | Check if the output is useful to the question                                                     | [Usefulness](/evaluation/metrics/usefulness)                                                              |
-| ContextRecall                | LLM as a Judge | Check if the output contains any hallucinations                                                   | [ContextRecall](/evaluation/metrics/context_recall)                                                       |
-| ContextPrecision             | LLM as a Judge | Check if the output contains any hallucinations                                                   | [ContextPrecision](/evaluation/metrics/context_precision)                                                 |
-| Conversational Coherence     | LLM as a Judge | Calculates the conversational coherence score for a given conversation thread.                    | [ConversationalCoherence](/evaluation/metrics/conversation_threads_metrics#conversationalcoherencemetric) |
-| Session Completeness Quality | LLM as a Judge | Evaluates the completeness of a session within a conversational thread.                           | [SessionCompleteness](/evaluation/metrics/conversation_threads_metrics#sessioncompletenessquality)        |
-| User Frustration             | LLM as a Judge | Calculates the user frustration score for a given conversational thread.                          | [UserFrustration](/evaluation/metrics/conversation_threads_metrics#userfrustrationmetric)                 |
+| Metric | Type | Description | Documentation |
+| --- | --- | --- | --- |
+| Equals | Heuristic | Checks if the output exactly matches an expected string | [Equals](/evaluation/metrics/heuristic_metrics#equals) |
+| Contains | Heuristic | Checks whether the output contains a specific substring | [Contains](/evaluation/metrics/heuristic_metrics#contains) |
+| RegexMatch | Heuristic | Checks if the output matches a specified regular expression pattern | [RegexMatch](/evaluation/metrics/heuristic_metrics#regexmatch) |
+| IsJson | Heuristic | Validates that the output can be parsed as JSON | [IsJson](/evaluation/metrics/heuristic_metrics#isjson) |
+| Levenshtein | Heuristic | Calculates the normalized Levenshtein distance between output and reference | [Levenshtein](/evaluation/metrics/heuristic_metrics#levenshteinratio) |
+| Sentence BLEU | Heuristic | Computes a BLEU score for a single output against one or more references | [SentenceBLEU](/evaluation/metrics/heuristic_metrics#bleu) |
+| Corpus BLEU | Heuristic | Computes corpus-level BLEU across multiple outputs | [CorpusBLEU](/evaluation/metrics/heuristic_metrics#bleu) |
+| ROUGE | Heuristic | Calculates ROUGE variants for comparing summaries or free-form text | [ROUGE](/evaluation/metrics/heuristic_metrics#rouge) |
+| Sentiment | Heuristic | Scores sentiment using VADER (compound, pos, neu, neg) | [Sentiment](/evaluation/metrics/heuristic_metrics#sentiment) |
+| Knowledge Retention | Heuristic (Conversation) | Checks whether the last assistant reply preserves user facts from earlier turns | [Knowledge Retention](/evaluation/metrics/conversation_threads_metrics#knowledge-retention-metric) |
+| Conversation ROUGE | Heuristic (Conversation) | Aggregates ROUGE scores across assistant turns in a thread | [Conversation ROUGE](/evaluation/metrics/conversation_threads_metrics#rougecmetric) |
+| Conversation BLEU | Heuristic (Conversation) | Aggregates BLEU scores across assistant turns | [Conversation BLEU](/evaluation/metrics/conversation_threads_metrics#bleucmetric) |
+| Conversation METEOR | Heuristic (Conversation) | Aggregates METEOR scores across assistant turns | [Conversation METEOR](/evaluation/metrics/conversation_threads_metrics#meteorcmetric) |
+| Conversation Degeneration | Heuristic (Conversation) | Detects repetition and degeneration patterns over a conversation | [Conversation Degeneration](/evaluation/metrics/conversation_threads_metrics#conversation-degeneration-metric) |
+| G-Eval | LLM as a Judge | Task-agnostic judge configurable with custom instructions | [G-Eval](/evaluation/metrics/g_eval) |
+| LLM Juries Judge | LLM as a Judge | Averages scores from multiple judge metrics for ensemble scoring | [LLM Juries](/evaluation/metrics/g_eval#llm-juries-judge) |
+| Hallucination | LLM as a Judge | Detects unsupported or hallucinated claims using an LLM judge | [Hallucination](/evaluation/metrics/hallucination) |
+| Moderation | LLM as a Judge | Flags safety or policy violations in assistant responses | [Moderation](/evaluation/metrics/moderation) |
+| Answer Relevance | LLM as a Judge | Checks whether the answer stays on-topic with the question | [Answer Relevance](/evaluation/metrics/answer_relevance) |
+| Usefulness | LLM as a Judge | Rates how useful the answer is to the user | [Usefulness](/evaluation/metrics/usefulness) |
+| Context Recall | LLM as a Judge | Measures how well the answer recalls supporting context | [Context Recall](/evaluation/metrics/context_recall) |
+| Context Precision | LLM as a Judge | Ensures the answer only uses relevant context | [Context Precision](/evaluation/metrics/context_precision) |
+| Compliance Risk Judge | LLM as a Judge | Identifies non-compliant or high-risk statements | [Compliance Risk](/evaluation/metrics/g_eval#compliance-risk-judge) |
+| Prompt Perplexity Judge | LLM as a Judge | Estimates how difficult a prompt is for models | [Prompt Diagnostics](/evaluation/metrics/g_eval#prompt-diagnostics) |
+| Prompt Uncertainty Judge | LLM as a Judge | Detects ambiguity in prompts that may confuse LLMs | [Prompt Diagnostics](/evaluation/metrics/g_eval#prompt-diagnostics) |
+| Summarization Consistency Judge | LLM as a Judge | Checks if a summary stays faithful to the source | [Summarization Consistency](/evaluation/metrics/g_eval#summarization-consistency-judge) |
+| Summarization Coherence Judge | LLM as a Judge | Rates the structure and coherence of a summary | [Summarization Coherence](/evaluation/metrics/g_eval#summarization-coherence-judge) |
+| Dialogue Helpfulness Judge | LLM as a Judge | Evaluates how helpful an assistant reply is in a dialogue | [Dialogue Helpfulness](/evaluation/metrics/g_eval#dialogue-helpfulness-judge) |
+| QA Relevance Judge | LLM as a Judge | Determines whether an answer directly addresses the user question | [QA Relevance](/evaluation/metrics/g_eval#qa-relevance-judge) |
+| Structured Output Compliance | LLM as a Judge | Checks JSON or schema adherence for structured responses | [Structured Output](/evaluation/metrics/structure_output_compliance) |
+| RevisEval Judge | LLM as a Judge | Uses retrieved evidence to revise and rescore an answer | [RevisEval](/evaluation/metrics/g_eval#reviseval-judge) |
+| Trajectory Accuracy | LLM as a Judge | Scores how closely agent trajectories follow expected steps | [Trajectory Accuracy](/evaluation/metrics/g_eval#trajectory-accuracy) |
+| Agent Task Completion Judge | LLM as a Judge | Checks whether an agent fulfilled its assigned task | [Agent Task Completion](/evaluation/metrics/g_eval#agent-task-completion-judge) |
+| Agent Tool Correctness Judge | LLM as a Judge | Evaluates whether an agent used tools correctly | [Agent Tool Correctness](/evaluation/metrics/g_eval#agent-tool-correctness-judge) |
+| Conversation Compliance Risk Metric | LLM as a Judge (Conversation) | Applies Compliance Risk Judge to the last assistant turn in a thread | [Conversation Compliance Risk](/evaluation/metrics/g_eval_conversation_metrics#conversationcomplianceriskmetric) |
+| Conversation Dialogue Helpfulness Metric | LLM as a Judge (Conversation) | Scores the final assistant reply for dialogue helpfulness | [Conversation Dialogue Helpfulness](/evaluation/metrics/g_eval_conversation_metrics#conversationdialoguehelpfulnessmetric) |
+| Conversation QA Relevance Metric | LLM as a Judge (Conversation) | Checks thread-level answer relevance | [Conversation QA Relevance](/evaluation/metrics/g_eval_conversation_metrics#conversationqarelevancemetric) |
+| Conversation Summarization Consistency Metric | LLM as a Judge (Conversation) | Evaluates how faithful a conversation summary is | [Conversation Summarization Consistency](/evaluation/metrics/g_eval_conversation_metrics#conversationsummarizationconsistencymetric) |
+| Conversation Summarization Coherence Metric | LLM as a Judge (Conversation) | Rates the coherence of a conversation summary | [Conversation Summarization Coherence](/evaluation/metrics/g_eval_conversation_metrics#conversationsummarizationcoherencemetric) |
+| Conversation Prompt Perplexity Metric | LLM as a Judge (Conversation) | Estimates prompt difficulty at the conversation level | [Conversation Prompt Perplexity](/evaluation/metrics/g_eval_conversation_metrics#conversationpromptperplexitymetric) |
+| Conversation Prompt Uncertainty Metric | LLM as a Judge (Conversation) | Flags ambiguous prompts in threaded evaluations | [Conversation Prompt Uncertainty](/evaluation/metrics/g_eval_conversation_metrics#conversationpromptuncertaintymetric) |
+| Conversational Coherence | LLM as a Judge (Conversation) | Evaluates coherence across sliding windows of a dialogue | [Conversational Coherence](/evaluation/metrics/conversation_threads_metrics#conversationalcoherencemetric) |
+| Session Completeness Quality | LLM as a Judge (Conversation) | Checks whether user goals were satisfied during the session | [Session Completeness](/evaluation/metrics/conversation_threads_metrics#sessioncompletenessquality) |
+| User Frustration | LLM as a Judge (Conversation) | Estimates the likelihood a user was frustrated | [User Frustration](/evaluation/metrics/conversation_threads_metrics#userfrustrationmetric) |
 
-You can also create your own custom metric, learn more about it in the [Custom Metric](/evaluation/metrics/custom_metric) section.
 
 ## Customizing LLM as a Judge metrics
 
-By default, Opik uses GPT-4o from OpenAI as the LLM to evaluate the output of other LLMs. However, you can easily switch to another LLM provider by specifying a different `model` in the `model_name` parameter of each LLM as a Judge metric.
+By default, Opik uses GPT-5-nano from OpenAI as the LLM to evaluate the output of other models. You can switch to any LiteLLM-supported backend by setting the `model` parameter on your judge metric.
 
 ```python
 from opik.evaluation.metrics import Hallucination
@@ -48,4 +76,6 @@ metric.score(
 )
 ```
 
-This functionality is based on LiteLLM framework, you can find a full list of supported LLM providers and how to configure them in the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide.
+This functionality is based on the LiteLLM framework—you can find the list of supported providers and configuration examples in the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide.
+
+You can also create your own custom metric, learn more about it in the [Custom Metric](/evaluation/metrics/custom_metric) section.
