@@ -91,7 +91,7 @@ public final class MessageContentNormalizer {
             return "";
         }
 
-        String normalized = type.name().toLowerCase(Locale.ENGLISH);
+        String normalized = type.name().toLowerCase(Locale.getDefault());
         return switch (normalized) {
             case "text" -> content.text() == null ? "" : content.text();
             case "image_url" -> renderImagePlaceholder(content.imageUrl());

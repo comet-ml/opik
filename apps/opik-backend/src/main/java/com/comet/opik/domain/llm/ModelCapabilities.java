@@ -109,6 +109,6 @@ public final class ModelCapabilities {
     }
 
     private static String normalize(@NonNull String modelName) {
-        return modelName.trim().toLowerCase(Locale.ENGLISH);
+        return modelName.trim().toLowerCase(Locale.getDefault());
     }
 }
