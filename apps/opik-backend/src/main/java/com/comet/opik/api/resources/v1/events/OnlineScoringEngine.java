@@ -258,17 +258,6 @@ public class OnlineScoringEngine {
         return builder.build();
     }
 
-    /**
-     * Unescape HTML entities commonly found in URLs.
-     * Handles both named entities (&amp;) and numeric entities (&#61;).
-     */
-    private static String unescapeHtml(String text) {
-        if (text == null) {
-            return null;
-        }
-        return URLDecoder.decode(text, StandardCharsets.UTF_8);
-    }
-
     private static void appendTextContent(UserMessage.Builder builder, String textSegment) {
         if (StringUtils.isNotBlank(textSegment)) {
             builder.addContent(TextContent.from(textSegment));
