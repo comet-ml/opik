@@ -42,6 +42,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+
+import org.apache.commons.lang3.StringUtils;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -218,21 +222,16 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    static UserMessage buildUserMessage(String content) {
-        if (content.length() > 100_000) {
-            throw new IllegalArgumentException("Message content exceeds maximum allowed size of 100,000 characters");
-        }
-
+    private static UserMessage buildUserMessage(String content) {
         Matcher matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
-        if (!matcher.find()) {
-            return UserMessage.from(content);
-        }
+        boolean foundAny = false;
 
-        matcher.reset();
         UserMessage.Builder builder = UserMessage.builder();
         int lastIndex = 0;
 
         while (matcher.find()) {
+            foundAny = true;
+
             if (matcher.start() > lastIndex) {
                 String textSegment = content.substring(lastIndex, matcher.start());
                 appendTextContent(builder, textSegment);
@@ -240,12 +239,15 @@ public class OnlineScoringEngine {
 
             String url = matcher.group(1).trim();
             if (!url.isEmpty()) {
-                // HTML-unescape the URL to handle cases where JsonPath returns HTML-encoded strings
-                String unescapedUrl = unescapeHtml(url);
-                builder.addContent(ImageContent.from(unescapedUrl));
+                String decodedUrl = URLDecoder.decode(url, StandardCharsets.UTF_8);
+                builder.addContent(ImageContent.from(decodedUrl));
             }
 
             lastIndex = matcher.end();
+        }
+
+        if (!foundAny) {
+            return UserMessage.from(content);
         }
 
         if (lastIndex < content.length()) {
@@ -261,52 +263,16 @@ public class OnlineScoringEngine {
      * Handles both named entities (&amp;) and numeric entities (&#61;).
      */
     private static String unescapeHtml(String text) {
-        if (text == null || (!text.contains("&") && !text.contains("&#"))) {
-            return text;
+        if (text == null) {
+            return null;
         }
-
-        String result = text;
-        // Replace common named entities
-        result = result.replace("&amp;", "&");
-        result = result.replace("&lt;", "<");
-        result = result.replace("&gt;", ">");
-        result = result.replace("&quot;", "\"");
-        result = result.replace("&apos;", "'");
-
-        // Replace numeric entities (decimal: &#NNN;)
-        Pattern decimalPattern = Pattern.compile("&#(\\d+);");
-        Matcher matcher = decimalPattern.matcher(result);
-        StringBuffer sb = new StringBuffer();
-        while (matcher.find()) {
-            int codePoint = Integer.parseInt(matcher.group(1));
-            matcher.appendReplacement(sb, Character.toString((char) codePoint));
-        }
-        matcher.appendTail(sb);
-        result = sb.toString();
-
-        // Replace hex entities (hex: &#xHH;)
-        Pattern hexPattern = Pattern.compile("&#[xX]([0-9a-fA-F]+);");
-        matcher = hexPattern.matcher(result);
-        sb = new StringBuffer();
-        while (matcher.find()) {
-            int codePoint = Integer.parseInt(matcher.group(1), 16);
-            matcher.appendReplacement(sb, Character.toString((char) codePoint));
-        }
-        matcher.appendTail(sb);
-
-        return sb.toString();
+        return URLDecoder.decode(text, StandardCharsets.UTF_8);
     }
 
     private static void appendTextContent(UserMessage.Builder builder, String textSegment) {
-        if (textSegment == null) {
-            return;
+        if (StringUtils.isNotBlank(textSegment)) {
+            builder.addContent(TextContent.from(textSegment));
         }
-
-        if (textSegment.isBlank()) {
-            return;
-        }
-
-        builder.addContent(TextContent.from(textSegment));
     }
 
     private static String extractFromJson(JsonNode json, String path) {
