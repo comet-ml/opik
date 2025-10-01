@@ -31,7 +31,9 @@ def _conversation(messages: List[str]) -> List[dict]:
 
 def test_geval_conversation_metric_success():
     metric = GEvalConversationMetric(judge=StubJudge(), name="conversation_stub")
-    conversation = _conversation(["Hello", "Hi there", "Tell me a joke", "Why did the chicken cross the road?"])
+    conversation = _conversation(
+        ["Hello", "Hi there", "Tell me a joke", "Why did the chicken cross the road?"]
+    )
 
     result = metric.score(conversation)
 

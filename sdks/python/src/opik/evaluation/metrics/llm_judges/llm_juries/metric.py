@@ -58,4 +58,3 @@ class LLMJuriesJudge(BaseMetric):
         return ScoreResult(
             value=average, name=self.name, reason=reason, metadata=metadata
         )
-

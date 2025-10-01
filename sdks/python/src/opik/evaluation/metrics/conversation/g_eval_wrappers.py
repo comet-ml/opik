@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import opik.exceptions as exceptions
 
@@ -43,7 +43,11 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
         **_: Any,
     ) -> ScoreResult:
         last_assistant = next(
-            (turn.get("content", "") for turn in reversed(conversation) if turn.get("role") == "assistant"),
+            (
+                turn.get("content", "")
+                for turn in reversed(conversation)
+                if turn.get("role") == "assistant"
+            ),
             "",
         )
         if not last_assistant.strip():
