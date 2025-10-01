@@ -249,6 +249,12 @@ class OptimizationResult(pydantic.BaseModel):
         optimized_params = self.details.get("optimized_parameters") or {}
         parameter_importance = self.details.get("parameter_importance") or {}
         search_ranges = self.details.get("search_ranges") or {}
+        precision = self.details.get("parameter_precision", 6)
+
+        def _format_float(value: Any, digits: int = precision) -> str:
+            if isinstance(value, float):
+                return f"{value:.{digits}f}"
+            return str(value)
 
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
