@@ -32,10 +32,25 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
     ) -> None:
         super().__init__(
             name=name or f"conversation_{judge.name}",
-            track=judge.track,
-            project_name=judge.project_name,
+            track=getattr(judge, "track", True),
+            project_name=getattr(judge, "project_name", None),
         )
         self._judge = judge
+
+    def _normalize_result(self, raw_result: Any) -> ScoreResult:
+        if isinstance(raw_result, ScoreResult):
+            return raw_result
+        if isinstance(raw_result, list):
+            if not raw_result:
+                raise exceptions.MetricComputationError(
+                    "Judge returned an empty list of results."
+                )
+            first = raw_result[0]
+            if isinstance(first, ScoreResult):
+                return first
+        raise exceptions.MetricComputationError(
+            f"Judge {self._judge.name} returned unsupported result type {type(raw_result)!r}"
+        )
 
     def score(
         self,
@@ -59,7 +74,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
             )
 
         try:
-            judge_result = self._judge.score(output=last_assistant)
+            raw_result = self._judge.score(output=last_assistant)
         except exceptions.MetricComputationError as error:
             return ScoreResult(
                 name=self.name,
@@ -68,6 +83,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
                 scoring_failed=True,
             )
 
+        judge_result = self._normalize_result(raw_result)
         return ScoreResult(
             name=self.name,
             value=judge_result.value,
