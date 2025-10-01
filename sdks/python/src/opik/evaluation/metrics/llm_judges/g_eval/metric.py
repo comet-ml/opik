@@ -324,12 +324,17 @@ class GEval(base_metric.BaseMetric):
         ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
+            provider_kwargs: Dict[str, Any] = {
+                "response_format": GEvalScoreFormat,
+            }
+            if self._log_probs_supported:
+                provider_kwargs["logprobs"] = True
+                provider_kwargs["top_logprobs"] = 20
+
             with base_model.get_provider_response(
                 model_provider=self._model,
                 messages=request,
-                logprobs=self._log_probs_supported,
-                top_logprobs=20 if self._log_probs_supported else None,
-                response_format=GEvalScoreFormat,
+                **provider_kwargs,
             ) as model_output:
                 return parser.parse_litellm_model_output(
                     content=model_output,
