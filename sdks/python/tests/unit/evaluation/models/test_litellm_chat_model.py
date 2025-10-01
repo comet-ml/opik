@@ -153,6 +153,7 @@ def test_geval_passes_logprobs_only_when_supported(monkeypatch):
     _install_litellm_stub(monkeypatch, supported_params=["response_format"])
     captured.clear()
 
+    @contextmanager
     def fake_response_no_logprobs(model_provider, messages, **kwargs):
         captured["kwargs"] = kwargs
         yield SimpleNamespace(
