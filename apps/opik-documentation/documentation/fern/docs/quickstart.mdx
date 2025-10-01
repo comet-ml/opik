@@ -11,43 +11,6 @@ Opik makes it easy to integrate with your existing LLM application, here are som
 popular integrations:
 
 <Tabs>
-  <Tab title="OpenAI (Python)" value="openai-python-sdk">
-    If you are using the OpenAI Python SDK, you can integrate by:
-
-    <Steps>
-      <Step>
-        Install the Opik Python SDK:
-
-        ```bash
-        pip install opik
-        ```
-      </Step>
-      <Step>
-        Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
-        Cloud or your Opik server address if you are self-hosting:
-
-        ```bash
-        opik configure
-        ```
-      </Step>
-      <Step>
-        Wrap your OpenAI client with the `track_openai` function:
-
-        ```python
-        from opik.integrations.openai import track_openai
-        from openai import OpenAI
-
-        # Wrap your OpenAI client
-        openai_client = OpenAI()
-        openai_client = track_openai(openai_client)
-        ```
-
-        All OpenAI calls made using the `openai_client` will now be logged to Opik.
-
-      </Step>
-    </Steps>
-
-  </Tab>
   <Tab title="OpenAI (TS)" value="openai-ts-sdk">
     If you are using the OpenAI TypeScript SDK, you can integrate by:
 
@@ -148,6 +111,43 @@ popular integrations:
         ```
 
         All AI SDK calls with `experimental_telemetry: { isEnabled: true }` will now be logged to Opik.
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="OpenAI (Python)" value="openai-python-sdk">
+    If you are using the OpenAI Python SDK, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik Python SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
+        Cloud or your Opik server address if you are self-hosting:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Wrap your OpenAI client with the `track_openai` function:
+
+        ```python
+        from opik.integrations.openai import track_openai
+        from openai import OpenAI
+
+        # Wrap your OpenAI client
+        openai_client = OpenAI()
+        openai_client = track_openai(openai_client)
+        ```
+
+        All OpenAI calls made using the `openai_client` will now be logged to Opik.
+
       </Step>
     </Steps>
 
