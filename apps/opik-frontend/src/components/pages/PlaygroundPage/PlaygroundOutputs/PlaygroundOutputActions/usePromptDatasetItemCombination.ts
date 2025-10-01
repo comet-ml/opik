@@ -61,15 +61,6 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
         return;
       }
 
-      if (
-        !normalized.startsWith("data:image") &&
-        placeholderMap["[image]"] &&
-        tag.toLowerCase().includes("image")
-      ) {
-        set(newDatasetItem, tag, placeholderMap["[image]"]);
-        return;
-      }
-
       set(newDatasetItem, tag, normalized);
       return;
     }
