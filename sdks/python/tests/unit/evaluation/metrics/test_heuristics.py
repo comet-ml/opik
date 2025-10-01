@@ -14,12 +14,9 @@ from opik.evaluation.metrics.heuristics.distribution_metrics import (
     JSDistance,
     KLDivergence,
 )
-from opik.evaluation.metrics.heuristics.blanc import BLANC
-from opik.evaluation.metrics.heuristics.blonde import BLONDE
 from opik.evaluation.metrics.heuristics.meteor import METEOR
 from opik.evaluation.metrics.heuristics.gleu import GLEU
 from opik.evaluation.metrics.heuristics.bertscore import BERTScore
-from opik.evaluation.metrics.heuristics.ribes import RIBES
 from opik.evaluation.metrics.heuristics.chrf import ChrF
 from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
 from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
@@ -260,70 +257,6 @@ def test_kl_divergence_avg_direction():
     assert result.value >= 0.0
 
 
-class _StubBlancModel:
-    def __init__(self, score: float = 0.5):
-        self._score = score
-        self.last_call = None
-
-    def eval_once(self, *, summary: str, source: str) -> float:
-        self.last_call = {"summary": summary, "source": source}
-        return self._score
-
-
-def test_blanc_score_uses_backend_stub():
-    stub = _StubBlancModel(score=0.42)
-    metric = BLANC(blanc_model=stub, track=False)
-
-    result = metric.score(output="short summary", reference="full document text")
-
-    assert isinstance(result, ScoreResult)
-    assert result.value == pytest.approx(0.42)
-    assert stub.last_call == {
-        "summary": "short summary",
-        "source": "full document text",
-    }
-
-
-def test_blanc_rejects_empty_inputs():
-    stub = _StubBlancModel()
-    metric = BLANC(blanc_model=stub, track=False)
-
-    with pytest.raises(MetricComputationError):
-        metric.score(output="   ", reference="text")
-
-    with pytest.raises(MetricComputationError):
-        metric.score(output="summary", reference="")
-
-
-class _StubBlondeFn:
-    def __init__(self, result):
-        self._result = result
-        self.calls = []
-
-    def __call__(self, prediction, references):
-        self.calls.append((prediction, tuple(references)))
-        return self._result
-
-
-def test_blonde_metric_with_stub():
-    stub = _StubBlondeFn({"blonde": 0.61, "precision": 0.7})
-    metric = BLONDE(scorer_fn=stub, track=False)
-
-    res = metric.score(output="summary", reference=["reference"])
-
-    assert res.value == pytest.approx(0.61)
-    assert res.metadata["precision"] == pytest.approx(0.7)
-    assert stub.calls == [("summary", ("reference",))]
-
-
-def test_blonde_rejects_empty_inputs():
-    metric = BLONDE(scorer_fn=lambda pred, refs: 0.0, track=False)
-    with pytest.raises(MetricComputationError):
-        metric.score(output="", reference="ref")
-    with pytest.raises(MetricComputationError):
-        metric.score(output="pred", reference=[""])
-
-
 def test_meteor_metric_with_custom_fn():
     captured = []
 
@@ -392,23 +325,6 @@ def test_bertscore_rejects_empty_candidate():
     metric = BERTScore(scorer_fn=lambda c, r: ([0.0], [0.0], [0.0]), track=False)
     with pytest.raises(MetricComputationError):
         metric.score(output="   ", reference="ref")
-
-
-def test_ribes_metric_uses_custom_fn():
-    calls = {}
-
-    def ribes_fn(hypothesis, references):
-        calls["hypothesis"] = hypothesis
-        calls["references"] = references
-        return 0.84
-
-    metric = RIBES(ribes_fn=ribes_fn, track=False)
-    result = metric.score(output="hello world", reference="hello world")
-
-    assert result.value == pytest.approx(0.84)
-    assert calls["hypothesis"] == ["hello", "world"]
-    assert calls["references"] == [["hello", "world"]]
-
 
 def test_chrf_metric_uses_custom_fn():
     def chrf_fn(candidate, references):
