@@ -361,10 +361,8 @@ def _try_add_agent_graph_to_metadata(
 
 def _log_tool_context_warning(context: tool_context.ToolContext) -> None:
     if context is not None:
-        LOGGER.warning(
-            f"Function call id: {context.function_call_id}, agent name: {context.agent_name}"
-        )
+        warning = f"Function call id: {context.function_call_id}, agent name: {context.agent_name}"
         if context.actions is not None:
-            LOGGER.warning(
-                f", is escalate: {context.actions.escalate}, transfer to: {context.actions.transfer_to_agent}"
-            )
+            warning += f", is escalate: {context.actions.escalate}, transfer to: {context.actions.transfer_to_agent}"
+
+        LOGGER.warning(warning)
