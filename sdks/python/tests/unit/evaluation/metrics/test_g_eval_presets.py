@@ -1,11 +1,11 @@
 import pytest
 
 from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset, GEVAL_PRESETS
-from opik.evaluation.metrics.llm_judges.uni_eval.metric import (
-    UniEvalDialogueHelpfulness,
-    UniEvalQARelevance,
-    UniEvalSummarizationCoherence,
-    UniEvalSummarizationConsistency,
+from opik.evaluation.metrics.llm_judges.qa_suite.metric import (
+    DialogueHelpfulnessJudge,
+    QARelevanceJudge,
+    SummarizationCoherenceJudge,
+    SummarizationConsistencyJudge,
 )
 from opik.evaluation.metrics.llm_judges.bias_classifier.metric import (
     DemographicBiasJudge,
@@ -41,21 +41,21 @@ def test_g_eval_preset_unknown():
         GEvalPreset(preset="nonexistent", track=False)
 
 
-def test_uni_eval_wrappers_use_presets():
+def test_qa_suite_wrappers_use_presets():
     assert (
-        UniEvalSummarizationConsistency(track=False).task_introduction
+        SummarizationConsistencyJudge(track=False).task_introduction
         == GEVAL_PRESETS["summarization_consistency"].task_introduction
     )
     assert (
-        UniEvalSummarizationCoherence(track=False).task_introduction
+        SummarizationCoherenceJudge(track=False).task_introduction
         == GEVAL_PRESETS["summarization_coherence"].task_introduction
     )
     assert (
-        UniEvalDialogueHelpfulness(track=False).task_introduction
+        DialogueHelpfulnessJudge(track=False).task_introduction
         == GEVAL_PRESETS["dialogue_helpfulness"].task_introduction
     )
     assert (
-        UniEvalQARelevance(track=False).task_introduction
+        QARelevanceJudge(track=False).task_introduction
         == GEVAL_PRESETS["qa_relevance"].task_introduction
     )
 

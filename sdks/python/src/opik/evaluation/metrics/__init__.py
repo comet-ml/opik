@@ -57,11 +57,11 @@ from .llm_judges.mmad.metric import MMADJudge
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
 from .llm_judges.usefulness.metric import Usefulness
 from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
-from .llm_judges.uni_eval import (
-    UniEvalDialogueHelpfulness,
-    UniEvalQARelevance,
-    UniEvalSummarizationCoherence,
-    UniEvalSummarizationConsistency,
+from .llm_judges.qa_suite import (
+    DialogueHelpfulnessJudge,
+    QARelevanceJudge,
+    SummarizationCoherenceJudge,
+    SummarizationConsistencyJudge,
 )
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
@@ -124,10 +124,10 @@ __all__ = [
     "Usefulness",
     "UserFrustrationMetric",
     "TrajectoryAccuracy",
-    "UniEvalDialogueHelpfulness",
-    "UniEvalQARelevance",
-    "UniEvalSummarizationCoherence",
-    "UniEvalSummarizationConsistency",
+    "DialogueHelpfulnessJudge",
+    "QARelevanceJudge",
+    "SummarizationCoherenceJudge",
+    "SummarizationConsistencyJudge",
     "RevisEvalJudge",
     "MMADJudge",
     # "Factuality",

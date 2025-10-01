@@ -6,7 +6,7 @@ from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset
 from opik.evaluation.models import base_model
 
 
-class UniEvalSummarizationConsistency(GEvalPreset):
+class SummarizationConsistencyJudge(GEvalPreset):
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
@@ -20,11 +20,11 @@ class UniEvalSummarizationConsistency(GEvalPreset):
             track=track,
             project_name=project_name,
             temperature=temperature,
-            name="uni_eval_summarization_consistency_metric",
+            name="summarization_consistency_judge",
         )
 
 
-class UniEvalSummarizationCoherence(GEvalPreset):
+class SummarizationCoherenceJudge(GEvalPreset):
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
@@ -38,11 +38,11 @@ class UniEvalSummarizationCoherence(GEvalPreset):
             track=track,
             project_name=project_name,
             temperature=temperature,
-            name="uni_eval_summarization_coherence_metric",
+            name="summarization_coherence_judge",
         )
 
 
-class UniEvalDialogueHelpfulness(GEvalPreset):
+class DialogueHelpfulnessJudge(GEvalPreset):
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
@@ -56,11 +56,11 @@ class UniEvalDialogueHelpfulness(GEvalPreset):
             track=track,
             project_name=project_name,
             temperature=temperature,
-            name="uni_eval_dialogue_helpfulness_metric",
+            name="dialogue_helpfulness_judge",
         )
 
 
-class UniEvalQARelevance(GEvalPreset):
+class QARelevanceJudge(GEvalPreset):
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
@@ -74,5 +74,5 @@ class UniEvalQARelevance(GEvalPreset):
             track=track,
             project_name=project_name,
             temperature=temperature,
-            name="uni_eval_qa_relevance_metric",
+            name="qa_relevance_judge",
         )
