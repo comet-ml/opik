@@ -408,7 +408,7 @@ You can resolve it by either:
 
 #### Health Check Command
 
-If you are experiencing problems with the Python SDK, run the health check command:
+If you are experiencing problems with the Python SDK, such as receiving 400 or 500 errors from the backend, or being unable to connect at all, run the health check command:
 
 ```bash
 opik healthcheck
@@ -419,6 +419,8 @@ This command will analyze your configuration and backend connectivity, providing
 <Frame>
   <img src="../../img/healthcheck.png" />
 </Frame>
+
+Reviewing the health check output can help pinpoint the source of the problem and suggest possible resolutions.
 
 ### TypeScript SDK Troubleshooting
 
