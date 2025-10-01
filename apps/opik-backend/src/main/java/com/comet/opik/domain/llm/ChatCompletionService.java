@@ -46,19 +46,18 @@ public class ChatCompletionService {
     }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        boolean allowStructured = ImageModelSupport.supportsImageInput(request.model());
-        ChatCompletionRequest normalizedRequest = MessageContentNormalizer.normalizeRequest(request, allowStructured);
+        boolean allowStructured = ModelCapabilities.supportsVision(request.model());
+        ChatCompletionRequest requestToSend = MessageContentNormalizer.normalizeRequest(request, allowStructured);
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalizedRequest.model());
-        llmProviderClient.validateRequest(normalizedRequest);
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, requestToSend.model());
+        llmProviderClient.validateRequest(requestToSend);
 
         ChatCompletionResponse chatCompletionResponse;
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId,
-                    normalizedRequest.model());
-            ChatCompletionRequest requestToSend = normalizedRequest;
-            chatCompletionResponse = retryPolicy
-                    .withRetry(() -> llmProviderClient.generate(requestToSend, workspaceId));
+                    requestToSend.model());
+            chatCompletionResponse = retryPolicy.withRetry(
+                    () -> llmProviderClient.generate(requestToSend, workspaceId));
         } catch (RuntimeException runtimeException) {
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
@@ -69,7 +68,7 @@ public class ChatCompletionService {
             throw new InternalServerErrorException(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER);
         }
 
-        log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, normalizedRequest.model());
+        log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, requestToSend.model());
         return chatCompletionResponse;
     }
 
@@ -77,23 +76,23 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest request,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        boolean allowStructured = ImageModelSupport.supportsImageInput(request.model());
-        ChatCompletionRequest normalizedRequest = MessageContentNormalizer.normalizeRequest(request, allowStructured);
+        boolean allowStructured = ModelCapabilities.supportsVision(request.model());
+        ChatCompletionRequest requestToSend = MessageContentNormalizer.normalizeRequest(request, allowStructured);
 
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
-                normalizedRequest.model());
+                requestToSend.model());
 
-        var llmProviderClient = llmProviderFactory.getService(workspaceId, normalizedRequest.model());
+        var llmProviderClient = llmProviderFactory.getService(workspaceId, requestToSend.model());
 
         llmProviderClient.generateStream(
-                normalizedRequest,
+                requestToSend,
                 workspaceId,
                 handlers::handleMessage,
                 handlers::handleClose,
                 getErrorHandler(handlers, llmProviderClient));
 
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
-                normalizedRequest.model());
+                requestToSend.model());
     }
 
     public ChatResponse scoreTrace(@NonNull ChatRequest chatRequest,
