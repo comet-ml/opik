@@ -6,6 +6,7 @@ set -euo pipefail
 
 # Variables
 DEBUG_MODE=${DEBUG_MODE:-false}
+ORIGINAL_COMMAND="$0 $@"
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
@@ -118,8 +119,10 @@ build_backend() {
     log_debug "Backend directory: $BACKEND_DIR"
     cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
 
-    log_debug "Running: mvn clean install -DskipTests"
-    if mvn clean install -DskipTests; then
+    # resolve.skip=true skips swagger, adjust if any future interference
+    MAVEN_BUILD_CMD="mvn clean install -T 1C -Dmaven.test.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.compile.skip=true -Dmaven.test.resources.skip=true -Dmaven.compiler.useIncrementalCompilation=false -Dresolve.skip=true"
+    log_debug "Running: $MAVEN_BUILD_CMD"
+    if $MAVEN_BUILD_CMD; then
         log_success "Backend build completed successfully"
     else
         log_error "Backend build failed"
@@ -167,6 +170,69 @@ lint_backend() {
         log_error "Backend linting failed"
         exit 1
     fi
+}
+
+print_migrations_recovery_message() {
+    log_error "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
+    log_error "  1. Stop all services: $0 --stop"
+    log_error "  2. Remove Docker volumes (DANGER): docker volume prune -a -f"
+    log_error "  3. Run again your current flow: $ORIGINAL_COMMAND"
+}
+
+# Function to run database migrations
+run_db_migrations() {
+    require_command java
+    log_info "Running database migrations..."
+    log_debug "Backend directory: $BACKEND_DIR"
+    cd "$BACKEND_DIR" || { log_error "Backend directory not found"; exit 1; }
+
+    # Find and validate the JAR file
+    if ! find_jar_files; then
+        log_warning "No backend JAR file found in target/. Building backend automatically..."
+        build_backend
+
+        # Re-scan for JAR files after build
+        if ! find_jar_files; then
+            log_error "Backend build completed but no JAR file found. Build may have failed."
+            exit 1
+        fi
+    fi
+
+    log_debug "Running migrations with JAR: $JAR_FILE"
+    log_debug "Current directory: $(pwd)"
+
+    # Run MySQL (state DB) migrations
+    log_info "Running MySQL (state DB) migrations..."
+    # Set the database name environment variable for MySQL migrations
+    export STATE_DB_DATABASE_NAME="opik"
+    if java -jar "$JAR_FILE" db migrate config.yml; then
+        log_success "MySQL migrations completed successfully"
+    else
+        # TODO: dbAnalytics clear-checksums not supported by liquibase-clickhouse yet,
+        #  this would enable automatic recovery,
+        #  not worthy adding it only for MySQL as volumes might need pruning anyway
+        log_error "MySQL migrations failed"
+        print_migrations_recovery_message
+        exit 1
+    fi
+
+    # Run ClickHouse (analytics DB) migrations
+    log_info "Running ClickHouse (analytics DB) migrations..."
+    # Set the database name environment variable for ClickHouse migrations
+    export ANALYTICS_DB_DATABASE_NAME="opik"
+    # Set the connection URL to ensure connection to opik database
+    export ANALYTICS_DB_MIGRATIONS_URL="jdbc:clickhouse://localhost:8123"
+    if java -jar "$JAR_FILE" dbAnalytics migrate config.yml; then
+        log_success "ClickHouse migrations completed successfully"
+    else
+        # TODO: dbAnalytics clear-checksums not supported by liquibase-clickhouse yet,
+        #  this would enable automatic recovery
+        log_error "ClickHouse migrations failed"
+        print_migrations_recovery_message
+        exit 1
+    fi
+
+    log_success "All database migrations completed successfully"
 }
 
 # Function to start backend
@@ -262,6 +328,10 @@ start_frontend() {
         export NODE_ENV="development"
         log_debug "Frontend debug mode enabled - NODE_ENV=development"
     fi
+
+    # Configure frontend to talk to local backend
+    export VITE_BASE_API_URL="http://localhost:8080"
+    log_info "Frontend API base URL (VITE_BASE_API_URL) set to: $VITE_BASE_API_URL"
 
     log_debug "Starting frontend with: npm run start"
 
@@ -421,6 +491,40 @@ verify_services() {
         echo -e "${GREEN}🚀 Opik Development Environment is Ready!${NC}"
         echo -e "${BLUE}📊  Access the UI:     http://localhost:5174${NC}"
         echo -e "${BLUE}🛠️  API ping Endpoint: http://localhost:8080/is-alive/ping${NC}"
+        echo ""
+        echo -e "${BLUE}ℹ️  SDK Configuration Required:${NC}"
+        echo -e "To use the Opik SDK with your local development environment, you MUST configure it to point to your local instance."
+        echo ""
+        echo -e "${BLUE}Step 1 - Run Python SDK Configuration (CLI):${NC}"
+        echo "  opik configure"
+        echo "  # When prompted:"
+        echo "  #   - Choose 'Local deployment' option"
+        echo "  #   - Enter URL: http://localhost:8080"
+        echo ""
+        echo -e "${YELLOW}⚠️  IMPORTANT: Manual Configuration File Edit Required!${NC}"
+        echo -e "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
+        echo ""
+        echo -e "${BLUE}Step 2 - Edit the configuration file:${NC}"
+        echo "  # Open the configuration file, by default: ~/.opik.config"
+        echo ""
+        echo "  # Change this line:"
+        echo "  url_override = http://localhost:8080/api/"
+        echo ""
+        echo "  # To this (remove '/api'):"
+        echo "  url_override = http://localhost:8080"
+        echo ""
+        echo -e "${BLUE}Alternative for previous steps - Environment Variables:${NC}"
+        echo "  export OPIK_URL_OVERRIDE='http://localhost:8080'"
+        echo "  export OPIK_WORKSPACE='default'"
+        echo ""
+        echo -e "${YELLOW}Important Notes:${NC}"
+        echo "  • The configuration file is located at ~/.opik.config by default"
+        echo "  • You MUST remove '/api' from the URL for local development"
+        echo "  • Default workspace is 'default'"
+        echo "  • No API key required for local instances"
+        echo ""
+        echo -e "${BLUE}📖 For complete configuration documentation, visit:${NC}"
+        echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
     fi
 
     echo ""
@@ -429,24 +533,42 @@ verify_services() {
     echo "  Frontend: tail -f /tmp/opik-frontend.log"
 }
 
+# Function to start services (without building)
+start_services() {
+    log_info "=== Starting Opik Development Environment ==="
+    log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
+    log_info "Step 1/4: Starting infrastructure..."
+    start_infrastructure
+    log_info "Step 2/4: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 3/4: Starting backend..."
+    start_backend
+    log_info "Step 4/4: Starting frontend..."
+    start_frontend
+    log_success "=== Start Complete ==="
+    verify_services
+}
+
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/8: Stopping frontend..."
+    log_info "Step 1/9: Stopping frontend..."
     stop_frontend
-    log_info "Step 2/8: Stopping backend..."
+    log_info "Step 2/9: Stopping backend..."
     stop_backend
-    log_info "Step 3/8: Stopping infrastructure..."
+    log_info "Step 3/9: Stopping infrastructure..."
     stop_infrastructure
-    log_info "Step 4/8: Starting infrastructure..."
+    log_info "Step 4/9: Starting infrastructure..."
     start_infrastructure
-    log_info "Step 5/8: Building backend..."
+    log_info "Step 5/9: Building backend..."
     build_backend
-    log_info "Step 6/8: Building frontend..."
+    log_info "Step 6/9: Building frontend..."
     build_frontend
-    log_info "Step 7/8: Starting backend..."
+    log_info "Step 7/9: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 8/9: Starting backend..."
     start_backend
-    log_info "Step 8/8: Starting frontend..."
+    log_info "Step 9/9: Starting frontend..."
     start_frontend
     log_success "=== Restart Complete ==="
     verify_services
@@ -459,6 +581,7 @@ show_usage() {
     echo "Options:"
     echo "  --build-be     - Build backend"
     echo "  --build-fe     - Build frontend"
+    echo "  --migrate      - Run database migrations"
     echo "  --start        - Start all services (without building)"
     echo "  --stop         - Stop all services"
     echo "  --restart      - Stop, build, and start all services (DEFAULT IF NO OPTIONS PROVIDED)"
@@ -527,11 +650,13 @@ case "${1:-}" in
     "--build-fe")
         build_frontend
         ;;
-    "--start")
+    "--migrate")
         start_infrastructure
-        start_backend
-        start_frontend
-        verify_services
+        build_backend
+        run_db_migrations
+        ;;
+    "--start")
+        start_services
         ;;
     "--stop")
         stop_frontend

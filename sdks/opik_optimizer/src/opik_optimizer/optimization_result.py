@@ -27,6 +27,7 @@ class OptimizationResult(pydantic.BaseModel):
     details: dict[str, Any] = pydantic.Field(default_factory=dict)
     history: list[dict[str, Any]] = []
     llm_calls: int | None = None
+    tool_calls: int | None = None
 
     # MIPRO specific
     demonstrations: list[dict[str, Any]] | None = None

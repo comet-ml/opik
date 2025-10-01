@@ -41,6 +41,15 @@ import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPa
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 
+declare module "@tanstack/react-router" {
+  interface StaticDataRouteOption {
+    hideUpgradeButton?: boolean;
+    title?: string;
+    param?: string;
+    paramValue?: string;
+  }
+}
+
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
     ? () => null // Render nothing in production
@@ -119,6 +128,9 @@ const getStartedRoute = createRoute({
   path: "/$workspaceName/get-started",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
   component: NewQuickstartPage,
+  staticData: {
+    hideUpgradeButton: true,
+  },
 });
 
 // ----------- home

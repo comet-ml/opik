@@ -15,21 +15,17 @@ services:
   zookeeper:
     ports:
       - "2181:2181"
-      
+
   minio:
     ports:
       - "9001:9000"   # MinIO API Port
       - "9090:9090"   # MinIO Web UI Console
 
   backend:
-    ports:
+    ports: !override
       - "8080:8080" # Exposing backend HTTP port to host
       - "3003:3003" # Exposing backend OpenAPI specification port to host
 
   python-backend:
     ports:
       - "8000:8000" # Exposing Python backend HTTP port to host
-
-  frontend:
-    ports:
-      - "5173:5173" # Exposing frontend server port to host

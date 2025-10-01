@@ -4,6 +4,20 @@
 
 from .types import (
     AggregationData,
+    Alert,
+    AlertPublic,
+    AlertTrigger,
+    AlertTriggerConfig,
+    AlertTriggerConfigPublic,
+    AlertTriggerConfigPublicType,
+    AlertTriggerConfigType,
+    AlertTriggerConfigWrite,
+    AlertTriggerConfigWriteType,
+    AlertTriggerEventType,
+    AlertTriggerPublic,
+    AlertTriggerPublicEventType,
+    AlertTriggerWrite,
+    AlertTriggerWriteEventType,
     AnnotationQueue,
     AnnotationQueueBatch,
     AnnotationQueueItemIds,
@@ -149,7 +163,9 @@ from .types import (
     ExperimentItemTraceVisibilityMode,
     ExperimentPagePublic,
     ExperimentPublic,
+    ExperimentPublicStatus,
     ExperimentPublicType,
+    ExperimentStatus,
     ExperimentType,
     ExportTraceServiceRequest,
     Feedback,
@@ -349,6 +365,9 @@ from .types import (
     ValueEntryPublic,
     ValueEntryPublicSource,
     ValueEntrySource,
+    Webhook,
+    WebhookPublic,
+    WebhookWrite,
     WorkspaceConfiguration,
     WorkspaceMetricRequest,
     WorkspaceMetricResponse,
@@ -368,6 +387,7 @@ from .errors import (
     UnprocessableEntityError,
 )
 from . import (
+    alerts,
     annotation_queues,
     attachments,
     automation_rule_evaluators,
@@ -398,7 +418,7 @@ from .attachments import (
 from .client import AsyncOpikApi, OpikApi
 from .datasets import DatasetUpdateVisibility, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
-from .experiments import ExperimentWriteType
+from .experiments import ExperimentUpdateStatus, ExperimentUpdateType, ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
@@ -419,6 +439,20 @@ from .spans import (
 
 __all__ = [
     "AggregationData",
+    "Alert",
+    "AlertPublic",
+    "AlertTrigger",
+    "AlertTriggerConfig",
+    "AlertTriggerConfigPublic",
+    "AlertTriggerConfigPublicType",
+    "AlertTriggerConfigType",
+    "AlertTriggerConfigWrite",
+    "AlertTriggerConfigWriteType",
+    "AlertTriggerEventType",
+    "AlertTriggerPublic",
+    "AlertTriggerPublicEventType",
+    "AlertTriggerWrite",
+    "AlertTriggerWriteEventType",
     "AnnotationQueue",
     "AnnotationQueueBatch",
     "AnnotationQueueItemIds",
@@ -571,8 +605,13 @@ __all__ = [
     "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExperimentPublicStatus",
     "ExperimentPublicType",
+    "ExperimentStatus",
     "ExperimentType",
+    "ExperimentUpdateStatus",
+    "ExperimentUpdateType",
+    "ExperimentWriteStatus",
     "ExperimentWriteType",
     "ExportTraceServiceRequest",
     "Feedback",
@@ -794,6 +833,9 @@ __all__ = [
     "ValueEntryPublic",
     "ValueEntryPublicSource",
     "ValueEntrySource",
+    "Webhook",
+    "WebhookPublic",
+    "WebhookWrite",
     "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
@@ -802,6 +844,7 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "alerts",
     "annotation_queues",
     "attachments",
     "automation_rule_evaluators",

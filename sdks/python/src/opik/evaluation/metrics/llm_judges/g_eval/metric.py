@@ -306,17 +306,18 @@ class GEval(base_metric.BaseMetric):
         ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
-            model_output = self._model.generate_provider_response(
+            with base_model.get_provider_response(
+                model_provider=self._model,
                 messages=request,
                 logprobs=self._log_probs_supported,
                 top_logprobs=20 if self._log_probs_supported else None,
                 response_format=GEvalScoreFormat,
-            )
-            return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=self._log_probs_supported,
-            )
+            ) as model_output:
+                return parser.parse_litellm_model_output(
+                    content=model_output,
+                    name=self.name,
+                    log_probs_supported=self._log_probs_supported,
+                )
 
         model_output_string = self._model.generate_string(
             input=llm_query, response_format=GEvalScoreFormat
@@ -344,17 +345,18 @@ class GEval(base_metric.BaseMetric):
         ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
-            model_output = await self._model.agenerate_provider_response(
+            async with base_model.aget_provider_response(
+                model_provider=self._model,
                 messages=request,
                 logprobs=self._log_probs_supported,
                 top_logprobs=20 if self._log_probs_supported else None,
                 response_format=GEvalScoreFormat,
-            )
-            return parser.parse_litellm_model_output(
-                content=model_output,
-                name=self.name,
-                log_probs_supported=self._log_probs_supported,
-            )
+            ) as model_output:
+                return parser.parse_litellm_model_output(
+                    content=model_output,
+                    name=self.name,
+                    log_probs_supported=self._log_probs_supported,
+                )
 
         model_output_string = await self._model.agenerate_string(
             input=llm_query, response_format=GEvalScoreFormat

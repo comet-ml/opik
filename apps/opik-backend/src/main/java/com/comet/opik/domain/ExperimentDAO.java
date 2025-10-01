@@ -7,8 +7,10 @@ import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
@@ -51,6 +53,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -83,7 +86,8 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 type,
-                optimization_id
+                optimization_id,
+                status
             )
             SELECT
                 if(
@@ -101,7 +105,8 @@ class ExperimentDAO {
                 new.prompt_id,
                 new.prompt_versions,
                 new.type,
-                new.optimization_id
+                new.optimization_id,
+                new.status
             FROM (
                 SELECT
                 :id AS id,
@@ -115,7 +120,8 @@ class ExperimentDAO {
                 :prompt_id AS prompt_id,
                 mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
                 :type AS type,
-                :optimization_id AS optimization_id
+                :optimization_id AS optimization_id,
+                :status AS status
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -349,6 +355,7 @@ class ExperimentDAO {
                 e.prompt_versions as prompt_versions,
                 e.optimization_id as optimization_id,
                 e.type as type,
+                e.status as status,
                 fs.feedback_scores as feedback_scores,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
@@ -660,6 +667,45 @@ class ExperimentDAO {
             ;
             """;
 
+    private static final String UPDATE = """
+            INSERT INTO experiments (
+                id,
+                dataset_id,
+                name,
+                workspace_id,
+                metadata,
+                created_by,
+                last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                type,
+                optimization_id,
+                status,
+                created_at,
+                last_updated_at
+            )
+            SELECT
+                id,
+                dataset_id,
+                <if(name)> :name <else> name <endif> as name,
+                workspace_id,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
+                created_by,
+                :user_name as last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                <if(type)> :type <else> type <endif> as type,
+                optimization_id,
+                <if(status)> :status <else> status <endif> as status,
+                created_at,
+                now64(9) as last_updated_at
+            FROM experiments
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull ExperimentSortingFactory sortingFactory;
@@ -680,7 +726,8 @@ class ExperimentDAO {
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
-                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "");
+                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "")
+                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue());
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -787,6 +834,7 @@ class ExperimentDAO {
                             .map(UUID::fromString)
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
+                    .status(ExperimentStatus.fromString(row.get("status", String.class)))
                     .build();
         });
     }
@@ -1205,4 +1253,66 @@ class ExperimentDAO {
                     .build();
         });
     }
+
+    @WithSpan
+    Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
+        log.info("Updating experiment with id '{}'", id);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> updateWithInsert(id, experimentUpdate, connection))
+                .then();
+    }
+
+    private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
+            Connection connection) {
+
+        ST template = buildUpdateTemplate(experimentUpdate, UPDATE);
+        String sql = template.render();
+
+        Statement statement = connection.createStatement(sql);
+        bindUpdateParams(experimentUpdate, statement);
+        statement.bind("id", id);
+
+        return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+    }
+
+    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update) {
+        ST template = new ST(update);
+
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            template.add("name", experimentUpdate.name());
+        }
+
+        if (experimentUpdate.metadata() != null) {
+            template.add("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.type() != null) {
+            template.add("type", experimentUpdate.type().getValue());
+        }
+
+        if (experimentUpdate.status() != null) {
+            template.add("status", experimentUpdate.status().getValue());
+        }
+
+        return template;
+    }
+
+    private void bindUpdateParams(ExperimentUpdate experimentUpdate, Statement statement) {
+        if (StringUtils.isNotBlank(experimentUpdate.name())) {
+            statement.bind("name", experimentUpdate.name());
+        }
+
+        if (experimentUpdate.metadata() != null) {
+            statement.bind("metadata", experimentUpdate.metadata().toString());
+        }
+
+        if (experimentUpdate.type() != null) {
+            statement.bind("type", experimentUpdate.type().getValue());
+        }
+
+        if (experimentUpdate.status() != null) {
+            statement.bind("status", experimentUpdate.status().getValue());
+        }
+    }
+
 }

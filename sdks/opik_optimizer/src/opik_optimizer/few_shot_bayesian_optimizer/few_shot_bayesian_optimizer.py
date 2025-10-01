@@ -1,6 +1,8 @@
 from typing import Any
 from collections.abc import Callable
+import warnings
 
+import copy
 import json
 import logging
 import random
@@ -16,7 +18,6 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
-from ..utils import create_litellm_agent_class
 from ..optimization_config import chat_prompt, mappers
 from ..optimizable_agent import OptimizableAgent
 from .. import _throttle, optimization_result, task_evaluator, utils
@@ -95,8 +96,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             **model_kwargs: Additional model parameters
         """
         if "project_name" in model_kwargs:
-            print(
-                "Removing `project_name` from constructor; it now belongs in the ChatPrompt()"
+            warnings.warn(
+                "The 'project_name' parameter in optimizer constructor is deprecated. "
+                "Set project_name in the ChatPrompt instead.",
+                DeprecationWarning,
+                stacklevel=2,
             )
             del model_kwargs["project_name"]
 
@@ -112,9 +116,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         elif self.verbose == 2:
             logger.setLevel(logging.DEBUG)
 
-        self._opik_client = opik.Opik()
-        self.llm_call_counter = 0
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
+
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        return {
+            "min_examples": self.min_examples,
+            "max_examples": self.max_examples,
+        }
 
     @_throttle.rate_limited(_limiter)
     def _call_model(
@@ -134,7 +142,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         Returns:
             Dict containing the model's response
         """
-        self.llm_call_counter += 1
+        self.increment_llm_counter()
 
         current_model_kwargs = self.model_kwargs.copy()
         current_model_kwargs.update(model_kwargs)
@@ -260,19 +268,20 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if n_samples is not None and n_samples < len(dataset_items):
             eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
 
-        # Define the experiment configuration
-        experiment_config = experiment_config or {}
-        base_experiment_config = {  # Base config for reuse
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "agent_class": self.agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": metric.__name__,
-                "dataset": dataset.name,
-                "configuration": {},
-            },
-        }
+        configuration_updates = self._drop_none(
+            {
+                "n_trials": n_trials,
+                "n_samples": n_samples,
+                "baseline_score": baseline_score,
+            }
+        )
+        base_experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+        )
 
         # Start Optuna Study
         def optimization_objective(trial: optuna.Trial) -> float:
@@ -327,7 +336,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             ]
 
             # Log trial config
-            trial_config = base_experiment_config.copy()
+            trial_config = copy.deepcopy(base_experiment_config)
             trial_config["configuration"]["prompt"] = (
                 messages_for_reporting  # Base instruction
             )
@@ -481,6 +490,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
             optimization_id=optimization_id,
         )
@@ -490,47 +500,39 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
         metric: Callable,
-        n_trials: int = 10,
-        agent_class: type[OptimizableAgent] | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
         Args:
-            prompt:
+            prompt: The prompt to optimize
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
-            n_trials: Number of trials for Bayesian Optimization
             experiment_config: Optional configuration for the experiment, useful to log additional metadata
             n_samples: Optional number of items to test in the dataset
+            auto_continue: Whether to auto-continue optimization
+            agent_class: Optional agent class to use
+            **kwargs: Additional parameters including:
+                n_trials (int): Number of trials for Bayesian Optimization (default: 10)
+                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
 
         Returns:
             OptimizationResult: Result of the optimization
         """
-        if not isinstance(prompt, chat_prompt.ChatPrompt):
-            raise ValueError("Prompt must be a ChatPrompt object")
+        # Use base class validation and setup methods
+        self.validate_optimization_inputs(prompt, dataset, metric)
+        self.configure_prompt_model(prompt)
+        self.agent_class = self.setup_agent_class(prompt, agent_class)
 
-        if not isinstance(dataset, Dataset):
-            raise ValueError("Dataset must be a Dataset object")
-
-        if not callable(metric):
-            raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
-            )
-
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
-
-        if agent_class is None:
-            self.agent_class = create_litellm_agent_class(prompt)
-        else:
-            self.agent_class = agent_class
+        # Extract n_trials from kwargs for backward compatibility
+        n_trials = kwargs.get("n_trials", 10)
 
         optimization = None
         try:
-            optimization = self._opik_client.create_optimization(
+            optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
@@ -636,26 +638,30 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         """
         llm_task = self._build_task_from_messages(prompt, prompt.get_messages())
 
-        experiment_config = experiment_config or {}
-        experiment_config["project_name"] = self.agent_class.__name__
-        experiment_config = {
-            **experiment_config,
-            **{
-                "optimizer": self.__class__.__name__,
-                "agent_class": self.agent_class.__name__,
-                "agent_config": prompt.to_dict(),
-                "metric": metric.__name__,
-                "dataset": dataset.name,
-                "configuration": {"prompt": prompt.get_messages()},
-            },
-        }
-
         if n_samples is not None:
             if dataset_item_ids is not None:
                 raise Exception("Can't use n_samples and dataset_item_ids")
 
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
             dataset_item_ids = random.sample(all_ids, n_samples)
+
+        configuration_updates = self._drop_none(
+            {
+                "n_samples": n_samples,
+                "dataset_item_ids": dataset_item_ids,
+            }
+        )
+        additional_metadata = (
+            {"optimization_id": optimization_id} if optimization_id else None
+        )
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata=additional_metadata,
+        )
 
         logger.debug("Starting FewShotBayesian evaluation...")
         score = task_evaluator.evaluate(
@@ -664,7 +670,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             metric=metric,
             evaluated_task=llm_task,
             num_threads=self.n_threads,
-            project_name=self.agent_class.project_name,
+            project_name=experiment_config.get("project_name"),
             experiment_config=experiment_config,
             optimization_id=optimization_id,
             verbose=self.verbose,

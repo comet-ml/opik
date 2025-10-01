@@ -17,6 +17,7 @@ export interface ExperimentWrite {
     metadata?: OpikApi.JsonListStringWrite;
     type?: OpikApi.ExperimentWriteType;
     optimizationId?: string;
+    status?: OpikApi.ExperimentWriteStatus;
     promptVersion?: OpikApi.PromptVersionLinkWrite;
     promptVersions?: OpikApi.PromptVersionLinkWrite[];
 }

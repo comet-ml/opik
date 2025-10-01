@@ -5,13 +5,24 @@
 [![Downloads](https://static.pepy.tech/badge/opik-optimizer)](https://pepy.tech/project/opik-optimizer)
 [![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 
-The Opik Agent Optimizer refines your prompts to achieve better performance from your Large Language Models (LLMs). It supports a variety of optimization algorithms, including:
+The Opik Agent Optimizer refines your prompts to achieve better performance from your Large Language Models (LLMs). It supports a variety of optimization algorithms, all with a **standardized API** for consistent usage and chaining:
 
-* EvolutionaryOptimizer
-* FewShotBayesianOptimizer
-* MetaPromptOptimizer
-* MiproOptimizer
-* GepaOptimizer
+* **EvolutionaryOptimizer** - Uses genetic algorithms for prompt evolution
+* **FewShotBayesianOptimizer** - Uses few-shot learning with Bayesian optimization
+* **MetaPromptOptimizer** - Employs meta-prompting techniques for optimization
+* **MiproOptimizer** - Implements MIPRO (Multi-Input Prompt Optimization) algorithm
+* **GepaOptimizer** - Leverages GEPA (Genetic-Pareto) optimization approach
+
+## 🎯 Key Features
+
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+- **Optimizer Chaining**: Results from one optimizer can be used as input for another
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+- **Type Safety**: Full type hints and validation for robust development
+- **Backward Compatibility**: All original parameters preserved through kwargs extraction
+- **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
@@ -63,6 +74,40 @@ You'll typically need:
 *   An [Opik Metric](https://www.comet.com/docs/opik/evaluation/metrics/overview/) (or a custom evaluation function).
 *   A starting prompt (template string).
 
+## Standardized API
+
+All optimizers follow the same interface, making it easy to switch between algorithms or chain them together:
+
+```python
+# All optimizers have the same signature
+def optimize_prompt(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+
+# All optimizers return the same result type
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=metric,
+    n_samples=100
+)
+
+# Results can be chained
+chained_result = another_optimizer.optimize_prompt(
+    prompt=ChatPrompt.from_result(result),  # Use previous result
+    dataset=dataset,
+    metric=metric
+)
+```
+
 ## Example
 
 Here's a brief example of how to use the `FewShotBayesianOptimizer`. We'll use a sample dataset provided by Opik.
@@ -108,14 +153,15 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=hot_pot_dataset,
     metric=levenshtein_ratio,
-    n_trials=10,   # Number of optimization trials
-    n_samples=150, # Number of dataset samples for evaluation per trial
+    n_samples=150  # Number of dataset samples for evaluation per trial
 )
 
 # Display the best prompt and its score
 result.display()
 ```
 The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
+
+The optimizer automatically logs run metadata—including optimizer version, tool schemas, prompt messages, and the models used—so you get consistent experiment context without any additional arguments. If you still need custom tags (for example identifying the dataset or task), pass an `experiment_config` dictionary and your fields will be merged on top of the defaults.
 
 ## Tool Optimization (MCP) - Beta
 
@@ -176,6 +222,46 @@ optimizer = MetaPromptOptimizer(model="gpt-4")
 ```
 
 For comprehensive documentation on tool optimization, see the [Tool Optimization Guide](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization).
+
+## Deprecation Warnings
+
+The following parameters are deprecated and will be removed in future versions:
+
+### Constructor Parameters
+
+- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
+- **`num_threads`** in optimizer constructors: Use `n_threads` instead
+
+### Example Migration
+
+```python
+# ❌ Deprecated
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    project_name="my-project",  # Deprecated
+    num_threads=16,             # Deprecated
+)
+
+# ✅ Correct
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    n_threads=16,  # Use n_threads instead
+)
+
+prompt = ChatPrompt(
+    project_name="my-project",  # Set here instead
+    messages=[...]
+)
+```
+
+### Suppressing Deprecation Warnings
+
+To suppress deprecation warnings during development:
+
+```python
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+```
 
 ### MCP Integration (Beta)
 

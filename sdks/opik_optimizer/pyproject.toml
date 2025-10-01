@@ -33,6 +33,7 @@ dev = [
     # "google-adk",
     "langgraph",
     "gepa>=0.0.7",
+    "pre-commit",
 ]
 
 [tool.setuptools.packages.find]
@@ -62,3 +63,12 @@ filterwarnings = [
     "ignore::pytest.PytestConfigWarning",
     "ignore::RuntimeWarning:litellm.integrations.opik.opik",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["opik_optimizer"]
+omit = ["opik_optimizer/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
