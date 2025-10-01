@@ -470,6 +470,39 @@ class BaseOptimizer(ABC):
             f"{self.__class__.__name__} does not implement optimize_mcp yet."
         )
 
+    def optimize_parameter(
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: Dataset,
+        metric: Callable,
+        parameter_space: "ParameterSearchSpace",
+        experiment_config: dict | None = None,
+        n_trials: int | None = None,
+        n_samples: int | None = None,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
+    ) -> optimization_result.OptimizationResult:
+        """
+        Optimize LLM call parameters such as temperature or top_k.
+
+        Args:
+            prompt: The chat prompt to evaluate with tuned parameters
+            dataset: Dataset providing evaluation examples
+            metric: Objective function to maximize
+            parameter_space: Definition of the search space for tunable parameters
+            experiment_config: Optional experiment metadata
+            n_trials: Number of trials to run (optimizer specific default if None)
+            n_samples: Number of dataset samples to evaluate per trial (None for all)
+            agent_class: Optional custom agent class to execute evaluations
+            **kwargs: Additional optimizer specific settings
+
+        Returns:
+            OptimizationResult: Structured result describing the best parameters found
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement optimize_parameter yet."
+        )
+
     def get_history(self) -> list[OptimizationRound]:
         """
         Get the optimization history.
