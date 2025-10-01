@@ -243,7 +243,7 @@ class TestOnlineScoring:
                 name=f"ML_Training_trace_{i}",
                 project_name=os.environ["OPIK_PROJECT_NAME"],
                 input={"query": "machine learning question", "context": "AI context"},
-                output={"answer": "ML response"},
+                output={"output": "ML response"},
                 tags=["ml", "production"],
             )
             matching_traces.append(trace)
@@ -255,7 +255,7 @@ class TestOnlineScoring:
                 name=f"Database_query_{i}",
                 project_name=os.environ["OPIK_PROJECT_NAME"],
                 input={"query": "database question", "context": "DB context"},
-                output={"answer": "DB response"},
+                output={"output": "DB response"},
                 tags=["database", "production"],
             )
             non_matching_traces.append(trace)
