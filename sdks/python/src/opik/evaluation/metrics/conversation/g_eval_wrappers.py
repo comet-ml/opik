@@ -76,20 +76,26 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
         try:
             raw_result = self._judge.score(output=last_assistant)
         except exceptions.MetricComputationError as error:
+            reason = str(error)
+        except Exception as error:
+            reason = (
+                f"Judge {self._judge.name} raised {error.__class__.__name__}: {error}"
+            )
+        else:
+            judge_result = self._normalize_result(raw_result)
             return ScoreResult(
                 name=self.name,
-                value=0.0,
-                reason=str(error),
-                scoring_failed=True,
+                value=judge_result.value,
+                reason=judge_result.reason,
+                metadata=judge_result.metadata,
+                scoring_failed=judge_result.scoring_failed,
             )
 
-        judge_result = self._normalize_result(raw_result)
         return ScoreResult(
             name=self.name,
-            value=judge_result.value,
-            reason=judge_result.reason,
-            metadata=judge_result.metadata,
-            scoring_failed=judge_result.scoring_failed,
+            value=0.0,
+            reason=reason,
+            scoring_failed=True,
         )
 
 

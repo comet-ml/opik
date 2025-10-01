@@ -199,8 +199,24 @@ GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
 }
 
 
+def _freeze_for_cache(value: Any) -> Any:
+    """Convert nested structures into hashable representations for caching."""
+
+    if isinstance(value, dict):
+        return tuple(
+            sorted((key, _freeze_for_cache(val)) for key, val in value.items())
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_for_cache(item) for item in value)
+    if isinstance(value, set):
+        return tuple(sorted(_freeze_for_cache(item) for item in value))
+    return value
+
+
 class GEval(base_metric.BaseMetric):
-    _CHAIN_OF_THOUGHT_CACHE: "OrderedDict[Tuple[str, str, str], str]" = OrderedDict()
+    _CHAIN_OF_THOUGHT_CACHE: "OrderedDict[Tuple[str, str, str, Any], str]" = (
+        OrderedDict()
+    )
     _CHAIN_OF_THOUGHT_LOCK: Lock = Lock()
     _MAX_CHAIN_OF_THOUGHT_CACHE = 128
 
@@ -244,11 +260,7 @@ class GEval(base_metric.BaseMetric):
         self._init_model(model, temperature=temperature)
 
     def llm_chain_of_thought(self) -> str:
-        cache_key = (
-            self.task_introduction,
-            self.evaluation_criteria,
-            getattr(self._model, "model_name", "unknown"),
-        )
+        cache_key = self._chain_of_thought_cache_key()
         cached = self._get_cached_chain_of_thought(cache_key)
         if cached is not None:
             return cached
@@ -262,11 +274,7 @@ class GEval(base_metric.BaseMetric):
         return generated
 
     async def allm_chain_of_thought(self) -> str:
-        cache_key = (
-            self.task_introduction,
-            self.evaluation_criteria,
-            getattr(self._model, "model_name", "unknown"),
-        )
+        cache_key = self._chain_of_thought_cache_key()
         cached = self._get_cached_chain_of_thought(cache_key)
         if cached is not None:
             return cached
@@ -296,7 +304,7 @@ class GEval(base_metric.BaseMetric):
 
     @classmethod
     def _get_cached_chain_of_thought(
-        cls, cache_key: Tuple[str, str, str]
+        cls, cache_key: Tuple[str, str, str, Any]
     ) -> Optional[str]:
         with cls._CHAIN_OF_THOUGHT_LOCK:
             value = cls._CHAIN_OF_THOUGHT_CACHE.get(cache_key)
@@ -306,7 +314,7 @@ class GEval(base_metric.BaseMetric):
 
     @classmethod
     def _store_chain_of_thought(
-        cls, cache_key: Tuple[str, str, str], value: str
+        cls, cache_key: Tuple[str, str, str, Any], value: str
     ) -> None:
         with cls._CHAIN_OF_THOUGHT_LOCK:
             existing = cls._CHAIN_OF_THOUGHT_CACHE.get(cache_key)
@@ -317,6 +325,31 @@ class GEval(base_metric.BaseMetric):
             cls._CHAIN_OF_THOUGHT_CACHE.move_to_end(cache_key)
             while len(cls._CHAIN_OF_THOUGHT_CACHE) > cls._MAX_CHAIN_OF_THOUGHT_CACHE:
                 cls._CHAIN_OF_THOUGHT_CACHE.popitem(last=False)
+
+    def _chain_of_thought_cache_key(self) -> Tuple[str, str, str, Any]:
+        model_name = getattr(self._model, "model_name", "unknown")
+        return (
+            self.task_introduction,
+            self.evaluation_criteria,
+            model_name,
+            self._model_cache_fingerprint(),
+        )
+
+    def _model_cache_fingerprint(self) -> Any:
+        fingerprint_candidate = getattr(self._model, "cache_fingerprint", None)
+        if callable(fingerprint_candidate):
+            try:
+                fingerprint = fingerprint_candidate()
+            except Exception:
+                fingerprint = None
+            else:
+                return _freeze_for_cache(fingerprint)
+
+        completion_kwargs = getattr(self._model, "_completion_kwargs", None)
+        if isinstance(completion_kwargs, dict):
+            return _freeze_for_cache(completion_kwargs)
+
+        return id(self._model)
 
     def score(
         self,
