@@ -58,9 +58,7 @@ class ConversationDegenerationMetric(BaseMetric):
             if turn.get("role") == "assistant" and turn.get("content")
         ]
         if not assistant_turns:
-            raise MetricComputationError(
-                "Conversation contains no assistant messages"
-            )
+            raise MetricComputationError("Conversation contains no assistant messages")
 
         per_turn_metadata: List[Dict[str, float]] = []
         degeneracy_scores: List[float] = []
