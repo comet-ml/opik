@@ -1,4 +1,4 @@
-"""M-MAD: Random forest of juries aggregating heterogeneous judges."""
+"""LLM Juries: aggregate heterogeneous judges into a consensus score."""
 
 from __future__ import annotations
 
@@ -9,20 +9,20 @@ from opik.evaluation.metrics.score_result import ScoreResult
 import opik.exceptions as exceptions
 
 
-class MMADJudge(BaseMetric):
+class LLMJuriesJudge(BaseMetric):
     """Aggregate multiple judge metrics (the 'juries') into a consensus score."""
 
     def __init__(
         self,
         judges: Iterable[BaseMetric],
-        name: str = "mmad_judge",
+        name: str = "llm_juries_judge",
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._judges = list(judges)
         if not self._judges:
-            raise ValueError("MMADJudge requires at least one judge metric.")
+            raise ValueError("LLMJuriesJudge requires at least one judge metric.")
 
     def score(self, *args: Any, **kwargs: Any) -> ScoreResult:
         precomputed: Optional[Dict[BaseMetric, ScoreResult]] = kwargs.pop(
@@ -58,3 +58,4 @@ class MMADJudge(BaseMetric):
         return ScoreResult(
             value=average, name=self.name, reason=reason, metadata=metadata
         )
+

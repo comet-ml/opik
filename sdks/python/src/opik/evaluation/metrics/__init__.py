@@ -7,6 +7,16 @@ from .conversation.bleu_c.metric import BleuCMetric
 from .conversation.meteor_c.metric import MeteorCMetric
 from .conversation.degeneration.metric import ConversationDegenerationMetric
 from .conversation.knowledge_retention.metric import KnowledgeRetentionMetric
+from .conversation.g_eval_wrappers import (
+    GEvalConversationMetric,
+    ConversationComplianceRiskMetric,
+    ConversationDialogueHelpfulnessMetric,
+    ConversationQARelevanceMetric,
+    ConversationSummarizationCoherenceMetric,
+    ConversationSummarizationConsistencyMetric,
+    ConversationPromptPerplexityMetric,
+    ConversationPromptUncertaintyMetric,
+)
 from .heuristics.contains import Contains
 from .heuristics.equals import Equals
 from .heuristics.gleu import GLEU
@@ -53,7 +63,7 @@ from .llm_judges.prompt_diagnostics.metric import (
 )
 from .llm_judges.compliance_risk.metric import ComplianceRiskJudge
 from .llm_judges.reviseval.metric import RevisEvalJudge
-from .llm_judges.mmad.metric import MMADJudge
+from .llm_judges.llm_juries.metric import LLMJuriesJudge
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
 from .llm_judges.usefulness.metric import Usefulness
 from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
@@ -77,6 +87,14 @@ __all__ = [
     "BaseMetric",
     "ConversationDegenerationMetric",
     "KnowledgeRetentionMetric",
+    "GEvalConversationMetric",
+    "ConversationComplianceRiskMetric",
+    "ConversationDialogueHelpfulnessMetric",
+    "ConversationQARelevanceMetric",
+    "ConversationSummarizationCoherenceMetric",
+    "ConversationSummarizationConsistencyMetric",
+    "ConversationPromptPerplexityMetric",
+    "ConversationPromptUncertaintyMetric",
     "ComplianceRiskJudge",
     "Contains",
     "ContextPrecision",
@@ -129,6 +147,6 @@ __all__ = [
     "SummarizationCoherenceJudge",
     "SummarizationConsistencyJudge",
     "RevisEvalJudge",
-    "MMADJudge",
+    "LLMJuriesJudge",
     # "Factuality",
 ]
