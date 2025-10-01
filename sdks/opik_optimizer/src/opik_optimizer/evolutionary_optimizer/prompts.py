@@ -225,19 +225,28 @@ def llm_crossover_user_prompt(
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
+    # Properly escape the messages as JSON to avoid malformed strings
+    parent1_json = json.dumps(parent1_messages, ensure_ascii=False)
+    parent2_json = json.dumps(parent2_messages, ensure_ascii=False)
     return f"""Parent Prompt 1:
-'''{parent1_messages}'''
+```json
+{parent1_json}
+```
 
 Parent Prompt 2:
-'''{parent2_messages}'''
+```json
+{parent2_json}
+```
 
 Desired output style from target LLM for children prompts: '{style}'
 
 Please generate TWO child prompts by intelligently blending the ideas, styles, or structures from these two parents, ensuring the children aim to elicit the desired output style.
 Follow the instructions provided in the system prompt regarding the JSON output format:
 [
-    {{"role": "<role>", "content": "<content>"}}, {{"role": "<role>", "content": "<content>"}}
+    [{{"role": "<role>", "content": "<content>"}}],
+    [{{"role": "<role>", "content": "<content>"}}]
 ]
+Return only valid JSON, nothing else.
 """
 
 
@@ -336,11 +345,18 @@ def semantic_mutation_user_prompt(
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
-    return f"""Given this prompt: '{prompt_messages}'
+    # Properly escape the messages as JSON to avoid malformed strings
+    messages_json = json.dumps(prompt_messages, ensure_ascii=False)
+    return f"""Given this prompt:
+```json
+{messages_json}
+```
+
 Task context: {task_description}
 Desired output style from target LLM: '{style}'
 Instruction for this modification: {strategy_instruction}.
-Return only the modified prompt message list, nothing else. Make sure to return a valid JSON object.
+
+Return only the modified prompt message list as valid JSON, nothing else. Make sure to return a valid JSON array.
 """
 
 
@@ -353,16 +369,20 @@ def radical_innovation_user_prompt(
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
+    # Properly escape the messages as JSON to avoid malformed strings
+    messages_json = json.dumps(existing_prompt_messages, ensure_ascii=False)
     return f"""Task Context:
 {task_description}
 Desired output style from target LLM: '{style}'
 
 Existing Prompt (which may be underperforming):
-'''{existing_prompt_messages}'''
+```json
+{messages_json}
+```
 
 Please generate a new, significantly improved, and potentially very different prompt for this task.
 Focus on alternative approaches, better clarity, or more effective guidance for the language model, aiming for the desired output style.
-Return only the new prompt list object.
+Return only the new prompt list as valid JSON, nothing else.
 """
 
 
@@ -383,8 +403,8 @@ Please generate {num_to_generate} diverse and effective prompt(s) for a language
 Focus on clarity, completeness, and guiding the model effectively towards the desired style. Explore different structural approaches.
 
 Example of valid response: [
-    ["role": "<role>", "content": "<Prompt targeting specified style.>"],
-    ["role": "<role>", "content": "<Another prompt designed for the output style.>"]
+    [{{"role": "system", "content": "<Prompt targeting specified style."}}],
+    [{{"role": "system", "content": "<Another prompt designed for the output style."}}]
 ]
 
 Your response MUST be a valid JSON list of AI messages. Do NOT include any other text, explanations, or Markdown formatting like ```json ... ``` around the list.
@@ -401,7 +421,13 @@ def variation_user_prompt(
         output_style_guidance
         or "Produce clear, effective, and high-quality responses suitable for the task."
     )
-    return f"""Initial prompt:'''{initial_prompt_messages}'''
+    # Properly escape the messages as JSON to avoid malformed strings
+    messages_json = json.dumps(initial_prompt_messages, ensure_ascii=False)
+    return f"""Initial prompt:
+```json
+{messages_json}
+```
+
 Task context: ```{task_description}```
 Desired output style from target LLM: '{style}'
 
