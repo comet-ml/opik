@@ -4593,7 +4593,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -4695,7 +4695,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -4748,7 +4748,7 @@ class ExperimentsResourceTest {
                     .datasetId(datasetId)
                     .build();
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -4902,7 +4902,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -4944,7 +4944,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5006,7 +5006,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5091,7 +5091,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset1.name(), null, List.of(datasetItem1)),
+                    new DatasetItemBatch(dataset1.name(), null, List.of(datasetItem1), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5126,7 +5126,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset2.name(), null, List.of(datasetItem2)),
+                    new DatasetItemBatch(dataset2.name(), null, List.of(datasetItem2), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
@@ -5188,7 +5188,7 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2)),
+                    new DatasetItemBatch(dataset.name(), null, List.of(datasetItem1, datasetItem2), false),
                     TEST_WORKSPACE,
                     API_KEY);
 
