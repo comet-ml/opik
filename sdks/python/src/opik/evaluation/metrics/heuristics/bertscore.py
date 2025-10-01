@@ -32,8 +32,8 @@ class BERTScore(base_metric.BaseMetric):
     def __init__(
         self,
         scorer_fn: Optional[BertScoreFn] = None,
-        model_type: Optional[str] = None,
-        lang: Optional[str] = None,
+        model_type: Optional[str] = "bert-base-uncased",
+        lang: Optional[str] = "en",
         rescale_with_baseline: bool = False,
         device: Optional[str] = None,
         name: str = "bertscore_metric",
