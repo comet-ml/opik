@@ -1,5 +1,12 @@
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Union
 
+try:
+    import nltk  # type: ignore
+    from nltk.corpus import wordnet  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    nltk = None
+    wordnet = None
+
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -50,6 +57,20 @@ class METEOR(base_metric.BaseMetric):
                     "METEOR metric requires the optional 'nltk' package. Install via"
                     " `pip install nltk` or provide `meteor_fn`."
                 )
+
+            if nltk is not None and wordnet is not None:
+                try:
+                    wordnet.ensure_loaded()  # type: ignore[attr-defined]
+                except LookupError:  # pragma: no cover - download path relies on network access
+                    try:
+                        nltk.download("wordnet", quiet=True)
+                        nltk.download("omw-1.4", quiet=True)
+                        wordnet.ensure_loaded()  # type: ignore[attr-defined]
+                    except Exception as download_error:
+                        raise ImportError(
+                            "METEOR metric requires the NLTK corpora 'wordnet' and 'omw-1.4'. "
+                            "Install manually via `python -m nltk.downloader wordnet omw-1.4`."
+                        ) from download_error
 
             def _scorer(references: Sequence[str], hypothesis: str) -> float:
                 try:
