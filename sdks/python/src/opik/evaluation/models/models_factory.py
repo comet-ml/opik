@@ -5,7 +5,7 @@ from . import base_model
 
 DEFAULT_GPT_MODEL_NAME = "gpt-5-nano"
 
-_MODEL_CACHE: dict[Any, base_model.OpikBaseModel] = {}
+_MODEL_CACHE: Dict[Any, base_model.OpikBaseModel] = {}
 
 
 def _freeze(value: Any) -> Any:

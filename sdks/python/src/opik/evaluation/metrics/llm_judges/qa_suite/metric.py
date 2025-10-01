@@ -8,6 +8,7 @@ from opik.evaluation.models import base_model
 
 class SummarizationConsistencyJudge(GEvalPreset):
     """Scores how faithful a summary is to its source content."""
+
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
@@ -27,6 +28,7 @@ class SummarizationConsistencyJudge(GEvalPreset):
 
 class SummarizationCoherenceJudge(GEvalPreset):
     """Evaluates coherence and structure of generated summaries."""
+
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
@@ -46,6 +48,7 @@ class SummarizationCoherenceJudge(GEvalPreset):
 
 class DialogueHelpfulnessJudge(GEvalPreset):
     """Judges how helpful an assistant reply is within a dialogue."""
+
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
@@ -65,6 +68,7 @@ class DialogueHelpfulnessJudge(GEvalPreset):
 
 class QARelevanceJudge(GEvalPreset):
     """Checks whether an answer directly addresses the user question."""
+
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
