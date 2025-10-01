@@ -117,7 +117,7 @@ class AlertServiceImpl implements AlertService {
                 .map(filterQueryBuilder::toStateSQLMapping)
                 .orElse(Map.of());
 
-        return transactionTemplate.inTransaction(handle -> {
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 
             long total = alertDAO.count(workspaceId, filtersSQL, filterMapping);
