@@ -50,7 +50,8 @@ public class WebhookPublisher {
             @NonNull String webhookUrl,
             @NonNull T payload,
             Map<String, String> headers) {
-        return publishWebhookEvent(eventType, alertId, workspaceId, webhookUrl, payload, headers, webhookConfig.getMaxRetries());
+        return publishWebhookEvent(eventType, alertId, workspaceId, webhookUrl, payload, headers,
+                webhookConfig.getMaxRetries());
     }
 
     /**

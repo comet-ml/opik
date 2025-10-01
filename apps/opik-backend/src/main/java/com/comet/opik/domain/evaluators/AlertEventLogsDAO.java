@@ -130,7 +130,7 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
         // Always add level to template, even if null, so the template condition works
         Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
-        
+
         // Only calculate offset if both page and size are present
         if (criteria.page() != null && criteria.size() != null) {
             template.add("offset", (criteria.page() - 1) * criteria.size());
@@ -147,7 +147,7 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
     private void bindParameters(LogCriteria criteria, Statement statement) {
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
-        
+
         // Only bind offset if both page and size are present
         if (criteria.page() != null && criteria.size() != null) {
             statement.bind("offset", (criteria.page() - 1) * criteria.size());

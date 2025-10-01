@@ -55,7 +55,8 @@ public class AlertJob extends Job {
                             bucketKey, throwable.getMessage(), throwable);
                 })
                 .subscribe(
-                        __ -> { /* Successfully processed bucket */ },
+                        __ -> {
+                            /* Successfully processed bucket */ },
                         error -> log.error("Error occurred during alert job execution:", error),
                         () -> log.info("Alert job finished processing all ready buckets"));
     }
