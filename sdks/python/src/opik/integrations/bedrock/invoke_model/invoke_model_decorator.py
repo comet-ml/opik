@@ -9,7 +9,7 @@ from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
 from .. import helpers
-from . import stream_wrappers
+from . import stream_wrappers, usage_extraction
 
 import botocore.response
 
@@ -48,10 +48,6 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         kwargs_copy = kwargs.copy()
         kwargs_copy["body"] = body_dict
 
-        body_dict, metadata = dict_utils.split_dict_by_keys(
-            body_dict, KWARGS_KEYS_TO_LOG_AS_INPUTS
-        )
-        # Extract input data and metadata
         input_data, metadata = dict_utils.split_dict_by_keys(
             kwargs_copy, KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
@@ -83,13 +79,17 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         output, metadata = dict_utils.split_dict_by_keys(
             output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
         )
-
-        # TODO: implement usage extraction. The main difficulty is that invoke_model API is not structured
-        # so the token usage exact location and structure may vary for different models.
+        subprovider = _extract_subprovider_from_model_id(
+            cast(str, current_span_data.model)
+        )
+        opik_usage = usage_extraction.try_extract_usage_from_bedrock_response(
+            subprovider, output
+        )
 
         result = arguments_helpers.EndSpanParameters(
             output=output,
             provider=opik.LLMProvider.BEDROCK,
+            usage=opik_usage,
             metadata=metadata,
         )
 
@@ -114,9 +114,15 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
 
         assert generations_aggregator is not None
 
-        if "body" in output and isinstance(
-            output["body"], botocore.response.StreamingBody
-        ):
+        # Despite the name, StreamingBody is not a stream in traditional LLM provider sense (response chunks).
+        # It's an interface to a stream of bytes representing the response body.
+        streaming_body_detected = (
+            isinstance(output, dict)
+            and "body" in output
+            and isinstance(output["body"], botocore.response.StreamingBody)
+        )
+
+        if streaming_body_detected:
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
             return stream_wrappers.wrap_invoke_model_response(
                 output=output,
@@ -130,5 +136,19 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         return STREAM_NOT_FOUND
 
 
-def _get_actual_provider_inside_bedrock(model_id: str) -> Optional[str]:
-    return None
+def _extract_subprovider_from_model_id(model_id: str) -> str:
+    """
+    Extracts the subprovider name from a Bedrock modelId.
+
+    Examples:
+        ai21.j2-mid-v1                -> ai21
+        amazon.nova-lite-v1:0         -> amazon
+        anthropic.claude-v2:1         -> anthropic
+        us.meta.llama3-1-70b-instruct -> meta
+    """
+    parts = model_id.split(".")
+
+    if parts[0] in {"us", "eu", "apac"}:
+        return parts[1]
+
+    return parts[0]
