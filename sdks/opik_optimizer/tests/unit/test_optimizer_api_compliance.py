@@ -24,7 +24,10 @@ from opik_optimizer import (
     GepaOptimizer,
     MetaPromptOptimizer,
     EvolutionaryOptimizer,
+    ParameterOptimizer,
+    ParameterSearchSpace,
 )
+from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.optimization_config import chat_prompt
 from collections.abc import Callable
@@ -68,6 +71,15 @@ class TestOptimizerAPICompliance:
 
         return metric
 
+    @pytest.fixture
+    def parameter_space(self) -> ParameterSearchSpace:
+        """Simple parameter space for parameter optimizer tests."""
+        return ParameterSearchSpace.model_validate(
+            {
+                "temperature": {"type": "float", "min": 0.0, "max": 1.0},
+            }
+        )
+
     def test_optimize_prompt_signature_consistency(self) -> None:
         """Test that all optimizers have identical optimize_prompt signatures."""
         optimizers: list[type[Any]] = [
@@ -90,6 +102,46 @@ class TestOptimizerAPICompliance:
                 f"{name} has different signature than {signatures[0][0]}\n"
                 f"Expected: {first_sig}\n"
                 f"Got: {sig}"
+            )
+
+    def test_optimize_parameter_signature_consistency(self) -> None:
+        """ParameterOptimizer.optimize_parameter matches BaseOptimizer signature."""
+        base_sig = inspect.signature(BaseOptimizer.optimize_parameter)
+        optimizer_sig = inspect.signature(ParameterOptimizer.optimize_parameter)
+
+        assert optimizer_sig == base_sig
+
+    def test_parameter_optimizer_input_validation(
+        self,
+        mock_dataset: Mock,
+        mock_metric: Callable[[Any, Any], float],
+        parameter_space: ParameterSearchSpace,
+    ) -> None:
+        """Parameter optimizer validates prompt, dataset, metric types."""
+        optimizer = ParameterOptimizer(model="gpt-4o-mini")
+
+        with pytest.raises(ValueError, match="Prompt must be a ChatPrompt object"):
+            optimizer.optimize_parameter(  # type: ignore[arg-type]
+                prompt="invalid_prompt",
+                dataset=mock_dataset,
+                metric=mock_metric,
+                parameter_space=parameter_space,
+            )
+
+        with pytest.raises(ValueError, match="Dataset must be a Dataset object"):
+            optimizer.optimize_parameter(
+                prompt=Mock(spec=chat_prompt.ChatPrompt),
+                dataset="invalid_dataset",  # type: ignore[arg-type]
+                metric=mock_metric,
+                parameter_space=parameter_space,
+            )
+
+        with pytest.raises(ValueError, match="Metric must be.*function"):
+            optimizer.optimize_parameter(
+                prompt=Mock(spec=chat_prompt.ChatPrompt),
+                dataset=mock_dataset,
+                metric="invalid_metric",  # type: ignore[arg-type]
+                parameter_space=parameter_space,
             )
 
     def test_optimize_prompt_parameter_order(self) -> None:
