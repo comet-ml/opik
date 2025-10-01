@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
