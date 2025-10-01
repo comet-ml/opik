@@ -136,8 +136,8 @@ interface AlertDAO {
     @SqlQuery(FIND)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    List<Alert> find(@Bind("workspace_id") String workspaceId,
-            @Bind("offset") int offset, @Bind("limit") int limit,
+    List<Alert> find(@Bind("workspaceId") String workspaceId,
+            @Define("offset") @Bind("offset") int offset, @Define("limit") @Bind("limit") int limit,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
@@ -164,7 +164,7 @@ interface AlertDAO {
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    long count(@Bind("workspace_id") String workspaceId,
+    long count(@Bind("workspaceId") String workspaceId,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 

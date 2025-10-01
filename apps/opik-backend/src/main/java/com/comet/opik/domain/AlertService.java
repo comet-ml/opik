@@ -6,7 +6,7 @@ import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.filter.Filter;
-import com.comet.opik.api.sorting.SortingFactoryPrompts;
+import com.comet.opik.api.sorting.SortingFactoryAlerts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -62,7 +62,7 @@ class AlertServiceImpl implements AlertService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
-    private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull SortingFactoryAlerts sortingFactory;
 
     @Override
     public UUID create(@NonNull Alert alert) {
