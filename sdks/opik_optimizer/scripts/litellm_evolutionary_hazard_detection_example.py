@@ -171,10 +171,10 @@ prompt = ChatPrompt(
 # - Evolve towards better hazard detection prompts
 optimizer = EvolutionaryOptimizer(
     model=VISION_MODEL,  # Vision-capable model
-    population_size=POPULATION_SIZE,  # Smaller population for multimodal (images are large)
-    num_generations=NUM_GENERATIONS,  # Fewer generations to reduce API calls
+    population_size=POPULATION_SIZE,  # Larger population for better exploration
+    num_generations=NUM_GENERATIONS,  # More generations for better evolution
     enable_moo=False,  # Single objective optimization
-    enable_llm_crossover=False,  # Disable LLM crossover to reduce API calls with large images
+    enable_llm_crossover=True,  # Enable intelligent LLM-based crossover (multimodal-aware)
     infer_output_style=False,  # IMPORTANT: Disable for multimodal to avoid context overflow
     verbose=1,  # Show progress
 )
