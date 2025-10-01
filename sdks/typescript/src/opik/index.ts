@@ -11,10 +11,3 @@ export type { SpanType } from "@/rest_api/api/types/SpanType";
 export { SpanType as OpikSpanType } from "@/rest_api/api/types/SpanType";
 export type { DatasetPublic } from "@/rest_api/api/types/DatasetPublic";
 export * from "./evaluation";
-
-// Gemini Integration
-export { trackGemini } from "./integrations/opik-gemini/src/index";
-export type {
-  TrackOpikConfig as GeminiTrackOpikConfig,
-  OpikExtension as GeminiOpikExtension,
-} from "./integrations/opik-gemini/src/types";

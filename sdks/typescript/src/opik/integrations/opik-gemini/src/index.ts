@@ -7,5 +7,3 @@
  */
 
 export { trackGemini } from "./trackGemini";
-export type { TrackOpikConfig, OpikExtension } from "./types";
-
