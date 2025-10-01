@@ -80,13 +80,12 @@ find_jar_files() {
     return 0  # JAR file found and selected
 }
 
-# Function to start Docker services (infrastructure or infrastructure + frontend)
-# Args: $1 = mode (--infra or --local-be), $2 = description for logs
+# Function to start Docker services (infrastructure or infrastructure + frontend or etc.)
+# Args: $1 = mode (--infra or --local-be or etc.)
 start_docker_services() {
     local mode="$1"
-    local description="$2"
     
-    log_info "Starting ${description}..."
+    log_info "Starting Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
     
     if ./opik.sh "$mode" --port-mapping; then
@@ -97,8 +96,8 @@ start_docker_services() {
     fi
 }
 
-# Function to stop Docker services (infrastructure or infrastructure + frontend)
-# Args: $1 = mode (--infra or --local-be)
+# Function to stop Docker services (infrastructure or infrastructure + frontend or etc.)
+# Args: $1 = mode (--infra or --local-be or etc.)
 stop_docker_services() {
     local mode="$1"
     
@@ -113,7 +112,7 @@ stop_docker_services() {
 }
 
 # Function to verify Docker services
-# Args: $1 = mode (--infra or --local-be)
+# Args: $1 = mode (--infra or --local-be or etc.)
 verify_docker_services() {
     local mode="$1"
     
@@ -124,7 +123,7 @@ verify_docker_services() {
 
 # Wrapper functions for backward compatibility and clearer intent
 start_infrastructure() {
-    start_docker_services "--infra" "infrastructure services (MySQL, Redis, ClickHouse, etc.)"
+    start_docker_services "--infra"
 }
 
 stop_infrastructure() {
@@ -136,7 +135,7 @@ verify_infrastructure() {
 }
 
 start_infrastructure_and_docker_frontend() {
-    start_docker_services "--local-be" "infrastructure and Docker frontend"
+    start_docker_services "--local-be"
 }
 
 stop_infrastructure_and_docker_frontend() {
