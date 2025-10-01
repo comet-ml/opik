@@ -10,7 +10,6 @@ This module tests the behavioral aspects of the seed parameter, specifically:
 import pytest
 from typing import Dict, Any
 import time
-import random
 
 from opik.evaluation import metrics
 from ...testlib import assert_helpers
@@ -107,9 +106,10 @@ class TestSeedParameterIntegration:
         # The probabilistic nature means we can't guarantee different results
         assert len(results) == len(seeds), "Should have results for all seeds"
         for seed, result in results:
-            assert_helpers.assert_score_result(
-                result
-            ), f"Result for seed {seed} should be valid"
+            (
+                assert_helpers.assert_score_result(result),
+                f"Result for seed {seed} should be valid",
+            )
 
         # If we do get variation, that's good, but don't fail if we don't
         if values_unique or reasons_unique:
