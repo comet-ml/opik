@@ -19,7 +19,11 @@ from opik_optimizer.utils.image_helpers import (
 )
 
 
-def driving_hazard_50(test_mode: bool = False) -> opik.Dataset:
+def driving_hazard_50(
+    test_mode: bool = False,
+    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    image_quality: int = 60,
+) -> opik.Dataset:
     """
     Dataset containing 50 samples from the DHPR driving hazard dataset.
 
@@ -31,24 +35,50 @@ def driving_hazard_50(test_mode: bool = False) -> opik.Dataset:
 
     Args:
         test_mode: If True, creates a test dataset with only 5 samples
+        max_image_size: Maximum (width, height) for images. Default (512, 384)
+            gives ~15-20k tokens per image. Use None to keep original size.
+            Examples: (400, 300) for smaller, (800, 600) for larger.
+        image_quality: JPEG compression quality (1-100). Default 60 balances
+            quality and size. Lower = smaller files. Higher = better quality.
+            Examples: 40-50 (very small), 60-70 (balanced), 85+ (high quality)
 
     Returns:
         opik.Dataset with multimodal hazard detection samples
+
+    Example:
+        >>> # Default settings (recommended for most cases)
+        >>> dataset = driving_hazard_50()
+        >>>
+        >>> # Smaller images for low context
+        >>> dataset = driving_hazard_50(max_image_size=(400, 300), image_quality=50)
+        >>>
+        >>> # Higher quality for detailed analysis
+        >>> dataset = driving_hazard_50(max_image_size=(800, 600), image_quality=85)
     """
     return _load_dhpr_dataset(
         dataset_name_prefix="driving_hazard_50",
         nb_items=50,
         test_mode=test_mode,
         split="train",
+        max_image_size=max_image_size,
+        image_quality=image_quality,
     )
 
 
-def driving_hazard_100(test_mode: bool = False) -> opik.Dataset:
+def driving_hazard_100(
+    test_mode: bool = False,
+    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    image_quality: int = 60,
+) -> opik.Dataset:
     """
     Dataset containing 100 samples from the DHPR driving hazard dataset.
 
     Args:
         test_mode: If True, creates a test dataset with only 5 samples
+        max_image_size: Maximum (width, height) for images. Default (512, 384)
+            gives ~15-20k tokens per image. Use None to keep original size.
+        image_quality: JPEG compression quality (1-100). Default 60 balances
+            quality and size. Lower = smaller files. Higher = better quality.
 
     Returns:
         opik.Dataset with multimodal hazard detection samples
@@ -58,15 +88,25 @@ def driving_hazard_100(test_mode: bool = False) -> opik.Dataset:
         nb_items=100,
         test_mode=test_mode,
         split="train",
+        max_image_size=max_image_size,
+        image_quality=image_quality,
     )
 
 
-def driving_hazard_test(test_mode: bool = False) -> opik.Dataset:
+def driving_hazard_test(
+    test_mode: bool = False,
+    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    image_quality: int = 60,
+) -> opik.Dataset:
     """
     Dataset containing samples from the DHPR test split.
 
     Args:
         test_mode: If True, loads only 5 samples; otherwise loads 100 samples
+        max_image_size: Maximum (width, height) for images. Default (512, 384)
+            gives ~15-20k tokens per image. Use None to keep original size.
+        image_quality: JPEG compression quality (1-100). Default 60 balances
+            quality and size. Lower = smaller files. Higher = better quality.
 
     Returns:
         opik.Dataset with multimodal hazard detection samples
@@ -76,6 +116,8 @@ def driving_hazard_test(test_mode: bool = False) -> opik.Dataset:
         nb_items=100,
         test_mode=test_mode,
         split="test",
+        max_image_size=max_image_size,
+        image_quality=image_quality,
     )
 
 
@@ -84,7 +126,8 @@ def _load_dhpr_dataset(
     nb_items: int,
     test_mode: bool,
     split: str = "train",
-    max_image_size: Optional[tuple[int, int]] = (512, 384),  # Smaller to reduce token usage
+    max_image_size: Optional[tuple[int, int]] = (512, 384),
+    image_quality: int = 60,
 ) -> opik.Dataset:
     """
     Internal function to load DHPR dataset with multimodal support.
@@ -95,7 +138,8 @@ def _load_dhpr_dataset(
         test_mode: Whether to create a test dataset
         split: Dataset split to load ("train", "test", or "val")
         max_image_size: Maximum image size (width, height) for resizing.
-            Set to None to keep original size.
+            Set to None to keep original size. Default (512, 384).
+        image_quality: JPEG compression quality (1-100). Default 60.
 
     Returns:
         opik.Dataset with loaded and processed samples
@@ -159,6 +203,7 @@ def _load_dhpr_dataset(
                 processed_item = _process_dhpr_item(
                     item=item,
                     max_image_size=max_image_size,
+                    image_quality=image_quality,
                 )
                 data.append(processed_item)
             except Exception as e:
@@ -183,6 +228,7 @@ def _load_dhpr_dataset(
 def _process_dhpr_item(
     item: Dict[str, Any],
     max_image_size: Optional[tuple[int, int]],
+    image_quality: int,
 ) -> Dict[str, Any]:
     """
     Process a single DHPR item to create multimodal content.
@@ -190,6 +236,7 @@ def _process_dhpr_item(
     Args:
         item: Raw item from HuggingFace dataset
         max_image_size: Maximum image size for resizing
+        image_quality: JPEG compression quality (1-100)
 
     Returns:
         Processed item with structured content
@@ -224,7 +271,7 @@ def _process_dhpr_item(
     image_uri = encode_pil_to_base64_uri(
         image=pil_image,
         format="JPEG",  # Use JPEG for dashcam photos to reduce size
-        quality=60,  # Lower quality to significantly reduce base64 size
+        quality=image_quality,  # Configurable quality (default 60)
     )
 
     # Create structured content (OpenAI format)
