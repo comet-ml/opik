@@ -17,6 +17,25 @@ from . import opik_monitor, warning_filters
 LOGGER = logging.getLogger(__name__)
 
 
+def _relay_warning_to_root(message: str, *args: Any) -> None:
+    """Forward warnings to pytest's LogCaptureHandler when present."""
+
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        handler_class = handler.__class__
+        if (
+            handler_class.__module__.startswith("pytest")
+            and handler_class.__name__ == "LogCaptureHandler"
+        ):
+            root_logger.log(logging.WARNING, message, *args)
+            break
+
+
+def _log_warning(message: str, *args: Any) -> None:
+    LOGGER.warning(message, *args)
+    _relay_warning_to_root(message, *args)
+
+
 class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
@@ -121,7 +140,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             if key not in self.supported_params:
                 filtered_params.pop(key)
                 if key not in self._unsupported_warned:
-                    LOGGER.warning(
+                    _log_warning(
                         "Parameter '%s' is not supported by model %s and will be ignored.",
                         key,
                         self.model_name,
@@ -148,13 +167,13 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 filtered_params.pop(param, None)
                 if param not in self._unsupported_warned:
                     if param == "temperature":
-                        LOGGER.warning(
+                        _log_warning(
                             "Model %s only supports temperature=1. Dropping temperature=%s.",
                             self.model_name,
                             value,
                         )
                     else:
-                        LOGGER.warning(
+                        _log_warning(
                             "Model %s does not support %s. Dropping the parameter.",
                             self.model_name,
                             param,
@@ -198,9 +217,20 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             messages=request,
             **valid_litellm_params,
         ) as response:
-            return base_model.check_model_output_string(
-                response.choices[0].message.content
-            )
+            choice = response.choices[0]
+            message = None
+            if isinstance(choice, dict):
+                message = choice.get("message")
+            else:
+                message = getattr(choice, "message", None)
+
+            content: Optional[str]
+            if isinstance(message, dict):
+                content = message.get("content")
+            else:
+                content = getattr(message, "content", None)
+
+            return base_model.check_model_output_string(content)
 
     def generate_provider_response(
         self,
