@@ -19,7 +19,7 @@ Opik provides two families of conversation metrics:
 | MeteorCMetric | Aggregates METEOR scores across assistant turns. |
 | ConversationDegenerationMetric | Detects repetition and degeneration patterns across the conversation. |
 
-### Knowledge Retention Metric {#knowledge-retention-metric}
+### Knowledge Retention Metric
 
 `KnowledgeRetentionMetric` operates on a conversation and compares how well the last assistant message preserves facts the user injected earlier. This is useful for guardrailing agents that should respect instructions or keep important constraints.
 
@@ -31,7 +31,7 @@ score = metric.score(conversation=my_thread)
 print(score.value, score.reason)
 ```
 
-### RougeC Metric {#rougecmetric}
+### RougeC Metric
 
 `RougeCMetric` computes ROUGE scores over every assistant message and averages them to provide a conversation-level quality signal. It relies on the same configuration options as the regular `ROUGE` metric (e.g. `rouge_type`, stemming, custom tokenizers).
 
@@ -42,7 +42,7 @@ metric = RougeCMetric(rouge_type="rougeL")
 score = metric.score(conversation=my_thread, references=my_reference_thread)
 ```
 
-### BleuC Metric {#bleucmetric}
+### BleuC Metric
 
 `BleuCMetric` aggregates sentence-level BLEU scores for each assistant turn and reports the conversation average. It accepts the same parameters as `SentenceBLEU`, including n-gram weighting and smoothing methods.
 
@@ -53,7 +53,7 @@ metric = BleuCMetric(n_grams=4)
 score = metric.score(conversation=my_thread, references=my_reference_thread)
 ```
 
-### MeteorC Metric {#meteorcmetric}
+### MeteorC Metric
 
 `MeteorCMetric` extends the standard METEOR metric to conversations by scoring each assistant message and averaging the results. You can forward all arguments supported by `METEOR` (language, stemmer, smoothing, etc.).
 
@@ -64,7 +64,7 @@ metric = MeteorCMetric()
 score = metric.score(conversation=my_thread, references=my_reference_thread)
 ```
 
-### Conversation Degeneration Metric {#conversation-degeneration-metric}
+### Conversation Degeneration Metric
 
 `ConversationDegenerationMetric` detects repetitive phrases, lack of variance, or low-entropy responses across a conversation. It is a lightweight guard against models that fall into loops or short-circuit the dialogue.
 
@@ -92,10 +92,14 @@ score = metric.score(conversation=my_thread)
 
 These metrics are based on the idea of using an LLM to evaluate the turns of the conversation between user and assistant. Opik ships a prompt template that wraps the transcript, criteria, and evaluation steps for you. By default, the `gpt-5-nano` model is used to evaluate responses, but you can switch to any LiteLLM-supported backend by setting the `model` parameter. You can learn more in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) guide.
 
-> [!TIP]
-> The GEval-based conversation adapters listed above live in the `opik.evaluation.metrics.conversation.g_eval_wrappers` module. They accept the same keyword arguments as their underlying judges (e.g. `model`, `temperature`). See [Conversation-level GEval metrics](/evaluation/metrics/g_eval_conversation_metrics) for a deeper walkthrough.
+<Tip>
+  The GEval-based conversation adapters listed above live in the
+  `opik.evaluation.metrics.conversation.g_eval_wrappers` module. They accept the same
+  keyword arguments as their underlying judges (e.g. `model`, `temperature`). See
+  [Conversation-level GEval metrics](/evaluation/metrics/g_eval_conversation_metrics) for a deeper walkthrough.
+</Tip>
 
-### ConversationalCoherenceMetric {#conversationalcoherencemetric}
+### ConversationalCoherenceMetric
 
 `ConversationalCoherenceMetric` evaluates the logical flow of a dialogue. It builds a sliding window of turns and asks an LLM to rate whether the final assistant message is coherent and relevant. It returns a score between 0.0 and 1.0 and can optionally return detailed reasons.
 
@@ -135,7 +139,7 @@ print(result.value)
 print(result.reason)
 ```
 
-### SessionCompletenessQuality {#sessioncompletenessquality}
+### SessionCompletenessQuality
 
 `SessionCompletenessQuality` captures whether a conversation fulfilled the user’s top-level goals. The metric asks an LLM to extract intentions from the thread, judge completion, and aggregate the results.
 
@@ -175,7 +179,7 @@ print(result.value)
 print(result.reason)
 ```
 
-### UserFrustrationMetric {#userfrustrationmetric}
+### UserFrustrationMetric
 
 `UserFrustrationMetric` estimates how likely it is that the user became frustrated (e.g. because of repetition or ignored requests). It scans windows of the conversation with an LLM and reports a value between 0.0 (not frustrated) and 1.0 (very frustrated).
 
