@@ -80,36 +80,71 @@ find_jar_files() {
     return 0  # JAR file found and selected
 }
 
-# Function to start infrastructure
-start_infrastructure() {
-    log_info "Starting infrastructure services (MySQL, Redis, ClickHouse, etc.)..."
+# Function to start Docker services (infrastructure or infrastructure + frontend)
+# Args: $1 = mode (--infra or --local-be), $2 = description for logs
+start_docker_services() {
+    local mode="$1"
+    local description="$2"
+    
+    log_info "Starting ${description}..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
     
-    if ./opik.sh --infra --port-mapping; then
-        log_success "Infrastructure services started successfully"
+    if ./opik.sh "$mode" --port-mapping; then
+        log_success "Docker services started successfully"
     else
-        log_error "Failed to start infrastructure services"
+        log_error "Failed to start Docker services"
         exit 1
     fi
 }
 
-# Function to stop infrastructure
-stop_infrastructure() {
-    log_info "Stopping infrastructure services..."
+# Function to stop Docker services (infrastructure or infrastructure + frontend)
+# Args: $1 = mode (--infra or --local-be)
+stop_docker_services() {
+    local mode="$1"
+    
+    log_info "Stopping Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
     
-    if ./opik.sh --infra --stop; then
-        log_success "Infrastructure services stopped"
+    if ./opik.sh "$mode" --stop; then
+        log_success "Docker services stopped"
     else
-        log_warning "Failed to stop some infrastructure services"
+        log_warning "Failed to stop some Docker services"
     fi
 }
 
-# Function to verify infrastructure
-verify_infrastructure() {
+# Function to verify Docker services
+# Args: $1 = mode (--infra or --local-be)
+verify_docker_services() {
+    local mode="$1"
+    
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
-    ./opik.sh --infra --verify >/dev/null 2>&1
+    ./opik.sh "$mode" --verify >/dev/null 2>&1
     return $?
+}
+
+# Wrapper functions for backward compatibility and clearer intent
+start_infrastructure() {
+    start_docker_services "--infra" "infrastructure services (MySQL, Redis, ClickHouse, etc.)"
+}
+
+stop_infrastructure() {
+    stop_docker_services "--infra"
+}
+
+verify_infrastructure() {
+    verify_docker_services "--infra"
+}
+
+start_infrastructure_and_docker_frontend() {
+    start_docker_services "--local-be" "infrastructure and Docker frontend"
+}
+
+stop_infrastructure_and_docker_frontend() {
+    stop_docker_services "--local-be"
+}
+
+verify_infrastructure_and_docker_frontend() {
+    verify_docker_services "--local-be"
 }
 
 # Function to build backend
@@ -533,6 +568,81 @@ verify_services() {
     echo "  Frontend: tail -f /tmp/opik-frontend.log"
 }
 
+# Function to verify BE-only services
+verify_be_only_services() {
+    log_info "=== Opik BE-Only Development Status ==="
+    
+    # Infrastructure and Docker Frontend status
+    local docker_services_running=false
+    if verify_infrastructure_and_docker_frontend; then
+        echo -e "Infrastructure + Docker Frontend: ${GREEN}RUNNING${NC} (Docker containers)"
+        docker_services_running=true
+    else
+        echo -e "Infrastructure + Docker Frontend: ${RED}STOPPED${NC} (Docker containers)"
+    fi
+    
+    # Backend process status
+    local backend_running=false
+    if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
+        echo -e "Backend Process: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
+        backend_running=true
+    else
+        echo -e "Backend Process: ${RED}STOPPED${NC}"
+    fi
+
+    # Show access information if all services are running
+    if [ "$docker_services_running" = true ] && [ "$backend_running" = true ]; then
+        echo ""
+        echo -e "${GREEN}🚀 Opik BE-Only Development Environment is Ready!${NC}"
+        echo -e "${BLUE}📊  Access the UI:     http://localhost:5173${NC}"
+        echo -e "${BLUE}🛠️  API ping Endpoint: http://localhost:8080/is-alive/ping${NC}"
+        echo ""
+        echo -e "${BLUE}⚙️  Mode: Backend as Process + Frontend in Docker${NC}"
+        echo -e "   • Backend runs as local process (PID: $(cat "$BACKEND_PID_FILE"))"
+        echo -e "   • Frontend runs in Docker container"
+        echo -e "   • Infrastructure services run in Docker"
+        echo ""
+        echo -e "${BLUE}ℹ️  SDK Configuration Required:${NC}"
+        echo -e "To use the Opik SDK with your local development environment, you MUST configure it to point to your local instance."
+        echo ""
+        echo -e "${BLUE}Step 1 - Run Python SDK Configuration (CLI):${NC}"
+        echo "  opik configure"
+        echo "  # When prompted:"
+        echo "  #   - Choose 'Local deployment' option"
+        echo "  #   - Enter URL: http://localhost:8080"
+        echo ""
+        echo -e "${YELLOW}⚠️  IMPORTANT: Manual Configuration File Edit Required!${NC}"
+        echo -e "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
+        echo ""
+        echo -e "${BLUE}Step 2 - Edit the configuration file:${NC}"
+        echo "  # Open the configuration file, by default: ~/.opik.config"
+        echo ""
+        echo "  # Change this line:"
+        echo "  url_override = http://localhost:8080/api/"
+        echo ""
+        echo "  # To this (remove '/api'):"
+        echo "  url_override = http://localhost:8080"
+        echo ""
+        echo -e "${BLUE}Alternative for previous steps - Environment Variables:${NC}"
+        echo "  export OPIK_URL_OVERRIDE='http://localhost:8080'"
+        echo "  export OPIK_WORKSPACE='default'"
+        echo ""
+        echo -e "${YELLOW}Important Notes:${NC}"
+        echo "  • The configuration file is located at ~/.opik.config by default"
+        echo "  • You MUST remove '/api' from the URL for local development"
+        echo "  • Default workspace is 'default'"
+        echo "  • No API key required for local instances"
+        echo ""
+        echo -e "${BLUE}📖 For complete configuration documentation, visit:${NC}"
+        echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
+    fi
+
+    echo ""
+    echo "Logs:"
+    echo "  Backend Process: tail -f /tmp/opik-backend.log"
+    echo "  Docker Services: docker logs -f opik-frontend-1"
+}
+
 # Function to start services (without building)
 start_services() {
     log_info "=== Starting Opik Development Environment ==="
@@ -574,11 +684,54 @@ restart_services() {
     verify_services
 }
 
+# Function to start BE-only services (without building)
+start_be_only_services() {
+    log_info "=== Starting Opik BE-Only Development Environment ==="
+    log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
+    log_info "Step 1/3: Starting infrastructure and Docker frontend..."
+    start_infrastructure_and_docker_frontend
+    log_info "Step 2/3: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 3/3: Starting backend process..."
+    start_backend
+    log_success "=== BE-Only Start Complete ==="
+    verify_be_only_services
+}
+
+# Function to stop BE-only services
+stop_be_only_services() {
+    log_info "=== Stopping Opik BE-Only Development Environment ==="
+    log_info "Step 1/2: Stopping backend process..."
+    stop_backend
+    log_info "Step 2/2: Stopping infrastructure and Docker frontend..."
+    stop_infrastructure_and_docker_frontend
+    log_success "=== BE-Only Stop Complete ==="
+}
+
+# Function to restart BE-only services (stop, build, start)
+restart_be_only_services() {
+    log_info "=== Restarting Opik BE-Only Development Environment ==="
+    log_info "Step 1/6: Stopping backend process..."
+    stop_backend
+    log_info "Step 2/6: Stopping infrastructure and Docker frontend..."
+    stop_infrastructure_and_docker_frontend
+    log_info "Step 3/6: Starting infrastructure and Docker frontend..."
+    start_infrastructure_and_docker_frontend
+    log_info "Step 4/6: Building backend..."
+    build_backend
+    log_info "Step 5/6: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 6/6: Starting backend process..."
+    start_backend
+    log_success "=== BE-Only Restart Complete ==="
+    verify_be_only_services
+}
+
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Options:"
+    echo "Standard Mode (All services as processes):"
     echo "  --build-be     - Build backend"
     echo "  --build-fe     - Build frontend"
     echo "  --migrate      - Run database migrations"
@@ -586,6 +739,14 @@ show_usage() {
     echo "  --stop         - Stop all services"
     echo "  --restart      - Stop, build, and start all services (DEFAULT IF NO OPTIONS PROVIDED)"
     echo "  --verify       - Verify status of all services"
+    echo ""
+    echo "BE-Only Mode (Backend as process, Frontend in Docker):"
+    echo "  --be-only-start    - Start infrastructure, Docker frontend, and backend process"
+    echo "  --be-only-stop     - Stop backend process and Docker services"
+    echo "  --be-only-restart  - Restart with build (stop, build backend, start all)"
+    echo "  --be-only-verify   - Verify status of BE-only services"
+    echo ""
+    echo "Utility Options:"
     echo "  --debug        - Enable debug mode (meant to be combined with other flags)"
     echo "  --logs         - Show logs for backend and frontend services"
     echo "  --lint-fe      - Lint frontend code"
@@ -594,6 +755,12 @@ show_usage() {
     echo ""
     echo "Environment Variables:"
     echo "  DEBUG_MODE=true  - Enable debug mode"
+    echo ""
+    echo "Examples:"
+    echo "  $0                      # Restart all services (default)"
+    echo "  $0 --start              # Start all services without building"
+    echo "  $0 --be-only-restart    # Restart in BE-only mode"
+    echo "  $0 --debug --verify     # Check status with debug output"
 }
 
 # Function to show logs
@@ -669,6 +836,18 @@ case "${1:-}" in
         ;;
     "--verify")
         verify_services
+        ;;
+    "--be-only-start")
+        start_be_only_services
+        ;;
+    "--be-only-stop")
+        stop_be_only_services
+        ;;
+    "--be-only-restart")
+        restart_be_only_services
+        ;;
+    "--be-only-verify")
+        verify_be_only_services
         ;;
     "--logs")
         show_logs
