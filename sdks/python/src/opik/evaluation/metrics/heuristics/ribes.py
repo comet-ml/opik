@@ -38,7 +38,18 @@ class RIBES(BaseMetric):
                     "RIBES metric requires the optional 'nltk' package. Install via"
                     " `pip install nltk` or provide `ribes_fn`."
                 )
-            self._ribes_fn = lambda hyp, refs: nltk_ribes_score.sentence_ribes(hyp, refs)
+            def _ribes_helper(hypothesis: Sequence[str], references: Sequence[Sequence[str]]) -> float:
+                # NLTK expects references as strings; join tokens back.
+                joined_references = [" ".join(ref) for ref in references]
+                joined_hypothesis = " ".join(hypothesis)
+                return float(
+                    nltk_ribes_score.sentence_ribes(
+                        joined_references,
+                        joined_hypothesis,
+                    )
+                )
+
+            self._ribes_fn = _ribes_helper
 
     def score(
         self,
