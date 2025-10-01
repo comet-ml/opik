@@ -1,14 +1,14 @@
 {
-  "name": "opik-openai",
-  "description": "Opik TypeScript and JavaScript SDK integration with OpenAI",
-  "version": "1.0.1",
+  "name": "opik-gemini",
+  "description": "Opik TypeScript and JavaScript SDK integration with Google Gemini AI",
+  "version": "0.1.0",
   "engines": {
     "node": ">=18"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
-    "directory": "sdks/typescript/src/opik/integrations/opik-openai"
+    "directory": "sdks/typescript/src/opik/integrations/opik-gemini"
   },
   "homepage": "https://www.comet.com/docs/opik/",
   "author": {
@@ -23,13 +23,19 @@
   "license": "Apache-2.0",
   "keywords": [
     "opik",
-    "openai",
-    "openai-integration",
+    "gemini",
+    "google-ai",
+    "google-generative-ai",
+    "genai",
+    "gemini-integration",
     "sdk",
     "javascript",
     "javascript-sdk",
     "typescript",
     "typescript-sdk",
+    "llm",
+    "tracing",
+    "observability",
     "comet"
   ],
   "exports": {
@@ -57,7 +63,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "openai": "^4.97.0",
+    "@google/genai": ">=1.0.0",
     "opik": "^1.7.25"
   },
   "devDependencies": {

@@ -491,9 +491,12 @@ navigation:
           - page: Fireworks AI
             path: docs/tracing/integrations/fireworks-ai.mdx
             slug: fireworks-ai
-          - page: Gemini
+          - page: Gemini (Python)
             path: docs/tracing/integrations/gemini.mdx
             slug: gemini
+          - page: Gemini (JS/TS)
+            path: docs/tracing/integrations/gemini-typescript.mdx
+            slug: gemini-typescript
           - page: Groq
             path: docs/tracing/integrations/groq.mdx
             slug: groq
