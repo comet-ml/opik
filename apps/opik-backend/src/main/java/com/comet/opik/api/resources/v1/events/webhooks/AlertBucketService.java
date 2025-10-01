@@ -172,9 +172,9 @@ public class AlertBucketService {
 
         return bucket.get(EVENT_IDS_KEY)
                 .defaultIfEmpty("[]")
-                .map(json -> {
+                .<Set<String>>map(json -> {
                     Set<String> eventIds = JsonUtils.readCollectionValue(json, Set.class, String.class);
-                    return (Set<String>) new HashSet<>(eventIds);
+                    return new HashSet<>(eventIds);
                 })
                 .doOnSuccess(eventIds -> log.debug("Retrieved {} events from bucket '{}'",
                         eventIds.size(), bucketKey))

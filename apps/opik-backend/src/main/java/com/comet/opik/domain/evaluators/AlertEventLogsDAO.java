@@ -130,7 +130,11 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
         // Always add level to template, even if null, so the template condition works
         Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
-        Optional.ofNullable(criteria.page()).ifPresent(page -> template.add("offset", (page - 1) * criteria.size()));
+        
+        // Only calculate offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            template.add("offset", (criteria.page() - 1) * criteria.size());
+        }
 
         Optional.ofNullable(criteria.markers())
                 .filter(markers -> !markers.isEmpty())
@@ -143,7 +147,11 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
     private void bindParameters(LogCriteria criteria, Statement statement) {
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
-        Optional.ofNullable(criteria.page()).ifPresent(page -> statement.bind("offset", (page - 1) * criteria.size()));
+        
+        // Only bind offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            statement.bind("offset", (criteria.page() - 1) * criteria.size());
+        }
 
         Optional.ofNullable(criteria.markers())
                 .filter(markers -> !markers.isEmpty())
@@ -177,13 +185,13 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
                         String alertId = Optional.ofNullable(event.getMDCPropertyMap().get("alert_id"))
                                 .orElseThrow(() -> failWithMessage("alert_id is not set"));
 
-                        Map<String, String> makers = CUSTOM_MARKER_KEYS.stream()
+                        Map<String, String> markers = CUSTOM_MARKER_KEYS.stream()
                                 .map(key -> Map.entry(key, event.getMDCPropertyMap().getOrDefault(key, "")))
                                 .filter(entry -> !entry.getValue().isEmpty())
                                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-                        String[] markerKeys = makers.keySet().toArray(String[]::new);
-                        String[] markerValues = makers.keySet().stream().map(makers::get).toArray(String[]::new);
+                        String[] markerKeys = markers.keySet().toArray(String[]::new);
+                        String[] markerValues = markers.keySet().stream().map(markers::get).toArray(String[]::new);
 
                         statement
                                 .bind("timestamp" + i, event.getInstant().toString())

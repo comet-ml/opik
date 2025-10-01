@@ -421,8 +421,12 @@ class AlertBucketServiceTest {
         String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
         var bucket = redissonClient.getMap(bucketKey);
 
-        // Get initial TTL
-        Long initialTtl = bucket.remainTimeToLive().block();
+        // Get initial TTL using StepVerifier to avoid blocking
+        java.util.concurrent.atomic.AtomicReference<Long> initialTtlRef = new java.util.concurrent.atomic.AtomicReference<>();
+        StepVerifier.create(bucket.remainTimeToLive())
+                .assertNext(initialTtlRef::set)
+                .verifyComplete();
+        Long initialTtl = initialTtlRef.get();
 
         // Wait a bit so TTL decreases
         Thread.sleep(100);

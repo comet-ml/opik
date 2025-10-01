@@ -55,8 +55,7 @@ public class AlertJob extends Job {
                             bucketKey, throwable.getMessage(), throwable);
                 })
                 .subscribe(
-                        __ -> {
-                        },
+                        __ -> { /* Successfully processed bucket */ },
                         error -> log.error("Error occurred during alert job execution:", error),
                         () -> log.info("Alert job finished processing all ready buckets"));
     }
@@ -167,6 +166,7 @@ public class AlertJob extends Job {
         // Send via WebhookPublisher with data from alert configuration
         return webhookPublisher.publishWebhookEvent(
                 eventType,
+                alert.id(),
                 workspaceId,
                 alert.webhook().url(),
                 payload,

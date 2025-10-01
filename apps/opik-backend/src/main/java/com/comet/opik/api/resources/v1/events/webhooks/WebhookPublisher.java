@@ -15,8 +15,10 @@ import org.redisson.api.stream.StreamAddArgs;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Service for publishing webhook events to the Redis stream.
@@ -35,6 +37,7 @@ public class WebhookPublisher {
      * Publishes a webhook event to the Redis stream for processing.
      *
      * @param eventType    The type of event
+     * @param alertId      The alert ID
      * @param workspaceId  The workspace ID associated with the event
      * @param webhookUrl   The URL to send the webhook to
      * @param payload      The payload to include in the webhook
@@ -42,17 +45,19 @@ public class WebhookPublisher {
      * @return A Mono that completes when the event is published to the stream
      */
     public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
+            @NonNull UUID alertId,
             @NonNull String workspaceId,
             @NonNull String webhookUrl,
             @NonNull T payload,
             Map<String, String> headers) {
-        return publishWebhookEvent(eventType, workspaceId, webhookUrl, payload, headers, webhookConfig.getMaxRetries());
+        return publishWebhookEvent(eventType, alertId, workspaceId, webhookUrl, payload, headers, webhookConfig.getMaxRetries());
     }
 
     /**
      * Publishes a webhook event to the Redis stream for processing with custom retry count.
      *
      * @param eventType    The type of event
+     * @param alertId      The alert ID
      * @param workspaceId  The workspace ID associated with the event
      * @param webhookUrl   The URL to send the webhook to
      * @param payload      The payload to include in the webhook
@@ -61,6 +66,7 @@ public class WebhookPublisher {
      * @return A Mono that completes when the event is published to the stream
      */
     public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
+            @NonNull UUID alertId,
             @NonNull String workspaceId,
             @NonNull String webhookUrl,
             @NonNull T payload,
@@ -79,10 +85,13 @@ public class WebhookPublisher {
                 .id(eventId)
                 .url(webhookUrl)
                 .eventType(eventType)
+                .alertId(alertId)
                 .payload(payload)
                 .headers(Optional.ofNullable(headers).orElse(Map.of()))
                 .maxRetries(maxRetries)
                 .workspaceId(workspaceId)
+                .userName("system")
+                .createdAt(Instant.now())
                 .build();
 
         log.info("Publishing webhook event: id='{}', type='{}', workspace='{}', url='{}'",
