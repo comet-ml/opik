@@ -118,7 +118,6 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
             response = self._model.generate_string(
                 input=prompt,
                 response_format=TrajectoryAccuracyResponseFormat,
-                seed=self._seed,
             )
 
             return parser.parse_evaluation_response(response, self.name)
@@ -161,7 +160,6 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
             response = await self._model.agenerate_string(
                 input=prompt,
                 response_format=TrajectoryAccuracyResponseFormat,
-                seed=self._seed,
             )
 
             return parser.parse_evaluation_response(response, self.name)

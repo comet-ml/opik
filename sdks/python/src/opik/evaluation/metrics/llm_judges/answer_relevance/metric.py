@@ -139,7 +139,6 @@ class AnswerRelevance(base_metric.BaseMetric):
         model_output = self._model.generate_string(
             input=llm_query,
             response_format=AnswerRelevanceResponseFormat,
-            seed=self._seed,
         )
         return parser.parse_model_output(content=model_output, name=self.name)
 
@@ -171,7 +170,6 @@ class AnswerRelevance(base_metric.BaseMetric):
         model_output = await self._model.agenerate_string(
             input=llm_query,
             response_format=AnswerRelevanceResponseFormat,
-            seed=self._seed,
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)

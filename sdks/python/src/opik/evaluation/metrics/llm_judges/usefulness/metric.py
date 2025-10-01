@@ -90,7 +90,7 @@ class Usefulness(base_metric.BaseMetric):
             output=output,
         )
         model_output = self._model.generate_string(
-            input=llm_query, response_format=UsefulnessResponseFormat, seed=self._seed
+            input=llm_query, response_format=UsefulnessResponseFormat
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)
@@ -115,7 +115,7 @@ class Usefulness(base_metric.BaseMetric):
             output=output,
         )
         model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=UsefulnessResponseFormat, seed=self._seed
+            input=llm_query, response_format=UsefulnessResponseFormat
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)

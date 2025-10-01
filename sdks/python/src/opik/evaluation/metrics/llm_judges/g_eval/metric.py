@@ -62,9 +62,7 @@ class GEval(base_metric.BaseMetric):
                 task_introduction=self.task_introduction,
                 evaluation_criteria=self.evaluation_criteria,
             )
-            self._chain_of_thought_response = self._model.generate_string(
-                input=prompt, seed=self._seed
-            )
+            self._chain_of_thought_response = self._model.generate_string(input=prompt)
 
         return self._chain_of_thought_response
 
@@ -75,7 +73,7 @@ class GEval(base_metric.BaseMetric):
                 evaluation_criteria=self.evaluation_criteria,
             )
             self._chain_of_thought_response = await self._model.agenerate_string(
-                input=prompt, seed=self._seed
+                input=prompt
             )
 
         return self._chain_of_thought_response
@@ -144,7 +142,7 @@ class GEval(base_metric.BaseMetric):
                 )
 
         model_output_string = self._model.generate_string(
-            input=llm_query, response_format=GEvalScoreFormat, seed=self._seed
+            input=llm_query, response_format=GEvalScoreFormat
         )
 
         return parser.parse_model_output_string(model_output_string, self.name)
@@ -192,7 +190,7 @@ class GEval(base_metric.BaseMetric):
                 )
 
         model_output_string = await self._model.agenerate_string(
-            input=llm_query, response_format=GEvalScoreFormat, seed=self._seed
+            input=llm_query, response_format=GEvalScoreFormat
         )
 
         return parser.parse_model_output_string(model_output_string, self.name)

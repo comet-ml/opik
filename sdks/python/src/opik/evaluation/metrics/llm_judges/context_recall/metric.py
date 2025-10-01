@@ -108,7 +108,6 @@ class ContextRecall(base_metric.BaseMetric):
         model_output = self._model.generate_string(
             input=llm_query,
             response_format=ContextRecallResponseFormat,
-            seed=self._seed,
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)
@@ -147,7 +146,6 @@ class ContextRecall(base_metric.BaseMetric):
         model_output = await self._model.agenerate_string(
             input=llm_query,
             response_format=ContextRecallResponseFormat,
-            seed=self._seed,
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)

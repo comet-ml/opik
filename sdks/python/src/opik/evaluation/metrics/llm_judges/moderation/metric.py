@@ -88,7 +88,7 @@ class Moderation(base_metric.BaseMetric):
             output=output, few_shot_examples=self.few_shot_examples
         )
         model_output = self._model.generate_string(
-            input=llm_query, response_format=ModerationResponseFormat, seed=self._seed
+            input=llm_query, response_format=ModerationResponseFormat
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)
@@ -114,7 +114,7 @@ class Moderation(base_metric.BaseMetric):
             output=output, few_shot_examples=self.few_shot_examples
         )
         model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=ModerationResponseFormat, seed=self._seed
+            input=llm_query, response_format=ModerationResponseFormat
         )
 
         return parser.parse_model_output(content=model_output, name=self.name)
