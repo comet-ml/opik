@@ -66,12 +66,12 @@ import { OpenAI } from "openai";
 
 // Define dataset item type
 type DatasetItem = {
-input: string;
-expected: string;
+    input: string;
+    expected: string;
 };
 
 const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
-const { input } = datasetItem;
+    const { input } = datasetItem;
 
     const openai = new OpenAI();
     const response = await openai.chat.completions.create({
@@ -85,7 +85,6 @@ const { input } = datasetItem;
     return { output: response.choices[0].message.content };
 
 };
-
 ```
 
 ```python title="Python" language="python"
@@ -166,7 +165,6 @@ In the same evaluation experiment, you can use multiple metrics to evaluate your
 import { ExactMatch } from "opik";
 
 const exact_match_metric = new ExactMatch();
-
 ```
 
 ```python title="Python" language="python"

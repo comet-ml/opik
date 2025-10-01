@@ -54,7 +54,6 @@ import { Opik } from "opik";
 // Create a dataset
 const client = new Opik();
 const dataset = await client.getOrCreateDataset("My dataset");
-
 ```
 
 ```python title="Python SDK" language="python"
@@ -82,10 +81,9 @@ const client = new Opik();
 const dataset = await client.getOrCreateDataset("My dataset");
 
 dataset.insert([
-{ user_question: "Hello, world!", expected_output: { assistant_answer: "Hello, world!" } },
-{ user_question: "What is the capital of France?", expected_output: { assistant_answer: "Paris" } },
+  { user_question: "Hello, world!", expected_output: { assistant_answer: "Hello, world!" } },
+  { user_question: "What is the capital of France?", expected_output: { assistant_answer: "Paris" } },
 ]);
-
 ```
 
 ```python title="Python" language="python"
@@ -159,32 +157,28 @@ You can delete items in a dataset by using the `delete` method:
   ```typescript title="TypeScript" language="typescript"
   import { Opik } from "opik";
 
-# Get or create a dataset
+  // Get or create a dataset
+  client = new Opik();
+  dataset = await client.getDataset("My dataset")
 
-client = new Opik();
-dataset = await client.getDataset("My dataset")
+  await dataset.delete(["123", "456"])
 
-await dataset.delete(["123", "456"])
+  // Or to delete all items
+  await dataset.clear()
+  ```
 
-# Or to delete all items
+  ```python title="Python" language="python"
+  from opik import Opik
 
-await dataset.clear()
+  # Get or create a dataset
+  client = Opik()
+  dataset = client.get_dataset(name="My dataset")
 
-```
+  dataset.delete(items_ids=["123", "456"])
 
-```python title="Python" language="python"
-from opik import Opik
-
-# Get or create a dataset
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
-
-dataset.delete(items_ids=["123", "456"])
-
-# Or to delete all items
-dataset.clear()
-```
-
+  # Or to delete all items
+  dataset.clear()
+  ```
 </CodeBlocks>
 
 ## Downloading a dataset from Opik
@@ -195,30 +189,28 @@ You can download a dataset from Opik using the `get_dataset` method:
   ```typescript title="TypeScript" language="typescript"
   import { Opik } from "opik";
 
-const client = new Opik();
-const dataset = await client.getDataset("My dataset");
+  const client = new Opik();
+  const dataset = await client.getDataset("My dataset");
 
-const items = await dataset.getItems();
-console.log(items);
+  const items = await dataset.getItems();
+  console.log(items);
+  ```
 
-```
+  ```python title="Python" language="python"
+  from opik import Opik
 
-```python title="Python" language="python"
-from opik import Opik
+  client = Opik()
+  dataset = client.get_dataset(name="My dataset")
 
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
+  # Get items as list of DatasetItem objects
+  items = dataset.get_items()
 
-# Get items as list of DatasetItem objects
-items = dataset.get_items()
+  # Convert to a Pandas DataFrame
+  dataset.to_pandas()
 
-# Convert to a Pandas DataFrame
-dataset.to_pandas()
-
-# Convert to a JSON array
-dataset.to_json()
-```
-
+  # Convert to a JSON array
+  dataset.to_json()
+  ```
 </CodeBlocks>
 
 ## Expanding a dataset with AI

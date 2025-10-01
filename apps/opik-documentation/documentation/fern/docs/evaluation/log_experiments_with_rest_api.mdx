@@ -27,97 +27,95 @@ your experiments.
   ```typescript title="TypeScript" language="typescript" maxLines=1000
   import { Opik } from "opik";
 
-const client = new Opik({
-apiKey: "your-api-key",
-apiUrl: "https://www.comet.com/opik/api",
-projectName: "your-project-name",
-workspaceName: "your-workspace-name",
-});
-const dataset = await client.getOrCreateDataset("My dataset");
+  const client = new Opik({
+    apiKey: "your-api-key",
+    apiUrl: "https://www.comet.com/opik/api",
+    projectName: "your-project-name",
+    workspaceName: "your-workspace-name",
+  });
+  const dataset = await client.getOrCreateDataset("My dataset");
 
-await dataset.insert([
-{
-user_question: "What is the capital of France?",
-expected_output: "Paris"
-},
-{
-user_question: "What is the capital of Japan?",
-expected_output: "Tokyo"
-},
-{
-user_question: "What is the capital of Brazil?",
-expected_output: "Brasília"
-}
-]);
-
-```
-
-```python title="Python" language="python" maxLines=1000
-from opik import Opik
-import opik
-
-# Configure Opik
-opik.configure()
-
-# Create dataset items
-dataset_items = [
+  await dataset.insert([
     {
-        "user_question": "What is the capital of France?",
-        "expected_output": "Paris"
+      user_question: "What is the capital of France?",
+      expected_output: "Paris"
     },
     {
-        "user_question": "What is the capital of Japan?",
-        "expected_output": "Tokyo"
+      user_question: "What is the capital of Japan?",
+      expected_output: "Tokyo"
     },
     {
-        "user_question": "What is the capital of Brazil?",
-        "expected_output": "Brasília"
+      user_question: "What is the capital of Brazil?",
+      expected_output: "Brasília"
     }
-]
+  ]);
+  ```
 
-# Get or create a dataset
-client = Opik()
-dataset = client.get_or_create_dataset(name="geography-questions")
+  ```python title="Python" language="python" maxLines=1000
+  from opik import Opik
+  import opik
 
-# Add dataset items
-dataset.insert(dataset_items)
-```
+  # Configure Opik
+  opik.configure()
 
-```bash title="REST API" maxLines=1000
-# First, create the dataset
-curl -X POST 'https://www.comet.com/opik/api/v1/private/datasets' \
-  -H 'Content-Type: application/json' \
-  -H 'Comet-Workspace: <your-workspace-name>' \
-  -H 'authorization: <your-api-key>' \
-  -d '{
-    "name": "geography-questions",
-    "description": "Geography quiz dataset"
-  }'
-
-# Then add dataset items
-curl -X POST 'https://www.comet.com/opik/api/v1/private/datasets/items' \
-  -H 'Content-Type: application/json' \
-  -H 'Comet-Workspace: <your-workspace-name>' \
-  -H 'authorization: <your-api-key>' \
-  -d '{
-    "dataset_name": "geography-questions",
-    "items": [
+  # Create dataset items
+  dataset_items = [
       {
-        "user_question": "What is the capital of France?",
-        "expected_output": "Paris"
+          "user_question": "What is the capital of France?",
+          "expected_output": "Paris"
       },
       {
-        "user_question": "What is the capital of Japan?",
-        "expected_output": "Tokyo"
+          "user_question": "What is the capital of Japan?",
+          "expected_output": "Tokyo"
       },
       {
-        "user_question": "What is the capital of Brazil?",
-        "expected_output": "Brasília"
+          "user_question": "What is the capital of Brazil?",
+          "expected_output": "Brasília"
       }
-    ]
-  }'
-```
+  ]
 
+  # Get or create a dataset
+  client = Opik()
+  dataset = client.get_or_create_dataset(name="geography-questions")
+
+  # Add dataset items
+  dataset.insert(dataset_items)
+  ```
+
+  ```bash title="REST API" maxLines=1000
+  # First, create the dataset
+  curl -X POST 'https://www.comet.com/opik/api/v1/private/datasets' \
+    -H 'Content-Type: application/json' \
+    -H 'Comet-Workspace: <your-workspace-name>' \
+    -H 'authorization: <your-api-key>' \
+    -d '{
+      "name": "geography-questions",
+      "description": "Geography quiz dataset"
+    }'
+
+  # Then add dataset items
+  curl -X POST 'https://www.comet.com/opik/api/v1/private/datasets/items' \
+    -H 'Content-Type: application/json' \
+    -H 'Comet-Workspace: <your-workspace-name>' \
+    -H 'authorization: <your-api-key>' \
+    -d '{
+      "dataset_name": "geography-questions",
+      "items": [
+        {
+          "user_question": "What is the capital of France?",
+          "expected_output": "Paris"
+        },
+        {
+          "user_question": "What is the capital of Japan?",
+          "expected_output": "Tokyo"
+        },
+        {
+          "user_question": "What is the capital of Brazil?",
+          "expected_output": "Brasília"
+        }
+      ]
+    }'
+  ```
 </CodeBlocks>
 
 <Tip>
@@ -137,24 +135,23 @@ Structure your evaluation results with the necessary fields. Each experiment ite
   ```typescript title="TypeScript" language="typescript" maxLines=1000
   const datasetItems = await dataset.getItems();
 
-const mockResponses = {
-"France": "The capital of France is Paris.",
-"Japan": "Japan's capital is Tokyo.",
-"Brazil": "The capital of Brazil is Rio de Janeiro."
-}
+  const mockResponses = {
+    "France": "The capital of France is Paris.",
+    "Japan": "Japan's capital is Tokyo.",
+    "Brazil": "The capital of Brazil is Rio de Janeiro."
+  }
 
-// This would be replaced by your specific logic, the goal is simply to have an array of
-// evaluation items with a dataset_item_id, evaluate_task_result and feedback_scores
-const evaluationItems = datasetItems.map(item => {  
- const response = mockResponses[item.user_question] || "I don't know";
-return {
-dataset_item_id: item.id,
-evaluate_task_result: { prediction: response },
-feedback_scores: [{ name: "accuracy", value: response.includes(item.expected_output) ? 1.0 : 0.0, source: "sdk" }]
-}
-});
-
-```
+  // This would be replaced by your specific logic, the goal is simply to have an array of
+  // evaluation items with a dataset_item_id, evaluate_task_result and feedback_scores
+  const evaluationItems = datasetItems.map(item => {  
+    const response = mockResponses[item.user_question] || "I don't know";
+      return {
+        dataset_item_id: item.id,
+        evaluate_task_result: { prediction: response },
+        feedback_scores: [{ name: "accuracy", value: response.includes(item.expected_output) ? 1.0 : 0.0, source: "sdk" }]
+      }
+  });
+  ```
 
 ```python title="Python" language="python" maxLines=1000
 # Get dataset items from the dataset object
@@ -256,27 +253,27 @@ print(f"Prepared {len(evaluation_items)} evaluation items")
 Use the bulk endpoint to efficiently log multiple evaluation results at once.
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript" maxLines=1000
-  import { Opik } from "opik";
+```typescript title="TypeScript" language="typescript" maxLines=1000
+import { Opik } from "opik";
 
 const client = new Opik({
-apiKey: "your-api-key",
-apiUrl: "https://www.comet.com/opik/api",
-projectName: "your-project-name",
-workspaceName: "your-workspace-name",
+  apiKey: "your-api-key",
+  apiUrl: "https://www.comet.com/opik/api",
+  projectName: "your-project-name",
+  workspaceName: "your-workspace-name",
 });
 
 const experimentName = "Bulk experiment upload";
 const datasetName = "geography-questions";
 const items = [
-{
-dataset_item_id: "dataset-item-id-1",
-evaluate_task_result: { prediction: "The capital of France is Paris." },
-feedback_scores: [{ name: "accuracy", value: 1.0, source: "sdk" }]
-}
+  {
+    dataset_item_id: "dataset-item-id-1",
+    evaluate_task_result: { prediction: "The capital of France is Paris." },
+    feedback_scores: [{ name: "accuracy", value: 1.0, source: "sdk" }]
+  }
 ];
-await client.api.experiments.experimentItemsBulk({ experimentName, datasetName, items });
 
+await client.api.experiments.experimentItemsBulk({ experimentName, datasetName, items });
 ```
 
 ```python title="Python" language="python" maxLines=1000
@@ -355,64 +352,62 @@ to the same experiment:
   ```typescript title="TypeScript" language="typescript" maxLines=1000
   import { generateId } from "opik";
 
-const experimentId = generateId();
-const experimentName = "Bulk experiment upload";
-// Split evaluation_items into two batches
-const mid = Math.floor(evaluationItems.length / 2);
+  const experimentId = generateId();
+  const experimentName = "Bulk experiment upload";
+  // Split evaluation_items into two batches
+  const mid = Math.floor(evaluationItems.length / 2);
 
-const halves = [
-evaluationItems.slice(0, mid),
-evaluationItems.slice(mid)
-];
+  const halves = [
+    evaluationItems.slice(0, mid),
+    evaluationItems.slice(mid)
+  ];
 
-for (const half of halves) {
-await client.restClient.experiments.experimentItemsBulk({
-experimentId: experimentId,
-experimentName: experimentName,
-datasetName: "geography-questions",
-items: half.map(item => ({
-datasetItemId: item.datasetItemId,
-evaluateTaskResult: item.evaluateTaskResult,
-feedbackScores: item.feedbackScores.map(score => ({
-...score,
-source: "sdk"
-}))
-}))
-});
-}
+  for (const half of halves) {
+    await client.restClient.experiments.experimentItemsBulk({
+      experimentId: experimentId,
+      experimentName: experimentName,
+      datasetName: "geography-questions",
+      items: half.map(item => ({
+        datasetItemId: item.datasetItemId,
+        evaluateTaskResult: item.evaluateTaskResult,
+        feedbackScores: item.feedbackScores.map(score => ({
+          ...score,
+          source: "sdk"
+        }))
+      }))
+    });
+  }
+  ```
 
-```
+  ```python title="Python" language="python" maxLines=1000
+  experiment_id = str(uuid6.uuid7())
+  experiment_name = "Bulk experiment upload"
+  # Split evaluation_items into two batches
+  mid = len(evaluation_items) // 2
 
-```python title="Python" language="python" maxLines=1000
-experiment_id = str(uuid6.uuid7())
-experiment_name = "Bulk experiment upload"
-# Split evaluation_items into two batches
-mid = len(evaluation_items) // 2
+  halves = [
+      evaluation_items[:mid],
+      evaluation_items[mid:]
+  ]
 
-halves = [
-    evaluation_items[:mid],
-    evaluation_items[mid:]
-]
-
-for half in halves:
-    client.rest_client.experiments.experiment_items_bulk(
-        experiment_id=experiment_id,
-        experiment_name=experiment_name,
-        dataset_name="geography-questions",
-        items=[
-            {
-                "dataset_item_id": item["dataset_item_id"],
-                "evaluate_task_result": item["evaluate_task_result"],
-                "feedback_scores": [
-                    {**score, "source": "sdk"}
-                    for score in item["feedback_scores"]
-                ]
-            }
-            for item in half
-        ]
-    )
-```
-
+  for half in halves:
+      client.rest_client.experiments.experiment_items_bulk(
+          experiment_id=experiment_id,
+          experiment_name=experiment_name,
+          dataset_name="geography-questions",
+          items=[
+              {
+                  "dataset_item_id": item["dataset_item_id"],
+                  "evaluate_task_result": item["evaluate_task_result"],
+                  "feedback_scores": [
+                      {**score, "source": "sdk"}
+                      for score in item["feedback_scores"]
+                  ]
+              }
+              for item in half
+          ]
+      )
+  ```
 </CodeBlocks>
 
 ## 4. Analyzing the results
@@ -430,24 +425,24 @@ Here's a complete example that puts all the steps together:
 
 // Configure Opik
 const client = new Opik({
-apiKey: "your-api-key",
-apiUrl: "https://www.comet.com/opik/api",
-projectName: "your-project-name",
-workspaceName: "your-workspace-name",
+  apiKey: "your-api-key",
+  apiUrl: "https://www.comet.com/opik/api",
+  projectName: "your-project-name",
+  workspaceName: "your-workspace-name",
 });
 
 // Step 1: Create dataset
 const dataset = await client.getOrCreateDataset("geography-questions");
 
 const localDatasetItems = [
-{
-user_question: "What is the capital of France?",
-expected_output: "Paris"
-},
-{
-user_question: "What is the capital of Japan?",
-expected_output: "Tokyo"
-}
+  {
+    user_question: "What is the capital of France?",
+    expected_output: "Paris"
+  },
+  {
+    user_question: "What is the capital of Japan?",
+    expected_output: "Tokyo"
+  }
 ];
 
 await dataset.insert(localDatasetItems);
@@ -457,42 +452,41 @@ const datasetItems = await dataset.getItems();
 
 // Helper function to get dataset item ID
 const getDatasetItem = (country: string) => {
-return datasetItems.find(item =>
-item.user_question.toLowerCase().includes(country.toLowerCase())
-);
+  return datasetItems.find(item =>
+    item.user_question.toLowerCase().includes(country.toLowerCase())
+  );
 };
 
 // Prepare evaluation results
 const evaluationItems = [
-{
-dataset_item_id: getDatasetItem("France")?.id,
-evaluate_task_result: { prediction: "The capital of France is Paris." },
-feedback_scores: [{ name: "accuracy", value: 1.0 }]
-},
-{
-dataset_item_id: getDatasetItem("Japan")?.id,
-evaluate_task_result: { prediction: "Japan's capital is Tokyo." },
-feedback_scores: [{ name: "accuracy", value: 1.0 }]
-}
+  {
+    dataset_item_id: getDatasetItem("France")?.id,
+    evaluate_task_result: { prediction: "The capital of France is Paris." },
+    feedback_scores: [{ name: "accuracy", value: 1.0 }]
+  },
+  {
+    dataset_item_id: getDatasetItem("Japan")?.id,
+    evaluate_task_result: { prediction: "Japan's capital is Tokyo." },
+    feedback_scores: [{ name: "accuracy", value: 1.0 }]
+  }
 ];
 
 // Step 3: Log experiment results
 const experimentName = `geography-bot-${Math.random().toString(36).substr(2, 4)}`;
 await client.api.experiments.experimentItemsBulk({
-experimentName,
-datasetName: "geography-questions",
-items: evaluationItems.map(item => ({
-datasetItemId: item.dataset_item_id,
-evaluateTaskResult: item.evaluate_task_result,
-feedbackScores: item.feedback_scores.map(score => ({
-...score,
-source: "sdk"
-}))
-}))
+  experimentName,
+  datasetName: "geography-questions",
+  items: evaluationItems.map(item => ({
+    datasetItemId: item.dataset_item_id,
+    evaluateTaskResult: item.evaluate_task_result,
+    feedbackScores: item.feedback_scores.map(score => ({
+      ...score,
+      source: "sdk"
+    }))
+  }))
 });
 
 console.log(`Experiment '${experimentName}' created successfully!`);
-
 ```
 
 ```python title="Python" language="python"
