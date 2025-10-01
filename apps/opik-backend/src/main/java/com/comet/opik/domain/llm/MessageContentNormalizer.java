@@ -7,6 +7,7 @@ import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -22,7 +23,7 @@ public final class MessageContentNormalizer {
 
     private MessageContentNormalizer() { }
 
-    public static ChatCompletionRequest normalizeRequest(ChatCompletionRequest request,
+    public static ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request,
             boolean allowStructuredContent) {
         if (allowStructuredContent) {
             return request;
@@ -54,7 +55,7 @@ public final class MessageContentNormalizer {
         return builder.build();
     }
 
-    public static String flattenContent(Object rawContent) {
+    public static String flattenContent(@NonNull Object rawContent) {
         if (rawContent instanceof String str) {
             return str;
         }
@@ -72,7 +73,7 @@ public final class MessageContentNormalizer {
         return String.valueOf(rawContent);
     }
 
-    private static Message normalizeUserMessage(UserMessage userMessage) {
+    private static Message normalizeUserMessage(@NonNull UserMessage userMessage) {
         String flattened = flattenContent(userMessage.content());
         UserMessage.Builder builder = UserMessage.builder();
 
@@ -84,7 +85,7 @@ public final class MessageContentNormalizer {
         return builder.build();
     }
 
-    private static String renderContent(Content content) {
+    private static String renderContent(@NonNull Content content) {
         ContentType type = content.type();
         if (type == null) {
             return "";
