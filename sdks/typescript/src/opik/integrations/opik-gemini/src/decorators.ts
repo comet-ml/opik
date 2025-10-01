@@ -254,9 +254,14 @@ function wrapAsyncIterable<T>(
             candidates: structuredClone(finalChunkParsed.candidates),
           };
 
-          if (aggregatedOutput.candidates?.[0]?.content?.parts?.[0]) {
-            aggregatedOutput.candidates[0].content.parts[0].text =
-              accumulatedText;
+          // Type assertion for nested property access after structuredClone
+          const typedOutput = aggregatedOutput as {
+            candidates?: Array<{
+              content?: { parts?: Array<{ text?: string }> };
+            }>;
+          };
+          if (typedOutput.candidates?.[0]?.content?.parts?.[0]) {
+            typedOutput.candidates[0].content.parts[0].text = accumulatedText;
           }
         }
       }
