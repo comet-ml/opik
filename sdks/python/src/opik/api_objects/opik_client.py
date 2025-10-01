@@ -6,13 +6,14 @@ from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
 
-from opik.api_objects import opik_query_language
 from . import (
     constants,
     dataset,
     experiment,
     optimization,
     helpers,
+    opik_query_language,
+    search_helpers,
     span,
     trace,
 )
@@ -971,7 +972,7 @@ class Opik:
         max_results: int = 1000,
         truncate: bool = True,
         wait_for_at_least: Optional[int] = None,
-        wait_for_timeout: int = 30,
+        wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
@@ -1028,7 +1029,7 @@ class Opik:
         )
 
         search_functor = functools.partial(
-            helpers.search_traces_with_filters,
+            search_helpers.search_traces_with_filters,
             rest_client=self._rest_client,
             project_name=project_name or self._project_name,
             filters=filters_,
@@ -1040,10 +1041,11 @@ class Opik:
             return search_functor()
 
         # do synchronization with backend if wait_for_at_least is provided until a specific number of traces are found
-        result = helpers.search_and_wait_for_done(
+        result = search_helpers.search_and_wait_for_done(
             search_functor=search_functor,
             wait_for_at_least=wait_for_at_least,
             wait_for_timeout=wait_for_timeout,
+            sleep_time=5,
         )
         if len(result) < wait_for_at_least:
             raise exceptions.SearchTimeoutError(
@@ -1060,7 +1062,7 @@ class Opik:
         max_results: int = 1000,
         truncate: bool = True,
         wait_for_at_least: Optional[int] = None,
-        wait_for_timeout: int = 30,
+        wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
@@ -1119,7 +1121,7 @@ class Opik:
         )
 
         search_functor = functools.partial(
-            helpers.search_spans_with_filters,
+            search_helpers.search_spans_with_filters,
             rest_client=self._rest_client,
             project_name=project_name or self._project_name,
             trace_id=trace_id,
@@ -1132,10 +1134,11 @@ class Opik:
             return search_functor()
 
         # do synchronization with backend if wait_for_at_least is provided until a specific number of spans are found
-        result = helpers.search_and_wait_for_done(
+        result = search_helpers.search_and_wait_for_done(
             search_functor=search_functor,
             wait_for_at_least=wait_for_at_least,
             wait_for_timeout=wait_for_timeout,
+            sleep_time=5,
         )
         if len(result) < wait_for_at_least:
             raise exceptions.SearchTimeoutError(
