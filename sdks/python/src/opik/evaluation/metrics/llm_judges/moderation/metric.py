@@ -64,12 +64,13 @@ class Moderation(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
+            model_kwargs = {}
             if temperature is not None:
-                self._model = models_factory.get(
-                    model_name=model, temperature=temperature
-                )
-            else:
-                self._model = models_factory.get(model_name=model)
+                model_kwargs["temperature"] = temperature
+            if self._seed is not None:
+                model_kwargs["seed"] = self._seed
+
+            self._model = models_factory.get(model_name=model, **model_kwargs)
 
     def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
         """
