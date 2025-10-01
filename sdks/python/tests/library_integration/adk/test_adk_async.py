@@ -1,13 +1,23 @@
-import opik
 from typing import Optional, AsyncIterator
-from . import agent_tools
+
+import pytest
 from google.adk import agents as adk_agents
+from google.adk import events as adk_events
 from google.adk import runners as adk_runners
 from google.adk import sessions as adk_sessions
-from google.adk import events as adk_events
 from google.genai import types as genai_types
 
+import opik
 from opik.integrations.adk import OpikTracer
+from opik.integrations.adk import helpers as opik_adk_helpers
+from . import agent_tools
+from .constants import (
+    APP_NAME,
+    USER_ID,
+    SESSION_ID,
+    MODEL_NAME,
+    EXPECTED_USAGE_KEYS_GOOGLE,
+)
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -16,16 +26,6 @@ from ...testlib import (
     TraceModel,
     assert_dict_has_keys,
     assert_equal,
-)
-
-import pytest
-from opik.integrations.adk import helpers as opik_adk_helpers
-from .constants import (
-    APP_NAME,
-    USER_ID,
-    SESSION_ID,
-    MODEL_NAME,
-    EXPECTED_USAGE_KEYS_GOOGLE,
 )
 
 

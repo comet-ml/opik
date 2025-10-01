@@ -8,44 +8,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Span, Trace, Thread } from "@/types/traces";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
 
-// scope property is needed only in case when we have TOGGLE_HUMAN_ANNOTATION_ENABLED,
-// to be able to hide this button in case we are on the thread page or sidebar
-// all this functionality should be deleted when the feature flag is be deleted
-type AddToDropdownScope = "trace" | "span" | "thread";
-
 export type AddToDropdownProps = {
   rows: Array<Trace | Span | Thread>;
-  scope?: AddToDropdownScope[];
   disabled?: boolean;
 };
 
 const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
   rows,
-  scope,
   disabled = false,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
 
-  const annotationQueuesEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.TOGGLE_HUMAN_ANNOTATION_ENABLED,
-  );
-
   const isThread = isObjectThread(rows[0]);
   const isSpan = isObjectSpan(rows[0]);
   const showAddToDataset = !isThread;
-  const showAddToQueue = (isThread || !isSpan) && annotationQueuesEnabled;
-
-  const isOnlyAnnotationScope = scope?.length === 1 && scope[0] === "thread";
-
-  if (!showAddToQueue && isOnlyAnnotationScope) return null;
+  const showAddToQueue = isThread || !isSpan;
 
   return (
     <>

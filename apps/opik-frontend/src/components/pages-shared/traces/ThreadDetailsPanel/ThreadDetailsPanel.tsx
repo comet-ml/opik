@@ -482,7 +482,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           </Button>
         </div>
         <div className="flex gap-2 pl-6">
-          <AddToDropdown rows={rows} scope={["thread"]} />
+          <AddToDropdown rows={rows} />
           <DetailsActionSectionToggle
             activeSection={currentActiveSection}
             setActiveSection={setActiveSection}

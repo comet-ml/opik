@@ -53,6 +53,7 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
                 .ifPresent(connectTimeout -> modelBuilder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(modelBuilder::temperature);
+        Optional.ofNullable(modelParameters.seed()).ifPresent(modelBuilder::seed);
 
         return modelBuilder.build();
     }

@@ -311,12 +311,13 @@ def _build_prompt_evaluation_task(
                 }
             )
 
-        llm_output = model.generate_provider_response(messages=processed_messages)
-
-        return {
-            "input": processed_messages,
-            "output": llm_output.choices[0].message.content,
-        }
+        with base_model.get_provider_response(
+            model_provider=model, messages=processed_messages
+        ) as llm_output:
+            return {
+                "input": processed_messages,
+                "output": llm_output.choices[0].message.content,
+            }
 
     return _prompt_evaluation_task
 
@@ -372,18 +373,23 @@ def evaluate_prompt(
         trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
     """
     if isinstance(model, str):
-        model = models_factory.get(model_name=model)
+        opik_model = models_factory.get(model_name=model)
     elif not isinstance(model, base_model.OpikBaseModel):
         raise ValueError("`model` must be either a string or an OpikBaseModel instance")
+    else:
+        opik_model = model
 
     if experiment_config is None:
-        experiment_config = {"prompt_template": messages, "model": model.model_name}
+        experiment_config = {
+            "prompt_template": messages,
+            "model": opik_model.model_name,
+        }
     else:
         if "prompt_template" not in experiment_config:
             experiment_config["prompt_template"] = messages
 
         if "model" not in experiment_config:
-            experiment_config["model"] = model.model_name
+            experiment_config["model"] = opik_model.model_name
 
     if scoring_metrics is None:
         scoring_metrics = []
@@ -413,7 +419,7 @@ def evaluate_prompt(
         )
         test_results = evaluation_engine.evaluate_llm_tasks(
             dataset_=dataset,
-            task=_build_prompt_evaluation_task(model=model, messages=messages),
+            task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,

@@ -46,6 +46,14 @@ jobs:
             restore-keys: |
               hf-datasets-
 
+        - name: Cache LiteLLM cache
+          uses: actions/cache@v4
+          with:
+            path: ~/.litellm_cache
+            key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}
+            restore-keys: |
+              litellm-cache-
+
         - name: Install opik_optimizer
           run: pip install .
         

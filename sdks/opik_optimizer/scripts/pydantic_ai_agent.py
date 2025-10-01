@@ -5,12 +5,22 @@ from opik_optimizer import (
 from opik_optimizer.utils import search_wikipedia
 from opik import track
 
+# Requires pydantic_ai version 0.2.15 or greater:
 from pydantic_ai import Agent
+from pydantic_ai.tools import RunContext
 from pydantic_ai.messages import (
     ModelRequest,
     UserPromptPart,
     SystemPromptPart,
 )
+
+
+def search_wikipedia_tool(ctx: RunContext, query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    return search_wikipedia(query)
 
 
 class PydanticAIAgent(OptimizableAgent):
@@ -26,7 +36,7 @@ class PydanticAIAgent(OptimizableAgent):
             output_type=str,
             system_prompt="",  # We'll use the chat-prompt
         )
-        self.agent.tool(track(type="tool")(search_wikipedia))
+        self.agent.tool(track(type="tool")(search_wikipedia_tool))
 
     def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         message_history = []

@@ -9,6 +9,11 @@
 .idea/
 *.iml
 
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
+
 # Maven
 target/
 **/dependency-reduced-pom.xml
@@ -66,7 +71,8 @@ __pycache__
 pip-log.txt
 .venv*
 .ipynb_checkpoints
-.python-version
+# Track Python version pin to avoid accidental environment drift.
+# Remove this exclusion so changes to the version file are committed.
 
 # VS Code
 .vscode
