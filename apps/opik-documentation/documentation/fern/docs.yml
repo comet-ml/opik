@@ -121,15 +121,12 @@ navigation:
           - page: Log conversations
             path: docs/tracing/log_chat_conversations.mdx
             slug: log_chat_conversations
+          - page: Log user feedback
+            path: docs/tracing/annotate_traces.mdx
+            slug: annotate_traces
           - page: Log media & attachments
             path: docs/tracing/log_multimodal_traces.mdx
             slug: log_multimodal_traces
-          - page: Log distributed traces
-            path: docs/tracing/log_distributed_traces.mdx
-            slug: log_distributed_traces
-          - page: Annotate traces
-            path: docs/tracing/annotate_traces.mdx
-            slug: annotate_traces
           - page: Cost tracking
             path: docs/tracing/cost_tracking.mdx
             slug: cost_tracking
@@ -149,9 +146,9 @@ navigation:
               - page: Log Agent Graphs
                 path: docs/tracing/log_agent_graph.mdx
                 slug: log_agent_graphs
-              - page: Dynamic tracing control
-                path: docs/cookbook/dynamic_tracing_cookbook.mdx
-                slug: dynamic_tracing_control
+              - page: Log distributed traces
+                path: docs/tracing/log_distributed_traces.mdx
+                slug: log_distributed_traces
       - section: Evaluation
         slug: /evaluation
         contents:
@@ -1060,4 +1057,7 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/supported_models"
     destination: "/docs/opik/tracing/cost_tracking"
+    permanent: true
+  - source: "/docs/opik/tracing/dynamic_tracing_control"
+    destination: "/docs/opik/tracing/log_traces#disabling-the-logging-process"
     permanent: true

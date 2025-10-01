@@ -24,7 +24,7 @@ and our [REST API](/reference/rest-api/overview).
 We won't be covering how to track chat conversations in this guide, you can learn more about this in the
 [Logging conversations](/tracing/log_chat_conversations) guide.
 
-## Enabling observability
+## Getting started
 
 ### 1. Installing the SDK
 
@@ -32,7 +32,7 @@ Before adding observability to your application, you will first need to install 
 Opik SDK.
 
 <Tabs>
-    <Tab value="Typescript SDK" title="Typescript SDK">
+    <Tab value="Typescript SDK" title="Typescript SDK" language="typescript">
 
     ```bash
     npm install opik
@@ -50,7 +50,7 @@ Opik SDK.
     ```
 
     </Tab>
-    <Tab value="Python SDK" title="Python SDK">
+    <Tab value="Python SDK" title="Python SDK" language="python">
 
     ```bash
     # Install the SDK
@@ -89,7 +89,7 @@ Opik SDK.
 Once you have installed and configured the Opik SDK, you can start using it to track your agent calls:
 
 <Tabs>
-  <Tab title="OpenAI (TS)" value="openai-ts-sdk">
+  <Tab title="OpenAI (TS)" value="openai-ts-sdk" language="typescript">
     If you are using the OpenAI TypeScript SDK, you can integrate by:
 
     <Steps>
@@ -141,7 +141,7 @@ Once you have installed and configured the Opik SDK, you can start using it to t
     </Steps>
 
   </Tab>
-  <Tab title="OpenAI (Python)" value="openai-python-sdk">
+  <Tab title="OpenAI (Python)" value="openai-python-sdk" language="python">
     If you are using the OpenAI Python SDK, you can integrate by:
 
     <Steps>
@@ -403,12 +403,7 @@ your traces and spans.
 
 ## Advanced usage
 
-### Logging traces and spans
-
-You might not always be able to use one of our integrations or you might need more control over the
-logging process. In this case, you can use the low level SDKs to log your traces and spans.
-
-#### Using function decorators
+### Using function decorators
 
 Function decorators are a great way to add Opik logging to your existing application. When you add
 the `@track` decorator to a function, Opik will create a span for that function call and log the
@@ -419,58 +414,11 @@ function.
 While decorators are most popular in Python, we also support them in our Typescript SDK:
 
 <Tabs>
-    <Tab title="Python" value="python">
-        You can add the `@track` decorator to any function in your application and track not just
-        LLM calls but also any other steps in your application:
-
-        ```python
-        import opik
-        import openai
-
-        client = openai.OpenAI()
-
-        @opik.track
-        def retrieve_context(input_text):
-            # Your retrieval logic here, here we are just returning a hardcoded list of strings
-            context =[
-                "What specific information are you looking for?",
-                "How can I assist you with your interests today?",
-                "Are there any topics you'd like to explore or learn more about?",
-            ]
-            return context
-
-        @opik.track
-        def generate_response(input_text, context):
-            full_prompt = (
-                f" If the user asks a question that is not specific, use the context to provide a relevant response.\n"
-                f"Context: {', '.join(context)}\n"
-                f"User: {input_text}\n"
-                f"AI:"
-            )
-
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": full_prompt}]
-            )
-            return response.choices[0].message.content
-
-        @opik.track(name="my_llm_application")
-        def llm_chain(input_text):
-            context = retrieve_context(input_text)
-            response = generate_response(input_text, context)
-
-            return response
-
-        # Use the LLM chain
-        result = llm_chain("Hello, how are you?")
-        print(result)
-        ```
-    </Tab>
-    <Tab title="Typescript" value="typescript">
+    <Tab title="Typescript" value="typescript" language="typescript">
         TypeScript started supporting decorators from version 5 but it's use is still not widespread.
         The Opik typescript SDK also supports decorators but it's currently considered experimental.
 
-        ```typescript
+        ```typescript maxLines=100
         import { track } from "opik";
 
         class TranslationService {
@@ -501,15 +449,126 @@ While decorators are most popular in Python, we also support them in our Typescr
     </Info>
 
     </Tab>
+    <Tab title="Python" value="python" language="python">
+        You can add the `@track` decorator to any function in your application and track not just
+        LLM calls but also any other steps in your application:
+
+        ```python maxLines=100
+        import opik
+        import openai
+
+        client = openai.OpenAI()
+
+        @opik.track
+        def retrieve_context(input_text):
+            # Your retrieval logic here, here we are just returning a
+            # hardcoded list of strings
+            context =[
+                "What specific information are you looking for?",
+                "How can I assist you with your interests today?",
+                "Are there any topics you'd like to explore?",
+            ]
+            return context
+
+        @opik.track
+        def generate_response(input_text, context):
+            full_prompt = (
+                f" If the user asks a non-specific question, use the context to provide a relevant response.\n"
+                f"Context: {', '.join(context)}\n"
+                f"User: {input_text}\n"
+                f"AI:"
+            )
+
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": full_prompt}]
+            )
+            return response.choices[0].message.content
+
+        @opik.track(name="my_llm_application")
+        def llm_chain(input_text):
+            context = retrieve_context(input_text)
+            response = generate_response(input_text, context)
+
+            return response
+
+        # Use the LLM chain
+        result = llm_chain("Hello, how are you?")
+        print(result)
+        ```
+
+        When using the track decorator, you can customize the data associated with both the trace
+        and the span using either the `opik_args` parameter or the
+        [`opik_context`](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html)
+        module. This is particularly useful if you want to specify the conversation thread id, tags
+        and metadata for example.
+
+        <CodeBlocks>
+            ```python title="opik_context module"
+            import opik
+
+            @opik.track
+            def llm_chain(text: str) -> str:
+                opik_context.update_current_trace(
+                    tags=["llm_chatbot"],
+                    metadata={"version": "1.0", "method": "simple"},
+                    thread_id="conversation-123",
+                    feedback_scores=[
+                        {
+                            "name": "user_feedback",
+                            "value": 1
+                        }
+                    ],
+                )
+                opik_context.update_current_span(
+                    metadata={"model": "gpt-4o"},
+                )
+                return f"Processed: {text}"
+            ```
+
+            ```python title="opik_args parameter"
+            import opik
+
+            @opik.track
+            def llm_chain(text: str) -> str:
+                # LLM chain code
+                # ...
+                return f"Processed: {text}"
+
+            # Call with opik_args - it won't be passed to the function
+            result = llm_chain(
+                "hello world",
+                opik_args={
+                    "span": {
+                        "tags": ["llm", "agent"],
+                        "metadata": {"version": "1.0", "method": "simple"}
+                    },
+                    "trace": {
+                        "thread_id": "conversation-123",
+                        "tags": ["user-session"],
+                        "metadata": {"user_id": "user-456"}
+                    }
+                }
+            )
+
+            print(result)
+            ```
+        </CodeBlocks>
+
+        <Tip>
+            If you specify the opik_args parameter as part of your function call, you can propagate
+            the configuration to the nested functions.
+        </Tip>
+    </Tab>
 
 </Tabs>
 
-#### Using the low-level SDKs
+### Using the low-level SDKs
 
 If you need full control over the logging process, you can use the low-level SDKs to log your traces and spans:
 
 <Tabs>
-    <Tab title="Typescript" value="typescript">
+    <Tab title="Typescript" value="typescript" language="typescript">
         You can use the [`Opik`](/reference/typescript-sdk/overview) client to log your traces and spans:
 
         ```typescript
@@ -548,7 +607,7 @@ If you need full control over the logging process, you can use the low-level SDK
             you can find more information about the configuration [here](/tracing/sdk_configuration).
         </Tip>
     </Tab>
-    <Tab title="Python" value="python">
+    <Tab title="Python" value="python" language="python">
         If you want full control over the data logged to Opik, you can use the
         [`Opik`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html) client.
 
@@ -613,319 +672,132 @@ If you need full control over the logging process, you can use the low-level SDK
 
 </Tabs>
 
-### Scoring traces
+### Logging to a specific project
 
-Feedback scores allow you to annotate your traces based on your own metrics or feedback from your
-users.
+By default, traces are logged to the `Default Project` project. You can change the project you want
+the trace to be logged to in a couple of ways:
 
 <Tabs>
-    <Tab title="Function decorators (Python)" value="python">
-        If you are using the `@track` decorator, you can log feedback scores to traces by using the
-        [`opik_context.update_current_trace`](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/update_current_trace.html) and 
-        [`opik_context.update_current_span`](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/update_current_span.html)
-        methods:
+    <Tab title="Typescript" value="typescript" language="typescript">
+    You can use the `OPIK_PROJECT_NAME` environment variable to set the project you want the trace
+    to be logged or pass a parameter to the `Opik` client.
+
+    ```typescript
+    import { Opik } from "opik";
+
+    const client = new Opik({
+        projectName: "my_project",
+        // apiKey: "my_api_key",
+        // apiUrl: "https://www.comet.com/opik/api",
+        // workspaceName: "my_workspace",
+    });
+    ```
+    </Tab>
+    <Tab title="Python" value="python" language="python">
+        You can use the `OPIK_PROJECT_NAME` environment variable to set the project you want traces
+        to be logged to.
+
+        If you are using function decorators, you can set the project as part of the decorator parameters:
 
         ```python
-        from opik import track, opik_context
-
-        @track
-        def llm_chain(input_text):
-            # LLM chain code
-            # ...
-
-            # Update the trace
-            opik_context.update_current_trace(
-                feedback_scores=[
-                    {"name": "user_feedback", "value": 1.0, "reason": "The response was helpful and accurate."}
-                ]
-            )
+        @track(project_name="my_project")
+        def my_function():
+            pass
         ```
 
-    </Tab>
-    <Tab title="Python low-level SDK" value="python">
-
-        You can log scores to traces and spans using the
-        [`log_traces_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_traces_feedback_scores)
-        and [`log_spans_feedback_scores`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.log_spans_feedback_scores)
-        methods:
+        If you are using the low level SDK, you can set the project as part of the `Opik` client constructor:
 
         ```python
         from opik import Opik
 
-        client = Opik()
-
-        trace = client.trace(name="my_trace")
-
-        client.log_traces_feedback_scores(
-            scores=[
-                {"id": trace.id, "name": "overall_quality", "value": 0.85, "reason": "The response was helpful and accurate."},
-                {"id": trace.id, "name": "coherence", "value": 0.75}
-            ]
-        )
-
-        span = trace.span(name="my_span")
-        client.log_spans_feedback_scores(
-            scores=[
-                {"id": span.id, "name": "overall_quality", "value": 0.85, "reason": "The response was helpful and accurate."},
-                {"id": span.id, "name": "coherence", "value": 0.75}
-            ]
-        )
+        client = Opik(project_name="my_project")
         ```
     </Tab>
 
 </Tabs>
 
-<Tip>
-You don't have to manually log feedback scores, you can also define LLM as a Judge metrics in Opik
-that will score traces automatically for you.
-
-You can learn more about this feature in the [Online evaluation](/production/rules) guide.
-
-</Tip>
-{/* 
-#### Logging additional data
-
-As mentioned above, the `@track` decorator only logs the input and output of the decorated function. If you want to log additional data, you can use the
-`update_current_span` function and `update_current_trace` function to manually update the span and trace:
-
-```python
-from opik import track, opik_context
-
-@track
-def llm_chain(input_text):
-    # LLM chain code
-    # ...
-
-    # Update the trace
-    opik_context.update_current_trace(
-        tags=["llm_chatbot"],
-    )
-
-    # Update the span
-    opik_context.update_current_span(
-        name="llm_chain"
-    )
-```
-
-You can learn more about the `opik_context` module in the [opik_context reference docs](https://www.comet.com/docs/opik/python-sdk-reference/opik_context/index.html).
-
-Also, you can use the `opik_args` parameter to pass additional configuration to traced functions, including `tags`, `metadata`, and trace-level settings like `thread_id`.
-This parameter can be used in two ways: implicitly or explicitly.
-
-##### Implicit `opik_args` (functions without `opik_args` parameter)
-
-When your function doesn't explicitly declare an `opik_args` parameter, you can still pass `opik_args` when calling the function. The decorator will handle it internally:
-
-```python
-import opik
-
-@opik.track
-def llm_chain(text: str) -> str:
-    # LLM chain code
-    # ...
-    return f"Processed: {text}"
-
-# Call with opik_args - it won't be passed to the function
-result = llm_chain(
-    "hello world",
-    opik_args={
-        "span": {
-            "tags": ["llm", "agent"],
-            "metadata": {"version": "1.0", "method": "simple"}
-        },
-        "trace": {
-            "thread_id": "conversation-123",
-            "tags": ["user-session"],
-            "metadata": {"user_id": "user-456"}
-        }
-    }
-)
-```
-
-##### Explicit `opik_args` (functions with `opik_args` parameter)
-
-When your function explicitly declares an `opik_args` parameter, it will receive the `opik_args` value directly. This is useful for propagating configuration through nested function calls:
-
-```python
-from typing import Optional, Dict, Any
-import opik
+### Flushing traces and spans
 
-@opik.track
-def child_function(data: str, opik_args: Optional[Dict[str, Any]]=None) -> str:
-    # This function can access opik_args directly if needed.
-    # All configuration options will be applied to the current span and trace
-    return f"Child processed: {data}"
+This process is optional and is only needed if you are running a short-lived script or if you are
+debugging why traces and spans are not being logged to Opik.
 
-@opik.track
-def parent_function(text: str, opik_args: Optional[Dict[str, Any]]=None) -> str:
-    # Propagate opik_args to a child function.
-    # All configuration options will be applied to the current span and trace.
-    intermediate = child_function(text, opik_args=opik_args)
-    return f"Parent: {intermediate}"
+<Tabs>
+    <Tab title="Typescript" value="typescript" language="typescript">
+        As the Typescript SDK has been designed to be used in production environments, we batch traces
+        and spans and send them to Opik in the background.
 
-# Both functions will receive the same opik_args and apply the same configuration
-# to the current span and trace of each function.
-result = parent_function(
-    "hello",
-    opik_args={
-        "span": {"tags": ["parent-child"]},
-        "trace": {"thread_id": "workflow-789"}
-    }
-)
-```
+        If you are running a short-lived script, you can flush the traces to Opik by using the
+        `flush` method of the `Opik` client.
 
-##### The `opik_args` structure
+        ```typescript
+        import { Opik } from "opik";
 
-The `opik_args` parameter accepts a dictionary with the following structure:
+        const client = new Opik();
+        client.flush();
+        ```
+    </Tab>
+    <Tab title="Python" value="python" language="python">
+        As the Python SDK has been designed to be used in production environments, we batch traces
+        and spans and send them to Opik in the background.
 
-```python
-opik_args = {
-    "span": {
-        "tags": ["tag1", "tag2"],              # List of tags for the span
-        "metadata": {"key": "value"}           # Dictionary of metadata for the span
-    },
-    "trace": {
-        "thread_id": "conversation-id",        # Thread ID for grouping related traces
-        "tags": ["trace-tag"],                 # List of tags for the trace
-        "metadata": {"trace-key": "value"}     # Dictionary of metadata for the trace
-    }
-}
-```
+        If you are running a short-lived script, you can flush the traces to Opik by using the
+        `flush` method of the `Opik` client.
 
-Both `"span"` and `"trace"` sections are optional - you can include either or both as needed.
+        ```python maxLines=100
+        from opik import Opik
 
-#### Configuring the project name
+        client = Opik()
+        client.flush()
+        ```
 
-You can configure the project you want the trace to be logged to using the `project_name` parameter of the `@track` decorator:
+        You can also set the `flush` parameter to `True` when you are using the `@track` decorator to make sure
+        the traces are flushed to Opik before the program exits.
 
-```python
-import opik
+        ```python
+        from opik import track
 
-@opik.track(project_name="my_project")
-def my_function(input):
-    # Function code
-    return input
-```
+        @track(flush=True)
+        def llm_chain(input_text):
+            # LLM chain code
+            # ...
+            return f"Processed: {input_text}"
+        ```
+    </Tab>
 
-If you want to configure this globally for all traces, you can also use the environment variable:
+</Tabs>
 
-```python
-import os
+### Disabling the logging process
 
-os.environ["OPIK_PROJECT_NAME"] = "my_project"
-```
+<Tabs>
+    <Tab title="Typescript" value="typescript" language="typescript">
+        This is currently not supported in the Typescript SDK. To disable the logging process, 
+    </Tab>
+    <Tab title="Python" value="python" language="python">
+        You can disable the logging process globally using the `OPIK_TRACK_DISABLE` environment variable.
 
-This will block the processing until the data is finished being logged.
+        If you are looking for more control, you can also use the `set_tracing_active` function to
+        dynamically disable the logging process.
 
-#### Flushing the trace
+        ```python
+        import opik
 
-You can ensure all data is logged by setting the `flush` parameter of the `@track` decorator to `True`:
+        # Check the current state of the tracing flag
+        print(opik.is_tracing_active())
 
-```python
-import opik
+        # Disable the logging process
+        opik.set_tracing_active(False)
 
-@opik.track(flush=True)
-def my_function(input):
-    # Function code
-    return input
-```
+        # re-enable the logging process
+        print(opik.set_tracing_active(True))
+        ```
+    </Tab>
 
-#### Disabling automatic logging of function input and output
+</Tabs>
 
-You can use the `capture_input` and `capture_output` parameters of the [`@track`](https://www.comet.com/docs/opik/python-sdk-reference/track.html) decorator to disable the automatic logging of the function input and output:
+## Next steps
 
-```python
-import opik
+Once you have the observability set up for your agent, you can go one step further and:
 
-@opik.track(capture_input=False, capture_output=False)
-def llm_chain(input_text):
-    # LLM chain code
-    return input_text
-```
-
-You can then use the `opik_context` module to manually log the trace and span attributes.
-
-#### Disable all tracing
-
-You can disable the logging of traces and spans using the environment variable `OPIK_TRACK_DISABLE`, this will turn off the logging for all function decorators:
-
-```python
-import os
-
-os.environ["OPIK_TRACK_DISABLE"] = "true"
-```
-
-### Configuring the `thread_id`
-
-You can group multiple traces into a single conversational thread by updating each created trace with a specific `thread_id` parameter.
-Often, this isn’t possible directly because tracing occurs inside a function you can’t modify. In such cases, you can use the `opik_args` parameter to pass the `thread_id` to the function, as shown below:
-
-```python
-from google import genai
-from opik.integrations.genai import track_genai
-
-client = genai.Client()
-gemini_client = track_genai(client, project_name="opik_args demo")
-
-response = gemini_client.models.generate_content(
-    model="gemini-2.0-flash",
-    contents="What is Opik?",
-    opik_args={"trace": {"thread_id": "f174a"}}
-)
-
-print(response.text)
-
-```
-
-Also, you can pass it to the function with `opik.track` decorator:
-
-```python
-from google import genai
-
-import opik
-from opik.integrations.genai import track_genai
-
-client = genai.Client()
-gemini_client = track_genai(client)
-
-@opik.track(project_name="opik_args demo")
-def chat_message(input_text):
-    response = gemini_client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=input_text
-    )
-    return response.text
-
-opik_args={"trace": {"thread_id": "f174a"}}
-chat_message("What is Opik ?", opik_args=opik_args)
-chat_message("Who is Opik?", opik_args=opik_args)
-```
-
-#### Copying traces to a new project
-
-You can copy traces between projects using the [`copy_traces`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.copy_traces) method. This
-method allows you to move traces from one project to another without having to re-log them.
-
-```python
-from opik import Opik
-
-client = Opik(_use_batching=True)
-
-client.copy_traces(
-    project_name="<name of the project where the traces were created>",
-    destination_project_name="<name of the new project>"
-)
-```
-
-<Note>
-By default, the `copy_traces` method will not delete the traces in the source project. You can optionally set
-the `delete_original_project` parameter to `true` to delete the traces in the source project after copying them.
-
-This is not recommended, instead we recommend moving the traces and once everything has been migrated you can delete
-the source project from the UI.
-
-</Note>
-
-### Using the REST API
-
-The documentation for the Opik REST API is available [here](/reference/rest-api/overview). \*/}
+- [Logging chat conversations](/tracing/log_chat_conversations)
+- [Logging user feedback](/tracing/log_feedback)
+- [Setup online evaluation metrics](/production/rules)
