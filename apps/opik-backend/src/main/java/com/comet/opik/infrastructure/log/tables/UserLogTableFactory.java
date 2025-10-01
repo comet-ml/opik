@@ -3,7 +3,6 @@ package com.comet.opik.infrastructure.log.tables;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.comet.opik.domain.alerts.AlertEventLogsDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorLogsDAO;
-import com.comet.opik.domain.evaluators.EventLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
 import io.r2dbc.spi.ConnectionFactory;
 import lombok.NonNull;

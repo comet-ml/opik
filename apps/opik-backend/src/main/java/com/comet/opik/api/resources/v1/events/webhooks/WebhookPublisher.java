@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.events.webhooks;
 
+import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
-import com.comet.opik.api.events.webhooks.WebhookEventTypes;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.WebhookConfig;
 import jakarta.inject.Inject;
@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Service for publishing webhook events to the Redis stream.
@@ -40,7 +41,7 @@ public class WebhookPublisher {
      * @param headers      Optional custom headers to include in the HTTP request
      * @return A Mono that completes when the event is published to the stream
      */
-    public <T> Mono<String> publishWebhookEvent(@NonNull WebhookEventTypes eventType,
+    public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
             @NonNull String workspaceId,
             @NonNull String webhookUrl,
             @NonNull T payload,
@@ -59,7 +60,7 @@ public class WebhookPublisher {
      * @param maxRetries   Maximum number of retry attempts for this specific event
      * @return A Mono that completes when the event is published to the stream
      */
-    public <T> Mono<String> publishWebhookEvent(@NonNull WebhookEventTypes eventType,
+    public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
             @NonNull String workspaceId,
             @NonNull String webhookUrl,
             @NonNull T payload,
@@ -79,7 +80,7 @@ public class WebhookPublisher {
                 .url(webhookUrl)
                 .eventType(eventType)
                 .payload(payload)
-                .headers(headers != null ? headers : Map.of())
+                .headers(Optional.ofNullable(headers).orElse(Map.of()))
                 .maxRetries(maxRetries)
                 .workspaceId(workspaceId)
                 .build();

@@ -4,15 +4,14 @@ import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
+import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
 
@@ -21,7 +20,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
  * This service ONLY sends webhooks and does not handle aggregation or debouncing.
  * Event aggregation and debouncing is handled by WebhookEventAggregationService.
  */
-@Singleton
+@EagerSingleton
 @Slf4j
 public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
@@ -50,6 +49,12 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         log.debug("Processing webhook event: id='{}', type='{}', url='{}'",
                 event.getId(), event.getEventType(), event.getUrl());
 
+        // Record metrics
+        var attributes = Attributes.builder()
+                .put("event_type", event.getEventType().getValue())
+                .put("workspace_id", event.getWorkspaceId())
+                .build();
+
         return Mono.defer(() -> validateEvent(event))
                 .then(Mono.defer(() -> webhookHttpClient.sendWebhook(event)))
                 .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId())
@@ -58,12 +63,38 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                 .doOnSuccess(unused -> {
                     log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
                             event.getId(), event.getEventType(), event.getUrl());
+
+                    // Record success metrics
+                    meter.counterBuilder("opik_webhook_events_processed_total")
+                            .setDescription("Total number of webhook events processed")
+                            .build()
+                            .add(1, attributes.toBuilder().put("status", "success").build());
                 })
-                .doOnError(throwable -> {
-                    log.error("Failed to send webhook: id='{}', type='{}', url='{}', error='{}'",
-                            event.getId(), event.getEventType(), event.getUrl(),
-                            throwable.getMessage(), throwable);
-                });
+                .onErrorResume(throwable -> handlePermanentFailure(event, throwable));
+    }
+
+    private Mono<Void> handlePermanentFailure(@NonNull WebhookEvent<?> event, @NonNull Throwable throwable) {
+        log.error("Webhook event '{}' permanently failed after all retries. " +
+                "Event type: '{}', URL: '{}', Error: '{}'",
+                event.getId(), event.getEventType(), event.getUrl(), throwable.getMessage());
+
+        // TODO: Implement dead letter queue or notification mechanism for permanent failures
+        // For now, we'll just log the failure and continue processing other events
+
+        // Record permanent failure metrics
+        var attributes = Attributes.builder()
+                .put("event_type", event.getEventType().getValue())
+                .put("workspace_id", event.getWorkspaceId())
+                .put("retry_count", event.getMaxRetries())
+                .put("status", "permanent_failure")
+                .build();
+
+        meter.counterBuilder("opik_webhook_events_permanent_failures_total")
+                .setDescription("Total number of webhook events that permanently failed")
+                .build()
+                .add(1, attributes);
+
+        return Mono.empty();
     }
 
     private Mono<Void> validateEvent(@NonNull WebhookEvent<?> event) {
@@ -88,4 +119,29 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         });
     }
 
+    @Override
+    public void start() {
+        if (!webhookConfig.isEnabled()) {
+            log.info("Webhook subscriber is disabled, skipping startup");
+            return;
+        }
+
+        log.info("Starting webhook subscriber with config: maxRetries={}, requestTimeout={}, connectionTimeout={}",
+                webhookConfig.getMaxRetries(),
+                webhookConfig.getRequestTimeout(),
+                webhookConfig.getConnectionTimeout());
+
+        super.start();
+    }
+
+    @Override
+    public void stop() {
+        if (!webhookConfig.isEnabled()) {
+            log.info("Webhook subscriber is disabled, skipping shutdown");
+            return;
+        }
+
+        log.info("Stopping webhook subscriber");
+        super.stop();
+    }
 }

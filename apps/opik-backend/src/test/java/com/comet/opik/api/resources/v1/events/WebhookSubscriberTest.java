@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
-import com.comet.opik.api.events.webhooks.WebhookEventTypes;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
@@ -64,7 +64,7 @@ class WebhookSubscriberTest {
                     webhookConfig);
         }
 
-        webhookSubscriber = new WebhookSubscriber(webhookHttpClient, webhookConfig);
+        webhookSubscriber = new WebhookSubscriber(webhookConfig, redisson, webhookHttpClient);
     }
 
     @AfterEach
@@ -87,7 +87,7 @@ class WebhookSubscriberTest {
                         .withBody("{\"status\":\"success\"}")));
 
         // When
-        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete();
 
         // Then
@@ -108,7 +108,7 @@ class WebhookSubscriberTest {
                         .withBody("Internal Server Error")));
 
         // When & Then - Should complete without error (permanent failure is handled gracefully)
-        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete();
 
         // Verify multiple retry attempts were made
@@ -122,7 +122,7 @@ class WebhookSubscriberTest {
         var webhookEvent = createWebhookEvent("invalid-url");
 
         // When & Then
-        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete(); // Should complete gracefully after handling validation error
     }
 
@@ -141,7 +141,7 @@ class WebhookSubscriberTest {
                 .willReturn(aResponse().withStatus(200)));
 
         // When
-        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete();
 
         // Then
@@ -162,7 +162,7 @@ class WebhookSubscriberTest {
                 .willReturn(aResponse().withStatus(500)));
 
         // When
-        StepVerifier.create(webhookSubscriber.sendWebhook(webhookEvent))
+        StepVerifier.create(webhookSubscriber.processEvent(webhookEvent))
                 .verifyComplete();
 
         // Then - Should only make one attempt (no retries)
@@ -185,7 +185,7 @@ class WebhookSubscriberTest {
     private WebhookEvent<?> createWebhookEvent(String url) {
         return WebhookEvent.builder()
                 .id("webhook-" + System.currentTimeMillis())
-                .eventType(WebhookEventTypes.TRACE_CREATED)
+                .eventType(AlertEventType.PROMPT_CREATED)
                 .alertId(UUID.randomUUID())
                 .workspaceId(WORKSPACE_ID)
                 .userName(USER_NAME)

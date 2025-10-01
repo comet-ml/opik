@@ -32,19 +32,19 @@ This document describes the implementation of webhook alert debouncing in the Op
 │                                                                         │
 │  1. Check buckets ready to process                                     │
 │  2. For each ready bucket:                                             │
-│     • Retrieve alert configuration                                     │
-│     • Get aggregated event IDs                                         │
-│     • Create consolidated webhook event                                 │
-│     • Send via WebhookSubscriber                                       │
+│     • Retrieve bucket data (event IDs, workspace ID)                  │
+│     • Fetch alert configuration from AlertService                     │
+│     • Create payload with alert and event data                        │
+│     • Publish webhook via WebhookPublisher                            │
 │     • Delete bucket                                                     │
 └─────────────────────────────────┬──────────────────────────────────────┘
                                   │
                                   ↓
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        WebhookSubscriber                                │
-│                 (Sends webhooks via HTTP)                              │
+│                        WebhookPublisher                                 │
+│              (Publishes webhooks to message queue)                     │
 │                                                                         │
-│  • sendWebhook() - Validates and sends HTTP request                   │
+│  • publishWebhookEvent() - Publishes event to webhook queue           │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,9 +53,9 @@ This document describes the implementation of webhook alert debouncing in the Op
 | Component | Responsibility |
 |-----------|---------------|
 | **Alert Evaluation** | Checks if event matches alert config, adds to bucket via AlertBucketService |
-| **AlertBucketService** | Stores and retrieves alert event buckets in Redis |
-| **AlertJob** | Scheduled job that checks buckets, retrieves alert config, creates consolidated events, triggers webhooks |
-| **WebhookSubscriber** | **ONLY sends HTTP webhooks** - no knowledge of aggregation |
+| **AlertBucketService** | Stores and retrieves alert event buckets in Redis with workspace context |
+| **AlertJob** | Scheduled job that checks buckets, retrieves alert config from Alert Service, creates payload, publishes webhooks |
+| **WebhookPublisher** | **ONLY publishes webhook events** - no knowledge of aggregation |
 
 ## Data Flow
 
@@ -66,6 +66,7 @@ This document describes the implementation of webhook alert debouncing in the Op
 if (eventMatchesAlertConfig(event, alert)) {
     alertBucketService.addEventToBucket(
         alert.getId(),
+        workspaceId,
         eventType,
         event.getId()
     ).subscribe();
@@ -81,11 +82,15 @@ if (eventMatchesAlertConfig(event, alert)) {
 {
   "eventIds": "[\"event-1\", \"event-2\", \"event-3\"]",
   "firstSeen": "1704067200000",
-  "windowSize": "60000"
+  "windowSize": "60000",
+  "workspaceId": "workspace-123"
 }
 ```
 
-**Note:** The `windowSize` field stores the debouncing window (in milliseconds) that was active when the bucket was created. This ensures that configuration changes do not affect existing buckets.
+**Note:** The bucket stores:
+- `windowSize`: The debouncing window (in milliseconds) active when the bucket was created
+- `workspaceId`: The workspace ID for retrieving alert configuration without RequestContext
+These fields ensure that configuration changes do not affect existing buckets and allow background jobs to access alert data.
 
 ### 3. Background Processing
 
@@ -159,6 +164,7 @@ Alert {
 ```java
 public Mono<Void> addEventToBucket(
     UUID alertId,
+    String workspaceId,
     AlertEventType eventType,
     String eventId) {
     
@@ -170,9 +176,10 @@ public Mono<Void> addEventToBucket(
     // If first event in bucket:
     //   - Store firstSeen timestamp
     //   - Store windowSize (preserves config at creation time)
+    //   - Store workspaceId (enables background job to retrieve alert)
     //   - Set bucket TTL (ONLY on first event, NOT refreshed on subsequent events)
     // Subsequent events:
-    //   - DO NOT update windowSize (preserves original config)
+    //   - DO NOT update windowSize or workspaceId (preserves original config and context)
     //   - DO NOT refresh TTL (bucket expires based on original TTL)
 }
 
@@ -183,6 +190,14 @@ public Flux<String> getBucketsReadyToProcess() {
     //   - If (now - firstSeen) >= stored windowSize
     //   - Return bucket key
     // Note: Uses the windowSize stored in the bucket, not current config
+}
+
+public Mono<BucketData> getBucketData(String bucketKey) {
+    // Retrieves complete bucket data including:
+    //   - eventIds: Set of aggregated event IDs
+    //   - firstSeen: Timestamp when first event was added
+    //   - windowSize: Debouncing window size (milliseconds)
+    //   - workspaceId: Workspace ID for accessing alert configuration
 }
 ```
 
@@ -364,18 +379,18 @@ void shouldHandleDisabledAlert() {
 ## Future Enhancements
 
 1. **Alert Configuration Management**: Integration with Alert CRUD operations
-2. **Workspace Context**: Proper workspace ID handling in webhook events
-3. **Metrics**: Track aggregation stats, publish latency, success/failure rates
-4. **Rate Limiting**: Implement per-alert webhook rate limits
-5. **Batch Size Limits**: Configurable maximum events per consolidated webhook
+2. **Metrics**: Track aggregation stats, publish latency, success/failure rates
+3. **Rate Limiting**: Implement per-alert webhook rate limits
+4. **Batch Size Limits**: Configurable maximum events per consolidated webhook
 
 ## Key Files
 
 ### Core Implementation
 - `AlertBucketService.java` - Redis bucket management
 - `AlertJob.java` - Scheduled job for processing buckets
-- `WebhookSubscriber.java` - HTTP webhook sender
+- `WebhookPublisher.java` - Webhook event publisher
 - `WebhookConfig.java` - Debouncing configuration
+- `AlertService.java` - Alert configuration service (includes `getByIdAndWorkspace`)
 
 ### Data Models
 - `Alert.java` - Alert configuration
@@ -389,7 +404,16 @@ void shouldHandleDisabledAlert() {
 
 ## Version History
 
-### Version 1.1 (Current)
+### Version 1.2 (Current)
+- **Workspace Context**: Added `workspaceId` storage in buckets for background job access
+  - AlertJob can now retrieve alert configuration without RequestContext
+  - Added `getByIdAndWorkspace()` method to AlertService
+- **AlertJob Updates**: Uses `getBucketData()` to retrieve complete bucket information
+  - Fetches workspace ID from bucket data
+  - Retrieves alert configuration using workspace context
+- **Documentation**: Updated to use `WebhookPublisher` instead of `WebhookSubscriber`
+
+### Version 1.1
 - **Configuration Change Handling**: Buckets now store their creation-time `windowSize`
   - Existing buckets continue to use their original debouncing window
   - New buckets created after configuration changes use the updated window
@@ -401,6 +425,7 @@ void shouldHandleDisabledAlert() {
 - Initial implementation
 - Timestamp-based debouncing
 - 5-second AlertJob schedule
-- WebhookSubscriber only sends HTTP
-- AlertBucketService manages Redis storage
-- AlertJob orchestrates bucket processing and webhook triggering
+- WebhookPublisher only publishes events to queue
+- AlertBucketService manages Redis storage with workspace context
+- AlertJob orchestrates bucket processing, fetches alert data, and publishes webhooks
+- Alert data is retrieved using workspaceId from bucket (no RequestContext needed)

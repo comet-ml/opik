@@ -6,14 +6,15 @@ import com.comet.opik.utils.JsonUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
-import lombok.Data;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.options.KeysScanOptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -37,6 +38,8 @@ public class AlertBucketService {
     private static final String EVENT_IDS_KEY = "eventIds";
     private static final String FIRST_SEEN_KEY = "firstSeen";
     private static final String WINDOW_SIZE_KEY = "windowSize";
+    private static final String WORKSPACE_ID_KEY = "workspaceId";
+    private static final int CONCURRENCY = 10;
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final @NonNull WebhookConfig webhookConfig;
@@ -44,16 +47,18 @@ public class AlertBucketService {
     /**
      * Adds an event to an alert bucket.
      * If this is the first event for this alert+event type combination,
-     * the current timestamp and debouncing window size are stored.
+     * the current timestamp, debouncing window size, and workspace ID are stored.
      * This ensures that configuration changes do not affect existing buckets.
      *
      * @param alertId the alert ID
+     * @param workspaceId the workspace ID for the alert
      * @param eventType the event type
      * @param eventId the event ID to add
      * @return Mono that completes when the event is added
      */
     public Mono<Void> addEventToBucket(
             @NonNull UUID alertId,
+            @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
             @NonNull String eventId) {
 
@@ -79,21 +84,22 @@ public class AlertBucketService {
                             .then(bucket.get(FIRST_SEEN_KEY).defaultIfEmpty(""))
                             .flatMap(firstSeen -> {
                                 if (firstSeen == null || firstSeen.isEmpty()) {
-                                    // First event in bucket - store timestamp, window size, and set TTL
+                                    // First event in bucket - store timestamp, window size, workspace ID, and set TTL
                                     String timestamp = String.valueOf(Instant.now().toEpochMilli());
                                     String windowSize = String.valueOf(currentWindowSizeMillis);
 
                                     log.debug(
-                                            "First event in bucket '{}', storing timestamp: '{}' and windowSize: '{}'ms",
-                                            bucketKey, timestamp, windowSize);
+                                            "First event in bucket '{}', storing timestamp: '{}', windowSize: '{}'ms, and workspaceId: '{}'",
+                                            bucketKey, timestamp, windowSize, workspaceId);
 
                                     return bucket.put(FIRST_SEEN_KEY, timestamp)
                                             .then(bucket.put(WINDOW_SIZE_KEY, windowSize))
+                                            .then(bucket.put(WORKSPACE_ID_KEY, workspaceId))
                                             .then(bucket.expire(java.time.Duration.ofMillis(
                                                     webhookConfig.getDebouncing().getBucketTtl().toMilliseconds())))
                                             .then();
                                 } else {
-                                    // Subsequent event - keep original timestamp, window size, and TTL
+                                    // Subsequent event - keep original timestamp, window size, workspace ID, and TTL
                                     log.debug(
                                             "Adding to existing bucket '{}', keeping original timestamp, windowSize, and TTL",
                                             bucketKey);
@@ -122,7 +128,7 @@ public class AlertBucketService {
 
         log.debug("Checking for buckets ready to process");
 
-        return redissonClient.getKeys().getKeysByPattern(pattern)
+        return redissonClient.getKeys().getKeys(KeysScanOptions.defaults().pattern(pattern))
                 .flatMap(bucketKey -> {
                     RMapReactive<String, String> bucket = redissonClient.getMap(bucketKey);
 
@@ -130,27 +136,29 @@ public class AlertBucketService {
                     return Mono.zip(
                             bucket.get(FIRST_SEEN_KEY).map(Long::parseLong),
                             bucket.get(WINDOW_SIZE_KEY).map(Long::parseLong))
-                            .filter(tuple -> {
-                                long firstSeenMillis = tuple.getT1();
-                                long bucketWindowMillis = tuple.getT2();
-                                long elapsedMillis = now.toEpochMilli() - firstSeenMillis;
-                                boolean ready = elapsedMillis >= bucketWindowMillis;
-
-                                if (ready) {
-                                    log.debug("Bucket '{}' is ready (elapsed: '{}ms' >= stored window: '{}ms')",
-                                            bucketKey, elapsedMillis, bucketWindowMillis);
-                                } else {
-                                    log.trace("Bucket '{}' not ready yet (elapsed: '{}ms' < stored window: '{}ms')",
-                                            bucketKey, elapsedMillis, bucketWindowMillis);
-                                }
-
-                                return ready;
-                            })
+                            .filter(tuple -> isReady(bucketKey, tuple, now))
                             .map(__ -> bucketKey)
                             .switchIfEmpty(Mono.empty());
-                })
+                }, CONCURRENCY) // Process up to 10 buckets in parallel
                 .doOnComplete(() -> log.debug("Finished checking for buckets ready to process"))
                 .doOnError(error -> log.error("Failed to check for buckets: {}", error.getMessage(), error));
+    }
+
+    private static boolean isReady(String bucketKey, Tuple2<Long, Long> tuple, Instant now) {
+        long firstSeenMillis = tuple.getT1();
+        long bucketWindowMillis = tuple.getT2();
+        long elapsedMillis = now.toEpochMilli() - firstSeenMillis;
+        boolean ready = elapsedMillis >= bucketWindowMillis;
+
+        if (ready) {
+            log.debug("Bucket '{}' is ready (elapsed: '{}ms' >= stored window: '{}ms')",
+                    bucketKey, elapsedMillis, bucketWindowMillis);
+        } else {
+            log.debug("Bucket '{}' not ready yet (elapsed: '{}ms' < stored window: '{}ms')",
+                    bucketKey, elapsedMillis, bucketWindowMillis);
+        }
+
+        return ready;
     }
 
     /**
@@ -186,11 +194,13 @@ public class AlertBucketService {
         return Mono.zip(
                 bucket.get(EVENT_IDS_KEY).defaultIfEmpty("[]"),
                 bucket.get(FIRST_SEEN_KEY),
-                bucket.get(WINDOW_SIZE_KEY))
-                .map(tuple -> {
+                bucket.get(WINDOW_SIZE_KEY),
+                bucket.get(WORKSPACE_ID_KEY))
+                .flatMap(tuple -> Mono.fromCallable(() -> {
                     String eventIdsJson = tuple.getT1();
                     String firstSeenStr = tuple.getT2();
                     String windowSizeStr = tuple.getT3();
+                    String workspaceId = tuple.getT4();
 
                     Set<String> eventIds = JsonUtils.readCollectionValue(eventIdsJson, Set.class, String.class);
                     long firstSeen = Long.parseLong(firstSeenStr);
@@ -200,11 +210,12 @@ public class AlertBucketService {
                             .eventIds(new HashSet<>(eventIds))
                             .firstSeen(firstSeen)
                             .windowSize(windowSize)
+                            .workspaceId(workspaceId)
                             .build();
-                })
+                }))
                 .doOnSuccess(
                         data -> log.debug("Retrieved bucket data for '{}': {} events, firstSeen={}, windowSize={}ms",
-                                bucketKey, data.getEventIds().size(), data.getFirstSeen(), data.getWindowSize()))
+                                bucketKey, data.eventIds().size(), data.firstSeen(), data.windowSize()))
                 .doOnError(error -> log.error("Failed to retrieve bucket data for '{}': {}",
                         bucketKey, error.getMessage(), error));
     }
@@ -212,12 +223,8 @@ public class AlertBucketService {
     /**
      * Data class to hold complete bucket information.
      */
-    @Data
     @Builder
-    public static class BucketData {
-        private Set<String> eventIds;
-        private long firstSeen;
-        private long windowSize;
+    public record BucketData(Set<String> eventIds, long firstSeen, long windowSize, String workspaceId) {
     }
 
     /**

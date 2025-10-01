@@ -67,15 +67,16 @@ class AlertBucketServiceTest {
     }
 
     @Test
-    @DisplayName("When first event added to bucket, then should store windowSize and firstSeen")
-    void addEventToBucket__whenFirstEvent__shouldStoreWindowSizeAndFirstSeen() {
+    @DisplayName("When first event added to bucket, then should store windowSize, firstSeen, and workspaceId")
+    void addEventToBucket__whenFirstEvent__shouldStoreWindowSizeFirstSeenAndWorkspaceId() {
         // Given
         var alertId = UUID.randomUUID();
+        var workspaceId = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
         var eventId = "test-event-1";
 
         // When
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, eventId))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId))
                 .verifyComplete();
 
         // Then - verify bucket structure
@@ -97,6 +98,14 @@ class AlertBucketServiceTest {
                             .isGreaterThan(0L);
                 })
                 .verifyComplete();
+
+        StepVerifier.create(bucket.get("workspaceId"))
+                .assertNext(storedWorkspaceId -> {
+                    assertThat(storedWorkspaceId)
+                            .as("Workspace ID should be stored")
+                            .isEqualTo(workspaceId);
+                })
+                .verifyComplete();
     }
 
     @Test
@@ -104,12 +113,13 @@ class AlertBucketServiceTest {
     void addEventToBucket__whenSubsequentEvents__shouldPreserveOriginalWindowSize() {
         // Given
         var alertId = UUID.randomUUID();
+        var workspaceId = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
         var eventId1 = "test-event-1";
         var eventId2 = "test-event-2";
 
         // When - add first event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, eventId1))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId1))
                 .verifyComplete();
 
         String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
@@ -118,9 +128,10 @@ class AlertBucketServiceTest {
         // Store original values
         String originalWindowSize = (String) bucket.get("windowSize").block();
         String originalFirstSeen = (String) bucket.get("firstSeen").block();
+        String originalWorkspaceId = (String) bucket.get("workspaceId").block();
 
         // When - add second event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, eventId2))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2))
                 .verifyComplete();
 
         // Then - verify values haven't changed
@@ -139,6 +150,14 @@ class AlertBucketServiceTest {
                             .isEqualTo(originalFirstSeen);
                 })
                 .verifyComplete();
+
+        StepVerifier.create(bucket.get("workspaceId"))
+                .assertNext(storedWorkspaceId -> {
+                    assertThat(storedWorkspaceId)
+                            .as("Workspace ID should remain unchanged")
+                            .isEqualTo(originalWorkspaceId);
+                })
+                .verifyComplete();
     }
 
     @Test
@@ -146,10 +165,11 @@ class AlertBucketServiceTest {
     void addEventToBucket__whenConfigChanges__shouldCreateSeparateBucketsWithDifferentWindows() {
         // Given - create first bucket with 1-second window
         var alert1Id = UUID.randomUUID();
+        var workspaceId1 = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
         var event1Id = "test-event-1";
 
-        StepVerifier.create(alertBucketService.addEventToBucket(alert1Id, eventType, event1Id))
+        StepVerifier.create(alertBucketService.addEventToBucket(alert1Id, workspaceId1, eventType, event1Id))
                 .verifyComplete();
 
         String bucket1Key = "alert_bucket:" + alert1Id + ":" + eventType.getValue();
@@ -176,9 +196,10 @@ class AlertBucketServiceTest {
 
         // Create second bucket with new config
         var alert2Id = UUID.randomUUID();
+        var workspaceId2 = "test-workspace-" + UUID.randomUUID();
         var event2Id = "test-event-2";
 
-        StepVerifier.create(updatedAlertBucketService.addEventToBucket(alert2Id, eventType, event2Id))
+        StepVerifier.create(updatedAlertBucketService.addEventToBucket(alert2Id, workspaceId2, eventType, event2Id))
                 .verifyComplete();
 
         String bucket2Key = "alert_bucket:" + alert2Id + ":" + eventType.getValue();
@@ -216,9 +237,10 @@ class AlertBucketServiceTest {
         var shortWindowService = new AlertBucketService(redissonClient, webhookConfig);
 
         var alert1Id = UUID.randomUUID();
+        var workspaceId1 = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
 
-        StepVerifier.create(shortWindowService.addEventToBucket(alert1Id, eventType, "event-1"))
+        StepVerifier.create(shortWindowService.addEventToBucket(alert1Id, workspaceId1, eventType, "event-1"))
                 .verifyComplete();
 
         // When - change to 3-second window and create second bucket
@@ -231,8 +253,9 @@ class AlertBucketServiceTest {
         var longWindowService = new AlertBucketService(redissonClient, webhookConfig);
 
         var alert2Id = UUID.randomUUID();
+        var workspaceId2 = "test-workspace-" + UUID.randomUUID();
 
-        StepVerifier.create(longWindowService.addEventToBucket(alert2Id, eventType, "event-2"))
+        StepVerifier.create(longWindowService.addEventToBucket(alert2Id, workspaceId2, eventType, "event-2"))
                 .verifyComplete();
 
         // Wait for first bucket's window to elapse (500ms + buffer)
@@ -264,9 +287,10 @@ class AlertBucketServiceTest {
     void addEventToBucket__whenAddingToSameAlertAfterConfigChange__shouldUseOriginalWindow() {
         // Given - create bucket with 60-second window
         var alertId = UUID.randomUUID();
+        var workspaceId = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
 
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, "event-1"))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1"))
                 .verifyComplete();
 
         // When - change config to 2-second window
@@ -279,7 +303,7 @@ class AlertBucketServiceTest {
         var updatedService = new AlertBucketService(redissonClient, webhookConfig);
 
         // Add another event to the same alert
-        StepVerifier.create(updatedService.addEventToBucket(alertId, eventType, "event-2"))
+        StepVerifier.create(updatedService.addEventToBucket(alertId, workspaceId, eventType, "event-2"))
                 .verifyComplete();
 
         // Then - bucket should still have original 1-second window
@@ -300,14 +324,15 @@ class AlertBucketServiceTest {
     void getBucketData__shouldReturnAllEventIds() {
         // Given
         var alertId = UUID.randomUUID();
+        var workspaceId = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
         var eventId1 = "test-event-1";
         var eventId2 = "test-event-2";
 
         // When - add multiple events
         StepVerifier.create(
-                alertBucketService.addEventToBucket(alertId, eventType, eventId1)
-                        .then(alertBucketService.addEventToBucket(alertId, eventType, eventId2)))
+                alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId1)
+                        .then(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2)))
                 .verifyComplete();
 
         String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
@@ -315,7 +340,7 @@ class AlertBucketServiceTest {
         // Then - verify both events are in bucket
         StepVerifier.create(alertBucketService.getBucketData(bucketKey))
                 .assertNext(bucketData -> {
-                    assertThat(bucketData.getEventIds())
+                    assertThat(bucketData.eventIds())
                             .as("Bucket should contain both event IDs")
                             .hasSize(2)
                             .contains(eventId1, eventId2);
@@ -328,10 +353,11 @@ class AlertBucketServiceTest {
     void deleteBucket__shouldRemoveBucketFromRedis() {
         // Given
         var alertId = UUID.randomUUID();
+        var workspaceId = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
         var eventId = "test-event-1";
 
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, eventId))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId))
                 .verifyComplete();
 
         String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
@@ -356,12 +382,13 @@ class AlertBucketServiceTest {
     void addEventToBucket__whenFirstEvent__shouldSetTtl() {
         // Given
         var alertId = UUID.randomUUID();
+        var workspaceId = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
         var eventId = "test-event-1";
         long expectedTtlMillis = webhookConfig.getDebouncing().getBucketTtl().toMilliseconds();
 
         // When - add first event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, eventId))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId))
                 .verifyComplete();
 
         // Then - verify TTL is set
@@ -384,10 +411,11 @@ class AlertBucketServiceTest {
     void addEventToBucket__whenSubsequentEvents__shouldNotRefreshTtl() throws InterruptedException {
         // Given
         var alertId = UUID.randomUUID();
+        var workspaceId = "test-workspace-" + UUID.randomUUID();
         var eventType = AlertEventType.TRACE_ERRORS;
 
         // When - add first event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, "event-1"))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1"))
                 .verifyComplete();
 
         String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
@@ -400,7 +428,7 @@ class AlertBucketServiceTest {
         Thread.sleep(100);
 
         // Add second event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, eventType, "event-2"))
+        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-2"))
                 .verifyComplete();
 
         // Then - verify TTL was NOT refreshed (it should be less than initial)
