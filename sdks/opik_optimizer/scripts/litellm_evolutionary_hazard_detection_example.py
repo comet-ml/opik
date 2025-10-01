@@ -228,8 +228,11 @@ from opik_optimizer.utils.image_helpers import (
     convert_to_structured_content,
 )
 
-# Load and encode image
-image_uri = encode_file_to_base64_uri("dashcam.jpg", max_size=(800, 600))
+# Load and encode image with YOUR preferred settings
+image_uri = encode_file_to_base64_uri(
+    "dashcam.jpg",
+    max_size=(512, 384),  # Match training size
+)
 
 # Create structured content
 image_content = convert_to_structured_content(
@@ -237,8 +240,9 @@ image_content = convert_to_structured_content(
     image_uri=image_uri,
 )
 
-# Use with optimized prompt
-messages = optimization_result.best_prompt.get_messages(
+# Create ChatPrompt from optimized messages and substitute placeholders
+optimized_prompt = ChatPrompt(messages=optimization_result.prompt)
+messages = optimized_prompt.get_messages(
     dataset_item={"image_content": image_content}
 )
 """)
