@@ -7,6 +7,7 @@ from opik.evaluation.metrics.heuristics import (
     regex_match,
     rouge,
 )
+from opik.evaluation.metrics.heuristics.contains import Contains
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU, CorpusBLEU
 
@@ -17,6 +18,83 @@ class CustomTokenizer:
 
     def tokenize(self, text):
         return text.split(self.delimiter)
+
+
+# --- NEW: Test cases for the Contains metric have been added below ---
+
+
+def test_contains_with_default_reference():
+    """Happy Flow: Tests that the metric correctly uses the default reference."""
+    metric = Contains(reference="world", case_sensitive=False)
+    # Test for a successful match (case-insensitive)
+    assert metric.score(output="Hello, beautiful World!").value == 1.0
+    # Test for a failed match
+    assert metric.score(output="Hello, beautiful planet!").value == 0.0
+
+
+def test_contains_with_case_sensitive_default_reference():
+    """Happy Flow: Tests the case_sensitive flag."""
+    metric = Contains(reference="World", case_sensitive=True)
+    # This should fail because 'world' is lowercase
+    assert metric.score(output="Hello, world!").value == 0.0
+    # This should pass because 'World' matches exactly
+    assert metric.score(output="Hello, World!").value == 1.0
+
+
+def test_contains_with_overridden_reference():
+    """Happy Flow: Tests that a reference in score() overrides the default one."""
+    metric = Contains(reference="world")
+    # Override 'world' with 'there'; the prediction does not contain 'world'
+    result = metric.score(output="Hello, there!", reference="there")
+    assert result.value == 1.0
+
+
+def test_contains_with_no_default_reference():
+    """Happy Flow: Tests providing the reference only in the score() call."""
+    metric = Contains()
+    result = metric.score(output="An example sentence.", reference="example")
+    assert result.value == 1.0
+
+
+def test_contains_raises_error_if_no_reference_is_provided():
+    """Edge Case: Tests ValueError when no reference is set anywhere."""
+    metric = Contains()  # No default reference
+    with pytest.raises(ValueError) as excinfo:
+        metric.score(output="Some text", reference=None)
+
+    expected_error_msg = (
+        "Invalid reference string provided. Reference must be a non-empty string."
+    )
+    assert expected_error_msg in str(excinfo.value)
+
+
+@pytest.mark.parametrize("invalid_ref", ["", None])
+def test_contains_raises_error_for_invalid_default_reference(invalid_ref):
+    """Edge Case: Tests ValueError when the default reference is None or empty."""
+    metric = Contains(reference=invalid_ref)
+    with pytest.raises(ValueError) as excinfo:
+        metric.score(output="Some text")
+
+    expected_error_msg = (
+        "Invalid reference string provided. Reference must be a non-empty string."
+    )
+    assert expected_error_msg in str(excinfo.value)
+
+
+@pytest.mark.parametrize("invalid_ref", ["", None])
+def test_contains_raises_error_for_invalid_overridden_reference(invalid_ref):
+    """Edge Case: Tests ValueError when the override reference is None or empty."""
+    metric = Contains(reference="A valid default")
+    with pytest.raises(ValueError) as excinfo:
+        metric.score(output="Some text", reference=invalid_ref)
+
+    expected_error_msg = (
+        "Invalid reference string provided. Reference must be a non-empty string."
+    )
+    assert expected_error_msg in str(excinfo.value)
+
+
+# --- Existing test cases below this line ---
 
 
 def test_evaluation__equals():
