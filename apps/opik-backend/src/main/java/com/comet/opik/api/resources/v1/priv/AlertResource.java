@@ -22,6 +22,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -72,6 +73,29 @@ public class AlertResource {
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(alertId)).build();
 
         return Response.created(uri).build();
+    }
+
+    @PUT
+    @Path("{id}")
+    @Operation(operationId = "updateAlert", summary = "Update alert", description = "Update alert", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response updateAlert(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating alert with id '{}', on workspace_id '{}'", id, workspaceId);
+
+        alertService.update(id, alert);
+
+        log.info("Updated alert with id '{}', on workspace_id '{}'", id, workspaceId);
+
+        return Response.noContent().build();
     }
 
     @GET
