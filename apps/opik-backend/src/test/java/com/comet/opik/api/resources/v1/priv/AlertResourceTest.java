@@ -341,21 +341,6 @@ class AlertResourceTest {
             alertResourceClient.updateAlert(nonExistentId, alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NOT_FOUND);
         }
-
-        @Test
-        @DisplayName("when alert id in path differs from alert id in body, then update using path id")
-        void updateAlert__whenAlertIdInPathDiffersFromBody__thenUsePathId() {
-            var mock = prepareMockWorkspace();
-
-            // Create an alert first
-            var alert = generateAlert();
-
-            // Update with different id in body
-            var differentId = UUID.randomUUID();
-
-            alertResourceClient.updateAlert(differentId, alert, mock.getLeft(), mock.getRight(),
-                    HttpStatus.SC_BAD_REQUEST);
-        }
     }
 
     @Nested
@@ -401,7 +386,7 @@ class AlertResourceTest {
                     .build();
 
             alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
-                    422); // Unprocessable Entity
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
 
         @Test
@@ -514,8 +499,6 @@ class AlertResourceTest {
 
         var webhook = alert.webhook().toBuilder()
                 .id(existingAlert.webhook().id())
-                .createdBy(existingAlert.webhook().createdBy())
-                .createdAt(existingAlert.webhook().createdAt())
                 .build();
 
         // add one new trigger, update one existing trigger, keep one existing trigger unchanged
@@ -526,8 +509,6 @@ class AlertResourceTest {
         return alert.toBuilder()
                 .id(existingAlert.id())
                 .webhook(webhook)
-                .createdBy(existingAlert.createdBy())
-                .createdAt(existingAlert.createdAt())
                 .triggers(List.of(unchangedTrigger, newTrigger, updatedTrigger))
                 .build();
     }
@@ -540,15 +521,11 @@ class AlertResourceTest {
 
         var updatedConfigs = updatedTrigger.triggerConfigs().get(1).toBuilder()
                 .id(existingTrigger.triggerConfigs().get(1).id())
-                .createdBy(existingTrigger.triggerConfigs().get(1).createdBy())
-                .createdAt(existingTrigger.triggerConfigs().get(1).createdAt())
                 .build();
 
         return updatedTrigger.toBuilder()
                 .id(existingTrigger.id())
                 .alertId(existingTrigger.alertId())
-                .createdBy(existingTrigger.createdBy())
-                .createdAt(existingTrigger.createdAt())
                 .triggerConfigs(List.of(unchangedConfig, newConfig, updatedConfigs))
                 .build();
     }

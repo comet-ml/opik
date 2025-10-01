@@ -30,8 +30,8 @@ public record AlertTrigger(
                 Alert.View.Write.class}) @Nullable List<AlertTriggerConfig> triggerConfigs,
 
         @JsonView({
-                Alert.View.Public.class, Alert.View.Write.class}) Instant createdAt,
+                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
 
         @JsonView({
-                Alert.View.Public.class, Alert.View.Write.class}) String createdBy){
+                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy){
 }

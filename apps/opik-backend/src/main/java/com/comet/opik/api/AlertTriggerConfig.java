@@ -28,10 +28,10 @@ public record AlertTriggerConfig(
                 Alert.View.Write.class}) Map<String, String> configValue,
 
         @JsonView({
-                Alert.View.Public.class, Alert.View.Write.class}) Instant createdAt,
+                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
 
         @JsonView({
-                Alert.View.Public.class, Alert.View.Write.class}) String createdBy,
+                Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
 
         @JsonView({Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
 

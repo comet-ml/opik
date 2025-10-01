@@ -11,7 +11,6 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -65,17 +64,19 @@ class AlertServiceImpl implements AlertService {
                 .withError(this::newAlertConflict);
     }
 
+    //TODO: Now endpoint is used to update alert/webhook and create/update/delete triggers and trigger configs.
+    // Should be split into separate endpoints in the future
     @Override
     public void update(@NonNull UUID id, @NonNull Alert alert) {
-        if (id.compareTo(alert.id()) != 0) {
-            throw new BadRequestException("Payload alert ID must match the path ID");
-        }
-
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
         // Ensure the alert exists, will throw NotFoundException if not
-        getById(id);
+        var existingAlert = getById(id);
+        alert = alert.toBuilder()
+                .createdBy(existingAlert.createdBy())
+                .createdAt(existingAlert.createdAt())
+                .build();
 
         // Prepare new updated alert with the same ID
         var newAlert = prepareAlert(alert, userName);
@@ -169,6 +170,7 @@ class AlertServiceImpl implements AlertService {
                 .id(webhookId)
                 .name("Webhook for alert " + alert.id()) // Not used by FE
                 .createdBy(Optional.ofNullable(alert.createdBy()).orElse(userName))
+                .createdAt(alert.createdAt()) // will be null for new alert, and not null for update
                 .lastUpdatedBy(userName)
                 .build();
 
@@ -176,7 +178,7 @@ class AlertServiceImpl implements AlertService {
         List<AlertTrigger> preparedTriggers = null;
         if (alert.triggers() != null) {
             preparedTriggers = alert.triggers().stream()
-                    .map(trigger -> prepareTrigger(trigger, userName, id))
+                    .map(trigger -> prepareTrigger(trigger, userName, id, alert))
                     .toList();
         }
 
@@ -190,14 +192,14 @@ class AlertServiceImpl implements AlertService {
                 .build();
     }
 
-    private AlertTrigger prepareTrigger(AlertTrigger trigger, String userName, UUID alertId) {
+    private AlertTrigger prepareTrigger(AlertTrigger trigger, String userName, UUID alertId, Alert alert) {
         UUID triggerId = trigger.id() == null ? idGenerator.generateId() : trigger.id();
         IdGenerator.validateVersion(triggerId, "Alert Trigger");
 
         List<AlertTriggerConfig> preparedConfigs = null;
         if (trigger.triggerConfigs() != null) {
             preparedConfigs = trigger.triggerConfigs().stream()
-                    .map(config -> prepareTriggerConfig(config, userName, triggerId))
+                    .map(config -> prepareTriggerConfig(config, userName, triggerId, alert))
                     .toList();
         }
 
@@ -206,10 +208,12 @@ class AlertServiceImpl implements AlertService {
                 .alertId(alertId)
                 .triggerConfigs(preparedConfigs)
                 .createdBy(Optional.ofNullable(trigger.createdBy()).orElse(userName))
+                .createdAt(alert.createdAt()) // will be null for new alert, and not null for update
                 .build();
     }
 
-    private AlertTriggerConfig prepareTriggerConfig(AlertTriggerConfig config, String userName, UUID triggerId) {
+    private AlertTriggerConfig prepareTriggerConfig(AlertTriggerConfig config, String userName, UUID triggerId,
+            Alert alert) {
         UUID triggerConfigId = config.id() == null ? idGenerator.generateId() : config.id();
         IdGenerator.validateVersion(triggerConfigId, "Alert Trigger Config");
 
@@ -217,6 +221,7 @@ class AlertServiceImpl implements AlertService {
                 .id(triggerConfigId)
                 .alertTriggerId(triggerId)
                 .createdBy(Optional.ofNullable(config.createdBy()).orElse(userName))
+                .createdAt(alert.createdAt()) // will be null for new alert, and not null for update
                 .lastUpdatedBy(userName)
                 .build();
     }
