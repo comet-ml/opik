@@ -8,11 +8,10 @@ This module tests the behavioral aspects of the seed parameter, specifically:
 """
 
 import pytest
-from typing import List, Dict, Any
+from typing import Dict, Any
 import time
 
 from opik.evaluation import metrics
-from opik import exceptions
 from ...testlib import assert_helpers
 import langchain_openai
 from opik.evaluation.models.langchain import langchain_chat_model
@@ -35,13 +34,13 @@ class TestSeedParameterIntegration:
         }
 
     @pytest.fixture
-    def model(self):
+    def model(self) -> str:
         """Standard model for testing."""
         return "gpt-4o"
 
     def test_same_seed_produces_consistent_results(
         self, test_inputs: Dict[str, Any], model: str
-    ):
+    ) -> None:
         """Test that the same seed produces identical results across multiple runs."""
         seed = 42
         num_runs = 3
@@ -75,7 +74,7 @@ class TestSeedParameterIntegration:
 
     def test_different_seeds_can_produce_different_results(
         self, test_inputs: Dict[str, Any], model: str
-    ):
+    ) -> None:
         """Test that different seeds can produce different results."""
         seeds = [42, 123, 999]
 
@@ -107,7 +106,7 @@ class TestSeedParameterIntegration:
 
     def test_seed_consistency_across_metric_types(
         self, test_inputs: Dict[str, Any], model: str
-    ):
+    ) -> None:
         """Test that seed behavior is consistent across different metric types."""
         seed = 42
         num_runs = 2
@@ -170,7 +169,7 @@ class TestSeedParameterIntegration:
 
     def test_seed_none_vs_seed_integer_behavior(
         self, test_inputs: Dict[str, Any], model: str
-    ):
+    ) -> None:
         """Test behavioral differences between seed=None and seed=integer."""
         # Test with seed=None (should be non-deterministic)
         metric_none = metrics.AnswerRelevance(model=model, seed=None, track=False)
@@ -205,14 +204,13 @@ class TestSeedParameterIntegration:
         assert len(set(seeded_values)) == 1, "Seeded results should be identical"
 
         # None-seeded results might be different (though not guaranteed)
-        none_values = [r.value for r in results_none]
         # We can't assert they're different because they might coincidentally be the same
         # But we can verify the seeded results are consistent
         assert all(
             v == seeded_values[0] for v in seeded_values
         ), "All seeded results should be identical"
 
-    def test_g_eval_seed_consistency(self, model: str):
+    def test_g_eval_seed_consistency(self, model: str) -> None:
         """Test seed consistency for GEval metric which has more complex generation."""
         seed = 42
         num_runs = 2
@@ -241,7 +239,7 @@ class TestSeedParameterIntegration:
                 result.reason == first_result.reason
             ), "GEval with same seed should produce identical reasons"
 
-    def test_structured_output_compliance_seed_consistency(self, model: str):
+    def test_structured_output_compliance_seed_consistency(self, model: str) -> None:
         """Test seed consistency for StructuredOutputCompliance metric."""
         seed = 42
         num_runs = 2
@@ -270,7 +268,7 @@ class TestSeedParameterIntegration:
                 result.reason == first_result.reason
             ), "StructuredOutputCompliance with same seed should produce identical reasons"
 
-    def test_trajectory_accuracy_seed_consistency(self, model: str):
+    def test_trajectory_accuracy_seed_consistency(self, model: str) -> None:
         """Test seed consistency for TrajectoryAccuracy metric."""
         seed = 42
         num_runs = 2
@@ -314,7 +312,9 @@ class TestSeedParameterIntegration:
                 result.reason == first_result.reason
             ), "TrajectoryAccuracy with same seed should produce identical reasons"
 
-    def test_seed_parameter_with_langchain_model(self, test_inputs: Dict[str, Any]):
+    def test_seed_parameter_with_langchain_model(
+        self, test_inputs: Dict[str, Any]
+    ) -> None:
         """Test seed parameter behavior with LangchainChatModel."""
         seed = 42
         num_runs = 2
@@ -348,7 +348,7 @@ class TestSeedParameterIntegration:
 
     def test_seed_parameter_performance_impact(
         self, test_inputs: Dict[str, Any], model: str
-    ):
+    ) -> None:
         """Test that seed parameter doesn't significantly impact performance."""
         import time
 
@@ -383,7 +383,9 @@ class TestSeedParameterIntegration:
             0.5 <= time_ratio <= 2.0
         ), f"Seed parameter should not significantly impact performance. Ratio: {time_ratio}"
 
-    def test_seed_parameter_edge_cases(self, test_inputs: Dict[str, Any], model: str):
+    def test_seed_parameter_edge_cases(
+        self, test_inputs: Dict[str, Any], model: str
+    ) -> None:
         """Test edge cases for seed parameter."""
         # Test with seed=0
         metric_zero = metrics.AnswerRelevance(model=model, seed=0, track=False)
