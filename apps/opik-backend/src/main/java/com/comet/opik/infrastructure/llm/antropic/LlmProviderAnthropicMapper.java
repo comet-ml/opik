@@ -101,7 +101,7 @@ interface LlmProviderAnthropicMapper {
     }
 
     default AnthropicMessageContent toAnthropicMessageContent(@NonNull Object rawContent) {
-        String flattened = com.comet.opik.domain.llm.MessageContentNormalizer.flattenContent(rawContent);
+        String flattened = MessageContentNormalizer.flattenContent(rawContent);
         return new AnthropicTextContent(flattened);
     }
 
