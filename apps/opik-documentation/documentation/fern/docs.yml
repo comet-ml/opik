@@ -169,12 +169,12 @@ navigation:
           - page: Manually logging experiments
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
-          - page: Annotation Queues
-            path: docs/evaluation/annotation_queues.mdx
-            slug: annotation_queues
           - page: Re-running an existing experiment
             path: docs/evaluation/update_existing_experiment.mdx
             slug: update_existing_experiment
+          - page: Annotation Queues
+            path: docs/evaluation/annotation_queues.mdx
+            slug: annotation_queues
           - section: Metrics
             slug: /metrics
             contents:
