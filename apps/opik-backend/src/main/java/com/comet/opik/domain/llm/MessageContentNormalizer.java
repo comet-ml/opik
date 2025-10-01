@@ -8,28 +8,33 @@ import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import lombok.NonNull;
+import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 @Slf4j
-
-public final class MessageContentNormalizer {
+@UtilityClass
+public class MessageContentNormalizer {
 
     public static final String IMAGE_PLACEHOLDER_START = "<<<image>>>";
     public static final String IMAGE_PLACEHOLDER_END = "<<</image>>>";
 
-    private MessageContentNormalizer() { }
+    public static ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request) {
+        boolean allowStructuredContent = ModelCapabilities.supportsVision(request.model());
+        return normalizeRequest(request, allowStructuredContent);
+    }
 
-    public static ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request,
+    static ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request,
             boolean allowStructuredContent) {
         if (allowStructuredContent) {
             return request;
         }
 
-        if (request.messages() == null || request.messages().isEmpty()) {
+        if (CollectionUtils.isEmpty(request.messages())) {
             return request;
         }
 
