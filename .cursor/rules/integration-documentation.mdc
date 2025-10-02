@@ -389,12 +389,12 @@ The integrations tab is now organized by **programming language** to improve dis
    - Manual Integration (TypeScript SDK)
 
 2. **Python** - Python integrations with icon `fa-brands fa-python`
-   - Frameworks (AG2, Autogen, CrewAI, DSPy, Haystack, etc.)
+   - Frameworks (AG2, Autogen, CrewAI, DSPy, Haystack, Semantic Kernel, etc.)
    - Model Providers (Anthropic, Bedrock, Gemini, OpenAI, Groq, etc.)
    - Dataset Management (Gretel, Hugging Face Datasets)
    - Evaluation (Ragas)
    - Gateways (AISuite, LiteLLM, OpenRouter)
-   - Other (Guardrails AI, Semantic Kernel)
+   - Other (Guardrails AI)
    - Manual Integration (Python SDK, OpenTelemetry Python SDK)
 
 3. **Java** - Java integrations with icon `fa-brands fa-java`
@@ -618,12 +618,12 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
    - **Manual Integration**: TypeScript SDK
 
 2. **Python** (`icon: fa-brands fa-python`)
-   - **Frameworks**: AG2, Autogen, CrewAI, DSPy, Google ADK, Haystack, Instructor, LangChain, LangGraph, LiveKit, Llama Index, OpenAI Agents, Pipecat, Pydantic AI, Smolagents, Strands Agents, VoltAgent
+   - **Frameworks**: AG2, Autogen, CrewAI, DSPy, Google ADK, Haystack, Instructor, LangChain, LangGraph, LiveKit, Llama Index, OpenAI Agents, Pipecat, Pydantic AI, Semantic Kernel, Smolagents, Strands Agents, VoltAgent
    - **Model Providers**: Anthropic, Bedrock, BytePlus, Cohere, DeepSeek, Fireworks AI, Gemini, Groq, Mistral AI, Novita AI, Ollama, OpenAI, Predibase, Together AI, WatsonX, xAI Grok
    - **Dataset Management**: Gretel, Hugging Face Datasets
    - **Evaluation**: Ragas
    - **Gateways**: AISuite, LiteLLM, OpenRouter
-   - **Other**: Guardrails AI, Semantic Kernel (Python)
+   - **Other**: Guardrails AI
    - **Manual Integration**: Python SDK, OpenTelemetry Python SDK
 
 3. **Java** (`icon: fa-brands fa-java`)
@@ -660,6 +660,7 @@ When modifying integrations, verify:
 - [ ] Integration tab navigation in docs.yml is updated
 - [ ] Integration is placed in the correct language section with proper icon
 - [ ] Integration is properly categorized in the correct subsection (Frameworks, Model Providers, etc.)
+- [ ] **Integration is in the same subsection (Frameworks, Model Providers, etc.) in BOTH docs.yml navigation AND overview.mdx page**
 - [ ] Integration names are consistent across all locations
 - [ ] Documentation links point to `/docs/opik/integrations/[integration_name]`
 - [ ] Language sections have `icon` property with Font Awesome icon class
@@ -686,6 +687,7 @@ When modifying integrations, verify:
 - ❌ Broken documentation links pointing to old `/tracing/integrations/` URLs instead of `/integrations/`
 - ❌ Incorrect categorization of integrations in the integrations tab
 - ❌ Placing integration in wrong language section
+- ❌ **Placing integration in different subsections between docs.yml navigation and overview.mdx page (e.g., in Frameworks in nav but Other in overview)**
 - ❌ Missing `icon` property for language sections in docs.yml
 - ❌ Missing `skip-slug: true` for language and subsection sections in docs.yml
 - ❌ Missing navigation entries in docs.yml integrations tab

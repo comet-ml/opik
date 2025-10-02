@@ -401,6 +401,9 @@ navigation:
               - page: Pydantic AI
                 path: docs/tracing/integrations/pydantic-ai.mdx
                 slug: pydantic-ai
+              - page: Semantic Kernel
+                path: docs/tracing/integrations/semantic-kernel.mdx
+                slug: semantic-kernel
               - page: Smolagents
                 path: docs/tracing/integrations/smolagents.mdx
                 slug: smolagents
@@ -494,9 +497,6 @@ navigation:
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
-              - page: Semantic Kernel
-                path: docs/tracing/integrations/semantic-kernel.mdx
-                slug: semantic-kernel
           - page: Opik Python SDK
             path: docs/reference/python-sdk/overview.mdx
             slug: python-sdk
@@ -651,7 +651,6 @@ navigation:
           - page: Anonymous usage statistics
             path: docs/self-host/configure/anonymous_usage_statistics.mdx
             slug: anonymous_usage_statistics
->>>>>>> main
   - tab: reference
     layout:
       - page: Overview
