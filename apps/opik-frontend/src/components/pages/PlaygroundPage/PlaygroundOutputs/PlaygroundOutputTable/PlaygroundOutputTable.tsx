@@ -150,7 +150,7 @@ const PlaygroundOutputTable = ({
       <DataTable
         columns={columns}
         data={rows}
-        rowHeight={ROW_HEIGHT.medium}
+        rowHeight={ROW_HEIGHT.large}
         resizeConfig={resizeConfig}
         noData={<DataTableNoData title={noDataMessage} />}
       />
