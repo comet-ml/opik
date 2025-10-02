@@ -723,11 +723,11 @@ function Stop-Frontend {
 # Helper function to display backend process status
 function Get-BackendStatus {
     if (Test-Path $script:BACKEND_PID_FILE) {
-        $pid = Get-Content $script:BACKEND_PID_FILE -ErrorAction SilentlyContinue
-        if ($pid -and (Get-Process -Id $pid -ErrorAction SilentlyContinue)) {
+        $processId = Get-Content $script:BACKEND_PID_FILE -ErrorAction SilentlyContinue
+        if ($processId -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
             Write-Host "Backend: " -NoNewline
             Write-Host "RUNNING" -ForegroundColor Green -NoNewline
-            Write-Host " (PID: $pid)"
+            Write-Host " (PID: $processId)"
             return $true
         }
     }
@@ -825,11 +825,11 @@ function Test-Services {
     # Frontend status
     $frontendRunning = $false
     if (Test-Path $script:FRONTEND_PID_FILE) {
-        $pid = Get-Content $script:FRONTEND_PID_FILE -ErrorAction SilentlyContinue
-        if ($pid -and (Get-Process -Id $pid -ErrorAction SilentlyContinue)) {
+        $processId = Get-Content $script:FRONTEND_PID_FILE -ErrorAction SilentlyContinue
+        if ($processId -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
             Write-Host "Frontend: " -NoNewline
             Write-Host "RUNNING" -ForegroundColor Green -NoNewline
-            Write-Host " (PID: $pid)"
+            Write-Host " (PID: $processId)"
             $frontendRunning = $true
         }
     }
