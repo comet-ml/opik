@@ -607,6 +607,12 @@ class Opik:
         Returns:
             None
         """
+        if not trace_id or not project_name:
+            raise ValueError(
+                "trace_id and project_name must be provided and can not be None or empty, "
+                f"trace_id: {trace_id}, project_name: {project_name}"
+            )
+
         trace_client.update_trace(
             trace_id=trace_id,
             project_name=project_name,
