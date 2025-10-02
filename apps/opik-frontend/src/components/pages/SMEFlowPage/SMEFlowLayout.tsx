@@ -18,7 +18,7 @@ const SMEFlowLayout: React.FC<SMEFlowLayoutProps> = ({
         {children}
       </div>
       {footer && (
-        <div className="flex justify-end gap-2 border-t border-border pb-6 pt-4">
+        <div className="flex justify-between gap-2 border-t border-border pb-6 pt-4">
           {footer}
         </div>
       )}
