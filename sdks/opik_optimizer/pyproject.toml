@@ -12,6 +12,7 @@ dependencies = [
     "datasets",
     "deap>=1.4.3",
     "diskcache",
+    "dspy<3",
     "gepa>=0.0.7",
     "ujson",
     "hf_xet",
@@ -30,7 +31,6 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-cov",
-    "dspy<3",
     # "google-adk",
     "langgraph",
     "pre-commit",
