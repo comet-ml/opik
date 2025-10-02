@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
+import capitalize from "lodash/capitalize";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tag } from "@/components/ui/tag";
@@ -7,6 +8,9 @@ import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueBy
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useAnnotationQueueIdFromURL } from "@/hooks/useAnnotationQueueIdFromURL";
 import DateTag from "@/components/shared/DateTag/DateTag";
+import ResourceLink, {
+  RESOURCE_TYPE,
+} from "@/components/shared/ResourceLink/ResourceLink";
 import ConfigurationTab from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ConfigurationTab";
 import QueueItemsTab from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
@@ -54,19 +58,24 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         direction="horizontal"
         limitWidth
       >
-        {annotationQueue?.created_at && (
-          <div className="mb-2 flex gap-4 overflow-x-auto">
+        <div className="mb-1 flex gap-4 overflow-x-auto">
+          {annotationQueue?.created_at && (
             <DateTag date={annotationQueue.created_at} />
-          </div>
-        )}
-
-        {annotationQueue?.scope && (
-          <div className="mb-2">
+          )}
+          {annotationQueue?.scope && (
             <Tag variant="blue" size="md">
-              {annotationQueue.scope}
+              {capitalize(annotationQueue.scope)}
             </Tag>
-          </div>
-        )}
+          )}
+          {annotationQueue?.project_id && (
+            <ResourceLink
+              id={annotationQueue.project_id}
+              name={annotationQueue.project_name}
+              resource={RESOURCE_TYPE.project}
+              asTag
+            />
+          )}
+        </div>
       </PageBodyStickyContainer>
       <Tabs
         defaultValue="items"
