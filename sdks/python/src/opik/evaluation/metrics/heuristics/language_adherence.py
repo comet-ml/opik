@@ -15,7 +15,35 @@ except ImportError:  # pragma: no cover
 
 
 class LanguageAdherenceMetric(BaseMetric):
-    """Checks whether text adheres to an expected language code."""
+    """
+    Check whether text is written in the expected language.
+
+    The metric relies on a fastText language identification model (or a
+    user-supplied detector callable) to predict the language of the evaluated text
+    and compares it with ``expected_language``. It outputs ``1.0`` when the detected
+    language matches and ``0.0`` otherwise, along with the detected label and
+    confidence score in ``metadata``.
+
+    Args:
+        expected_language: Language code the text should conform to, e.g. ``"en"``.
+        model_path: Path to a fastText language identification model. Required unless
+            ``detector`` is provided.
+        name: Display name for the metric result. Defaults to
+            ``"language_adherence_metric"``.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+        detector: Optional callable accepting text and returning a
+            ``(language, confidence)`` tuple. When provided, ``model_path`` is not
+            needed.
+
+    Example:
+        >>> from opik.evaluation.metrics import LanguageAdherenceMetric
+        >>> # Assuming `lid.176.ftz` is available locally for fastText
+        >>> metric = LanguageAdherenceMetric(expected_language="en", model_path="lid.176.ftz")
+        >>> result = metric.score("This response is written in English.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        1.0
+    """
 
     def __init__(
         self,
