@@ -1188,3 +1188,87 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
         data_sizes=data_sizes,
         timeout=30,
     )
+
+
+@pytest.mark.parametrize(
+    "new_input,new_output,new_tags,new_metadata,new_thread_id",
+    [
+        ({"input": "new-trace-input-value"}, None, None, None, None),
+        (None, {"output": "new-trace-output-value"}, None, None, None),
+        (None, None, ["new-trace-tag"], None, None),
+        (
+            None,
+            None,
+            None,
+            {"new-trace-metadata-key": "new-trace-metadata-value"},
+            None,
+        ),
+        (None, None, None, None, id_helpers.generate_id()),
+    ],
+)
+def test_opik_client__update_trace__happy_flow(
+    new_input, new_output, new_tags, new_metadata, new_thread_id, opik_client: opik.Opik
+):
+    # test that the trace update works by updating only one field at a time
+    project_name = "update_trace_happy_flow"
+    trace_name = "trace_name"
+    input = {"input": "trace-input-value"}
+    output = {"output": "trace-output-value"}
+    tags = ["trace-tag"]
+    metadata = {"trace-metadata-key": "trace-metadata-value"}
+    thread_id = id_helpers.generate_id()
+    trace = opik_client.trace(
+        name=trace_name,
+        input=input,
+        output=output,
+        tags=tags,
+        metadata=metadata,
+        project_name=project_name,
+        thread_id=thread_id,
+    )
+
+    opik_client.flush()
+
+    # verify that the trace was saved
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name=trace_name,
+        project_name=project_name,
+        input=input,
+        output=output,
+        metadata=metadata,
+        tags=tags,
+        thread_id=thread_id,
+    )
+
+    #
+    # Do partial update
+    #
+    opik_client.update_trace(
+        trace_id=trace.id,
+        project_name=project_name,
+        input=new_input,
+        output=new_output,
+        tags=new_tags,
+        metadata=new_metadata,
+        thread_id=new_thread_id,
+    )
+
+    input = new_input or input
+    output = new_output or output
+    tags = new_tags or tags
+    metadata = new_metadata or metadata
+    thread_id = new_thread_id or thread_id
+
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name=trace_name,
+        project_name=project_name,
+        input=input,
+        output=output,
+        tags=tags,
+        metadata=metadata,
+        thread_id=thread_id,
+    )

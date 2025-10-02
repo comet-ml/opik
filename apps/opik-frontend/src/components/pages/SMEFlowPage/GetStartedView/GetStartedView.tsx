@@ -5,11 +5,16 @@ import { Button } from "@/components/ui/button";
 import InstructionsContent from "@/components/pages-shared/annotation-queues/InstructionsContent";
 import ScoresContent from "@/components/pages-shared/annotation-queues/ScoresContent";
 import SMEFlowLayout from "../SMEFlowLayout";
+import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
 import { useSMEFlow } from "../SMEFlowContext";
 
 const GetStartedView: React.FC = () => {
-  const { annotationQueue, canStartAnnotation, handleStartAnnotating } =
-    useSMEFlow();
+  const {
+    annotationQueue,
+    canStartAnnotation,
+    handleStartAnnotating,
+    processedCount,
+  } = useSMEFlow();
 
   if (!annotationQueue) {
     return null;
@@ -29,9 +34,17 @@ const GetStartedView: React.FC = () => {
         </>
       }
       footer={
-        <Button onClick={handleStartAnnotating} disabled={!canStartAnnotation}>
-          Start annotating
-        </Button>
+        <>
+          <ReturnToAnnotationQueueButton />
+          <div className="flex gap-2">
+            <Button
+              onClick={handleStartAnnotating}
+              disabled={!canStartAnnotation}
+            >
+              {processedCount > 0 ? "Resume annotating" : "Start annotating"}
+            </Button>
+          </div>
+        </>
       }
     >
       <div className="flex flex-col gap-8">

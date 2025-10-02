@@ -306,38 +306,26 @@ popular integrations:
 
   </Tab>
   <Tab title="AI Wizard" value="ai-installation">
-    The AI integration wizard will get you setup with Opik in just a few minutes with just one
-    prompt !
+    <div style={{"display": "flex", "flexDirection": "row", "gap": "1rem", "alignItems": "center", "justifyContent": "space-between"}}>
+      <span style={{"& p": {"margin": "0rem"}}}>
+        <p style={{"margin": "0rem", "fontStyle": "italic"}}>Integrate with Opik faster using this pre-built prompt</p>
+      </span>
+      <Button intent="primary" href="cursor:////anysphere.cursor-deeplink/prompt?text=%23+OPIK+Agentic+Onboarding%0A%0A%23%23+Goals%0A%0AYou+must+help+me%3A%0A%0A1.+Integrate+the+Opik+client+with+my+existing+LLM+application%0A2.+Set+up+tracing+for+my+LLM+calls+and+chains%0A%0A%23%23+Rules%0A%0ABefore+you+begin%2C+you+must+understand+and+strictly+adhere+to+these+core+principles%3A%0A%0A1.+Code+Preservation+%26+Integration+Guidelines%3A%0A%0A+++-+Existing+business+logic+must+remain+untouched+and+unmodified%0A+++-+Only+add+Opik-specific+code+%28decorators%2C+imports%2C+handlers%2C+env+vars%29%0A+++-+Integration+must+be+non-invasive+and+backwards+compatible%0A%0A2.+Process+Requirements%3A%0A%0A+++-+Follow+the+workflow+steps+sequentially+without+deviation%0A+++-+Validate+completion+of+each+step+before+proceeding%0A+++-+Request+explicit+approval+for+any+workflow+modifications%0A%0A3.+Documentation+%26+Resources%3A%0A%0A+++-+Reference+official+Opik+documentation+at+https%3A%2F%2Fwww.comet.com%2Fdocs%2Fopik%2Fquickstart.md%0A+++-+Follow+Opik+best+practices+and+recommended+patterns%0A+++-+Maintain+detailed+integration+notes+and+configuration+details%0A%0A4.+Testing+%26+Validation%3A%0A+++-+Verify+Opik+integration+without+impacting+existing+functionality%0A+++-+Validate+tracing+works+correctly+for+all+LLM+interactions%0A+++-+Ensure+proper+error+handling+and+logging%0A%0A%23%23+Integration+Workflow%0A%0A%23%23%23+Step+1%3A+Language+and+Compatibility+Check%0A%0AFirst%2C+analyze+the+codebase+to+identify%3A%0A%0A1.+Primary+programming+language+and+frameworks%0A2.+Existing+LLM+integrations+and+patterns%0A%0ACompatibility+Requirements%3A%0A%0A-+Supported+Languages%3A+Python%2C+JavaScript%2FTypeScript%0A%0AIf+the+codebase+uses+unsupported+languages%3A%0A%0A-+Stop+immediately%0A-+Inform+me+that+the+codebase+is+unsupported+for+AI+integration%0A%0AOnly+proceed+to+Step+2+if%3A%0A%0A-+Language+is+Python+or+JavaScript%2FTypeScript%0A%0A%23%23%23+Step+2%3A+Codebase+Discovery+%26+Entrypoint+Confirmation%0A%0AAfter+verifying+language+compatibility%2C+perform+a+full+codebase+scan+with+the+following+objectives%3A%0A%0A-+LLM+Touchpoints%3A+Locate+all+files+and+functions+that+invoke+or+interface+with+LLMs+or+can+be+a+candidates+for+tracing.%0A-+Entrypoint+Detection%3A+Identify+the+primary+application+entry+point%28s%29+%28e.g.%2C+main+script%2C+API+route%2C+CLI+handler%29.+If+ambiguous%2C+pause+and+request+clarification+on+which+component%28s%29+are+most+important+to+trace+before+proceeding.%0A++%E2%9A%A0%EF%B8%8F+Do+not+proceed+to+Step+3+without+explicit+confirmation+if+the+entrypoint+is+unclear.%0A-+Return+the+LLM+Touchpoints+to+me%0A%0A%23%23%23+Step+3%3A+Discover+Available+Integrations%0A%0AAfter+I+confirm+the+LLM+Touchpoints+and+entry+point%2C+find+the+list+of+supported+integrations+at+https%3A%2F%2Fwww.comet.com%2Fdocs%2Fopik%2Fintegrations%2Foverview.md%0A%0A%23%23%23+Step+4%3A+Deep+Analysis+Confirmed+files+for+LLM+Frameworks+%26+SDKs%0A%0AUsing+the+files+confirmed+in+Step+2%2C+perform+targeted+inspection+to+detect+specific+LLM-related+technologies+in+use%2C+such+as%3A%0ASDKs%3A+openai%2C+anthropic%2C+huggingface%2C+etc.%0AFrameworks%3A+LangChain%2C+LlamaIndex%2C+Haystack%2C+etc.%0A%0A%23%23%23+Step+5%3A+Pre-Implementation+Development+Plan+%28Approval+Required%29%0A%0ADo+not+write+or+modify+code+yet.+You+must+propose+me+a+step-by-step+plan+including%3A%0A%0A-+Opik+packages+to+install%0A-+Files+to+be+modified%0A-+Code+snippets+for+insertion%2C+clearly+scoped+and+annotated%0A-+Where+to+place+Opik+API+keys%2C+with+placeholder+comments+%28Visit+https%3A%2F%2Fcomet.com%2Fopik%2Fyour-workspace-name%2Fget-started+to+copy+your+API+key%29%0A++Wait+for+approval+before+proceeding%21%0A%0A%23%23%23+Step+6%3A+Execute+the+Integration+Plan%0A%0AAfter+approval%3A%0A%0A-+Run+the+package+installation+command+via+terminal+%28pip+install+opik%2C+npm+install+opik%2C+etc.%29.%0A-+Apply+code+modifications+exactly+as+described+in+Step+5.%0A-+Keep+all+additions+minimal+and+non-invasive.%0A++Upon+completion%2C+review+the+changes+made+and+confirm+installation+success.%0A%0A%23%23%23+Step+7%3A+Request+User+Review+and+Wait%0A%0ANotify+me+that+all+integration+steps+are+complete.%0A%22Please+run+the+application+and+verify+if+Opik+is+capturing+traces+as+expected.+Let+me+know+if+you+need+adjustments.%22%0A%0A%23%23%23+Step+8%3A+Debugging+Loop+%28If+Needed%29%0A%0AIf+issues+are+reported%3A%0A%0A1.+Parse+the+error+or+unexpected+behavior+from+feedback.%0A2.+Re-query+the+Opik+docs+using+https%3A%2F%2Fwww.comet.com%2Fdocs%2Fopik%2Fquickstart.md+if+needed.%0A3.+Propose+a+minimal+fix+and+await+approval.%0A4.+Apply+and+revalidate.%0A">
+        <div style={{"display": "flex", "flexDirection": "row", "gap": "1rem", "alignItems": "center"}}>
+          <svg xmlns="http://www.w3.org/2000/svg" id="Ebene_1" version="1.1" viewBox="0 0 466.73 532.09">
+            <path style={{"fill": "#edecec"}} class="st0" d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"/>
+          </svg>
+          Open in Cursor
+        </div>
+      </Button>
+    </div>
 
-    <Steps>
-      <Step title="1. Install the Opik extension for Cursor">
-      We will first install the Opik extension for Cursor that will both setup the Opik MCP server
-      for you and also log your Cursor conversations to Opik. You can learn more about the extension
-      [here](/tracing/integrations/cursor):
+    The pre-built prompt will guide you through the integration process, install the Opik SDK and
+    instrument your code. It supports both Python and TypeScript codebases, if you are using
+    another language just let us know and we can help you out.
 
-      <Button intent="primary" href="cursor:extension/opik.opik">Install Cursor extension</Button>
-
-      </Step>
-      <Step title="2. Run the following prompt in the Cursor chat">
-        Once it is installed, you can run the following prompt in the Cursor chat (make sure to run
-        in agent mode so tools can be called):
-
-        ```text
-        Integrate Opik with my project.
-        ```
-
-        Once the integration is complete, you will need to setup your Opik Cloud API key or point
-        to your self-hosted Opik server. You can learn more about the configuration
-        [here](/tracing/sdk_configuration).
-
-      </Step>
-      <Step title="3. (Optional) Manually install the Opik MCP server">
-            If you are using another AI assistant, first install the Opik MCP server following the
-      instructions in the [MCP Server Integration](/prompt_engineering/mcp_server) documentation and
-      then run the prompt above.
-      </Step>
-    </Steps>
-
+    Once the integration is complete, simply run your application and you will start seeing traces
+    in your Opik dashboard.
   </Tab>
   <Tab title="Other" value="other">
     Opik has more than 30 integrations with the most popular frameworks and libraries, you can find
