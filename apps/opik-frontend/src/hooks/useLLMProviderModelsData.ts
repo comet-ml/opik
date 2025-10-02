@@ -1120,10 +1120,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5-nano",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B,
-      label: "openai/gpt-oss-120b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B_FREE,
       label: "openai/gpt-oss-120b:free",
     },
@@ -1176,10 +1172,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/o4-mini-high",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENGVLAB_INTERNVL3_14B,
-      label: "opengvlab/internvl3-14b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENGVLAB_INTERNVL3_78B,
       label: "opengvlab/internvl3-78b",
     },
@@ -1210,10 +1202,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_REASONING_PRO,
       label: "perplexity/sonar-reasoning-pro",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_72B_INSTRUCT,
-      label: "qwen/qwen-2-72b-instruct",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_72B_INSTRUCT,
@@ -1458,10 +1446,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_UNSLOPNEMO_12B,
       label: "thedrummer/unslopnemo-12b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_32B,
-      label: "thudm/glm-4-32b",
     },
     {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
