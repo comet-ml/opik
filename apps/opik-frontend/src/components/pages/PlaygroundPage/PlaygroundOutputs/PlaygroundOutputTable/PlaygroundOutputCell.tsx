@@ -61,7 +61,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="flex pt-3"
+      className="flex pt-5"
     >
       <div className="size-full">
         <div className="h-[var(--cell-top-height)]" />
