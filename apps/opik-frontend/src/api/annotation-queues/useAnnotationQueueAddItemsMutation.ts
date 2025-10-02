@@ -31,12 +31,6 @@ const useAnnotationQueueAddItemsMutation = () => {
 
       return data;
     },
-
-    onSuccess: () => {
-      toast({
-        description: "Items added to annotation queue successfully",
-      });
-    },
     onError: (error: AxiosError) => {
       const message = get(
         error,
