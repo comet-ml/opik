@@ -449,18 +449,30 @@ function Start-Backend {
         Write-LogDebug "Starting backend with JAR: $jarFile"
         Write-LogDebug "Command: java -jar $jarFile server config.yml"
         
-        # Build environment variable prefix for shell command
-        $envPrefix = "CORS=true"
+        # Set environment variables for backend
+        $env:CORS = "true"
         if ($script:DEBUG_MODE) {
-            $envPrefix += " GENERAL_LOG_LEVEL=DEBUG OPIK_LOG_LEVEL=DEBUG"
+            $env:GENERAL_LOG_LEVEL = "DEBUG"
+            $env:OPIK_LOG_LEVEL = "DEBUG"
         }
         
-        # Start backend in background with nohup and capture the PID
-        # Use nohup with & to run in background, then echo $! to get the PID
-        $shellCmd = "cd '$script:BACKEND_DIR' && $envPrefix nohup java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1 & echo `$!"
+        # Start backend in background using Start-Process (cross-platform)
+        # Use separate files for stdout and stderr since PowerShell doesn't allow same file
+        $stdoutLog = "$script:BACKEND_LOG_FILE"
+        $stderrLog = "$script:BACKEND_LOG_FILE.err"
         
-        $processOutput = sh -c $shellCmd
-        $backendPid = $processOutput.Trim()
+        $processParams = @{
+            FilePath = "java"
+            ArgumentList = @("-jar", $jarFile, "server", "config.yml")
+            WorkingDirectory = $script:BACKEND_DIR
+            RedirectStandardOutput = $stdoutLog
+            RedirectStandardError = $stderrLog
+            NoNewWindow = $true
+            PassThru = $true
+        }
+        
+        $process = Start-Process @processParams
+        $backendPid = $process.Id
         Set-Content -Path $script:BACKEND_PID_FILE -Value $backendPid
         
         Write-LogDebug "Backend process started with PID: $backendPid"
@@ -472,14 +484,18 @@ function Start-Backend {
         
         if ($stillRunning) {
             Write-LogSuccess "Backend started successfully (PID: $backendPid)"
-            Write-LogInfo "Backend logs: Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+            Write-LogInfo "Backend logs:"
+            Write-LogInfo "  stdout: Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+            Write-LogInfo "  stderr: Get-Content -Wait '$script:BACKEND_LOG_FILE.err'"
             
             if ($script:DEBUG_MODE) {
                 Write-LogDebug "Debug mode enabled - check logs for detailed output"
             }
         }
         else {
-            Write-LogError "Backend failed to start. Check logs: Get-Content '$script:BACKEND_LOG_FILE'"
+            Write-LogError "Backend failed to start. Check logs:"
+            Write-LogError "  Get-Content '$script:BACKEND_LOG_FILE'"
+            Write-LogError "  Get-Content '$script:BACKEND_LOG_FILE.err'"
             Remove-Item $script:BACKEND_PID_FILE -Force -ErrorAction SilentlyContinue
             exit 1
         }
@@ -516,21 +532,33 @@ function Start-Frontend {
         # Configure frontend to talk to local backend
         Write-LogInfo "Frontend API base URL (VITE_BASE_API_URL) set to: http://localhost:8080"
         
-        # Build environment variable prefix for shell command
-        $envPrefix = "CI=true VITE_BASE_API_URL='http://localhost:8080'"
+        # Set environment variables for frontend
+        $env:CI = "true"
+        $env:VITE_BASE_API_URL = "http://localhost:8080"
         if ($script:DEBUG_MODE) {
-            $envPrefix += " NODE_ENV=development"
+            $env:NODE_ENV = "development"
             Write-LogDebug "Frontend debug mode enabled - NODE_ENV=development"
         }
         
         Write-LogDebug "Starting frontend with: npm run start"
         
-        # Start frontend in background with nohup and capture the PID
-        # Use nohup with & to run in background, then echo $! to get the PID
-        $shellCmd = "cd '$script:FRONTEND_DIR' && $envPrefix nohup npm run start > '$script:FRONTEND_LOG_FILE' 2>&1 & echo `$!"
+        # Start frontend in background using Start-Process (cross-platform)
+        # Use separate files for stdout and stderr since PowerShell doesn't allow same file
+        $stdoutLog = "$script:FRONTEND_LOG_FILE"
+        $stderrLog = "$script:FRONTEND_LOG_FILE.err"
         
-        $processOutput = sh -c $shellCmd
-        $frontendPid = $processOutput.Trim()
+        $processParams = @{
+            FilePath = "npm"
+            ArgumentList = @("run", "start")
+            WorkingDirectory = $script:FRONTEND_DIR
+            RedirectStandardOutput = $stdoutLog
+            RedirectStandardError = $stderrLog
+            NoNewWindow = $true
+            PassThru = $true
+        }
+        
+        $process = Start-Process @processParams
+        $frontendPid = $process.Id
         Set-Content -Path $script:FRONTEND_PID_FILE -Value $frontendPid
         
         Write-LogDebug "Frontend process started with PID: $frontendPid"
@@ -542,10 +570,14 @@ function Start-Frontend {
         
         if ($stillRunning) {
             Write-LogSuccess "Frontend started successfully (PID: $frontendPid)"
-            Write-LogInfo "Frontend logs: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
+            Write-LogInfo "Frontend logs:"
+            Write-LogInfo "  stdout: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
+            Write-LogInfo "  stderr: Get-Content -Wait '$script:FRONTEND_LOG_FILE.err'"
         }
         else {
-            Write-LogError "Frontend failed to start. Check logs: Get-Content '$script:FRONTEND_LOG_FILE'"
+            Write-LogError "Frontend failed to start. Check logs:"
+            Write-LogError "  Get-Content '$script:FRONTEND_LOG_FILE'"
+            Write-LogError "  Get-Content '$script:FRONTEND_LOG_FILE.err'"
             Remove-Item $script:FRONTEND_PID_FILE -Force -ErrorAction SilentlyContinue
             exit 1
         }
@@ -806,8 +838,10 @@ function Test-Services {
     
     Write-Host ""
     Write-Host "Logs:"
-    Write-Host "  Backend:  Get-Content -Wait '$script:BACKEND_LOG_FILE'"
-    Write-Host "  Frontend: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
+    Write-Host "  Backend stdout:  Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+    Write-Host "  Backend stderr:  Get-Content -Wait '$script:BACKEND_LOG_FILE.err'"
+    Write-Host "  Frontend stdout: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
+    Write-Host "  Frontend stderr: Get-Content -Wait '$script:FRONTEND_LOG_FILE.err'"
 }
 
 # Function to verify BE-only services
@@ -837,7 +871,8 @@ function Test-BeOnlyServices {
     
     Write-Host ""
     Write-Host "Logs:"
-    Write-Host "  Backend Process: Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+    Write-Host "  Backend stdout: Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+    Write-Host "  Backend stderr: Get-Content -Wait '$script:BACKEND_LOG_FILE.err'"
     Write-Host "  Docker Services: docker logs -f opik-frontend-1"
 }
 
@@ -954,18 +989,30 @@ function Show-Logs {
     Write-LogInfo "=== Recent Logs ==="
     
     if (Test-Path $script:BACKEND_LOG_FILE) {
-        Write-Host "`nBackend logs (last 20 lines):" -ForegroundColor Blue
+        Write-Host "`nBackend stdout logs (last 20 lines):" -ForegroundColor Blue
         Get-Content $script:BACKEND_LOG_FILE -Tail 20
     }
     
+    if (Test-Path "$script:BACKEND_LOG_FILE.err") {
+        Write-Host "`nBackend stderr logs (last 20 lines):" -ForegroundColor Blue
+        Get-Content "$script:BACKEND_LOG_FILE.err" -Tail 20
+    }
+    
     if (Test-Path $script:FRONTEND_LOG_FILE) {
-        Write-Host "`nFrontend logs (last 20 lines):" -ForegroundColor Blue
+        Write-Host "`nFrontend stdout logs (last 20 lines):" -ForegroundColor Blue
         Get-Content $script:FRONTEND_LOG_FILE -Tail 20
     }
     
+    if (Test-Path "$script:FRONTEND_LOG_FILE.err") {
+        Write-Host "`nFrontend stderr logs (last 20 lines):" -ForegroundColor Blue
+        Get-Content "$script:FRONTEND_LOG_FILE.err" -Tail 20
+    }
+    
     Write-Host "`nTo follow logs in real-time:" -ForegroundColor Blue
-    Write-Host "  Backend:  Get-Content -Wait '$script:BACKEND_LOG_FILE'"
-    Write-Host "  Frontend: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
+    Write-Host "  Backend stdout:  Get-Content -Wait '$script:BACKEND_LOG_FILE'"
+    Write-Host "  Backend stderr:  Get-Content -Wait '$script:BACKEND_LOG_FILE.err'"
+    Write-Host "  Frontend stdout: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
+    Write-Host "  Frontend stderr: Get-Content -Wait '$script:FRONTEND_LOG_FILE.err'"
 }
 
 # Function to show usage
