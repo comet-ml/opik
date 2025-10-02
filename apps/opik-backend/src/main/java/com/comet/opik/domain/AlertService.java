@@ -190,7 +190,7 @@ class AlertServiceImpl implements AlertService {
         String requestBody = JsonUtils.writeValueAsString(event);
 
         return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(response -> {
                     log.info("Successfully sent webhook: id='{}', type='{}', url='{}', statusCode='{}'",
