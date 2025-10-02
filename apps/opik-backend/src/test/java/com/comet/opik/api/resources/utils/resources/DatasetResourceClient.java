@@ -5,7 +5,6 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.PromptVersion;
-import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -22,6 +21,8 @@ import java.util.UUID;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
+import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,7 +44,7 @@ public class DatasetResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(201);
             assertThat(actualResponse.hasEntity()).isFalse();
 
-            var id = TestUtils.getIdFromLocation(actualResponse.getLocation());
+            var id = getIdFromLocation(actualResponse.getLocation());
 
             assertThat(id).isNotNull();
             assertThat(id.version()).isEqualTo(7);
@@ -186,7 +187,7 @@ public class DatasetResourceClient {
 
         if (CollectionUtils.isNotEmpty(filters)) {
             webTarget = webTarget.queryParam("filters",
-                    com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam(filters));
+                    toURLEncodedQueryParam(filters));
         }
 
         try (var response = webTarget
