@@ -100,7 +100,7 @@ const FeedbackDefinitionsSelectBox: React.FC<
             rel="noopener noreferrer"
             className="flex items-center gap-1"
           >
-            <span>Add new feedback score</span>
+            <span>Add new feedback definition</span>
             <ExternalLink className="size-3" />
           </Link>
         </Button>
