@@ -76,6 +76,8 @@ description: Start here to integrate Opik into your [INTEGRATION NAME]-based gen
   - ✅ `title: Observability for LangChain (JavaScript) with Opik` (TypeScript version when Python also exists)
   - ✅ `title: Observability for OpenAI (Python) with Opik` (Python version when TypeScript also exists)
   - ✅ `title: Observability for OpenAI (TypeScript) with Opik` (TypeScript version when Python also exists)
+  - ✅ `title: Observability for Google Gemini (Python) with Opik` (Python version when TypeScript also exists)
+  - ✅ `title: Observability for Google Gemini (TypeScript) with Opik` (TypeScript version when Python also exists)
   - ✅ `title: Observability for Spring AI (Java) with Opik` (Java only, no other languages)
   - ✅ `title: Observability for CrewAI with Opik` (Python only, no other languages)
   - ❌ `title: Observability for LangChain with Opik` (Missing language spec when multiple versions exist)
@@ -383,12 +385,12 @@ The integrations tab is now organized by **programming language** to improve dis
 
 1. **TypeScript** - TypeScript/JavaScript integrations with icon `fa-brands fa-js`
    - Frameworks (Agno, BeeAI, LangChain, Mastra, Vercel AI SDK)
-   - Model Providers (Cloudflare Workers AI, OpenAI)
+   - Model Providers (Cloudflare Workers AI, Gemini, OpenAI)
    - Manual Integration (TypeScript SDK)
 
 2. **Python** - Python integrations with icon `fa-brands fa-python`
    - Frameworks (AG2, Autogen, CrewAI, DSPy, Haystack, etc.)
-   - Model Providers (Anthropic, Bedrock, OpenAI, Groq, etc.)
+   - Model Providers (Anthropic, Bedrock, Gemini, OpenAI, Groq, etc.)
    - Dataset Management (Gretel, Hugging Face Datasets)
    - Evaluation (Ragas)
    - Gateways (AISuite, LiteLLM, OpenRouter)
@@ -612,7 +614,7 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 
 1. **TypeScript** (`icon: fa-brands fa-js`)
    - **Frameworks**: Agno, BeeAI, LangChain, Mastra, Vercel AI SDK
-   - **Model Providers**: Cloudflare Workers AI, OpenAI
+   - **Model Providers**: Cloudflare Workers AI, Gemini, OpenAI
    - **Manual Integration**: TypeScript SDK
 
 2. **Python** (`icon: fa-brands fa-python`)
