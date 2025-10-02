@@ -26,6 +26,11 @@ const PlaygroundVariableCell: React.FunctionComponent<
 
   const { showIndex } = (custom ?? {}) as CustomMeta;
 
+  const placeholderLabel =
+    typeof value === "string" && /\[image(?:_\d+)?\]/i.test(value)
+      ? value.trim()
+      : undefined;
+
   const images = useMemo(() => {
     if (typeof value !== "string" || value.trim().length === 0) {
       return [] as ParsedImageData[];
@@ -42,7 +47,7 @@ const PlaygroundVariableCell: React.FunctionComponent<
     if (images.length > 0) {
       const [firstImage, ...restImages] = images;
       const remainingCount = restImages.length;
-      const fallbackText = firstImage?.name ?? "Image";
+      const fallbackText = placeholderLabel ?? firstImage?.name ?? "Image";
       const label =
         fallbackText.length > 60
           ? `${fallbackText.slice(0, 57)}…`
@@ -57,7 +62,7 @@ const PlaygroundVariableCell: React.FunctionComponent<
           }
           stopClickPropagation
         >
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3 overflow-hidden">
             <div className="relative inline-flex">
               <img
                 src={firstImage.url}
@@ -71,7 +76,11 @@ const PlaygroundVariableCell: React.FunctionComponent<
               ) : null}
             </div>
             {label ? (
-              <span className={cn("truncate text-xs text-muted-slate")}>
+              <span
+                className={cn(
+                  "min-w-0 max-w-[12rem] truncate text-xs text-muted-slate",
+                )}
+              >
                 {label}
               </span>
             ) : null}
@@ -92,7 +101,11 @@ const PlaygroundVariableCell: React.FunctionComponent<
       );
     }
 
-    return <div className="size-full overflow-y-auto">{value}</div>;
+    return (
+      <div className="size-full min-w-0 overflow-hidden break-words">
+        {value}
+      </div>
+    );
   };
 
   return (
