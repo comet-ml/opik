@@ -753,7 +753,7 @@ show_usage() {
     echo "BE-Only Mode (BE as process, FE in Docker):"
     echo "  --be-only-start    - Start Docker infrastructure and FE, and backend process (without building)"
     echo "  --be-only-stop     - Stop Docker infrastructure and FE, and backend process"
-    echo "  --be-only-restart  - Stop, build, and Docker infrastructure and FE, and backend process"
+    echo "  --be-only-restart  - Stop, build, and start Docker infrastructure and FE, and backend process"
     echo "  --be-only-verify   - Verify status of Docker infrastructure and FE, and backend process"
     echo ""
     echo "Other options:"
