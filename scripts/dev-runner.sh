@@ -536,6 +536,8 @@ show_access_information() {
         echo ""
         echo "  # To this (remove '/api'):"
         echo "  url_override = http://localhost:8080"
+    else
+        echo "  # When prompted, use URL: ${ui_url}"
     fi
     
     echo ""
