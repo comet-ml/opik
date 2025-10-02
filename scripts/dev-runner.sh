@@ -643,6 +643,18 @@ start_services() {
     verify_services
 }
 
+# Function to stop services
+stop_services() {
+    log_info "=== Stopping Opik Development Environment ==="
+    log_info "Step 1/3: Stopping frontend..."
+    stop_frontend
+    log_info "Step 2/3: Stopping backend..."
+    stop_backend
+    log_info "Step 3/3: Stopping infrastructure..."
+    stop_infrastructure
+    log_success "=== Stop Complete ==="
+}
+
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
@@ -810,10 +822,7 @@ case "${1:-}" in
         start_services
         ;;
     "--stop")
-        stop_frontend
-        stop_backend
-        stop_infrastructure
-        log_success "All services stopped"
+        stop_services
         ;;
     "--restart")
         restart_services
