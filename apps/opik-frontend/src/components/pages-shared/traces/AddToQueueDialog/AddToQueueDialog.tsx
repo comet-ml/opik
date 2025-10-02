@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { UserPen, MessageCircleWarning } from "lucide-react";
+import { UserPen, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Thread, Trace } from "@/types/traces";
@@ -30,7 +30,7 @@ import { createFilter } from "@/lib/filters";
 import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
 import { isObjectThread } from "@/lib/traces";
 
-const DEFAULT_SIZE = 5;
+const DEFAULT_SIZE = 100;
 
 type AddToQueueDialogProps = {
   rows: Array<Trace | Thread>;
@@ -203,22 +203,26 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
               className="mb-4"
               {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
             />
-            <div className="flex gap-2.5">
-              <SearchInput
-                searchText={search}
-                setSearchText={setSearch}
-              ></SearchInput>
+            <div className="my-2 flex items-center justify-between">
+              <h3 className="comet-title-xs">Select an annotation queue</h3>
               <Button
-                variant="secondary"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setOpen(false);
                   setOpenDialog(true);
                 }}
                 disabled={noValidRows}
               >
+                <Plus className="mr-2 size-4" />
                 Create new annotation queue
               </Button>
             </div>
+            <SearchInput
+              searchText={search}
+              setSearchText={setSearch}
+              className="w-full"
+            />
             {renderAlert()}
             <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderListItems()}
