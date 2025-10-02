@@ -11,7 +11,7 @@ import {
   packageManagers,
 } from './package-manager';
 import { fulfillsVersionRange } from './semver';
-import type { Feature, WizardOptions } from './types';
+import type { WizardOptions } from './types';
 import { ISSUES_URL, type Integration } from '../lib/constants';
 import { OPIK_ENV_VARS } from '../lib/env-constants';
 import clack from './clack';

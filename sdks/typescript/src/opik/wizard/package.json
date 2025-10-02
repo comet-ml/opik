@@ -56,6 +56,7 @@
   },
   "devDependencies": {
     "@babel/types": "~7.21.4",
+    "@eslint/js": "^9.20.0",
     "@langchain/core": "^0.3.78",
     "@types/glob": "^7.2.0",
     "@types/inquirer": "^0.0.43",
@@ -64,15 +65,14 @@
     "@types/opn": "5.1.0",
     "@types/semver": "^7.3.7",
     "@types/yargs": "^16.0.9",
-    "@typescript-eslint/eslint-plugin": "^5.13.0",
-    "@typescript-eslint/parser": "^5.13.0",
     "dotenv": "^16.4.7",
-    "eslint": "^8.18.0",
-    "eslint-config-prettier": "^8.3.0",
+    "eslint": "^9.20.0",
+    "globals": "^15.14.0",
     "prettier": "^2.8.7",
     "ts-node": "^10.9.1",
     "tsx": "^4.20.3",
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "typescript-eslint": "^8.24.0"
   },
   "engines": {
     "node": ">=18",
@@ -87,10 +87,10 @@
     "postbuild": "chmod +x ./dist/bin.js && cp -r src/utils/rules dist/src/utils && cp -r templates dist/",
     "lint": "pnpm lint:prettier && pnpm lint:eslint",
     "lint:prettier": "prettier --check \"src/**/*.ts\"",
-    "lint:eslint": "eslint . --cache --format stylish",
+    "lint:eslint": "eslint '**/*.{ts,tsx}'",
     "fix": "pnpm fix:eslint && pnpm fix:prettier",
     "fix:prettier": "prettier --write \"src/**/*.ts\"",
-    "fix:eslint": "eslint . --format stylish --fix",
+    "fix:eslint": "eslint '**/*.{ts,tsx}' --fix",
     "try": "tsx bin.ts"
   },
   "author": "Opik",

@@ -26,10 +26,9 @@ export const OPIK_ENV_VAR_NAMES = Object.values(OPIK_ENV_VARS);
 /**
  * Type-safe helper to check if a string is a valid Opik env var name
  */
-export function isOpikEnvVar(
-  key: string,
-): key is (typeof OPIK_ENV_VARS)[keyof typeof OPIK_ENV_VARS] {
-  return OPIK_ENV_VAR_NAMES.includes(key as any);
+type OpikEnvVar = (typeof OPIK_ENV_VARS)[keyof typeof OPIK_ENV_VARS];
+export function isOpikEnvVar(key: string): key is OpikEnvVar {
+  return OPIK_ENV_VAR_NAMES.includes(key as OpikEnvVar);
 }
 
 /**

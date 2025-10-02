@@ -60,8 +60,7 @@ export async function runWizard(argv: Args) {
 
   clack.intro(`Welcome to the Opik setup wizard ✨`);
 
-  const integration =
-    finalArgs.integration ?? (await getIntegrationForSetup(wizardOptions));
+  const integration = finalArgs.integration ?? (await getIntegrationForSetup());
 
   analytics.setTag('integration', integration);
   analytics.capture('integration selected', { integration });
@@ -111,9 +110,7 @@ export async function runWizard(argv: Args) {
     process.exit(1);
   }
 }
-async function detectIntegration(
-  options: Pick<WizardOptions, 'installDir'>,
-): Promise<Integration | undefined> {
+async function detectIntegration(): Promise<Integration | undefined> {
   const integrationConfigs = Object.entries(INTEGRATION_CONFIG).sort(
     ([a], [b]) =>
       INTEGRATION_ORDER.indexOf(a as Integration) -
@@ -128,10 +125,8 @@ async function detectIntegration(
   }
 }
 
-async function getIntegrationForSetup(
-  options: Pick<WizardOptions, 'installDir'>,
-) {
-  const detectedIntegration = await detectIntegration(options);
+async function getIntegrationForSetup() {
+  const detectedIntegration = await detectIntegration();
 
   if (detectedIntegration) {
     clack.log.success(
