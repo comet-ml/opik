@@ -39,7 +39,8 @@ class FeedbackDefinitionsPage(BasePage):
                 self.page.get_by_placeholder("Name").nth(i + 2).fill(key)
                 self.page.get_by_placeholder("0.0").nth(i).click()
                 self.page.get_by_placeholder("0.0").nth(i).fill(str(categories[key]))
-                self.page.get_by_role("button", name="Add category").click()
+                if self.page.get_by_placeholder("Name").count() < i + 4:
+                    self.page.get_by_role("button", name="Add category").click()
 
     def fill_numerical_values(self, min, max):
         min_box = self.page.get_by_placeholder("Min")
