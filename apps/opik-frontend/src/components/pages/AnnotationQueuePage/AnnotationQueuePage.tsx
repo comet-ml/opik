@@ -1,6 +1,8 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import capitalize from "lodash/capitalize";
+import sortBy from "lodash/sortBy";
+import { PenLine } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tag } from "@/components/ui/tag";
@@ -11,6 +13,7 @@ import DateTag from "@/components/shared/DateTag/DateTag";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/components/shared/ResourceLink/ResourceLink";
+import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import ConfigurationTab from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ConfigurationTab";
 import QueueItemsTab from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
@@ -34,6 +37,24 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       setBreadcrumbParam("annotationQueueId", annotationQueueId, queueName);
     }
   }, [annotationQueueId, queueName, setBreadcrumbParam]);
+
+  const allocatedFeedbackScores = useMemo(() => {
+    if (
+      !annotationQueue?.feedback_scores ||
+      !annotationQueue?.feedback_definition_names
+    ) {
+      return [];
+    }
+
+    const filtered = annotationQueue.feedback_scores.filter((score) =>
+      annotationQueue.feedback_definition_names.includes(score.name),
+    );
+
+    return sortBy(filtered, "name");
+  }, [
+    annotationQueue?.feedback_scores,
+    annotationQueue?.feedback_definition_names,
+  ]);
 
   return (
     <PageBodyScrollContainer>
@@ -75,6 +96,18 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
               asTag
             />
           )}
+        </div>
+        <div className="flex h-11 items-center gap-2">
+          <PenLine className="size-4 shrink-0" />
+          <div className="flex gap-1 overflow-x-auto">
+            {allocatedFeedbackScores.map((feedbackScore) => (
+              <FeedbackScoreTag
+                key={feedbackScore.name + feedbackScore.value}
+                label={feedbackScore.name}
+                value={feedbackScore.value}
+              />
+            ))}
+          </div>
         </div>
       </PageBodyStickyContainer>
       <Tabs
