@@ -26,9 +26,26 @@ export interface LLMJudgeSchema {
   unsaved: boolean;
 }
 
+export type LLMMessageContentText = {
+  type: "text";
+  text: string;
+};
+
+export type LLMMessageContentImageUrl = {
+  type: "image_url";
+  image_url: {
+    url: string;
+    detail?: string;
+  };
+};
+
+export type LLMMessageContentItem =
+  | LLMMessageContentText
+  | LLMMessageContentImageUrl;
+
 export interface LLMMessage {
   id: string;
-  content: string;
+  content: string | LLMMessageContentItem[];
   role: LLM_MESSAGE_ROLE;
   promptId?: string;
   promptVersionId?: string;

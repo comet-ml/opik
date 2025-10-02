@@ -31,6 +31,7 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -136,12 +137,19 @@ const EditPromptVersionDialog: React.FunctionComponent<
               </ToggleGroup>
             </div>
             {previewMode === PROMPT_PREVIEW_MODE.write ? (
-              <Textarea
-                id="template"
-                className="comet-code"
-                placeholder="Prompt"
+              <CodeMirror
+                className="min-h-44"
+                theme={theme}
                 value={template}
-                onChange={(event) => setTemplate(event.target.value)}
+                onChange={setTemplate}
+                placeholder="Type your prompt here"
+                extensions={[EditorView.lineWrapping, mustachePlugin]}
+                basicSetup={{
+                  foldGutter: false,
+                  allowMultipleSelections: false,
+                  lineNumbers: false,
+                  highlightActiveLine: false,
+                }}
               />
             ) : (
               <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">

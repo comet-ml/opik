@@ -32,6 +32,7 @@ interface LLMPromptMessagesProps {
   onChange: (messages: LLMMessage[]) => void;
   onAddMessage: () => void;
   hint?: string;
+  disableImages?: boolean;
 }
 
 const LLMPromptMessages = ({
@@ -42,6 +43,7 @@ const LLMPromptMessages = ({
   onChange,
   onAddMessage,
   hint = "",
+  disableImages = false,
 }: LLMPromptMessagesProps) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -130,6 +132,7 @@ const LLMPromptMessages = ({
                   handleChangeMessage(message.id, changes)
                 }
                 message={message}
+                disableImages={disableImages}
               />
             ))}
           </div>

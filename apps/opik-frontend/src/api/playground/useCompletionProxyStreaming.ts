@@ -15,6 +15,11 @@ import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
+import {
+  isStructuredMessageContent,
+  stringifyMessageContent,
+  supportsImageInput,
+} from "@/lib/llm";
 
 const DATA_PREFIX = "data:";
 
@@ -122,13 +127,62 @@ const useCompletionProxyStreaming = ({
       let providerError = null;
 
       try {
-        const response = await getCompletionProxyStream({
-          model,
-          messages,
-          configs,
-          signal,
-          workspaceName,
-        });
+        const hasStructuredContent = messages.some((message) =>
+          isStructuredMessageContent(message.content),
+        );
+
+        const allowStructured =
+          hasStructuredContent && supportsImageInput(model);
+
+        const buildPayload = (useStructured: boolean) => {
+          if (!useStructured) {
+            return messages.map((message) => {
+              if (!isStructuredMessageContent(message.content)) {
+                return message;
+              }
+
+              return {
+                ...message,
+                content: stringifyMessageContent(message.content, {
+                  includeImagePlaceholders: true,
+                }),
+              } satisfies ProviderMessageType;
+            });
+          }
+
+          return messages;
+        };
+
+        const sendRequest = async (useStructured: boolean) => {
+          const payload = buildPayload(useStructured);
+          const response = await getCompletionProxyStream({
+            model,
+            messages: payload,
+            configs,
+            signal,
+            workspaceName,
+          });
+
+          return { response, useStructured } as const;
+        };
+
+        let { response } = await sendRequest(allowStructured);
+
+        if (!response.ok && allowStructured) {
+          const errorText = await response.text();
+          console.warn(
+            "Structured message payload was rejected. Retrying with flattened content.",
+            errorText,
+          );
+
+          const fallback = await sendRequest(false);
+          response = fallback.response;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || "Upstream completion request failed");
+        }
 
         const reader = response?.body?.getReader();
         const decoder = new TextDecoder("utf-8");

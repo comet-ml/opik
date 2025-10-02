@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
@@ -17,6 +17,10 @@ import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlayground
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
+import {
+  stringifyMessageContent,
+  tryDeserializeMessageContent,
+} from "@/lib/llm";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -57,6 +61,19 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   );
 
   const versions = data?.content;
+
+  const displayedTemplateContent = useMemo(
+    () => tryDeserializeMessageContent(activeVersion?.template ?? ""),
+    [activeVersion?.template],
+  );
+
+  const displayedTemplate = useMemo(
+    () =>
+      stringifyMessageContent(displayedTemplateContent, {
+        includeImagePlaceholders: true,
+      }),
+    [displayedTemplateContent],
+  );
 
   const handleOpenEditPrompt = (value: boolean) => {
     editPromptResetKeyRef.current = editPromptResetKeyRef.current + 1;
@@ -109,7 +126,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         <div className="flex grow flex-col gap-2">
           <p className="comet-body-s-accented text-foreground">Prompt</p>
           <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-            {activeVersion?.template}
+            {displayedTemplate}
           </code>
           {activeVersion?.metadata && (
             <>

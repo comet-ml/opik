@@ -3,6 +3,10 @@ import { AlertCircle } from "lucide-react";
 
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { TraceAnalyzerLLMMessage } from "@/types/ai-assistant";
+import {
+  getMessageContentImageSegments,
+  getMessageContentTextSegments,
+} from "@/lib/llm";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
@@ -12,7 +16,13 @@ type TraceChatMessageProps = {
 };
 
 const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
-  const noContent = message.content === "";
+  const textSegments = getMessageContentTextSegments(message.content);
+  const mergedText = textSegments.join("\n\n");
+  const imageSegments = getMessageContentImageSegments(message.content);
+
+  const hasText = mergedText.trim().length > 0;
+  const hasImages = imageSegments.length > 0;
+  const noContent = !hasText && !hasImages;
   const isUser = message.role === LLM_MESSAGE_ROLE.user;
 
   return (
@@ -47,11 +57,27 @@ const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
             <Skeleton className="inline-block h-2 w-1/4" />
           </div>
         ) : (
-          <MarkdownPreview
-            className={cn(message.isError && "text-destructive")}
-          >
-            {message.content}
-          </MarkdownPreview>
+          <>
+            {hasText ? (
+              <MarkdownPreview
+                className={cn(message.isError && "text-destructive")}
+              >
+                {mergedText}
+              </MarkdownPreview>
+            ) : null}
+            {hasImages ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {imageSegments.map((segment, index) => (
+                  <img
+                    key={`${message.id}-image-${index}`}
+                    src={segment.image_url.url}
+                    alt={`Message image ${index + 1}`}
+                    className="max-h-40 rounded-md border border-border object-contain"
+                  />
+                ))}
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </div>

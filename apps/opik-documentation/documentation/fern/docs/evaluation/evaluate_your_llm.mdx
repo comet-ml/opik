@@ -109,6 +109,11 @@ all your test cases.
 If you have already created a Dataset, you can use the get or create dataset methods to
 fetch it.
 
+<Tip>
+  Evaluations that include images just work—the SDK keeps `image_url` blocks intact for models that support vision and
+  automatically falls back to markdown placeholders when the model is text-only.
+</Tip>
+
 <CodeBlocks>
     ```typescript title="TypeScript" language="typescript"
     import { Opik } from "opik";
