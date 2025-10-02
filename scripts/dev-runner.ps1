@@ -37,10 +37,14 @@ $script:SCRIPT_DIR = Split-Path -Parent $PSCommandPath
 $script:PROJECT_ROOT = Split-Path -Parent $SCRIPT_DIR
 $script:BACKEND_DIR = Join-Path $PROJECT_ROOT "apps\opik-backend"
 $script:FRONTEND_DIR = Join-Path $PROJECT_ROOT "apps\opik-frontend"
-$script:BACKEND_PID_FILE = Join-Path $env:TEMP "opik-backend.pid"
-$script:FRONTEND_PID_FILE = Join-Path $env:TEMP "opik-frontend.pid"
-$script:BACKEND_LOG_FILE = Join-Path $env:TEMP "opik-backend.log"
-$script:FRONTEND_LOG_FILE = Join-Path $env:TEMP "opik-frontend.log"
+
+# Cross-platform temp directory handling
+$script:TEMP_DIR = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { "/tmp" }
+
+$script:BACKEND_PID_FILE = Join-Path $script:TEMP_DIR "opik-backend.pid"
+$script:FRONTEND_PID_FILE = Join-Path $script:TEMP_DIR "opik-frontend.pid"
+$script:BACKEND_LOG_FILE = Join-Path $script:TEMP_DIR "opik-backend.log"
+$script:FRONTEND_LOG_FILE = Join-Path $script:TEMP_DIR "opik-frontend.log"
 
 # Logging functions
 function Write-LogInfo {
