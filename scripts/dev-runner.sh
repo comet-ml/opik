@@ -502,12 +502,10 @@ display_backend_process_status() {
 
 # Helper function to display access information
 # Args: $1 = UI URL (e.g., "http://localhost:5174" or "http://localhost:5173")
-#       $2 = configure command (e.g., "opik configure" or "opik configure --use_local")
-#       $3 = show manual edit warning (true/false)
+#       $2 = show manual edit warning (true/false)
 show_access_information() {
     local ui_url="$1"
-    local configure_command="$2"
-    local show_manual_edit="${3:-true}"
+    local show_manual_edit="${2:-true}"
     
     echo ""
     echo -e "${GREEN}🚀 Opik Development Environment is Ready!${NC}"
@@ -518,7 +516,7 @@ show_access_information() {
     echo -e "To use the Opik SDK with your local development environment, you MUST configure it to point to your local instance."
     echo ""
     echo -e "${BLUE}Run SDK Configuration Command:${NC}"
-    echo "  ${configure_command}"
+    echo "  opik configure --use_local"
     
     if [ "$show_manual_edit" = true ]; then
         echo "  # When prompted:"
@@ -544,7 +542,7 @@ show_access_information() {
     echo -e "${BLUE}Alternative - Environment Variables:${NC}"
     # When no manual edit is required (BE-only mode), append /api to the URL
     if [ "$show_manual_edit" = true ]; then
-        echo "  export OPIK_URL_OVERRIDE='${ui_url}'"
+        echo "  export OPIK_URL_OVERRIDE='http://localhost:8080'"
     else
         echo "  export OPIK_URL_OVERRIDE='${ui_url}/api'"
     fi
@@ -595,7 +593,7 @@ verify_services() {
 
     # Show access information if all services are running
     if [ "$infra_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
-        show_access_information "http://localhost:5174" "opik configure" true
+        show_access_information "http://localhost:5174" true
     fi
 
     echo ""
@@ -625,7 +623,7 @@ verify_be_only_services() {
 
     # Show access information if all services are running
     if [ "$docker_services_running" = true ] && [ "$backend_running" = true ]; then
-        show_access_information "http://localhost:5173" "opik configure --use_local" false
+        show_access_information "http://localhost:5173" false
     fi
 
     echo ""
