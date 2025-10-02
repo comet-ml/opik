@@ -1,7 +1,6 @@
 import type { Integration } from '../../lib/constants';
 import clack from '../../utils/clack';
 import { abortIfCancelled } from '../../utils/clack-utils';
-import type { WizardOptions } from '../../utils/types';
 import { EnvironmentProvider } from './EnvironmentProvider';
 
 export const uploadEnvironmentVariablesStep = async (

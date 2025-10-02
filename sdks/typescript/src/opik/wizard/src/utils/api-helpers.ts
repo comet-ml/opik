@@ -107,7 +107,7 @@ export async function isOpikAccessible(
 
     // Consider Opik accessible if we get any response (even 404 means server is running)
     return response.status >= 200 && response.status < 500;
-  } catch (error) {
+  } catch {
     return false;
   }
 }

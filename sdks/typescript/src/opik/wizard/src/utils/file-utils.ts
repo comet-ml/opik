@@ -160,8 +160,13 @@ export async function generateFileChangesForIntegration({
           path.join(installDir, filePath),
           'utf8',
         );
-      } catch (readError) {
-        if (readError.code !== 'ENOENT') {
+      } catch (readError: unknown) {
+        if (
+          readError &&
+          typeof readError === 'object' &&
+          'code' in readError &&
+          readError.code !== 'ENOENT'
+        ) {
           await abort(`Error reading file ${filePath}`);
           continue;
         }
@@ -201,7 +206,7 @@ export async function generateFileChangesForIntegration({
       fileChangeSpinner.stop(
         `${oldContent ? 'Updated' : 'Created'} file ${filePath}`,
       );
-    } catch (error) {
+    } catch {
       await abort(`Error processing file ${filePath}`);
     }
   }

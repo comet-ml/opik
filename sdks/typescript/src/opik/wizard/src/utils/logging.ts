@@ -11,7 +11,6 @@ export function prepareMessage(msg: unknown): string {
 }
 
 export function l(msg: string): void {
-  // eslint-disable-next-line no-console
   console.log(msg);
 }
 
@@ -39,6 +38,6 @@ export function cyan(msg: string): void {
   return l(Chalk.cyan(prepareMessage(msg)));
 }
 
-export function debug(msg: any): void {
+export function debug(msg: unknown): void {
   return l(Chalk.italic.yellow(prepareMessage(msg)));
 }

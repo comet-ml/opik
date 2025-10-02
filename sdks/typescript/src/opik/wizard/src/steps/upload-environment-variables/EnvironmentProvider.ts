@@ -3,7 +3,7 @@ import type { WizardOptions } from '../../utils/types';
 export abstract class EnvironmentProvider {
   protected options: WizardOptions;
 
-  name: string;
+  abstract name: string;
 
   constructor(options: WizardOptions) {
     this.options = options;

@@ -1,0 +1,87 @@
+name: Opik Wizard Publish
+run-name: "Opik Wizard Publish from ${{github.ref_name}} by @${{ github.actor }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERSION: ${{ github.event.inputs.version || inputs.version }}
+      IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
+    defaults:
+      run:
+        working-directory: sdks/typescript/src/opik/wizard
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Update version
+        if: ${{ env.IS_RELEASE }}
+        run: pnpm version ${{ env.VERSION }} --no-git-tag-version
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Commit version changes
+        if: ${{ env.IS_RELEASE }}
+        run: |
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "github-actions"
+          git add package.json pnpm-lock.yaml
+          git commit -m "Update TypeScript Wizard version to ${{ env.VERSION }}"
+
+      - name: Publish to NPM
+        if: ${{ env.IS_RELEASE }}
+        run: pnpm publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Push changes
+        if: ${{ env.IS_RELEASE }}
+        uses: ad-m/github-push-action@v0.8.0
+        with:
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          branch: ${{ github.ref }}
+          force_with_lease: true

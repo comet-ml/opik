@@ -1,5 +1,4 @@
 import chalk from 'chalk';
-import type { WizardOptions } from '../utils/types';
 import type { PackageManager } from '../utils/package-manager';
 import { ISSUES_URL, Integration } from './constants';
 import { INTEGRATION_CONFIG } from './config';
@@ -30,14 +29,12 @@ export const getPRDescription = ({
 };
 
 export const getOutroMessage = ({
-  options,
   integration,
   addedEditorRules,
   packageManager,
   envFileChanged,
   uploadedEnvVars,
 }: {
-  options: WizardOptions;
   integration: Integration;
   addedEditorRules: boolean;
   packageManager?: PackageManager;
@@ -49,16 +46,16 @@ export const getOutroMessage = ({
   const changes = [
     addedEditorRules ? `Added Cursor rules for Opik` : '',
     envFileChanged
-      ? `Added your Project API key to your ${envFileChanged} file`
+      ? `Added your Opik API key to your ${envFileChanged} file`
       : '',
     uploadedEnvVars.length > 0
-      ? `Uploaded your Project API key to your hosting provider Opik`
+      ? `Uploaded your Opik API key to your hosting provider`
       : '',
   ].filter(Boolean);
 
   const nextSteps = [
     uploadedEnvVars.length === 0
-      ? `Upload your Project API key to your hosting provider Opik`
+      ? `Upload your Opik API key to your hosting provider`
       : '',
   ].filter(Boolean);
 
@@ -76,9 +73,8 @@ ${nextSteps.map((step) => `• ${step}`).join('\n')}
 Learn more about Opik + ${integrationConfig.name}: ${chalk.cyan(
     integrationConfig.docsUrl,
   )}
-Note: This uses experimental AI to setup your project. It might have got it wrong, please check!
 
-You should validate your setup by (re)starting your dev environment Opik${
+You should validate your setup by (re)starting your dev environment with Opik${
     packageManager
       ? ` (e.g. ${chalk.cyan(`${packageManager.runScriptCommand} dev`)}).`
       : `.`

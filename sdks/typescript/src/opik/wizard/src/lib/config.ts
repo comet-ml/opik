@@ -2,6 +2,7 @@
 // import { hasPackageInstalled } from '../utils/package-json';
 import type { WizardOptions } from '../utils/types';
 import { Integration } from './constants';
+import { OPIK_ENV_VARS } from './env-constants';
 
 type IntegrationConfig = {
   name: string;
@@ -27,7 +28,7 @@ export const INTEGRATION_CONFIG = {
       'static',
       'node-env.d.*',
     ],
-    detect: async (options) => {
+    detect: async () => {
       // const packageJson = await getPackageDotJson(options);
       // return hasPackageInstalled('nodejs', packageJson);
 
@@ -51,8 +52,7 @@ export const INTEGRATION_CONFIG = {
 - If there's a setup or initialization file, include it`,
     docsUrl:
       'https://www.comet.com/docs/opik/reference/typescript-sdk/overview',
-    defaultChanges:
-      '• Installed opik package\n• Initialized Opik client\n• Set up environment variables (OPIK_API_KEY, OPIK_URL_OVERRIDE)',
+    defaultChanges: `• Installed opik package\n• Initialized Opik client\n• Set up environment variables (${OPIK_ENV_VARS.API_KEY}, ${OPIK_ENV_VARS.URL_OVERRIDE})`,
     nextSteps:
       '• Use @track() decorator to automatically trace functions\n• Use client.trace() for manual trace creation\n• For short-lived scripts: Add await client.flush() before exit\n• Integrate with LLM libraries using trackOpenAI() or OpikTracer\n• Check the documentation for advanced usage: https://www.comet.com/docs/opik/reference/typescript-sdk/overview',
   },

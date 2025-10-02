@@ -1,10 +1,12 @@
+import { OPIK_ENV_VARS } from '../lib/env-constants';
+
 export const getNodejsDocumentation = ({
   language,
 }: {
   language: 'typescript' | 'javascript';
 }) => {
-  const apiKeyText = `process.env.OPIK_API_KEY`;
-  const hostText = `process.env.OPIK_URL_OVERRIDE`;
+  const apiKeyText = `process.env.${OPIK_ENV_VARS.API_KEY}`;
+  const hostText = `process.env.${OPIK_ENV_VARS.URL_OVERRIDE}`;
   const ext = language === 'typescript' ? 'ts' : 'js';
 
   return `
@@ -38,17 +40,21 @@ Configuration precedence: Explicit options → Env vars → ~/.opik.config → D
 Environment Variables:
 --------------------------------------------------
 # Required
-export OPIK_API_KEY="your-api-key"
+export ${OPIK_ENV_VARS.API_KEY}="your-api-key"
 
 # Required: Choose Cloud or Local deployment
-export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"  # For Opik Cloud
-# export OPIK_URL_OVERRIDE="http://localhost:5173/api"    # For Local deployment
+export ${
+    OPIK_ENV_VARS.URL_OVERRIDE
+  }="https://www.comet.com/opik/api"  # For Opik Cloud
+# export ${
+    OPIK_ENV_VARS.URL_OVERRIDE
+  }="http://localhost:5173/api"    # For Local deployment
 
 # Required: Your workspace name
-export OPIK_WORKSPACE_NAME="your-workspace-name"
+export ${OPIK_ENV_VARS.WORKSPACE}="your-workspace-name"
 
 # Optional: Defaults to "Default" if not specified
-export OPIK_PROJECT_NAME="your-project-name"
+export ${OPIK_ENV_VARS.PROJECT_NAME}="your-project-name"
 --------------------------------------------------
 
 Programmatic Configuration:
@@ -576,7 +582,7 @@ export async function handler(event${
     language === 'typescript' ? ': any' : ''
   }) {
   const opik = new Opik({
-    apiKey: process.env.OPIK_API_KEY,
+    apiKey: process.env.${OPIK_ENV_VARS.API_KEY},
     holdUntilFlush: true,  // Prevent auto-flush
   });
 
@@ -614,7 +620,7 @@ CI/CD & Testing:
 --------------------------------------------------
 // Disable tracing in tests
 const opik = new Opik({
-  apiKey: process.env.CI ? 'mock-key' : process.env.OPIK_API_KEY,
+  apiKey: process.env.CI ? 'mock-key' : process.env.${OPIK_ENV_VARS.API_KEY},
   logLevel: process.env.CI ? 'silent' : 'info',
 });
 --------------------------------------------------
@@ -627,10 +633,18 @@ Installation:
   npm install opik
 
 Configuration:
-  export OPIK_API_KEY="your-api-key"                        # Required
-  export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api" # Required (Cloud or Local)
-  export OPIK_WORKSPACE_NAME="your-workspace-name"           # Required
-  export OPIK_PROJECT_NAME="your-project-name"               # Optional (defaults to "Default")
+  export ${
+    OPIK_ENV_VARS.API_KEY
+  }="your-api-key"                        # Required
+  export ${
+    OPIK_ENV_VARS.URL_OVERRIDE
+  }="https://www.comet.com/opik/api" # Required (Cloud or Local)
+  export ${
+    OPIK_ENV_VARS.WORKSPACE
+  }="your-workspace-name"                # Required
+  export ${
+    OPIK_ENV_VARS.PROJECT_NAME
+  }="your-project-name"               # Optional (defaults to "Default")
 
 Basic Usage:
   const opik = new Opik();

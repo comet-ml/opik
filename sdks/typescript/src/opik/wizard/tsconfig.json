@@ -1,25 +1,25 @@
 {
-  "extends": "./tsconfig.build.json",
-
   "compilerOptions": {
-    "moduleResolution": "node16",
-    "module": "node16",
-    "types": ["node", "jest"],
-    "typeRoots": ["./node_modules/@types", "./types"],
+    "target": "ES2022",
+    "module": "Node16",
+    "lib": ["ES2022"],
     "declaration": true,
-    "outDir": "dist"
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "strict": true,
+    "moduleResolution": "Node16",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types", "./types"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
-  "include": [
-    "__tests__",
-    "index.ts",
-    "bin.ts",
-    "src/lib/**/*",
-    "spec/**/*",
-    "src/**/*",
-    "test/**/*",
-    "types/**/*"
-  ],
-  "ts-node": {
-    "files": true
-  }
+  "include": ["src", "bin.ts", "index.ts", "types"],
+  "exclude": ["node_modules", "dist"]
 }

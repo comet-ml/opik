@@ -12,11 +12,8 @@ import {
 } from './package-manager';
 import { fulfillsVersionRange } from './semver';
 import type { Feature, WizardOptions } from './types';
-import {
-  DEFAULT_HOST_URL,
-  ISSUES_URL,
-  type Integration,
-} from '../lib/constants';
+import { ISSUES_URL, type Integration } from '../lib/constants';
+import { OPIK_ENV_VARS } from '../lib/env-constants';
 import clack from './clack';
 import { getCloudUrl } from './urls';
 import { INTEGRATION_CONFIG } from '../lib/config';
@@ -27,6 +24,7 @@ import {
   normalizeOpikUrl,
   MAX_URL_VALIDATION_RETRIES,
 } from './api-helpers';
+import { analytics } from './analytics';
 
 // interface ProjectData {
 //   projectApiKey: string;
@@ -64,6 +62,7 @@ export interface CliSetupConfigContent {
 }
 
 export async function abort(message?: string, status?: number): Promise<never> {
+  await analytics.shutdown('cancelled');
   clack.outro(message ?? 'Wizard setup cancelled.');
   return process.exit(status ?? 1);
 }
@@ -83,6 +82,8 @@ export async function abortIfCancelled<T>(
       ? INTEGRATION_CONFIG[integration].docsUrl
       : 'https://www.comet.com/docs/opik/reference/typescript-sdk/overview';
 
+    await analytics.shutdown('cancelled');
+
     clack.cancel(
       `Wizard setup cancelled. You can read the documentation for ${
         integration ?? 'Opik'
@@ -98,7 +99,6 @@ export function printWelcome(options: {
   wizardName: string;
   message?: string;
 }): void {
-  // eslint-disable-next-line no-console
   console.log('');
   clack.intro(chalk.inverse(` ${options.wizardName} `));
 
@@ -186,19 +186,18 @@ export async function askForItemSelection(
   items: string[],
   message: string,
 ): Promise<{ value: string; index: number }> {
-  const selection: { value: string; index: number } | symbol =
-    await abortIfCancelled(
-      clack.select({
-        maxItems: 12,
-        message: message,
-        options: items.map((item, index) => {
-          return {
-            value: { value: item, index: index },
-            label: item,
-          };
-        }),
+  const selection: { value: string; index: number } = await abortIfCancelled(
+    clack.select({
+      maxItems: 12,
+      message: message,
+      options: items.map((item, index) => {
+        return {
+          value: { value: item, index: index },
+          label: item,
+        };
       }),
-    );
+    }),
+  );
 
   return selection;
 }
@@ -260,7 +259,6 @@ export async function installPackage({
   packageNameDisplayLabel,
   packageManager,
   forceInstall = false,
-  integration,
   installDir,
 }: {
   /** The string that is passed to the package manager CLI as identifier to install (e.g. `posthog-js`, or `posthog-js@^1.100.0`) */
@@ -272,8 +270,6 @@ export async function installPackage({
   packageManager?: PackageManager;
   /** Add force install flag to command to skip install precondition fails */
   forceInstall?: boolean;
-  /** The integration that is being used */
-  integration?: string;
   /** The directory to install the package in */
   installDir: string;
 }): Promise<{ packageManager?: PackageManager }> {
@@ -295,6 +291,9 @@ export async function installPackage({
 
   const pkgManager =
     packageManager || (await getPackageManager({ installDir }));
+
+  // Track package manager for analytics
+  analytics.setTag('packageManager', pkgManager.label);
 
   const legacyPeerDepsFlag =
     pkgManager.name === 'npm' ? '--legacy-peer-deps' : '';
@@ -339,8 +338,7 @@ export async function installPackage({
     clack.log.error(
       `${chalk.red(
         'Encountered the following error during installation:',
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      )}\n\n${e}\n\n${chalk.dim(
+      )}\n\n${String(e)}\n\n${chalk.dim(
         `The wizard has created a \`opik-wizard-installation-error-*.log\` file. If you think this issue is caused by the Opik wizard, create an issue on GitHub and include the log file's content:\n${ISSUES_URL}`,
       )}`,
     );
@@ -352,6 +350,13 @@ export async function installPackage({
       packageNameDisplayLabel ?? packageName,
     )} with ${chalk.bold(pkgManager.label)}.`,
   );
+
+  analytics.capture('package installed', {
+    packageName: packageNameDisplayLabel ?? packageName,
+    packageManager: pkgManager.label,
+    wasAlreadyInstalled: alreadyInstalled,
+    forceInstall,
+  });
 
   return { packageManager: pkgManager };
 }
@@ -397,6 +402,11 @@ export async function ensureNodejsIsInstalled(): Promise<void> {
   const installed = isNodejsInstalled();
 
   if (!installed) {
+    analytics.capture('wrong environment detected', {
+      reason: 'node.js not installed',
+      errorType: 'missing_nodejs',
+    });
+
     const continueWithoutNodejs = await abortIfCancelled(
       clack.confirm({
         message:
@@ -404,6 +414,11 @@ export async function ensureNodejsIsInstalled(): Promise<void> {
         initialValue: false,
       }),
     );
+
+    analytics.capture('wrong environment decision', {
+      errorType: 'missing_nodejs',
+      continued: continueWithoutNodejs,
+    });
 
     if (!continueWithoutNodejs) {
       await abort(undefined, 0);
@@ -417,8 +432,14 @@ export async function getPackageDotJson({
   const packageJsonFileContents = await fs.promises
     .readFile(join(installDir, 'package.json'), 'utf8')
     .catch(() => {
+      analytics.capture('wrong environment detected', {
+        reason: 'package.json not found',
+        errorType: 'missing_package_json',
+        installDir,
+      });
+
       clack.log.error(
-        'Could not find package.json. Make sure to run the wizard in the root of your app!',
+        'Could not find package.json. Make sure to run the Opik wizard in the root of your app!',
       );
       return abort();
     });
@@ -426,9 +447,14 @@ export async function getPackageDotJson({
   let packageJson: PackageDotJson | undefined = undefined;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    packageJson = JSON.parse(packageJsonFileContents);
+    packageJson = JSON.parse(packageJsonFileContents) as PackageDotJson;
   } catch {
+    analytics.capture('wrong environment detected', {
+      reason: 'invalid package.json format',
+      errorType: 'invalid_package_json',
+      installDir,
+    });
+
     clack.log.error(
       `Unable to parse your ${chalk.cyan(
         'package.json',
@@ -484,16 +510,15 @@ export async function getPackageManager({
       ? 'Multiple package managers detected. Please select one:'
       : 'Please select your package manager.';
 
-  const selectedPackageManager: PackageManager | symbol =
-    await abortIfCancelled(
-      clack.select({
-        message,
-        options: options.map((packageManager) => ({
-          value: packageManager,
-          label: packageManager.label,
-        })),
-      }),
-    );
+  const selectedPackageManager: PackageManager = await abortIfCancelled(
+    clack.select({
+      message,
+      options: options.map((packageManager) => ({
+        value: packageManager,
+        label: packageManager.label,
+      })),
+    }),
+  );
 
   return selectedPackageManager;
 }
@@ -544,7 +569,7 @@ async function handleLocalDeploymentConfig(): Promise<string> {
       clack.text({
         message: 'Please enter your Opik instance URL',
         placeholder: 'http://localhost:5173/',
-        validate: (value) => {
+        validate: (value: string) => {
           if (!value || value.trim() === '') {
             return 'URL cannot be empty. Please enter a valid URL...';
           }
@@ -602,7 +627,7 @@ async function handleSelfHostedDeploymentConfig(): Promise<string> {
       clack.text({
         message: 'Please enter your Opik instance URL',
         placeholder: 'https://your-opik-instance.com/',
-        validate: (value) => {
+        validate: (value: string) => {
           if (!value || value.trim() === '') {
             return 'URL cannot be empty. Please enter a valid URL...';
           }
@@ -669,11 +694,7 @@ export async function getOrAskForProjectData(): Promise<{
   const isLocalRunning = await isOpikAccessible(DEFAULT_LOCAL_URL, 3000);
 
   // Step 2: Deployment Type Selection
-  const deploymentChoices: Array<{
-    value: DeploymentType;
-    label: string;
-    hint: string;
-  }> = [
+  const deploymentChoices = [
     {
       value: DeploymentType.CLOUD,
       label: 'Opik Cloud',
@@ -696,13 +717,18 @@ export async function getOrAskForProjectData(): Promise<{
   const deploymentType = (await abortIfCancelled(
     clack.select({
       message: 'Which Opik deployment do you want to log your traces to?',
-      options: deploymentChoices as any,
+      options: deploymentChoices,
       initialValue: isLocalRunning
-        ? DeploymentType.LOCAL
-        : DeploymentType.CLOUD,
+        ? deploymentChoices[2].value
+        : deploymentChoices[0].value,
     }),
     'nodejs' as Integration,
   )) as DeploymentType;
+
+  analytics.capture('deployment type selected', {
+    deploymentType,
+    localDetected: isLocalRunning,
+  });
 
   // Step 3: Handle deployment type specific configuration
   let host: string;
@@ -731,7 +757,7 @@ export async function getOrAskForProjectData(): Promise<{
       clack.text({
         message: 'Enter your Opik API key',
         placeholder: '...',
-        validate: (value) => {
+        validate: (value: string) => {
           if (!value || value.trim() === '') {
             return 'API key is required';
           }
@@ -771,7 +797,7 @@ export async function getOrAskForProjectData(): Promise<{
           : 'Enter your workspace name',
         placeholder: defaultWorkspaceName || 'your-workspace-name',
         defaultValue: defaultWorkspaceName,
-        validate: (value) => {
+        validate: (value: string) => {
           // Allow empty input if defaultValue is set (Enter key will use default)
           if ((!value || value.trim() === '') && !defaultWorkspaceName) {
             return 'Workspace name is required';
@@ -793,6 +819,13 @@ export async function getOrAskForProjectData(): Promise<{
   );
 
   const wizardHash = 'terminal-input-' + Date.now(); // Simple hash for tracking
+
+  analytics.setDistinctId(wizardHash);
+  analytics.capture('project data configured', {
+    hasApiKey: !!projectApiKey,
+    deploymentType,
+    workspaceName,
+  });
 
   return {
     wizardHash,
@@ -955,7 +988,7 @@ export async function askForToolConfigPath(
     clack.text({
       message: `Please enter the path to your ${toolName} config file:`,
       placeholder: join('.', configFileName),
-      validate: (value) => {
+      validate: (value: string) => {
         if (!value) {
           return 'Please enter a path.';
         }
@@ -1006,7 +1039,6 @@ export async function showCopyPasteInstructions(
   // Padding the code snippet to be printed with a \n at the beginning and end
   // This makes it easier to distinguish the snippet from the rest of the output
   // Intentionally logging directly to console here so that the code can be copied/pasted directly
-  // eslint-disable-next-line no-console
   console.log(`\n${codeSnippet}\n`);
 
   await abortIfCancelled(
@@ -1109,37 +1141,6 @@ export async function createNewConfigFile(
   return false;
 }
 
-export async function featureSelectionPrompt<F extends ReadonlyArray<Feature>>(
-  features: F,
-): Promise<{ [key in F[number]['id']]: boolean }> {
-  const selectedFeatures: Record<string, boolean> = {};
-
-  for (const feature of features) {
-    const selected = await abortIfCancelled(
-      clack.select({
-        message: feature.prompt,
-        initialValue: true,
-        options: [
-          {
-            value: true,
-            label: 'Yes',
-            hint: feature.enabledHint,
-          },
-          {
-            value: false,
-            label: 'No',
-            hint: feature.disabledHint,
-          },
-        ],
-      }),
-    );
-
-    selectedFeatures[feature.id] = selected;
-  }
-
-  return selectedFeatures as { [key in F[number]['id']]: boolean };
-}
-
 export async function askShouldInstallPackage(
   pkgName: string,
 ): Promise<boolean> {
@@ -1185,5 +1186,93 @@ export async function askForAIConsent(options: Pick<WizardOptions, 'default'>) {
         }),
       );
 
+  analytics.capture('ai consent', {
+    consent: aiConsent,
+    defaultMode: options.default,
+  });
+
   return aiConsent;
+}
+
+export async function checkAndAskToUpdateConfig(
+  options: Pick<WizardOptions, 'installDir'>,
+): Promise<boolean> {
+  const opikVariables = [
+    OPIK_ENV_VARS.API_KEY,
+    OPIK_ENV_VARS.URL_OVERRIDE,
+    OPIK_ENV_VARS.WORKSPACE,
+    OPIK_ENV_VARS.PROJECT_NAME,
+  ];
+
+  const dotEnvLocalFilePath = join(options.installDir, '.env.local');
+  const dotEnvFilePath = join(options.installDir, '.env');
+
+  let envFilePath: string | undefined;
+  let envContent = '';
+
+  if (fs.existsSync(dotEnvLocalFilePath)) {
+    envFilePath = dotEnvLocalFilePath;
+    envContent = fs.readFileSync(dotEnvLocalFilePath, 'utf8');
+  } else if (fs.existsSync(dotEnvFilePath)) {
+    envFilePath = dotEnvFilePath;
+    envContent = fs.readFileSync(dotEnvFilePath, 'utf8');
+  }
+
+  const foundVariables = opikVariables.filter((variable) => {
+    const regex = new RegExp(`^${variable}=`, 'm');
+    return regex.test(envContent);
+  });
+
+  const hasConfig = foundVariables.length > 0;
+
+  if (!hasConfig) {
+    return true;
+  }
+
+  const relativeEnvPath = envFilePath
+    ? relative(options.installDir, envFilePath)
+    : '.env';
+
+  clack.log.warning(
+    `Found existing Opik configuration in ${chalk.bold.cyan(relativeEnvPath)}`,
+  );
+
+  // Display the found environment variables
+  const variableValues: Record<string, string> = {};
+  foundVariables.forEach((variable) => {
+    const regex = new RegExp(`^${variable}=(.*)$`, 'm');
+    const match = envContent.match(regex);
+    if (match) {
+      variableValues[variable] = match[1];
+    }
+  });
+
+  if (Object.keys(variableValues).length > 0) {
+    clack.log.message('');
+    clack.log.message(chalk.bold('Current configuration:'));
+    Object.entries(variableValues).forEach(([key, value]) => {
+      // Mask sensitive values (API keys) but show workspace and project name
+      const displayValue =
+        key === OPIK_ENV_VARS.API_KEY && value.length > 8
+          ? `${value.substring(0, 4)}...${value.substring(value.length - 4)}`
+          : value;
+      clack.log.message(
+        `  ${chalk.cyan(key)}: ${chalk.dim(displayValue || '(empty)')}`,
+      );
+    });
+    clack.log.message('');
+  }
+
+  const shouldUpdate = await abortIfCancelled(
+    clack.confirm({
+      message: 'Do you want to update it with new configuration?',
+      initialValue: false,
+    }),
+  );
+
+  if (!shouldUpdate) {
+    clack.log.info('Keeping existing configuration');
+  }
+
+  return shouldUpdate;
 }

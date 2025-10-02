@@ -7,7 +7,7 @@ export function executeSync(command: string): string {
 
 export function execute(command: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    child_process.exec(command, (error, stdout, _) => {
+    child_process.exec(command, (error, stdout) => {
       if (error) {
         reject(error);
         return;

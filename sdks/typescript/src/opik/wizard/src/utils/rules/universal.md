@@ -11,7 +11,7 @@ export OPIK_API_KEY="your-api-key"
 export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"  // For Opik Cloud
 export OPIK_URL_OVERRIDE="http://localhost:5173/api"       // For local
 export OPIK_PROJECT_NAME="your-project-name"
-export OPIK_WORKSPACE_NAME="your-workspace-name"
+export OPIK_WORKSPACE="your-workspace-name"
 ```
 
 Or pass configuration to the Opik client constructor:

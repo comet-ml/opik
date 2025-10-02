@@ -115,6 +115,45 @@ popular integrations:
     </Steps>
 
   </Tab>
+  <Tab title="Opik Wizard (TS)" value="opik-wizard-ts">
+    The Opik Wizard is an interactive CLI tool that helps you quickly add Opik SDK to your Node.js/TypeScript project with guided setup:
+
+    <Steps>
+      <Step>
+        Run the wizard in your project directory:
+
+        ```bash
+        npx @opik/wizard
+        ```
+
+        The wizard will:
+        - Detect your project setup (package manager, TypeScript config)
+        - Install the Opik SDK and required dependencies
+        - Help you configure environment variables
+        - Set up tracing for your LLM integrations (OpenAI, LangChain, etc.)
+      </Step>
+      <Step>
+        Follow the interactive prompts to:
+        - Choose your package manager (npm, yarn, pnpm, bun)
+        - Select which integrations to set up
+        - Configure your API keys and environment variables
+        - Apply formatting with Prettier (optional)
+      </Step>
+      <Step>
+        Once complete, the wizard will have:
+        - Installed all necessary packages
+        - Created or updated your `.env` file with Opik configuration
+        - Set up tracing in your application code
+
+        Your project is now ready to log traces to Opik!
+      </Step>
+    </Steps>
+
+    <Tip>
+      The wizard supports custom options like `--debug` for verbose logging, `--force-install` to skip peer dependency checks, and `--install-dir` to specify a custom directory. Run `npx @opik/wizard --help` to see all available options.
+    </Tip>
+
+  </Tab>
   <Tab title="OpenAI (Python)" value="openai-python-sdk">
     If you are using the OpenAI Python SDK, you can integrate by:
 

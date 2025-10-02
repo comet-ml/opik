@@ -75,4 +75,5 @@ yargs(hideBin(process.argv))
   .alias('help', 'h')
   .version()
   .alias('version', 'v')
-  .wrap(process.stdout.isTTY ? yargs.terminalWidth() : 80).argv;
+  .wrap(process.stdout.isTTY ? yargs.terminalWidth() : 80)
+  .parse();

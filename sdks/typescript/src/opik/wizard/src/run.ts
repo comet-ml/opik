@@ -11,6 +11,7 @@ import { INTEGRATION_CONFIG, INTEGRATION_ORDER } from './lib/config';
 import { EventEmitter } from 'events';
 import chalk from 'chalk';
 import { RateLimitError } from './utils/errors';
+import { analytics } from './utils/analytics';
 
 EventEmitter.defaultMaxListeners = 50;
 
@@ -23,6 +24,13 @@ type Args = {
 };
 
 export async function runWizard(argv: Args) {
+  // Collect system information for analytics
+  analytics.setTag('os', process.platform);
+  analytics.setTag('nodeVersion', process.version);
+  analytics.setTag('arch', process.arch);
+
+  analytics.capture('wizard started');
+
   const finalArgs = {
     ...argv,
     ...readEnvironment(),
@@ -46,10 +54,17 @@ export async function runWizard(argv: Args) {
     default: finalArgs.default ?? false,
   };
 
+  analytics.setTag('debug', wizardOptions.debug);
+  analytics.setTag('forceInstall', wizardOptions.forceInstall);
+  analytics.setTag('default', wizardOptions.default);
+
   clack.intro(`Welcome to the Opik setup wizard ✨`);
 
   const integration =
     finalArgs.integration ?? (await getIntegrationForSetup(wizardOptions));
+
+  analytics.setTag('integration', integration);
+  analytics.capture('integration selected', { integration });
 
   try {
     switch (integration) {
@@ -58,17 +73,41 @@ export async function runWizard(argv: Args) {
         break;
       default:
         clack.log.error('No setup wizard selected!');
+        analytics.capture('wizard error', {
+          error: 'No setup wizard selected',
+        });
+        await analytics.shutdown('error');
+        process.exit(1);
     }
+
+    await analytics.shutdown('success');
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    analytics.capture('wizard error', {
+      error: errorMessage,
+      errorType: error instanceof RateLimitError ? 'rate_limit' : 'unknown',
+    });
+
     if (error instanceof RateLimitError) {
-      clack.log.error('Wizard usage limit reached. Please try again later.');
+      clack.log.error(
+        'Opik wizard usage limit reached. Please try again later.',
+      );
     } else {
+      if (error instanceof Error) {
+        analytics.captureException(error, {
+          integration,
+          arguments: JSON.stringify(finalArgs),
+        });
+      }
       clack.log.error(
         `Something went wrong. You can read the documentation at ${chalk.cyan(
           `${INTEGRATION_CONFIG[integration].docsUrl}`,
         )} to set up Opik manually.`,
       );
     }
+
+    await analytics.shutdown('error');
     process.exit(1);
   }
 }
@@ -82,7 +121,7 @@ async function detectIntegration(
   );
 
   for (const [integration, config] of integrationConfigs) {
-    const detected = await config.detect(options);
+    const detected = await config.detect();
     if (detected) {
       return integration as Integration;
     }

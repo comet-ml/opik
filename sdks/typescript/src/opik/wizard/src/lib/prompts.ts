@@ -1,4 +1,5 @@
 import { PromptTemplate } from '@langchain/core/prompts';
+import { OPIK_ENV_VARS } from './env-constants';
 
 export const baseFilterFilesPromptTemplate = new PromptTemplate({
   inputVariables: [
@@ -64,7 +65,7 @@ CRITICAL OPIK PATTERNS:
 - For short-lived scripts/CLI tools: Always add \`await client.flush()\` before exit
 - For integrations: Use \`trackOpenAI()\`, \`OpikTracer\`, etc.
 - DO NOT use provider patterns like \`<OpikProvider>\` - that's not how Opik works
-- Environment variables: OPIK_API_KEY and OPIK_URL_OVERRIDE
+- Environment variables: ${OPIK_ENV_VARS.API_KEY} and ${OPIK_ENV_VARS.URL_OVERRIDE}
 
 Rules:
 - Preserve the existing code formatting and style

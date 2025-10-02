@@ -42,3 +42,6 @@ export const DEFAULT_HOST_URL = IS_DEV
   ? 'http://localhost:5173'
   : 'https://www.comet.com';
 export const DUMMY_PROJECT_API_KEY = '_YOUR_OPIK_API_KEY_';
+export const ANALYTICS_POSTHOG_PUBLIC_PROJECT_WRITE_KEY =
+  'phc_NAfd7RuhI3CPTaYZ7wnjStOgyvlseao9JHp5fWkTkzM';
+export const ANALYTICS_HOST_URL = 'https://us.i.posthog.com';

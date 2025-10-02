@@ -51,7 +51,7 @@ export async function runPrettierStep({
         },
       );
     });
-  } catch (e) {
+  } catch {
     prettierSpinner.stop(
       'Prettier failed to run. You may want to format the changes manually.',
     );

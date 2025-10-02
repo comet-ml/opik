@@ -74,7 +74,7 @@ export async function addOrUpdateEnvironmentVariablesStep({
       }
 
       addedEnvVariables = true;
-    } catch (error) {
+    } catch {
       clack.log.warning(
         `Failed to update environment variables in ${chalk.bold.cyan(
           relativeEnvFilePath,
@@ -100,7 +100,7 @@ export async function addOrUpdateEnvironmentVariablesStep({
       );
 
       addedEnvVariables = true;
-    } catch (error) {
+    } catch {
       clack.log.warning(
         `Failed to create ${chalk.bold.cyan(
           relativeEnvFilePath,
@@ -142,7 +142,7 @@ export async function addOrUpdateEnvironmentVariablesStep({
           )} to include ${chalk.bold.cyan(envFileName)}.`,
         );
         addedGitignore = true;
-      } catch (error) {
+      } catch {
         clack.log.warning(
           `Failed to update ${chalk.bold.cyan(
             '.gitignore',
@@ -171,7 +171,7 @@ export async function addOrUpdateEnvironmentVariablesStep({
         `Created ${chalk.bold.cyan('.gitignore')} with environment files.`,
       );
       addedGitignore = true;
-    } catch (error) {
+    } catch {
       clack.log.warning(
         `Failed to create ${chalk.bold.cyan(
           '.gitignore',

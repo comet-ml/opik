@@ -122,7 +122,7 @@ export const query = async <S>({
   let parsedContent: unknown;
   try {
     parsedContent = JSON.parse(content);
-  } catch (error) {
+  } catch {
     debug('Failed to parse LLM response as JSON:', content);
     throw new Error('Invalid JSON response from LLM');
   }
