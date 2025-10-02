@@ -19,5 +19,4 @@ public record OpenRouterErrorMessage(
     public ErrorMessage toErrorMessage() {
         return new ErrorMessage(error.code(), error.message());
     }
-
 }

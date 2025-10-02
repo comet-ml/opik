@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -184,7 +185,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             userFacingLogger.info("Received response for threadId: '{}':\n\n{}", threadId, chatResponse);
         } catch (Exception exception) {
             userFacingLogger.error("Unexpected error while scoring threadId: '{}' with ruleName: '{}': \n\n{}",
-                    threadId, rule.getName(), exception.getCause().getMessage());
+                    threadId, rule.getName(), Optional.ofNullable(exception.getCause())
+                            .map(Throwable::getMessage)
+                            .orElse(exception.getMessage()));
             throw exception;
         }
 
