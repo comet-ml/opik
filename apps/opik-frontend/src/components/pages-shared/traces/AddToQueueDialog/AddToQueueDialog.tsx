@@ -203,7 +203,7 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
               className="mb-4"
               {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
             />
-            <div className="mb-4 flex items-center justify-between">
+            <div className="my-2 flex items-center justify-between">
               <h3 className="comet-title-xs">Select an annotation queue</h3>
               <Button
                 variant="ghost"

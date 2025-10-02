@@ -219,7 +219,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
               ]}
             />
-            <div className="mb-4 flex items-center justify-between">
+            <div className="my-2 flex items-center justify-between">
               <h3 className="comet-title-xs">Select a dataset</h3>
               <Button
                 variant="ghost"
