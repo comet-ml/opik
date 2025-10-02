@@ -99,7 +99,7 @@ const PlaygroundVariableCell: React.FunctionComponent<
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="pt-3"
+      className="pt-5"
     >
       <div className="size-full pl-1">
         <div className="h-[var(--cell-top-height)] items-center font-semibold">
