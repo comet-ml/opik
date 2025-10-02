@@ -454,42 +454,19 @@ function Start-Backend {
         Write-LogDebug "Starting backend with JAR: $jarFile"
         Write-LogDebug "Command: java -jar $jarFile server config.yml"
         
-        # Start backend in background
-        $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $processInfo.FileName = "java"
-        $processInfo.Arguments = "-jar `"$jarFile`" server config.yml"
-        $processInfo.RedirectStandardOutput = $true
-        $processInfo.RedirectStandardError = $true
-        $processInfo.UseShellExecute = $false
-        $processInfo.CreateNoWindow = $true
-        $processInfo.WorkingDirectory = $script:BACKEND_DIR
+        # Start backend in background with output redirected to log file
+        # Use Start-Process for better cross-platform compatibility
+        $processParams = @{
+            FilePath = "java"
+            ArgumentList = @("-jar", $jarFile, "server", "config.yml")
+            WorkingDirectory = $script:BACKEND_DIR
+            RedirectStandardOutput = $script:BACKEND_LOG_FILE
+            RedirectStandardError = $script:BACKEND_LOG_FILE
+            NoNewWindow = $true
+            PassThru = $true
+        }
         
-        $process = New-Object System.Diagnostics.Process
-        $process.StartInfo = $processInfo
-        
-        # Set up log file handling
-        $logFile = [System.IO.StreamWriter]::new($script:BACKEND_LOG_FILE, $false)
-        
-        $process.add_OutputDataReceived({
-            param($sender, $e)
-            if ($e.Data) {
-                $logFile.WriteLine($e.Data)
-                $logFile.Flush()
-            }
-        })
-        
-        $process.add_ErrorDataReceived({
-            param($sender, $e)
-            if ($e.Data) {
-                $logFile.WriteLine($e.Data)
-                $logFile.Flush()
-            }
-        })
-        
-        [void]$process.Start()
-        $process.BeginOutputReadLine()
-        $process.BeginErrorReadLine()
-        
+        $process = Start-Process @processParams
         $backendPid = $process.Id
         Set-Content -Path $script:BACKEND_PID_FILE -Value $backendPid
         
@@ -498,7 +475,9 @@ function Start-Backend {
         # Wait a bit and check if process is still running
         Start-Sleep -Seconds 3
         
-        if (-not $process.HasExited) {
+        $stillRunning = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
+        
+        if ($stillRunning) {
             Write-LogSuccess "Backend started successfully (PID: $backendPid)"
             Write-LogInfo "Backend logs: Get-Content -Wait '$script:BACKEND_LOG_FILE'"
             
@@ -553,44 +532,21 @@ function Start-Frontend {
         
         Write-LogDebug "Starting frontend with: npm run start"
         
-        # Start frontend in background
+        # Start frontend in background with output redirected to log file
+        # Use Start-Process for better cross-platform compatibility
         $env:CI = "true"
         
-        $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $processInfo.FileName = "cmd.exe"
-        $processInfo.Arguments = "/c npm run start"
-        $processInfo.RedirectStandardOutput = $true
-        $processInfo.RedirectStandardError = $true
-        $processInfo.UseShellExecute = $false
-        $processInfo.CreateNoWindow = $true
-        $processInfo.WorkingDirectory = $script:FRONTEND_DIR
+        $processParams = @{
+            FilePath = "npm"
+            ArgumentList = @("run", "start")
+            WorkingDirectory = $script:FRONTEND_DIR
+            RedirectStandardOutput = $script:FRONTEND_LOG_FILE
+            RedirectStandardError = $script:FRONTEND_LOG_FILE
+            NoNewWindow = $true
+            PassThru = $true
+        }
         
-        $process = New-Object System.Diagnostics.Process
-        $process.StartInfo = $processInfo
-        
-        # Set up log file handling
-        $logFile = [System.IO.StreamWriter]::new($script:FRONTEND_LOG_FILE, $false)
-        
-        $process.add_OutputDataReceived({
-            param($sender, $e)
-            if ($e.Data) {
-                $logFile.WriteLine($e.Data)
-                $logFile.Flush()
-            }
-        })
-        
-        $process.add_ErrorDataReceived({
-            param($sender, $e)
-            if ($e.Data) {
-                $logFile.WriteLine($e.Data)
-                $logFile.Flush()
-            }
-        })
-        
-        [void]$process.Start()
-        $process.BeginOutputReadLine()
-        $process.BeginErrorReadLine()
-        
+        $process = Start-Process @processParams
         $frontendPid = $process.Id
         Set-Content -Path $script:FRONTEND_PID_FILE -Value $frontendPid
         
@@ -599,7 +555,9 @@ function Start-Frontend {
         # Wait a bit and check if process is still running
         Start-Sleep -Seconds 3
         
-        if (-not $process.HasExited) {
+        $stillRunning = Get-Process -Id $frontendPid -ErrorAction SilentlyContinue
+        
+        if ($stillRunning) {
             Write-LogSuccess "Frontend started successfully (PID: $frontendPid)"
             Write-LogInfo "Frontend logs: Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
         }
