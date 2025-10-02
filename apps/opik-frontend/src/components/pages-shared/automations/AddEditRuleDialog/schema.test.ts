@@ -20,14 +20,6 @@ const imageContent: LLMMessageContentItem[] = [
   },
 ];
 
-const imageContentWithPlaceholderSpacing: LLMMessageContentItem[] = [
-  { type: "text", text: "Hello\n\n" },
-  {
-    type: "image_url",
-    image_url: { url: "https://example.com/cat.png" },
-  },
-];
-
 describe("automation schema serialization", () => {
   it("serializes structured content when building the backend payload", () => {
     const backendPayload = convertLLMJudgeDataToLLMJudgeObject({
@@ -87,8 +79,6 @@ describe("automation schema serialization", () => {
     });
 
     expect(formData.messages).toHaveLength(1);
-    expect(formData.messages[0].content).toEqual(
-      imageContentWithPlaceholderSpacing,
-    );
+    expect(formData.messages[0].content).toEqual(imageContent);
   });
 });

@@ -191,12 +191,14 @@ const buildPartsFromPattern = (
   const parts: LLMMessageContentItem[] = [];
   let match: RegExpExecArray | null;
   let lastIndex = 0;
+  let foundMatch = false;
 
   pattern.lastIndex = 0;
 
   while ((match = pattern.exec(template)) !== null) {
-    const precedingText = template.slice(lastIndex, match.index);
-    if (precedingText.trim().length > 0) {
+    foundMatch = true;
+    const precedingText = template.slice(lastIndex, match.index).trim();
+    if (precedingText.length > 0) {
       parts.push({ type: "text", text: precedingText });
     }
 
@@ -208,8 +210,8 @@ const buildPartsFromPattern = (
     lastIndex = pattern.lastIndex;
   }
 
-  const trailingText = template.slice(lastIndex);
-  if (trailingText.trim().length > 0) {
+  const trailingText = template.slice(lastIndex).trim();
+  if (foundMatch && trailingText.length > 0) {
     parts.push({ type: "text", text: trailingText });
   }
 
