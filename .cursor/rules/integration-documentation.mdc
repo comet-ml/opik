@@ -74,7 +74,7 @@ description: Start here to integrate Opik into your [INTEGRATION NAME]-based gen
   - `title: Observability for OpenAI with Opik` (Python only)
   - `title: Observability for OpenAI (TypeScript) with Opik` (TypeScript version)
   - `title: Observability for Spring AI (Java) with Opik` (Java only)
-  - `title: Observability for Semantic Kernel (.NET) with Opik` (.NET only)
+  - `title: Observability for Semantic Kernel (Python) with Opik` (Python version of Semantic Kernel)
 
 ### Content Structure
 
@@ -372,14 +372,38 @@ All integration documentation is now consolidated into a single comprehensive fo
 
 #### Integration Tab Structure:
 
-**Categories in the integrations tab:**
-- **Native**: Python SDK, TypeScript SDK, OpenTelemetry
-- **Frameworks**: AG2, Agno, Autogen, CrewAI, DSPy, Haystack, Instructor, LangChain, etc.
-- **Evaluation**: Ragas and other evaluation frameworks
-- **Model Providers**: Anthropic, Bedrock, OpenAI, Groq, Ollama, etc.
-- **Gateways**: LiteLLM and other gateway solutions
-- **No-Code Tools**: AIsuite, BeeAI, Cursor, Dify, Flowise, etc.
-- **OpenTelemetry**: Ruby SDK, Pydantic AI, and other OTEL integrations
+**Language-Based Organization:**
+
+The integrations tab is now organized by **programming language** to improve discoverability:
+
+1. **TypeScript** - TypeScript/JavaScript integrations with icon `fa-brands fa-js`
+   - Frameworks (Agno, BeeAI, LangChain, Mastra, Vercel AI SDK)
+   - Model Providers (Cloudflare Workers AI, OpenAI)
+   - Manual Integration (TypeScript SDK)
+
+2. **Python** - Python integrations with icon `fa-brands fa-python`
+   - Frameworks (AG2, Autogen, CrewAI, DSPy, Haystack, etc.)
+   - Model Providers (Anthropic, Bedrock, OpenAI, Groq, etc.)
+   - Dataset Management (Gretel, Hugging Face Datasets)
+   - Evaluation (Ragas)
+   - Gateways (AISuite, LiteLLM, OpenRouter)
+   - Other (Guardrails AI, Semantic Kernel)
+   - Manual Integration (Python SDK, OpenTelemetry Python SDK)
+
+3. **Java** - Java integrations with icon `fa-brands fa-java`
+   - Spring AI
+
+4. **.NET** - .NET integrations with icon `fa-solid fa-code`
+   - Coming soon! No integrations yet.
+
+5. **Ruby** - Ruby integrations with icon `fa-solid fa-gem`
+   - OpenTelemetry Ruby SDK
+
+6. **No-Code** - No-code tools with icon `fa-solid fa-wand-magic-sparkles`
+   - Cursor, Dify, Flowise
+
+7. **Multi-Language** - Multi-language support with icon `fa-solid fa-globe`
+   - OpenTelemetry Overview
 
 #### Integration Type Mapping:
 
@@ -446,12 +470,47 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 
 #### 2. Integration Overview Documentation
 **File**: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/overview.mdx`
-**Structure**: Card-based layout organized by category (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry, Other)
-- Update the integration cards with consistent naming
+**Structure**: Language-based layout with H2 headers using `<Icon>` components
+
+**Language Section Headers:**
+- Use `<Icon icon="..." />` component in H2 headers for language icons
+- Example: `## <Icon icon="fa-brands fa-js" /> TypeScript`
+- Icons: `fa-brands fa-js` (TypeScript), `fa-brands fa-python` (Python), `fa-brands fa-java` (Java), `fa-solid fa-code` (.NET), `fa-solid fa-gem` (Ruby), `fa-solid fa-wand-magic-sparkles` (No-Code), `fa-solid fa-globe` (Multi-Language)
+
+**Content Organization:**
+- Each language has an H2 header with an icon (e.g., `## <Icon icon="fa-brands fa-python" /> Python`)
+- Within each language, use H3 headers for subsections (Frameworks, Model Providers, etc.)
+- Use H3 "Manual Integration" subsection for SDKs at the bottom of each language
+- Organize integrations using `<CardGroup cols={3}>` and `<Card>` components
 - Ensure all cards have proper hrefs pointing to `/docs/opik/integrations/[integration_name]`
-- Organize integrations by their appropriate categories using `<CardGroup cols={3}>` and `<Card>` components
 - **No Colab badges** - comprehensive examples are included in the integration docs
 - Use consistent card structure: `<Card title="Integration Name" href="/docs/opik/integrations/integration-name" />`
+
+**Example Structure:**
+```markdown
+## <Icon icon="fa-brands fa-python" /> Python
+
+### Frameworks
+
+<CardGroup cols={3}>
+  <Card title="LangChain" href="/docs/opik/integrations/langchain" />
+  <Card title="CrewAI" href="/docs/opik/integrations/crewai" />
+</CardGroup>
+
+### Model Providers
+
+<CardGroup cols={3}>
+  <Card title="OpenAI" href="/docs/opik/integrations/openai" />
+  <Card title="Anthropic" href="/docs/opik/integrations/anthropic" />
+</CardGroup>
+
+### Manual Integration
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" href="https://www.comet.com/docs/opik/python-sdk-reference/" />
+  <Card title="OpenTelemetry Python SDK" href="/docs/opik/integrations/opentelemetry-python-sdk" />
+</CardGroup>
+```
 
 #### 3. Integration Tab Navigation
 **File**: `apps/opik-documentation/documentation/fern/docs.yml`
@@ -465,10 +524,10 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 
 **For Integration Documentation** (Required for ALL integrations):
 - **Tab**: `integrations` (dedicated integrations tab)
-- **Categories**: Organized into sections (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry)
+- **Organization**: Language-based sections with icons (TypeScript, Python, Java, .NET, Ruby, No-Code, Multi-Language)
 - **Path**: `docs/tracing/integrations/[integration_name].mdx`
 - **Slug**: `[integration_name]` (matches the filename)
-- **URL Structure**: `/docs/opik/integrations/[integration_name]` (clean URLs without category folders)
+- **URL Structure**: `/docs/opik/integrations/[integration_name]` (clean URLs without language/category folders)
 
 **Navigation Structure Example:**
 ```yaml
@@ -477,19 +536,61 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
     - page: Overview
       path: docs/tracing/integrations/overview.mdx
       slug: overview
-    - section: Native
+    - section: TypeScript
       skip-slug: true
+      icon: fa-brands fa-js
       contents:
-        - page: Python SDK
+        - section: Frameworks
+          skip-slug: true
+          contents:
+            - page: LangChain
+              path: docs/tracing/integrations/langchainjs.mdx
+              slug: langchainjs
+            - page: Vercel AI SDK
+              path: docs/tracing/integrations/vercel-ai-sdk.mdx
+              slug: vercel-ai-sdk
+        - section: Model Providers
+          skip-slug: true
+          contents:
+            - page: OpenAI
+              path: docs/tracing/integrations/openai-typescript.mdx
+              slug: openai-typescript
+        - page: Opik TypeScript SDK
+          path: docs/reference/typescript-sdk/overview.mdx
+          slug: typescript-sdk
+    - section: Python
+      skip-slug: true
+      icon: fa-brands fa-python
+      contents:
+        - section: Frameworks
+          skip-slug: true
+          contents:
+            - page: LangChain
+              path: docs/tracing/integrations/langchain.mdx
+              slug: langchain
+            - page: CrewAI
+              path: docs/tracing/integrations/crewai.mdx
+              slug: crewai
+        - section: Model Providers
+          skip-slug: true
+          contents:
+            - page: OpenAI
+              path: docs/tracing/integrations/openai.mdx
+              slug: openai
+        - page: Opik Python SDK
           path: docs/reference/python-sdk/overview.mdx
           slug: python-sdk
-    - section: Frameworks
-      skip-slug: true
-      contents:
-        - page: LangChain (Python)
-          path: docs/tracing/integrations/langchain.mdx
-          slug: langchain
+        - page: OpenTelemetry Python SDK
+          path: docs/tracing/opentelemetry/python-sdk.mdx
+          slug: opentelemetry-python-sdk
 ```
+
+**Navigation Structure Rules:**
+- Each language section has `skip-slug: true` to prevent URL pollution
+- Each language section has an `icon` property with Font Awesome icon class
+- Within each language, subsections (Frameworks, Model Providers, etc.) also have `skip-slug: true`
+- Manual integration pages (SDKs) are placed directly under the language section, not in a subsection
+- All integrations maintain clean URLs: `/docs/opik/integrations/[integration_name]`
 
 ### Integration Information Requirements
 
@@ -500,15 +601,38 @@ When adding, updating, or removing integrations in Opik, you must update **ALL**
 - **Card Structure**: Properly formatted card with correct href
 - **Category**: Properly categorized in the appropriate section (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry, Other)
 
-#### Integration Categories:
-- **Native**: Python SDK, TypeScript SDK, OpenTelemetry
-- **Frameworks**: AG2, Agno, Autogen, CrewAI, DSPy, Haystack, Instructor, LangChain, etc.
-- **Evaluation**: Ragas and other evaluation frameworks
-- **Model Providers**: Anthropic, Bedrock, OpenAI, Groq, Ollama, etc.
-- **Gateways**: LiteLLM, OpenRouter, AISuite
-- **No-Code Tools**: Dify, Flowise, Langflow, OpenWebUI
-- **OpenTelemetry**: OpenTelemetry Overview, Python SDK, Ruby SDK
-- **Other**: Guardrails AI and additional integrations
+#### Integration Organization:
+
+**Language-Based Structure:**
+
+1. **TypeScript** (`icon: fa-brands fa-js`)
+   - **Frameworks**: Agno, BeeAI, LangChain, Mastra, Vercel AI SDK
+   - **Model Providers**: Cloudflare Workers AI, OpenAI
+   - **Manual Integration**: TypeScript SDK
+
+2. **Python** (`icon: fa-brands fa-python`)
+   - **Frameworks**: AG2, Autogen, CrewAI, DSPy, Google ADK, Haystack, Instructor, LangChain, LangGraph, LiveKit, Llama Index, OpenAI Agents, Pipecat, Pydantic AI, Smolagents, Strands Agents, VoltAgent
+   - **Model Providers**: Anthropic, Bedrock, BytePlus, Cohere, DeepSeek, Fireworks AI, Gemini, Groq, Mistral AI, Novita AI, Ollama, OpenAI, Predibase, Together AI, WatsonX, xAI Grok
+   - **Dataset Management**: Gretel, Hugging Face Datasets
+   - **Evaluation**: Ragas
+   - **Gateways**: AISuite, LiteLLM, OpenRouter
+   - **Other**: Guardrails AI, Semantic Kernel (Python)
+   - **Manual Integration**: Python SDK, OpenTelemetry Python SDK
+
+3. **Java** (`icon: fa-brands fa-java`)
+   - Spring AI
+
+4. **.NET** (`icon: fa-solid fa-code`)
+   - Coming soon! No integrations yet.
+
+5. **Ruby** (`icon: fa-solid fa-gem`)
+   - OpenTelemetry Ruby SDK
+
+6. **No-Code** (`icon: fa-solid fa-wand-magic-sparkles`)
+   - Cursor, Dify, Flowise
+
+7. **Multi-Language** (`icon: fa-solid fa-globe`)
+   - OpenTelemetry Overview
 
 #### Card Structure Requirements:
 - Use `<CardGroup cols={3}>` for consistent 3-column layout
@@ -522,16 +646,20 @@ When modifying integrations, verify:
 
 - [ ] All README files are updated (README.md, readme_CN.md, readme_JP.md, readme_KO.md)
 - [ ] README integration tables use 3-column format (Integration, Description, Documentation)
-- [ ] Integration overview cards are updated with correct categories and card structure
+- [ ] Integration overview cards are updated with correct language-based organization
+- [ ] Language headers use `<Icon icon="..." />` component in H2 headers
+- [ ] Subsections use H3 headers within each language
+- [ ] Manual Integration subsection includes SDKs at the bottom of each language
 - [ ] Integration tab navigation in docs.yml is updated
+- [ ] Integration is placed in the correct language section with proper icon
+- [ ] Integration is properly categorized in the correct subsection (Frameworks, Model Providers, etc.)
 - [ ] Integration names are consistent across all locations
 - [ ] Documentation links point to `/docs/opik/integrations/[integration_name]`
-- [ ] Integration is properly categorized in the correct section
-- [ ] Categories are properly assigned (Native, Frameworks, Evaluation, Model Providers, Gateways, No-Code Tools, OpenTelemetry)
+- [ ] Language sections have `icon` property with Font Awesome icon class
+- [ ] All sections have `skip-slug: true` to maintain clean URLs
 - [ ] Descriptions are clear and consistent
 - [ ] No duplicate navigation entries exist
 - [ ] Enterprise deployment configuration is included for OTel integrations
-- [ ] `skip-slug: true` is set for all category sections
 - [ ] Integration page contains comprehensive content (no separate cookbook needed)
 - [ ] No Colab links in README files (comprehensive examples in integration docs)
 
@@ -550,9 +678,15 @@ When modifying integrations, verify:
 - ❌ Inconsistent naming between locations
 - ❌ Broken documentation links pointing to old `/tracing/integrations/` URLs instead of `/integrations/`
 - ❌ Incorrect categorization of integrations in the integrations tab
-- ❌ Missing `skip-slug: true` for category sections in docs.yml
+- ❌ Placing integration in wrong language section
+- ❌ Missing `icon` property for language sections in docs.yml
+- ❌ Missing `skip-slug: true` for language and subsection sections in docs.yml
 - ❌ Missing navigation entries in docs.yml integrations tab
 - ❌ Duplicate entries in docs.yml navigation structure
+- ❌ Not using `<Icon icon="..." />` component in overview page H2 headers
+- ❌ Using wrong icon for language sections
+- ❌ Not including "Manual Integration" H3 subsection for SDKs
+- ❌ Placing SDKs in a subsection instead of directly under language section
 - ❌ Screenshot positioned at the bottom instead of near the top (after framework overview)
 - ❌ Screenshot placed in incorrect directory (`static/img/tracing/` instead of `fern/img/tracing/`)
 - ❌ Screenshot file naming doesn't follow `[integration_name]_integration.png` pattern
@@ -564,7 +698,7 @@ When modifying integrations, verify:
 - ❌ Creating separate cookbook documentation instead of merging content into integration pages
 - ❌ Adding Colab notebook links instead of including comprehensive examples in integration docs
 - ❌ Using incorrect card structure (missing CardGroup wrapper or wrong href format)
-- ❌ Placing integrations in wrong category sections
+- ❌ Placing integrations in wrong language or subsection
 - ❌ Inconsistent card titles or hrefs in integration overview
 - ❌ Adding Colab links in README files instead of pointing to comprehensive integration docs
 - ❌ Using old `/tracing/integrations/` URLs in README instead of `/integrations/`
