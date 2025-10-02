@@ -6483,5 +6483,116 @@ class DatasetsResourceTest {
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
         }
+
+        @Test
+        @DisplayName("Success: Get experiment items stats with is_not_empty feedback scores filter")
+        void getExperimentItemsStats__withFeedbackScoresIsNotEmptyFilter() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Create dataset items
+            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            // Create trace WITH feedback score
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            // Create trace WITHOUT feedback score
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            // Create experiment items
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .build();
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2));
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Add feedback score to trace1 only
+            var feedbackScoreName = "UserFeedback"; // Use name without spaces to avoid URL encoding issues
+            var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace1.id())
+                    .projectName(experiment.name())
+                    .name(feedbackScoreName)
+                    .value(BigDecimal.valueOf(4.5))
+                    .build();
+            traceResourceClient.feedbackScores(List.of(feedbackScore1), apiKey, workspaceName);
+
+            // Create filter for is_not_empty on feedback score
+            var filters = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES.getQueryParamField())
+                            .operator(Operator.IS_NOT_EMPTY)
+                            .key(feedbackScoreName)
+                            .value("")
+                            .build());
+
+            // Query with is_not_empty filter - should return only trace1 stats
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment.id()),
+                    apiKey,
+                    workspaceName,
+                    filters);
+
+            // Fetch the trace with feedback score to get actual duration
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+
+            // Calculate expected values - should only include trace1 which has feedback score
+            var experimentItemsCount = 1L; // Only experiment item 1 has feedback score
+            var traceCount = 1L; // Only trace1 has feedback score
+            var expectedAvgValue = feedbackScore1.value();
+
+            var durationPercentiles = StatsUtils.calculateQuantiles(
+                    List.of(createdTrace1.duration()),
+                    List.of(0.50, 0.90, 0.99));
+
+            // Build complete expected stats list
+            List<ProjectStatItem<?>> expectedStats = List.of(
+                    new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
+                    new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
+                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.DURATION,
+                            new PercentageValues(
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
+                    new AvgValueStat("feedback_scores.%s".formatted(feedbackScoreName),
+                            expectedAvgValue.doubleValue()));
+
+            // Assert the whole ProjectStats object using TraceAssertions
+            TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
     }
 }

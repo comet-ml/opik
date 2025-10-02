@@ -777,20 +777,73 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
             """
-                    WITH <if(feedback_scores_empty_filters)>
+                    WITH feedback_scores_combined_raw AS (
+                        SELECT workspace_id,
+                               project_id,
+                               entity_id,
+                               name,
+                               value,
+                               last_updated_at,
+                               feedback_scores.last_updated_by AS author
+                        FROM feedback_scores FINAL
+                        WHERE entity_type = 'trace'
+                          AND workspace_id = :workspace_id
+                        UNION ALL
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            value,
+                            last_updated_at,
+                            author
+                        FROM authored_feedback_scores FINAL
+                        WHERE entity_type = 'trace'
+                           AND workspace_id = :workspace_id
+                    ), feedback_scores_with_ranking AS (
+                        SELECT workspace_id,
+                               project_id,
+                               entity_id,
+                               name,
+                               value,
+                               last_updated_at,
+                               author,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY workspace_id, project_id, entity_id, name, author
+                                   ORDER BY last_updated_at DESC
+                               ) as rn
+                        FROM feedback_scores_combined_raw
+                    ), feedback_scores_combined AS (
+                        SELECT workspace_id,
+                               project_id,
+                               entity_id,
+                               name,
+                               value,
+                               last_updated_at,
+                               author
+                        FROM feedback_scores_with_ranking
+                        WHERE rn = 1
+                    ),                     feedback_scores_final AS (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                            max(last_updated_at) AS last_updated_at
+                        FROM feedback_scores_combined
+                        GROUP BY workspace_id, project_id, entity_id, name
+                    )<if(feedback_scores_empty_filters)>,
                     fsc AS (
                         SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                         FROM (
                             SELECT *
-                            FROM feedback_scores final
-                            WHERE workspace_id = :workspace_id AND entity_type = 'trace'
-                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id
-                        HAVING <feedback_scores_empty_filters>
-                    ),
-                    <endif>
+                            FROM feedback_scores_final
+                         )
+                         GROUP BY entity_id
+                         HAVING <feedback_scores_empty_filters>
+                    )
+                    <endif>,
                     experiment_items_filtered AS (
                         SELECT
                             ei.id,
@@ -810,17 +863,22 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
                         )
                         <endif>
+                        <if(feedback_scores_empty_filters)>
+                        AND ei.trace_id IN (
+                            SELECT id
+                            FROM traces
+                            LEFT JOIN fsc ON fsc.entity_id = traces.id
+                            WHERE workspace_id = :workspace_id
+                            AND fsc.feedback_scores_count = 0
+                        )
+                        <endif>
                         <if(feedback_scores_filters)>
                         AND ei.trace_id IN (
                             SELECT entity_id
-                            FROM feedback_scores final
-                            WHERE workspace_id = :workspace_id AND entity_type = 'trace'
+                            FROM feedback_scores_final
                             GROUP BY entity_id, name
                             HAVING <feedback_scores_filters>
                         )
-                        <endif>
-                        <if(feedback_scores_empty_filters)>
-                        AND ei.trace_id IN (SELECT entity_id FROM fsc)
                         <endif>
                         <if(dataset_item_filters)>
                         AND ei.dataset_item_id IN (
@@ -853,65 +911,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
                             GROUP BY workspace_id, project_id, trace_id
                         ) AS s ON eif.trace_id = s.trace_id
-                    ), feedback_scores_combined_raw AS (
-                        SELECT workspace_id,
-                               project_id,
-                               entity_id,
-                               name,
-                               value,
-                               last_updated_at,
-                               feedback_scores.last_updated_by AS author
-                        FROM feedback_scores FINAL
-                        WHERE entity_type = 'trace'
-                          AND workspace_id = :workspace_id
-                          AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
-                        UNION ALL
-                        SELECT
-                            workspace_id,
-                            project_id,
-                            entity_id,
-                            name,
-                            value,
-                            last_updated_at,
-                            author
-                        FROM authored_feedback_scores FINAL
-                        WHERE entity_type = 'trace'
-                           AND workspace_id = :workspace_id
-                           AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
-                    ), feedback_scores_with_ranking AS (
-                        SELECT workspace_id,
-                               project_id,
-                               entity_id,
-                               name,
-                               value,
-                               last_updated_at,
-                               author,
-                               ROW_NUMBER() OVER (
-                                   PARTITION BY workspace_id, project_id, entity_id, name, author
-                                   ORDER BY last_updated_at DESC
-                               ) as rn
-                        FROM feedback_scores_combined_raw
-                    ), feedback_scores_combined AS (
-                        SELECT workspace_id,
-                               project_id,
-                               entity_id,
-                               name,
-                               value,
-                               last_updated_at,
-                               author
-                        FROM feedback_scores_with_ranking
-                        WHERE rn = 1
-                    ), feedback_scores_final AS (
-                        SELECT
-                            workspace_id,
-                            project_id,
-                            entity_id,
-                            name,
-                            if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
-                        FROM feedback_scores_combined
-                        GROUP BY workspace_id, project_id, entity_id, name
-                    ),
-                    feedback_scores_agg AS (
+                    ), feedback_scores_agg AS (
                         SELECT
                             entity_id,
                             mapFromArrays(
@@ -919,6 +919,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 groupArray(value)
                             ) AS feedback_scores
                         FROM feedback_scores_final
+                        WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
                         GROUP BY workspace_id, project_id, entity_id
                     )
                     SELECT

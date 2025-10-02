@@ -169,7 +169,7 @@ public class FilterQueryBuilder {
                             "empty(%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0",
+                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
                             FieldType.ERROR_CONTAINER,
                             "notEmpty(%1$s)")))
                     .build());
@@ -492,9 +492,14 @@ public class FilterQueryBuilder {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
-        } else if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
-            return Optional.empty();
-        }
+        } else
+            if (filter.operator() == Operator.IS_NOT_EMPTY
+                    && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
+                        return Optional.empty();
+                    } else
+                if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
+                    return Optional.empty();
+                }
 
         return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
     }
