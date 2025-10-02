@@ -575,7 +575,15 @@ function Start-Frontend {
 # Function to stop backend
 function Stop-Backend {
     if (Test-Path $script:BACKEND_PID_FILE) {
-        $backendPid = Get-Content $script:BACKEND_PID_FILE
+        $backendPid = Get-Content $script:BACKEND_PID_FILE -ErrorAction SilentlyContinue
+        
+        # Check if PID is valid
+        if (-not $backendPid) {
+            Write-LogWarning "Backend PID file exists but is empty (cleaning up stale PID file)"
+            Remove-Item $script:BACKEND_PID_FILE -Force
+            return
+        }
+        
         $process = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
         
         if ($process) {
@@ -617,7 +625,15 @@ function Stop-Backend {
 # Function to stop frontend
 function Stop-Frontend {
     if (Test-Path $script:FRONTEND_PID_FILE) {
-        $frontendPid = Get-Content $script:FRONTEND_PID_FILE
+        $frontendPid = Get-Content $script:FRONTEND_PID_FILE -ErrorAction SilentlyContinue
+        
+        # Check if PID is valid
+        if (-not $frontendPid) {
+            Write-LogWarning "Frontend PID file exists but is empty (cleaning up stale PID file)"
+            Remove-Item $script:FRONTEND_PID_FILE -Force
+            return
+        }
+        
         $process = Get-Process -Id $frontendPid -ErrorAction SilentlyContinue
         
         if ($process) {
