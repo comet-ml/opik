@@ -8,11 +8,13 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -255,9 +257,13 @@ public class SpanService {
             // Step 3: Update the span in database transaction
             spanDAO.update(id, processedUpdate, existingSpan)
                     .flatMap(updateResult -> {
-                        // Step 4: Delete old attachments OUTSIDE the database transaction
-                        if (!existingAttachments.isEmpty()) {
-                            return attachmentService.deleteSpecificAttachments(existingAttachments,
+                        // Step 4: Delete only auto-stripped attachments from the old data
+                        // User-uploaded attachments are preserved unless explicitly removed by user
+                        List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils
+                                .filterAutoStrippedAttachments(existingAttachments);
+
+                        if (!autoStrippedAttachments.isEmpty()) {
+                            return attachmentService.deleteSpecificAttachments(autoStrippedAttachments,
                                     id, SPAN, existingSpan.projectId())
                                     .thenReturn(updateResult);
                         }
@@ -301,13 +307,14 @@ public class SpanService {
                 .collectList()
                 .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
-        // Delete existing attachments for all spans in the batch before processing
-        // This prevents duplicate attachments when the SDK sends the same span data multiple times
+        // Delete only auto-stripped attachments for all spans in the batch before processing
+        // This prevents duplicate auto-stripped attachments when the SDK sends the same span data multiple times
+        // while preserving user-uploaded attachments
         Set<UUID> spanIds = dedupedSpans.stream()
                 .map(Span::id)
                 .collect(Collectors.toSet());
 
-        return attachmentService.deleteByEntityIds(SPAN, spanIds)
+        return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
                 .then(resolveProjects)
                 .flatMap(this::stripAttachmentsFromSpanBatch)
                 .flatMap(spanDAO::batchInsert);

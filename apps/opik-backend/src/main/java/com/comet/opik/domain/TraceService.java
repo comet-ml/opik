@@ -11,6 +11,7 @@ import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -23,6 +24,7 @@ import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -356,10 +358,19 @@ class TraceServiceImpl implements TraceService {
                     .flatMap(processedUpdate ->
             // Step 3: Update in database transaction
             template.nonTransaction(connection -> dao.update(processedUpdate, id, connection))
-                    .then(
-                            // Step 4: Delete old attachments AFTER successful database update
-                            attachmentService.deleteSpecificAttachments(existingAttachments, id, EntityType.TRACE,
-                                    trace.projectId()))));
+                    .then(Mono.defer(() -> {
+                        // Step 4: Delete only auto-stripped attachments from the old data
+                        // User-uploaded attachments are preserved unless explicitly removed by user
+                        List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils
+                                .filterAutoStrippedAttachments(existingAttachments);
+
+                        if (autoStrippedAttachments.isEmpty()) {
+                            return Mono.empty();
+                        }
+
+                        return attachmentService.deleteSpecificAttachments(autoStrippedAttachments, id,
+                                EntityType.TRACE, trace.projectId());
+                    }))));
         });
     }
 

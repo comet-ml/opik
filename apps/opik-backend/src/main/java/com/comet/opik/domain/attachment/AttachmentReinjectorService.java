@@ -7,24 +7,24 @@ import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.io.IOUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Service responsible for reinjecting attachment data back into trace/span payloads
@@ -42,15 +42,6 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AttachmentReinjectorService {
 
-    /**
-     * Pattern to match attachment references in the format: [{context}-attachment-{num}-{timestamp}.{extension}]
-     * Examples:
-     * - [input-attachment-1-1704067200000.png]
-     * - [output-attachment-2-1704067201000.json]
-     * - [metadata-attachment-1-1704067199000.pdf]
-     */
-    private static final Pattern ATTACHMENT_REF_PATTERN = Pattern.compile("^\\[(\\w+-attachment-\\d+-\\d+\\.\\w+)\\]$");
-
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull AttachmentService attachmentService;
 
@@ -65,7 +56,8 @@ public class AttachmentReinjectorService {
         }
 
         // Quick check: scan for attachment references before querying DB
-        boolean hasRefs = hasAttachmentReferences(trace.input(), trace.output(), trace.metadata());
+        boolean hasRefs = AttachmentUtils.hasAttachmentReferences(objectMapper, trace.input(), trace.output(),
+                trace.metadata());
         if (!hasRefs) {
             return Mono.just(trace);
         }
@@ -79,22 +71,23 @@ public class AttachmentReinjectorService {
             // Get attachment info using AttachmentService
             return attachmentService
                     .getAttachmentInfoByEntity(entityId, entityType, projectId)
-                    .flatMap(attachments -> Mono.fromCallable(() -> {
-                        if (attachments == null || attachments.isEmpty()) {
-                            return trace;
+                    .flatMap(attachments -> {
+                        if (CollectionUtils.isEmpty(attachments)) {
+                            return Mono.just(trace);
                         }
 
-                        // Reinject attachments into input, output, and metadata
-                        JsonNode newInput = reinjectIntoJson(trace.input(), attachments, workspaceId);
-                        JsonNode newOutput = reinjectIntoJson(trace.output(), attachments, workspaceId);
-                        JsonNode newMetadata = reinjectIntoJson(trace.metadata(), attachments, workspaceId);
+                        // Reinject attachments into input, output, and metadata in parallel
+                        Mono<JsonNode> inputMono = reinjectIntoJson(trace.input(), attachments, workspaceId);
+                        Mono<JsonNode> outputMono = reinjectIntoJson(trace.output(), attachments, workspaceId);
+                        Mono<JsonNode> metadataMono = reinjectIntoJson(trace.metadata(), attachments, workspaceId);
 
-                        return trace.toBuilder()
-                                .input(newInput)
-                                .output(newOutput)
-                                .metadata(newMetadata)
-                                .build();
-                    }).subscribeOn(Schedulers.boundedElastic()));
+                        return Mono.zip(inputMono, outputMono, metadataMono)
+                                .map(tuple -> trace.toBuilder()
+                                        .input(tuple.getT1())
+                                        .output(tuple.getT2())
+                                        .metadata(tuple.getT3())
+                                        .build());
+                    });
         });
     }
 
@@ -109,7 +102,8 @@ public class AttachmentReinjectorService {
         }
 
         // Quick check: scan for attachment references before querying DB
-        boolean hasRefs = hasAttachmentReferences(span.input(), span.output(), span.metadata());
+        boolean hasRefs = AttachmentUtils.hasAttachmentReferences(objectMapper, span.input(), span.output(),
+                span.metadata());
         if (!hasRefs) {
             return Mono.just(span);
         }
@@ -124,192 +118,113 @@ public class AttachmentReinjectorService {
             return attachmentService
                     .getAttachmentInfoByEntity(entityId, entityType, projectId)
                     .flatMap(attachments -> {
-                        if (attachments.isEmpty()) {
+                        if (CollectionUtils.isEmpty(attachments)) {
                             return Mono.just(span);
                         }
 
-                        return Mono.fromCallable(() -> {
-                            // Reinject attachments into input, output, and metadata
-                            JsonNode newInput = reinjectIntoJson(span.input(), attachments, workspaceId);
-                            JsonNode newOutput = reinjectIntoJson(span.output(), attachments, workspaceId);
-                            JsonNode newMetadata = reinjectIntoJson(span.metadata(), attachments, workspaceId);
+                        // Reinject attachments into input, output, and metadata in parallel
+                        Mono<JsonNode> inputMono = reinjectIntoJson(span.input(), attachments, workspaceId);
+                        Mono<JsonNode> outputMono = reinjectIntoJson(span.output(), attachments, workspaceId);
+                        Mono<JsonNode> metadataMono = reinjectIntoJson(span.metadata(), attachments, workspaceId);
 
-                            return span.toBuilder()
-                                    .input(newInput)
-                                    .output(newOutput)
-                                    .metadata(newMetadata)
-                                    .build();
-                        }).subscribeOn(Schedulers.boundedElastic());
+                        return Mono.zip(inputMono, outputMono, metadataMono)
+                                .map(tuple -> span.toBuilder()
+                                        .input(tuple.getT1())
+                                        .output(tuple.getT2())
+                                        .metadata(tuple.getT3())
+                                        .build());
                     });
         });
     }
 
     /**
-     * Quick check to see if any of the JSON nodes contain attachment references.
-     * This avoids expensive DB queries when there are no attachments to reinject.
-     *
-     * @return true if any node contains a string matching the pattern [filename]
+     * Async version: Find and replace attachment references in a JSON string.
+     * Converts JsonNode to string, finds all [filename.ext] references, downloads
+     * attachments asynchronously, and replaces references with base64 data.
+     * Much simpler than recursive approach - just string find-and-replace!
      */
-    private boolean hasAttachmentReferences(JsonNode... nodes) {
-        for (JsonNode node : nodes) {
-            if (containsAttachmentReference(node)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Recursively scan a JsonNode to check if it contains any attachment references.
-     */
-    private boolean containsAttachmentReference(JsonNode node) {
+    private Mono<JsonNode> reinjectIntoJson(JsonNode node, List<AttachmentInfo> attachments,
+            String workspaceId) {
         if (node == null || node.isNull()) {
-            return false;
+            return Mono.just(node);
         }
 
-        if (node.isTextual()) {
-            String text = node.asText();
-            // First check if the text itself is an attachment reference
-            if (ATTACHMENT_REF_PATTERN.matcher(text).matches()) {
-                return true;
-            }
-            // If it's a JSON string, try to parse it and check recursively
-            if (text.startsWith("{") || text.startsWith("[")) {
-                try {
-                    JsonNode parsed = objectMapper.readTree(text);
-                    return containsAttachmentReference(parsed);
-                } catch (Exception e) {
-                    // Not valid JSON, ignore
-                    return false;
-                }
-            }
-            return false;
+        // Convert JsonNode to string
+        String jsonString = node.toString();
+
+        // Extract all attachment references using AttachmentUtils
+        List<String> references = AttachmentUtils.extractAttachmentReferences(jsonString);
+
+        // If no references found, return original node
+        if (references.isEmpty()) {
+            return Mono.just(node);
         }
 
-        if (node.isObject()) {
-            var fieldNames = node.fieldNames();
-            while (fieldNames.hasNext()) {
-                String fieldName = fieldNames.next();
-                if (containsAttachmentReference(node.get(fieldName))) {
-                    return true;
-                }
-            }
-            return false;
-        }
+        // Download all attachments asynchronously in parallel
+        List<Mono<Tuple2<String, String>>> downloadMonos = references.stream()
+                .map(filename -> {
+                    // Find matching attachment
+                    AttachmentInfo attachInfo = attachments.stream()
+                            .filter(att -> att.fileName().equals(filename))
+                            .findFirst()
+                            .orElse(null);
 
-        if (node.isArray()) {
-            for (JsonNode element : node) {
-                if (containsAttachmentReference(element)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        return false;
-    }
-
-    /**
-     * Recursively processes a JsonNode to find and replace attachment references.
-     * When a text node contains an attachment reference like [filename.png], it:
-     * 1. Downloads the attachment data from S3/MinIO
-     * 2. Encodes it as base64
-     * 3. Returns a new text node with the data URL format
-     */
-    private JsonNode reinjectIntoJson(JsonNode node, List<AttachmentInfo> attachments, String workspaceId) {
-        if (node == null || node.isNull()) {
-            return node;
-        }
-
-        // Handle text nodes - check if they contain attachment references or JSON strings
-        if (node.isTextual()) {
-            String text = node.asText();
-            Matcher matcher = ATTACHMENT_REF_PATTERN.matcher(text);
-
-            if (matcher.matches()) {
-                // This is an attachment reference like [filename.png]
-                String filename = matcher.group(1);
-
-                // Find the matching attachment
-                AttachmentInfo matchingAttachment = attachments.stream()
-                        .filter(att -> att.fileName().equals(filename))
-                        .findFirst()
-                        .orElse(null);
-
-                if (matchingAttachment != null) {
-                    try {
-                        // Download attachment data
-                        InputStream inputStream = attachmentService.downloadAttachment(
-                                matchingAttachment, workspaceId);
-
-                        // Read into byte array
-                        byte[] data = readAllBytes(inputStream);
-
-                        // Convert to base64
-                        String base64 = Base64.getEncoder().encodeToString(data);
-
-                        // Return raw base64 (no data URL prefix) - matching the original input format
-                        return objectMapper.getNodeFactory().textNode(base64);
-                    } catch (Exception e) {
-                        log.error("Failed to reinject attachment '{}': {}", filename, e.getMessage(), e);
-                        // Return original reference on error
-                        return node;
+                    if (attachInfo == null) {
+                        // Return reference as-is if attachment not found
+                        log.warn("[Attachment not found] filename {} not found in attachments", filename);
+                        String wrappedRef = AttachmentUtils.wrapReference(filename);
+                        return Mono.just(Tuples.of(wrappedRef, wrappedRef));
                     }
-                }
-            } else if (text.startsWith("{") || text.startsWith("[")) {
-                // If it's a JSON string, parse it, process recursively, and return as JSON string
-                try {
-                    JsonNode parsed = objectMapper.readTree(text);
-                    JsonNode processed = reinjectIntoJson(parsed, attachments, workspaceId);
-                    // Convert back to JSON string
-                    String processedJson = objectMapper.writeValueAsString(processed);
-                    return objectMapper.getNodeFactory().textNode(processedJson);
-                } catch (Exception e) {
-                    log.error("Failed to parse and reinject JSON string: {}", e.getMessage(), e);
-                    // Return original text node on error
-                    return node;
-                }
+
+                    // Async download and conversion to base64
+                    return Mono.fromCallable(() -> attachmentService.downloadAttachment(attachInfo, workspaceId))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(this::readAllBytesAsync)
+                            .map(data -> {
+                                String base64 = Base64.getEncoder().encodeToString(data);
+                                String wrappedRef = AttachmentUtils.wrapReference(filename);
+                                return Tuples.of(wrappedRef, base64);
+                            })
+                            .onErrorResume(e -> {
+                                log.error("Failed to download attachment: {}", filename, e);
+                                // Return reference as-is if download fails
+                                String wrappedRef = AttachmentUtils.wrapReference(filename);
+                                return Mono.just(Tuples.of(wrappedRef, wrappedRef));
+                            });
+                })
+                .collect(Collectors.toList());
+
+        // Wait for all downloads to complete and replace references
+        return Mono.zip(downloadMonos, results -> {
+            String modifiedJson = jsonString;
+
+            for (Object result : results) {
+                @SuppressWarnings("unchecked")
+                Tuple2<String, String> tuple = (Tuple2<String, String>) result;
+                String reference = tuple.getT1();
+                String base64 = tuple.getT2();
+
+                // Replace all occurrences of this reference with base64
+                // JsonNode.toString() escapes quotes, so we need to search for \"[reference]\"
+                modifiedJson = modifiedJson.replace("\\\"" + reference + "\\\"", "\\\"" + base64 + "\\\"");
             }
-            return node;
-        }
 
-        // Handle object nodes - recursively process all fields
-        if (node.isObject()) {
-            ObjectNode objectNode = (ObjectNode) node.deepCopy();
-            objectNode.fieldNames().forEachRemaining(fieldName -> {
-                JsonNode fieldValue = objectNode.get(fieldName);
-                JsonNode reinjectedValue = reinjectIntoJson(fieldValue, attachments, workspaceId);
-                objectNode.set(fieldName, reinjectedValue);
-            });
-            return objectNode;
-        }
-
-        // Handle array nodes - recursively process all elements
-        if (node.isArray()) {
-            ArrayNode arrayNode = (ArrayNode) node.deepCopy();
-            for (int i = 0; i < arrayNode.size(); i++) {
-                JsonNode reinjectedValue = reinjectIntoJson(arrayNode.get(i), attachments, workspaceId);
-                arrayNode.set(i, reinjectedValue);
+            try {
+                // Parse the modified JSON string back to JsonNode
+                return objectMapper.readTree(modifiedJson);
+            } catch (Exception e) {
+                log.error("Failed to parse modified JSON, returning original", e);
+                return node;
             }
-            return arrayNode;
-        }
-
-        return node;
+        });
     }
 
     /**
-     * Read all bytes from an InputStream.
+     * Asynchronously read all bytes from an InputStream.
+     * Offloads the blocking I/O operation to the boundedElastic scheduler.
      */
-    private byte[] readAllBytes(InputStream inputStream) throws Exception {
-        try (ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
-            byte[] data = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(data, 0, data.length)) != -1) {
-                buffer.write(data, 0, bytesRead);
-            }
-            return buffer.toByteArray();
-        } finally {
-            inputStream.close();
-        }
+    private Mono<byte[]> readAllBytesAsync(InputStream inputStream) {
+        return Mono.fromCallable(() -> IOUtils.toByteArray(inputStream))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 }

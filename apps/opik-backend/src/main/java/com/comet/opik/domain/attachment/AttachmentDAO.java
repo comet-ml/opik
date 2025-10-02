@@ -40,6 +40,8 @@ public interface AttachmentDAO {
     Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(EntityType entityType, Set<UUID> entityIds);
 
     Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    Mono<Long> deleteByFileNames(EntityType entityType, Set<UUID> entityIds, Set<String> fileNames);
 }
 
 @Singleton
@@ -124,6 +126,15 @@ class AttachmentDAOImpl implements AttachmentDAO {
             WHERE workspace_id = :workspace_id
             AND entity_type = :entity_type
             AND entity_id IN :entity_ids
+            ;
+            """;
+
+    private static final String DELETE_ATTACHMENTS_BY_FILE_NAMES = """
+            DELETE FROM attachments
+            WHERE workspace_id = :workspace_id
+              AND entity_id IN :entity_ids
+              AND entity_type = :entity_type
+              AND file_name IN :file_names
             ;
             """;
 
@@ -226,6 +237,26 @@ class AttachmentDAOImpl implements AttachmentDAO {
 
             statement.bind("entity_ids", entityIds.toArray(UUID[]::new))
                     .bind("entity_type", entityType.getValue());
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum);
+        });
+    }
+
+    @Override
+    public Mono<Long> deleteByFileNames(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds,
+            @NonNull Set<String> fileNames) {
+        if (CollectionUtils.isEmpty(entityIds) || CollectionUtils.isEmpty(fileNames)) {
+            return Mono.just(0L);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(DELETE_ATTACHMENTS_BY_FILE_NAMES);
+            statement
+                    .bind("entity_ids", entityIds)
+                    .bind("entity_type", entityType.getValue())
+                    .bind("file_names", fileNames);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)
