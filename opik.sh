@@ -79,6 +79,49 @@ debugLog() {
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
 }
 
+get_system_info() {
+  # Function to gather system info without failing the script
+  # All commands wrapped with error handling and fallbacks
+  
+  # OS detection - safe with fallback
+  local os_info="unknown"
+  if command -v uname >/dev/null 2>&1; then
+    os_info=$(uname -s 2>/dev/null || echo "unknown")
+    if [[ "$os_info" == "Darwin" ]]; then
+      local os_version=$(sw_vers -productVersion 2>/dev/null || echo "")
+      [[ -n "$os_version" ]] && os_info="macOS ${os_version}" || os_info="macOS"
+    elif [[ "$os_info" == "Linux" ]]; then
+      if [[ -f /etc/os-release ]]; then
+        local distro=$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "Linux")
+        [[ -n "$distro" ]] && os_info="$distro" || os_info="Linux"
+      fi
+    fi
+  fi
+  
+  # Python version - safe with fallback
+  local python_version="unknown"
+  if command -v python3 >/dev/null 2>&1; then
+    python_version=$(python3 --version 2>&1 | awk '{print $2}' || echo "unknown")
+  elif command -v python >/dev/null 2>&1; then
+    python_version=$(python --version 2>&1 | awk '{print $2}' || echo "unknown")
+  fi
+  
+  # Docker version - safe with fallback
+  local docker_version="unknown"
+  if command -v docker >/dev/null 2>&1; then
+    docker_version=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',' || echo "unknown")
+  fi
+  
+  # Docker Compose version - safe with fallback
+  local docker_compose_version="unknown"
+  if command -v docker >/dev/null 2>&1; then
+    docker_compose_version=$(docker compose version 2>/dev/null | awk '{print $4}' || echo "unknown")
+  fi
+  
+  # Return as pipe-delimited string (will be used in JSON payload)
+  echo "$os_info|$python_version|$docker_version|$docker_compose_version"
+}
+
 get_docker_compose_cmd() {
   local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
@@ -378,6 +421,13 @@ EOF
 )
   else
     event_type="opik_os_install_started"
+    
+    # Get system info safely - wrapped to prevent script failure
+    system_info=$(get_system_info 2>/dev/null || echo "unknown|unknown|unknown|unknown")
+    IFS='|' read -r os_info python_ver docker_ver docker_compose_ver <<< "$system_info"
+    
+    debugLog "[DEBUG] System info: OS=$os_info, Python=$python_ver, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
+    
     json_payload=$(cat <<EOF
 {
   "anonymous_id": "$uuid",
@@ -385,7 +435,11 @@ EOF
   "event_properties": {
     "start_time": "$start_time",
     "event_ver": "1",
-    "script_type": "sh"
+    "script_type": "sh",
+    "os": "$os_info",
+    "python_version": "$python_ver",
+    "docker_version": "$docker_ver",
+    "docker_compose_version": "$docker_compose_ver"
   }
 }
 EOF

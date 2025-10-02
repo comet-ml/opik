@@ -68,6 +68,82 @@ function Write-DebugLog {
     }
 }
 
+function Get-SystemInfo {
+    # Function to gather system info without failing the script
+    # All commands wrapped with error handling and fallbacks
+    
+    # OS detection - safe with fallback
+    $osInfo = "unknown"
+    try {
+        $osVersion = [System.Environment]::OSVersion
+        if ($osVersion) {
+            $osInfo = "Windows $($osVersion.Version.Major).$($osVersion.Version.Minor).$($osVersion.Version.Build)"
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get OS info: $_"
+    }
+    
+    # Python version - safe with fallback
+    $pythonVersion = "unknown"
+    try {
+        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+        if ($pythonCmd) {
+            $pythonOutput = (python --version 2>&1 | Out-String).Trim()
+            if ($pythonOutput -match 'Python ([\d.]+)') {
+                $pythonVersion = $Matches[1]
+            }
+        }
+        if ($pythonVersion -eq "unknown") {
+            $python3Cmd = Get-Command python3 -ErrorAction SilentlyContinue
+            if ($python3Cmd) {
+                $python3Output = (python3 --version 2>&1 | Out-String).Trim()
+                if ($python3Output -match 'Python ([\d.]+)') {
+                    $pythonVersion = $Matches[1]
+                }
+            }
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get Python version: $_"
+    }
+    
+    # Docker version - safe with fallback
+    $dockerVersion = "unknown"
+    try {
+        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+        if ($dockerCmd) {
+            $dockerOutput = (docker --version 2>&1 | Out-String).Trim()
+            if ($dockerOutput -match 'Docker version ([\d.]+)') {
+                $dockerVersion = $Matches[1]
+            }
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get Docker version: $_"
+    }
+    
+    # Docker Compose version - safe with fallback
+    $dockerComposeVersion = "unknown"
+    try {
+        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+        if ($dockerCmd) {
+            $composeOutput = (docker compose version 2>&1 | Out-String).Trim()
+            if ($composeOutput -match 'version ([\d.]+)') {
+                $dockerComposeVersion = $Matches[1]
+            } elseif ($composeOutput -match '[\d.]+') {
+                $dockerComposeVersion = $Matches[0]
+            }
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get Docker Compose version: $_"
+    }
+    
+    return @{
+        Os = $osInfo
+        PythonVersion = $pythonVersion
+        DockerVersion = $dockerVersion
+        DockerComposeVersion = $dockerComposeVersion
+    }
+}
+
 function Show-Usage {
     Write-Host 'Usage: opik.ps1 [OPTIONS]'
     Write-Host ''
@@ -170,6 +246,21 @@ function Send-InstallReport {
         }
     } else {
         $EventType = "opik_os_install_started"
+        
+        # Get system info safely - wrapped to prevent script failure
+        try {
+            $SystemInfo = Get-SystemInfo
+        } catch {
+            Write-DebugLog "[WARN] Failed to get system info, using defaults: $_"
+            $SystemInfo = @{
+                Os = "unknown"
+                PythonVersion = "unknown"
+                DockerVersion = "unknown"
+                DockerComposeVersion = "unknown"
+            }
+        }
+        
+        Write-DebugLog "[DEBUG] System info: OS=$($SystemInfo.Os), Python=$($SystemInfo.PythonVersion), Docker=$($SystemInfo.DockerVersion), Docker Compose=$($SystemInfo.DockerComposeVersion)"
 
         $Payload = @{
             anonymous_id = $Uuid
@@ -178,6 +269,10 @@ function Send-InstallReport {
                 start_time = $StartTime
                 event_ver  = "1"
                 script_type = "ps1"
+                os = $SystemInfo.Os
+                python_version = $SystemInfo.PythonVersion
+                docker_version = $SystemInfo.DockerVersion
+                docker_compose_version = $SystemInfo.DockerComposeVersion
             }
         }
     }
