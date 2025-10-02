@@ -280,22 +280,31 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
         retries = kwargs.pop("__opik_retries", 3)
+        try:
+            attempts = max(1, int(retries))
+        except (TypeError, ValueError):
+            attempts = 1
         backoff = 0.5
 
         last_exception: Optional[Exception] = None
-        for attempt in range(retries):
+        for attempt in range(attempts):
             try:
                 return self._engine.completion(
                     model=self.model_name, messages=messages, **all_kwargs
                 )
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
-                if attempt == retries - 1:
+                if attempt == attempts - 1:
                     raise
                 time.sleep(backoff)
                 backoff *= 2
 
-        raise last_exception if last_exception else RuntimeError("Unknown LLM error")
+        if last_exception is not None:
+            raise last_exception
+        raise RuntimeError(
+            "LLM completion failed without executing any attempts; "
+            "check retry configuration."
+        )
 
     async def agenerate_string(
         self,
