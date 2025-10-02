@@ -98,14 +98,6 @@ get_system_info() {
     fi
   fi
   
-  # Python version - safe with fallback
-  local python_version="unknown"
-  if command -v python3 >/dev/null 2>&1; then
-    python_version=$(python3 --version 2>&1 | awk '{print $2}' || echo "unknown")
-  elif command -v python >/dev/null 2>&1; then
-    python_version=$(python --version 2>&1 | awk '{print $2}' || echo "unknown")
-  fi
-  
   # Docker version - safe with fallback
   local docker_version="unknown"
   if command -v docker >/dev/null 2>&1; then
@@ -126,7 +118,7 @@ get_system_info() {
   fi
   
   # Return as triple-pipe-delimited string (using ||| to avoid conflicts with single pipes in version strings)
-  echo "$os_info|||$python_version|||$docker_version|||$docker_compose_version"
+  echo "$os_info|||$docker_version|||$docker_compose_version"
 }
 
 get_docker_compose_cmd() {
@@ -430,10 +422,10 @@ EOF
     event_type="opik_os_install_started"
     
     # Get system info safely - wrapped to prevent script failure
-    system_info=$(get_system_info 2>/dev/null || echo "unknown|||unknown|||unknown|||unknown")
-    IFS='|||' read -r os_info python_ver docker_ver docker_compose_ver <<< "$system_info"
+    system_info=$(get_system_info 2>/dev/null || echo "unknown|||unknown|||unknown")
+    IFS='|||' read -r os_info docker_ver docker_compose_ver <<< "$system_info"
     
-    debugLog "[DEBUG] System info: OS=$os_info, Python=$python_ver, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
+    debugLog "[DEBUG] System info: OS=$os_info, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
     
     json_payload=$(cat <<EOF
 {
@@ -444,7 +436,6 @@ EOF
     "event_ver": "1",
     "script_type": "sh",
     "os": "$os_info",
-    "python_version": "$python_ver",
     "docker_version": "$docker_ver",
     "docker_compose_version": "$docker_compose_ver"
   }
