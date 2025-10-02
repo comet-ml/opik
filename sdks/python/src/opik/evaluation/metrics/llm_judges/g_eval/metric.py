@@ -242,6 +242,7 @@ class GEval(base_metric.BaseMetric):
         >>> result.value  # doctest: +SKIP
         0.9
     """
+
     _CHAIN_OF_THOUGHT_CACHE: "OrderedDict[Tuple[str, str, str, Any], str]" = (
         OrderedDict()
     )

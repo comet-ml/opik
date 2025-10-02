@@ -151,6 +151,7 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
         >>> result.value  # doctest: +SKIP
         0.12
     """
+
     def __init__(
         self,
         model: Optional[str] = None,
@@ -193,6 +194,7 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
         >>> result.value  # doctest: +SKIP
         0.88
     """
+
     def __init__(
         self,
         model: Optional[str] = None,
@@ -235,6 +237,7 @@ class ConversationQARelevanceMetric(GEvalConversationMetric):
         >>> result.value  # doctest: +SKIP
         1.0
     """
+
     def __init__(
         self,
         model: Optional[str] = None,
@@ -278,6 +281,7 @@ class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
         >>> result.value  # doctest: +SKIP
         0.91
     """
+
     def __init__(
         self,
         model: Optional[str] = None,
@@ -321,6 +325,7 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
         >>> result.value  # doctest: +SKIP
         0.95
     """
+
     def __init__(
         self,
         model: Optional[str] = None,
@@ -364,6 +369,7 @@ class ConversationPromptPerplexityMetric(GEvalConversationMetric):
         >>> result.value  # doctest: +SKIP
         0.37
     """
+
     def __init__(
         self,
         model: Optional[str] = None,
@@ -407,6 +413,7 @@ class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
         >>> result.value  # doctest: +SKIP
         0.42
     """
+
     def __init__(
         self,
         model: Optional[str] = None,

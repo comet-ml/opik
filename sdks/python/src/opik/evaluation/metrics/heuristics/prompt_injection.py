@@ -42,7 +42,7 @@ _SUSPICIOUS_KEYWORDS = {
     "no longer bound",
     "developer mode",
     "jailbreak",
-} 
+}
 
 
 class PromptInjectionGuard(BaseMetric):
