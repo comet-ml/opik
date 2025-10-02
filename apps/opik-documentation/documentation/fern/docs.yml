@@ -24,7 +24,9 @@ analytics:
     write-key: ${SEGMENT_WRITE_KEY}
   gtm:
     container-id: ${GTM_CONTAINER_ID}
-
+  posthog:
+    api-key: ${POSTHOG_API_KEY}
+    endpoint: ${POSTHOG_API_HOST}
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -55,14 +57,14 @@ tabs:
     display-name: Documentation
     icon: fa-regular fa-building
     slug: /
-  agent-optimization:
-    display-name: Agent Optimization
-    icon: fa-regular fa-robot
-    slug: /agent_optimization
   integrations:
     display-name: Integrations
     icon: fa-regular fa-plug
     slug: /integrations
+  agent-optimization:
+    display-name: Agent Optimization
+    icon: fa-regular fa-robot
+    slug: /agent_optimization
   self-host:
     display-name: Self-hosting Opik
     icon: fa-regular fa-server
@@ -71,10 +73,6 @@ tabs:
     display-name: SDK & API reference
     icon: fa-regular fa-square-terminal
     slug: /reference
-  contributing:
-    display-name: Contributing
-    icon: fa-regular fa-code-branch
-    slug: /contributing
   opik-university:
     display-name: Opik University
     icon: fa-regular fa-graduation-cap
@@ -118,42 +116,37 @@ navigation:
           - page: Log traces
             path: docs/tracing/log_traces.mdx
             slug: log_traces
-          - page: Opik Assist
-            path: docs/tracing/opik_assist.mdx
-            slug: opik_assist
-          - page: Debug Mode & Environment Variables
-            path: docs/tracing/debug_mode.mdx
-            slug: debug_mode
           - page: Log conversations
             path: docs/tracing/log_chat_conversations.mdx
             slug: log_chat_conversations
-          - page: Log agents
-            path: docs/tracing/log_agents.mdx
-            slug: log_agents
+          - page: Log user feedback
+            path: docs/tracing/annotate_traces.mdx
+            slug: annotate_traces
           - page: Log media & attachments
             path: docs/tracing/log_multimodal_traces.mdx
             slug: log_multimodal_traces
-          - page: Log distributed traces
-            path: docs/tracing/log_distributed_traces.mdx
-            slug: log_distributed_traces
-          - page: Annotate traces
-            path: docs/tracing/annotate_traces.mdx
-            slug: annotate_traces
           - page: Cost tracking
             path: docs/tracing/cost_tracking.mdx
             slug: cost_tracking
-          - page: Supported models
-            path: docs/tracing/supported_models.mdx
-            slug: supported_models
-          - page: SDK configuration
-            path: docs/tracing/sdk_configuration.mdx
-            slug: sdk_configuration
-          - page: Dynamic tracing control
-            path: docs/cookbook/dynamic_tracing_cookbook.mdx
-            slug: dynamic_tracing_control
           - page: Export data
             path: docs/tracing/export_data.mdx
             slug: export_data
+          - page: Opik Assist
+            path: docs/tracing/opik_assist.mdx
+            slug: opik_assist
+          - section: Advanced
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: SDK configuration
+                path: docs/tracing/sdk_configuration.mdx
+                slug: sdk_configuration
+              - page: Log Agent Graphs
+                path: docs/tracing/log_agent_graph.mdx
+                slug: log_agent_graphs
+              - page: Log distributed traces
+                path: docs/tracing/log_distributed_traces.mdx
+                slug: log_distributed_traces
       - section: Evaluation
         slug: /evaluation
         contents:
@@ -163,36 +156,27 @@ navigation:
           - page: Concepts
             path: docs/evaluation/concepts.mdx
             slug: concepts
-          - page: Evaluate prompts
-            path: docs/evaluation/evaluate_prompt.mdx
-            slug: evaluate_prompt
-          - page: Evaluate your LLM application
-            path: docs/evaluation/evaluate_your_llm.mdx
-            slug: evaluate_your_llm
-          - page: Evaluate agents
-            path: docs/evaluation/evaluate_agents.mdx
-            slug: evaluate_agents
-          - page: Evaluate threads
-            path: docs/evaluation/evaluate_threads.mdx
-            slug: evaluate_threads
-          - page: Annotation Queues
-            path: docs/evaluation/annotation_queues.mdx
-            slug: annotation_queues
-          - page: Log experiments with REST API
-            path: docs/evaluation/log_experiments_with_rest_api.mdx
-            slug: log_experiments_with_rest_api
-          - page: Update existing experiment
-            path: docs/evaluation/update_existing_experiment.mdx
-            slug: update_existing_experiment
           - page: Manage datasets
             path: docs/evaluation/manage_datasets.mdx
             slug: manage_datasets
-          - page: Cookbook - Evaluate hallucination metric
-            path: docs/cookbook/evaluate_hallucination_metric.mdx
-            slug: evaluate_hallucination_metric
-          - page: Cookbook - Evaluate moderation metric
-            path: docs/cookbook/evaluate_moderation_metric.mdx
-            slug: evaluate_moderation_metric
+          - page: Evaluate single prompts
+            path: docs/evaluation/evaluate_prompt.mdx
+            slug: evaluate_prompt
+          - page: Evaluate your agent
+            path: docs/evaluation/evaluate_your_llm.mdx
+            slug: evaluate_your_llm
+          - page: Evaluate multi-turn conversations
+            path: docs/evaluation/evaluate_threads.mdx
+            slug: evaluate_threads
+          - page: Manually logging experiments
+            path: docs/evaluation/log_experiments_with_rest_api.mdx
+            slug: log_experiments_with_rest_api
+          - page: Re-running an existing experiment
+            path: docs/evaluation/update_existing_experiment.mdx
+            slug: update_existing_experiment
+          - page: Annotation Queues
+            path: docs/evaluation/annotation_queues.mdx
+            slug: annotation_queues
           - section: Metrics
             slug: /metrics
             contents:
@@ -265,18 +249,31 @@ navigation:
               - page: Custom metric
                 path: docs/evaluation/metrics/custom_metric.mdx
                 slug: custom_metric
+          - section: Tutorials
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Best practices for evaluating agents
+                path: docs/evaluation/evaluate_agents.mdx
+                slug: evaluate_agents
+              - page: Cookbook - Evaluate hallucination metric
+                path: docs/cookbook/evaluate_hallucination_metric.mdx
+                slug: evaluate_hallucination_metric
+              - page: Cookbook - Evaluate moderation metric
+                path: docs/cookbook/evaluate_moderation_metric.mdx
+                slug: evaluate_moderation_metric
       - section: Prompt engineering
         slug: /prompt_engineering
         contents:
           - page: Prompt management
             path: docs/prompt_engineering/prompt_management.mdx
             slug: prompt_management
-          - page: Opik's MCP server
-            path: docs/prompt_engineering/mcp_server.mdx
-            slug: mcp_server
           - page: Prompt Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
+          - page: Opik's MCP server
+            path: docs/prompt_engineering/mcp_server.mdx
+            slug: mcp_server
       - section: Testing
         slug: /testing
         contents:
@@ -307,6 +304,280 @@ navigation:
           - page: AI Providers
             path: docs/configuration/ai_providers.mdx
             slug: ai_providers
+      - section: Contributing
+        slug: /contributing
+        contents:
+          - page: Contribution Overview
+            path: docs/contributing/overview.mdx
+            slug: overview
+            icon: fa-regular fa-compass
+          - section: Specific Contribution Guides
+            slug: /guides
+            contents:
+              - page: Documentation
+                path: docs/contributing/documentation.mdx
+                slug: documentation
+                icon: fa-regular fa-book
+              - page: Python SDK
+                path: docs/contributing/python-sdk.mdx
+                slug: python-sdk
+                icon: fa-brands fa-python
+              - page: TypeScript SDK
+                path: docs/contributing/typescript-sdk.mdx
+                slug: typescript-sdk
+                icon: fa-brands fa-js
+              - page: Opik Optimizer
+                path: docs/contributing/agent-optimizer-sdk.mdx
+                slug: agent-optimizer-sdk
+                icon: fa-regular fa-gauge-high
+              - page: Frontend
+                path: docs/contributing/frontend.mdx
+                slug: frontend
+                icon: fa-regular fa-window-maximize
+              - page: Backend
+                path: docs/contributing/backend.mdx
+                slug: backend
+                icon: fa-regular fa-server
+          - section: Developer Programs
+            slug: /developer-programs
+            contents:
+              - page: Bounty Program
+                path: docs/contributing/bounties.mdx
+                slug: bounties
+                icon: fa-regular fa-gem
+  - tab: integrations
+    layout:
+      - page: Overview
+        path: docs/tracing/integrations/overview.mdx
+        slug: overview
+      - section: TypeScript
+        skip-slug: true
+        icon: fa-brands fa-js
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
+              - page: BeeAI
+                path: docs/tracing/integrations/beeai.mdx
+                slug: beeai
+              - page: LangChain
+                path: docs/tracing/integrations/langchainjs.mdx
+                slug: langchainjs
+              - page: Mastra
+                path: docs/tracing/integrations/mastra.mdx
+                slug: mastra
+              - page: Vercel AI SDK
+                path: docs/tracing/integrations/vercel-ai-sdk.mdx
+                slug: vercel-ai-sdk
+          - section: Model Providers
+            skip-slug: true
+            contents:
+              - page: Cloudflare Workers AI
+                path: docs/tracing/integrations/cloudflare-workers-ai.mdx
+                slug: cloudflare-workers-ai
+              - page: Gemini
+                path: docs/tracing/integrations/gemini-typescript.mdx
+                slug: gemini-typescript
+              - page: OpenAI
+                path: docs/tracing/integrations/openai-typescript.mdx
+                slug: openai-typescript
+          - page: Opik TypeScript SDK
+            path: docs/reference/typescript-sdk/overview.mdx
+            slug: typescript-sdk
+      - section: Python
+        skip-slug: true
+        icon: fa-brands fa-python
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: AG2
+                path: docs/tracing/integrations/ag2.mdx
+                slug: ag2
+              - page: Autogen
+                path: docs/tracing/integrations/autogen.mdx
+                slug: autogen
+              - page: CrewAI
+                path: docs/tracing/integrations/crewai.mdx
+                slug: crewai
+              - page: DSPy
+                path: docs/tracing/integrations/dspy.mdx
+                slug: dspy
+              - page: Google Agent Development Kit
+                path: docs/tracing/integrations/adk.mdx
+                slug: adk
+              - page: Haystack
+                path: docs/tracing/integrations/haystack.mdx
+                slug: haystack
+              - page: Instructor
+                path: docs/tracing/integrations/instructor.mdx
+                slug: instructor
+              - page: LangChain
+                path: docs/tracing/integrations/langchain.mdx
+                slug: langchain
+              - page: LangGraph
+                path: docs/tracing/integrations/langgraph.mdx
+                slug: langgraph
+              - page: LiveKit Agents
+                path: docs/tracing/integrations/livekit.mdx
+                slug: livekit
+              - page: Llama Index
+                path: docs/tracing/integrations/llama_index.mdx
+                slug: llama_index
+              - page: OpenAI Agents
+                path: docs/tracing/integrations/openai_agents.mdx
+                slug: openai_agents
+              - page: Pipecat
+                path: docs/tracing/integrations/pipecat.mdx
+                slug: pipecat
+              - page: Pydantic AI
+                path: docs/tracing/integrations/pydantic-ai.mdx
+                slug: pydantic-ai
+              - page: Semantic Kernel
+                path: docs/tracing/integrations/semantic-kernel.mdx
+                slug: semantic-kernel
+              - page: Smolagents
+                path: docs/tracing/integrations/smolagents.mdx
+                slug: smolagents
+              - page: Strands Agents
+                path: docs/tracing/integrations/strands-agents.mdx
+                slug: strands-agents
+              - page: VoltAgent
+                path: docs/tracing/integrations/voltagent.mdx
+                slug: voltagent
+          - section: Model Providers
+            skip-slug: true
+            contents:
+              - page: Anthropic
+                path: docs/tracing/integrations/anthropic.mdx
+                slug: anthropic
+              - page: Bedrock
+                path: docs/tracing/integrations/bedrock.mdx
+                slug: bedrock
+              - page: BytePlus
+                path: docs/tracing/integrations/byteplus.mdx
+                slug: byteplus
+              - page: Cohere
+                path: docs/tracing/integrations/cohere.mdx
+                slug: cohere
+              - page: DeepSeek
+                path: docs/tracing/integrations/deepseek.mdx
+                slug: deepseek
+              - page: Fireworks AI
+                path: docs/tracing/integrations/fireworks-ai.mdx
+                slug: fireworks-ai
+              - page: Gemini
+                path: docs/tracing/integrations/gemini.mdx
+                slug: gemini
+              - page: Groq
+                path: docs/tracing/integrations/groq.mdx
+                slug: groq
+              - page: Mistral AI
+                path: docs/tracing/integrations/mistral.mdx
+                slug: mistral
+              - page: Novita AI
+                path: docs/tracing/integrations/novita-ai.mdx
+                slug: novita-ai
+              - page: Ollama
+                path: docs/tracing/integrations/ollama.mdx
+                slug: ollama
+              - page: OpenAI
+                path: docs/tracing/integrations/openai.mdx
+                slug: openai
+              - page: Predibase
+                path: docs/tracing/integrations/predibase.mdx
+                slug: predibase
+              - page: Together AI
+                path: docs/tracing/integrations/together-ai.mdx
+                slug: together-ai
+              - page: WatsonX
+                path: docs/tracing/integrations/watsonx.mdx
+                slug: watsonx
+              - page: xAI Grok
+                path: docs/tracing/integrations/xai-grok.mdx
+                slug: xai-grok
+          - section: Dataset Management
+            skip-slug: true
+            contents:
+              - page: Gretel
+                path: docs/tracing/integrations/gretel.mdx
+                slug: gretel
+              - page: Hugging Face Datasets
+                path: docs/tracing/integrations/huggingface-datasets.mdx
+                slug: huggingface-datasets
+          - section: Evaluation
+            skip-slug: true
+            contents:
+              - page: Ragas
+                path: docs/tracing/integrations/ragas.mdx
+                slug: ragas
+          - section: Gateways
+            skip-slug: true
+            contents:
+              - page: AISuite
+                path: docs/tracing/integrations/aisuite.mdx
+                slug: aisuite
+              - page: LiteLLM
+                path: docs/tracing/integrations/litellm.mdx
+                slug: litellm
+              - page: OpenRouter
+                path: docs/tracing/integrations/openrouter.mdx
+                slug: openrouter
+          - section: Other
+            skip-slug: true
+            contents:
+              - page: Guardrails AI
+                path: docs/tracing/integrations/guardrails-ai.mdx
+                slug: guardrails-ai
+          - page: Opik Python SDK
+            path: docs/reference/python-sdk/overview.mdx
+            slug: python-sdk
+          - page: OpenTelemetry Python SDK
+            path: docs/tracing/opentelemetry/python-sdk.mdx
+            slug: opentelemetry-python-sdk
+      - section: Java
+        skip-slug: true
+        icon: fa-brands fa-java
+        contents:
+          - page: Spring AI
+            path: docs/tracing/integrations/spring-ai.mdx
+            slug: spring-ai
+      - section: Ruby
+        skip-slug: true
+        icon: fa-solid fa-gem
+        contents:
+          - page: OpenTelemetry Ruby SDK
+            path: docs/reference/ruby-otel-sdk/overview.mdx
+            slug: opentelemetry-ruby-sdk
+      - section: No-Code
+        skip-slug: true
+        icon: fa-solid fa-wand-magic-sparkles
+        contents:
+          - page: Cursor
+            path: docs/tracing/integrations/cursor.mdx
+            slug: cursor
+          - page: Dify
+            path: docs/tracing/integrations/dify.mdx
+            slug: dify
+          - page: Flowise
+            path: docs/tracing/integrations/flowise.mdx
+            slug: flowise
+          # - page: Langflow
+          #   path: docs/tracing/integrations/langflow.mdx
+          #   slug: langflow
+          # - page: OpenWebUI
+          #   path: docs/tracing/integrations/openwebui.mdx
+          #   slug: openwebui
+      - section: Multi-Language
+        skip-slug: true
+        icon: fa-solid fa-globe
+        contents:
+          - page: OpenTelemetry
+            path: docs/tracing/opentelemetry/overview.mdx
+            slug: opentelemetry
   - tab: agent-optimization
     layout:
       - page: Opik Agent Optimizer
@@ -409,239 +680,12 @@ navigation:
       - page: Advanced clickhouse backup
         path: docs/self-host/backup.mdx
         slug: backup
-      - page: Scaling
-        path: docs/self-host/scaling.mdx
-        slug: scaling
       - section: Configuration
         slug: /configure
         contents:
           - page: Anonymous usage statistics
             path: docs/self-host/configure/anonymous_usage_statistics.mdx
             slug: anonymous_usage_statistics
-  - tab: integrations
-    layout:
-      - page: Overview
-        path: docs/tracing/integrations/overview.mdx
-        slug: overview
-      - section: Frameworks
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: AG2
-            path: docs/tracing/integrations/ag2.mdx
-            slug: ag2
-          - page: Agno
-            path: docs/tracing/integrations/agno.mdx
-            slug: agno
-          - page: Autogen
-            path: docs/tracing/integrations/autogen.mdx
-            slug: autogen
-          - page: BeeAI
-            path: docs/tracing/integrations/beeai.mdx
-            slug: beeai
-          - page: Crewai
-            path: docs/tracing/integrations/crewai.mdx
-            slug: crewai
-          - page: DSPY
-            path: docs/tracing/integrations/dspy.mdx
-            slug: dspy
-          - page: Google Agent Development Kit
-            path: docs/tracing/integrations/adk.mdx
-            slug: adk
-          - page: Haystack
-            path: docs/tracing/integrations/haystack.mdx
-            slug: haystack
-          - page: Instructor
-            path: docs/tracing/integrations/instructor.mdx
-            slug: instructor
-          - page: LangChain (Python)
-            path: docs/tracing/integrations/langchain.mdx
-            slug: langchain
-          - page: LangChain (JS/TS)
-            path: docs/tracing/integrations/langchainjs.mdx
-            slug: langchainjs
-          - page: LangGraph
-            path: docs/tracing/integrations/langgraph.mdx
-            slug: langgraph
-          - page: LiveKit Agents
-            path: docs/tracing/integrations/livekit.mdx
-            slug: livekit
-          - page: Llama Index
-            path: docs/tracing/integrations/llama_index.mdx
-            slug: llama_index
-          - page: Mastra
-            path: docs/tracing/integrations/mastra.mdx
-            slug: mastra
-          - page: OpenAI Agents
-            path: docs/tracing/integrations/openai_agents.mdx
-            slug: openai_agents
-          - page: Pipecat
-            path: docs/tracing/integrations/pipecat.mdx
-            slug: pipecat
-          - page: Pydantic AI
-            path: docs/tracing/integrations/pydantic-ai.mdx
-            slug: pydantic-ai
-          - page: Semantic Kernel
-            path: docs/tracing/integrations/semantic-kernel.mdx
-            slug: semantic-kernel
-          - page: Smolagents
-            path: docs/tracing/integrations/smolagents.mdx
-            slug: smolagents
-          - page: Spring AI
-            path: docs/tracing/integrations/spring-ai.mdx
-            slug: spring-ai
-          - page: Strands Agents
-            path: docs/tracing/integrations/strands-agents.mdx
-            slug: strands-agents
-          - page: Vercel AI SDK
-            path: docs/tracing/integrations/vercel-ai-sdk.mdx
-            slug: vercel-ai-sdk
-          - page: VoltAgent
-            path: docs/tracing/integrations/voltagent.mdx
-            slug: voltagent
-      - section: Model Providers
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Anthropic
-            path: docs/tracing/integrations/anthropic.mdx
-            slug: anthropic
-          - page: Bedrock
-            path: docs/tracing/integrations/bedrock.mdx
-            slug: bedrock
-          - page: BytePlus
-            path: docs/tracing/integrations/byteplus.mdx
-            slug: byteplus
-          - page: Cloudflare Workers AI
-            path: docs/tracing/integrations/cloudflare-workers-ai.mdx
-            slug: cloudflare-workers-ai
-          - page: Cohere
-            path: docs/tracing/integrations/cohere.mdx
-            slug: cohere
-          - page: DeepSeek
-            path: docs/tracing/integrations/deepseek.mdx
-            slug: deepseek
-          - page: Fireworks AI
-            path: docs/tracing/integrations/fireworks-ai.mdx
-            slug: fireworks-ai
-          - page: Gemini (Python)
-            path: docs/tracing/integrations/gemini.mdx
-            slug: gemini
-          - page: Gemini (JS/TS)
-            path: docs/tracing/integrations/gemini-typescript.mdx
-            slug: gemini-typescript
-          - page: Groq
-            path: docs/tracing/integrations/groq.mdx
-            slug: groq
-          - page: Mistral AI
-            path: docs/tracing/integrations/mistral.mdx
-            slug: mistral
-          - page: Novita AI
-            path: docs/tracing/integrations/novita-ai.mdx
-            slug: novita-ai
-          - page: Ollama
-            path: docs/tracing/integrations/ollama.mdx
-            slug: ollama
-          - page: OpenAI (Python)
-            path: docs/tracing/integrations/openai.mdx
-            slug: openai
-          - page: OpenAI (JS/TS)
-            path: docs/tracing/integrations/openai-typescript.mdx
-            slug: openai-typescript
-          - page: Predibase
-            path: docs/tracing/integrations/predibase.mdx
-            slug: predibase
-          - page: Together AI
-            path: docs/tracing/integrations/together-ai.mdx
-            slug: together-ai
-          - page: WatsonX
-            path: docs/tracing/integrations/watsonx.mdx
-            slug: watsonx
-          - page: xAI Grok
-            path: docs/tracing/integrations/xai-grok.mdx
-            slug: xai-grok
-      - section: Manual Integration
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Python SDK
-            path: docs/reference/python-sdk/overview.mdx
-            slug: python-sdk
-          - page: TypeScript SDK
-            path: docs/reference/typescript-sdk/overview.mdx
-            slug: typescript-sdk
-          - page: OpenTelemetry
-            path: docs/tracing/opentelemetry/overview.mdx
-            slug: opentelemetry
-      - section: Dataset Management
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Gretel
-            path: docs/tracing/integrations/gretel.mdx
-            slug: gretel
-          - page: Hugging Face Datasets
-            path: docs/tracing/integrations/huggingface-datasets.mdx
-            slug: huggingface-datasets
-      - section: Evaluation
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Ragas
-            path: docs/tracing/integrations/ragas.mdx
-            slug: ragas
-      - section: Gateways
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: AISuite
-            path: docs/tracing/integrations/aisuite.mdx
-            slug: aisuite
-          - page: LiteLLM
-            path: docs/tracing/integrations/litellm.mdx
-            slug: litellm
-          - page: OpenRouter
-            path: docs/tracing/integrations/openrouter.mdx
-            slug: openrouter
-      - section: No-Code Tools
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Cursor
-            path: docs/tracing/integrations/cursor.mdx
-            slug: cursor
-          - page: Dify
-            path: docs/tracing/integrations/dify.mdx
-            slug: dify
-          - page: Flowise
-            path: docs/tracing/integrations/flowise.mdx
-            slug: flowise
-          # - page: Langflow
-          #   path: docs/tracing/integrations/langflow.mdx
-          #   slug: langflow
-          # - page: OpenWebUI
-          #   path: docs/tracing/integrations/openwebui.mdx
-          #   slug: openwebui
-      - section: OpenTelemetry
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: OpenTelemetry Overview
-            path: docs/tracing/opentelemetry/overview.mdx
-            slug: opentelemetry
-          - page: OpenTelemetry Python SDK
-            path: docs/tracing/opentelemetry/python-sdk.mdx
-            slug: opentelemetry-python-sdk
-          - page: OpenTelemetry Ruby SDK
-            path: docs/reference/ruby-otel-sdk/overview.mdx
-            slug: opentelemetry-ruby-sdk
-      - section: Other
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Guardrails AI
-            path: docs/tracing/integrations/guardrails-ai.mdx
-            slug: guardrails-ai
   - tab: reference
     layout:
       - page: Overview
@@ -692,46 +736,6 @@ navigation:
           - api: API Reference
             slug: /
             display-errors: true
-  - tab: contributing
-    layout:
-      - page: Contribution Overview
-        path: docs/contributing/overview.mdx
-        slug: overview
-        icon: fa-regular fa-compass
-      - section: Specific Contribution Guides
-        slug: /guides
-        contents:
-          - page: Documentation
-            path: docs/contributing/documentation.mdx
-            slug: documentation
-            icon: fa-regular fa-book
-          - page: Python SDK
-            path: docs/contributing/python-sdk.mdx
-            slug: python-sdk
-            icon: fa-brands fa-python
-          - page: TypeScript SDK
-            path: docs/contributing/typescript-sdk.mdx
-            slug: typescript-sdk
-            icon: fa-brands fa-js
-          - page: Opik Optimizer
-            path: docs/contributing/agent-optimizer-sdk.mdx
-            slug: agent-optimizer-sdk
-            icon: fa-regular fa-gauge-high
-          - page: Frontend
-            path: docs/contributing/frontend.mdx
-            slug: frontend
-            icon: fa-regular fa-window-maximize
-          - page: Backend
-            path: docs/contributing/backend.mdx
-            slug: backend
-            icon: fa-regular fa-server
-      - section: Developer Programs
-        slug: /developer-programs
-        contents:
-          - page: Bounty Program
-            path: docs/contributing/bounties.mdx
-            slug: bounties
-            icon: fa-regular fa-gem
   - tab: opik-university
     layout:
       - page: Overview
@@ -1101,4 +1105,10 @@ redirects:
     permanent: true
   - source: "/docs/opik/cookbook"
     destination: "/docs/opik/integrations"
+    permanent: true
+  - source: "/docs/opik/tracing/supported_models"
+    destination: "/docs/opik/tracing/cost_tracking"
+    permanent: true
+  - source: "/docs/opik/tracing/dynamic_tracing_control"
+    destination: "/docs/opik/tracing/log_traces#disabling-the-logging-process"
     permanent: true
