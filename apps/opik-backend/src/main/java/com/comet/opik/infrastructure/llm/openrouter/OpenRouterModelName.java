@@ -60,7 +60,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     BAIDU_ERNIE_4_5_VL_424B_A47B("baidu/ernie-4.5-vl-424b-a47b"),
     BYTEDANCE_SEED_OSS_36B_INSTRUCT("bytedance/seed-oss-36b-instruct"),
     BYTEDANCE_UI_TARS_1_5_7B("bytedance/ui-tars-1.5-7b"),
-    COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE("cognitivecomputations/dolphin-mistral-24b-venice-edition:free"),
+    COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE(
+            "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"),
     COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B("cognitivecomputations/dolphin3.0-mistral-24b"),
     COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B_FREE("cognitivecomputations/dolphin3.0-mistral-24b:free"),
     COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B("cognitivecomputations/dolphin3.0-r1-mistral-24b"),
