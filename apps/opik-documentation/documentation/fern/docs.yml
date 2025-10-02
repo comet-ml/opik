@@ -566,6 +566,9 @@ navigation:
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
+              - page: Semantic Kernel
+                path: docs/tracing/integrations/semantic-kernel.mdx
+                slug: semantic-kernel
           - page: Opik Python SDK
             path: docs/reference/python-sdk/overview.mdx
             slug: python-sdk
@@ -579,13 +582,6 @@ navigation:
           - page: Spring AI
             path: docs/tracing/integrations/spring-ai.mdx
             slug: spring-ai
-      - section: .NET
-        skip-slug: true
-        icon: fa-solid fa-code
-        contents:
-          - page: Semantic Kernel
-            path: docs/tracing/integrations/semantic-kernel.mdx
-            slug: semantic-kernel
       - section: Ruby
         skip-slug: true
         icon: fa-solid fa-gem
