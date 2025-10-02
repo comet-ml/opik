@@ -355,7 +355,9 @@ function Get-UIUrl {
 }
 
 function New-OpikConfigIfMissing {
-    $configFile = Join-Path $env:USERPROFILE ".opik.config"
+    # Cross-platform home directory handling
+    $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { "~" }
+    $configFile = Join-Path $homeDir ".opik.config"
     
     if (Test-Path $configFile) {
         Write-DebugLog "[DEBUG] .opik.config file already exists, skipping creation"
