@@ -9,10 +9,7 @@ The Opik Wizard is an interactive command-line tool that streamlines the process
 
 - **🔍 Smart Detection**: Automatically detects your project setup (package manager, TypeScript configuration, existing integrations)
 - **📦 Package Management**: Supports npm, yarn, pnpm, and bun
-- **🔌 Integration Setup**: Configures popular LLM integrations (OpenAI, LangChain, Gemini, Vercel AI SDK)
 - **⚙️ Environment Configuration**: Creates or updates `.env` files with proper Opik configuration
-- **🎨 Code Formatting**: Optional Prettier integration for clean code formatting
-- **🚀 Non-Interactive Mode**: Support for CI/CD pipelines with `--default` flag
 
 ## Getting Started
 
@@ -21,17 +18,16 @@ The Opik Wizard is an interactive command-line tool that streamlines the process
 Run the wizard in your project directory:
 
 ```bash
-npx @opik/wizard
+npx opik-wizard
 ```
 
 The wizard will guide you through:
 
 1. **Project Detection**: Identifies your package manager and project structure
-2. **Integration Selection**: Choose which LLM frameworks to set up tracing for
-3. **Dependency Installation**: Installs Opik SDK and integration packages
-4. **Environment Setup**: Configures API keys and environment variables
-5. **Code Generation**: Sets up tracing in your application code
-6. **Formatting**: Optionally applies Prettier formatting
+2. **Dependency Installation**: Installs Opik SDK and integration packages
+3. **Environment Setup**: Configures API keys and environment variables
+4. **Code Generation**: Sets up Opik client in your root project folder
+5. **Formatting**: Optionally applies Prettier formatting
 
 ### Requirements
 
@@ -40,7 +36,6 @@ The wizard will guide you through:
 - **Supported Project Types**:
   - Node.js applications
   - TypeScript projects
-  - Next.js applications
   - Express/Fastify APIs
 
 ## CLI Options
@@ -61,81 +56,25 @@ The wizard supports several command-line options for customization:
 **Verbose debugging mode:**
 
 ```bash
-npx @opik/wizard --debug
+npx opik-wizard --debug
 ```
 
 **Non-interactive mode with defaults:**
 
 ```bash
-npx @opik/wizard --default
+npx opik-wizard --default
 ```
 
 **Install in a specific directory:**
 
 ```bash
-npx @opik/wizard --install-dir=./my-app
+npx opik-wizard --install-dir=./my-app
 ```
 
 **Force installation (skip peer dependency checks):**
 
 ```bash
-npx @opik/wizard --force-install
-```
-
-## Supported Integrations
-
-The wizard can automatically set up tracing for the following frameworks:
-
-### OpenAI Integration
-
-Automatically configures the `opik-openai` package to trace OpenAI API calls:
-
-```typescript
-import OpenAI from "openai";
-import { trackOpenAI } from "opik-openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const trackedOpenAI = trackOpenAI(openai);
-```
-
-### LangChain Integration
-
-Sets up `opik-langchain` for tracing LangChain applications:
-
-```typescript
-import { ChatOpenAI } from "@langchain/openai";
-import { trackLangChain } from "opik-langchain";
-
-const model = new ChatOpenAI({ modelName: "gpt-4" });
-const trackedModel = trackLangChain(model);
-```
-
-### Vercel AI SDK Integration
-
-Configures OpenTelemetry exporter for Vercel AI SDK:
-
-```typescript
-import { openai } from "@ai-sdk/openai";
-import { generateText } from "ai";
-import { NodeSDK } from "@opentelemetry/sdk-node";
-import { OpikExporter } from "opik/vercel";
-
-const sdk = new NodeSDK({
-  traceExporter: new OpikExporter(),
-});
-sdk.start();
-```
-
-### Gemini Integration
-
-Sets up Google Generative AI with Opik tracing:
-
-```typescript
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { trackGoogleGenerativeAI } from "opik";
-
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-const trackedGenAI = trackGoogleGenerativeAI(genAI);
+npx opik-wizard --force-install
 ```
 
 ## Environment Configuration
@@ -148,10 +87,6 @@ OPIK_API_KEY=your-api-key-here
 OPIK_URL_OVERRIDE=https://www.comet.com/opik/api
 OPIK_PROJECT_NAME=default
 OPIK_WORKSPACE_NAME=default
-
-# Provider API Keys (based on selected integrations)
-OPENAI_API_KEY=your-openai-key
-GOOGLE_API_KEY=your-google-key
 ```
 
 <Tip>
@@ -169,7 +104,7 @@ If you encounter permission errors during installation:
 
 ```bash
 # Use --force-install to bypass peer dependency checks
-npx @opik/wizard --force-install
+npx opik-wizard --force-install
 ```
 
 ### Package Manager Issues
@@ -177,7 +112,7 @@ npx @opik/wizard --force-install
 If the wizard fails to detect your package manager:
 
 1. Ensure you have a `package.json` in your project directory
-2. Try running the wizard with debug mode: `npx @opik/wizard --debug`
+2. Try running the wizard with debug mode: `npx opik-wizard --debug`
 3. Manually specify your package manager by selecting it from the prompts
 
 ### Environment Variable Setup
@@ -204,7 +139,7 @@ If traces aren't appearing in Opik:
 Enable verbose logging to troubleshoot issues:
 
 ```bash
-npx @opik/wizard --debug
+npx opik-wizard --debug
 ```
 
 This will show detailed information about:
@@ -220,7 +155,7 @@ For automated deployments, use the non-interactive mode:
 
 ```bash
 # In your CI/CD pipeline
-npx @opik/wizard --default --force-install
+npx opik-wizard --default --force-install
 ```
 
 Set environment variables beforehand:
@@ -228,30 +163,7 @@ Set environment variables beforehand:
 ```bash
 export OPIK_API_KEY="your-api-key"
 export OPENAI_API_KEY="your-openai-key"
-npx @opik/wizard --default
-```
-
-## Development
-
-To contribute to the wizard or test changes locally:
-
-```bash
-# Clone the repository
-git clone https://github.com/comet-ml/opik.git
-cd opik/sdks/typescript/src/opik/wizard
-
-# Install dependencies
-pnpm install
-
-# Test the wizard locally
-pnpm try --install-dir=/path/to/test/project
-
-# Build for production
-pnpm build
-
-# Link globally for testing
-pnpm link --global
-opik-wizard [options]
+npx opik-wizard --default
 ```
 
 ## Next Steps

@@ -8,7 +8,7 @@ observability and tracing.
 # Usage
 
 ```bash
-npx @opik/wizard
+npx opik-wizard
 ```
 
 # Options
