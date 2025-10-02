@@ -456,9 +456,8 @@ function Start-Backend {
         }
         
         # Start backend in background with output redirected to log file
-        # Use shell to combine stdout and stderr into single log file
-        # Change directory first, then run java with environment variables
-        $shellCmd = "cd '$script:BACKEND_DIR' && $envPrefix java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1"
+        # Use exec to replace shell process with java, so the PID is the Java process
+        $shellCmd = "cd '$script:BACKEND_DIR' && exec $envPrefix java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1"
         
         $processParams = @{
             FilePath = "sh"
@@ -534,9 +533,8 @@ function Start-Frontend {
         Write-LogDebug "Starting frontend with: npm run start"
         
         # Start frontend in background with output redirected to log file
-        # Use shell to combine stdout and stderr into single log file
-        # Change directory first, then run npm with environment variables
-        $shellCmd = "cd '$script:FRONTEND_DIR' && $envPrefix npm run start > '$script:FRONTEND_LOG_FILE' 2>&1"
+        # Use exec to replace shell process with npm, so the PID is the npm process
+        $shellCmd = "cd '$script:FRONTEND_DIR' && exec $envPrefix npm run start > '$script:FRONTEND_LOG_FILE' 2>&1"
         
         $processParams = @{
             FilePath = "sh"
