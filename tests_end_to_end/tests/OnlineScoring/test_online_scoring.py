@@ -205,6 +205,7 @@ class TestOnlineScoring:
 
     @pytest.mark.regression
     @pytest.mark.online_scoring
+    @pytest.mark.skip(reason="AI generated test, skip until analyzed by human")
     @allure.title("Online scoring with filters")
     def test_online_scoring_with_filters(
         self,

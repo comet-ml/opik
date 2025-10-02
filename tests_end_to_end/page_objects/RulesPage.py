@@ -100,13 +100,11 @@ class RulesPage:
     ):
         """
         Create a new moderation rule with filters.
-
         Args:
             rule_name: The name for the new rule
             provider_config: The provider configuration object
             model_config: The model configuration object
             filters: List of filter dictionaries with 'field', 'operator', and 'value' keys
-
         Returns:
             str: The created rule name
         """

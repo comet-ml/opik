@@ -287,6 +287,7 @@ class TestTracesCrud:
         # Delete traces via UI
         logger.info("Deleting traces via UI")
         traces_page = TracesPage(page, traces_created=True)
+        traces_page.page.reload()
 
         # Wait for traces to appear on UI
         traces_page.wait_for_traces_to_be_visible()
