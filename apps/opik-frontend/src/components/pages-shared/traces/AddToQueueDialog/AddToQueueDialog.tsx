@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { UserPen, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Thread, Trace } from "@/types/traces";
 import { ThreadStatus } from "@/types/thread";
@@ -11,6 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import Loader from "@/components/shared/Loader/Loader";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -44,6 +47,8 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   setOpen,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
@@ -98,15 +103,51 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const noValidRows = validRows.length === 0;
   const partialValid = validRows.length !== rows.length;
 
+  const handleAddSuccess = useCallback(
+    (queue: AnnotationQueue) => {
+      toast({
+        title: "Items added to annotation queue",
+        description:
+          "Start annotating your items and provide feedback to improve the evaluation of your LLM application.",
+        actions: [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText="Go to annotation queue"
+            key="Go to annotation queue"
+            onClick={() =>
+              navigate({
+                to: "/$workspaceName/annotation-queues/$annotationQueueId",
+                params: {
+                  workspaceName,
+                  annotationQueueId: queue.id,
+                },
+              })
+            }
+          >
+            Go to annotation queue
+          </ToastAction>,
+        ],
+      });
+    },
+    [toast, navigate, workspaceName],
+  );
+
   const addToQueueHandler = useCallback(
     (queue: AnnotationQueue) => {
       setOpen(false);
-      mutate({
-        annotationQueueId: queue.id,
-        ids: validRows.map(getAnnotationQueueItemId),
-      });
+      mutate(
+        {
+          annotationQueueId: queue.id,
+          ids: validRows.map(getAnnotationQueueItemId),
+        },
+        {
+          onSuccess: () => handleAddSuccess(queue),
+        },
+      );
     },
-    [setOpen, mutate, validRows],
+    [setOpen, mutate, validRows, handleAddSuccess],
   );
 
   const onQueueCreated = useCallback(
