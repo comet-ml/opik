@@ -22,6 +22,7 @@ class GEval(base_metric.BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
         temperature: float = 0.0,
+        seed: Optional[int] = None,
     ):
         """
         A metric that evaluates an LLM output based on chain-of-thought built with the evaluation criteria provided
@@ -39,6 +40,7 @@ class GEval(base_metric.BaseMetric):
             project_name: Optional project name to track the metric in for the cases when
                 there is no parent span/trace to inherit project name from.
             temperature: The temperature to use for the model. Defaults to 0.0.
+            seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
         """
         super().__init__(
             name=name,
@@ -47,6 +49,7 @@ class GEval(base_metric.BaseMetric):
         )
         self.task_introduction = task_introduction
         self.evaluation_criteria = evaluation_criteria
+        self._seed = seed
 
         self._log_probs_supported = False
         self._chain_of_thought_response: Optional[str] = None
@@ -81,7 +84,11 @@ class GEval(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model, temperature=temperature)
+            model_kwargs = {"temperature": temperature}
+            if self._seed is not None:
+                model_kwargs["seed"] = self._seed
+
+            self._model = models_factory.get(model_name=model, **model_kwargs)
 
         if (
             hasattr(self._model, "supported_params")

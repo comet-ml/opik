@@ -15,12 +15,15 @@ import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
+import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMap;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
-import org.jdbi.v3.sqlobject.statement.GetGeneratedKeys;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -36,34 +39,28 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface AlertDAO {
 
-    @SqlUpdate("INSERT INTO alerts (id, name, enabled, webhook_id, workspace_id, created_by, last_updated_by, created_at) "
-            +
-            "VALUES (:bean.id, :bean.name, :bean.enabled, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))")
-    @GetGeneratedKeys
-    Alert save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
-            @Bind("webhookId") UUID webhookId);
-
-    @SqlQuery("""
+    String FIND = """
             WITH target_alerts AS (
-                SELECT *
-                FROM alerts
-                WHERE id = :id AND workspace_id = :workspaceId
-            ),
-            target_webhooks AS (
                 SELECT
-                    JSON_OBJECT(
-                        'id', id,
-                        'url', url,
-                        'secret_token', secret_token,
-                        'headers', headers,
-                        'created_at', created_at,
-                        'created_by', created_by,
-                        'last_updated_at', last_updated_at,
-                        'last_updated_by', last_updated_by
-                    ) AS webhook,
-                    id
-                FROM webhooks
-                WHERE workspace_id = :workspaceId
+                    a.id as id,
+                    a.name as name,
+                    a.enabled as enabled,
+                    a.created_at as created_at,
+                    a.created_by as created_by,
+                    a.last_updated_at as last_updated_at,
+                    a.last_updated_by as last_updated_by,
+                    w.id as webhook_id,
+                    w.url as webhook_url,
+                    w.secret_token as webhook_secret_token,
+                    w.headers as webhook_headers,
+                    w.created_at as webhook_created_at,
+                    w.created_by as webhook_created_by,
+                    w.last_updated_at as webhook_last_updated_at,
+                    w.last_updated_by as webhook_last_updated_by
+                FROM alerts a
+                JOIN webhooks w ON a.webhook_id = w.id
+                WHERE a.workspace_id = :workspaceId
+                    <if(id)> AND a.id = :id <endif>
             ),
             trigger_ids AS (
                 SELECT id
@@ -116,12 +113,60 @@ interface AlertDAO {
             )
             SELECT *
             FROM target_alerts a
-            JOIN target_webhooks w
-                ON a.webhook_id = w.id
             LEFT JOIN target_triggers t
-                ON a.id = t.alert_id;
+                ON a.id = t.alert_id
+            <if(filters)> WHERE <filters> <endif>
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
+            <if(limit)> LIMIT :limit <endif>
+            <if(offset)> OFFSET :offset <endif>;
+            """;
+
+    @SqlUpdate("""
+            INSERT INTO alerts (id, name, enabled, webhook_id, workspace_id, created_by, last_updated_by, created_at)
+            VALUES (:bean.id, :bean.name, :bean.enabled, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
             """)
-    Alert findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+    void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
+            @Bind("webhookId") UUID webhookId);
+
+    @SqlQuery(FIND)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Alert findById(@Define("id") @Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery(FIND)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Alert> find(@Bind("workspaceId") String workspaceId,
+            @Define("offset") @Bind("offset") int offset, @Define("limit") @Bind("limit") int limit,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping);
+
+    @SqlQuery("""
+             WITH target_alerts AS (
+                SELECT
+                    a.id as id,
+                    a.name as name,
+                    a.created_at as created_at,
+                    a.created_by as created_by,
+                    a.last_updated_at as last_updated_at,
+                    a.last_updated_by as last_updated_by,
+                    w.url as webhook_url,
+                    w.secret_token as webhook_secret_token
+                FROM alerts a
+                JOIN webhooks w ON a.webhook_id = w.id
+                WHERE a.workspace_id = :workspaceId
+            )
+            SELECT
+                count(id)
+            FROM target_alerts
+            <if(filters)> WHERE <filters> <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    long count(@Bind("workspaceId") String workspaceId,
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping);
 
     @SqlUpdate("""
                     DELETE a, w, atr, atrc
@@ -144,11 +189,29 @@ interface AlertDAO {
 
         @Override
         public Alert map(ResultSet rs, StatementContext ctx) throws SQLException {
-            // Parse webhook JSON object
-            Webhook webhook = Optional.ofNullable(rs.getString("webhook"))
-                    .map(JsonUtils::getJsonNodeFromString)
-                    .map(this::mapWebhook)
-                    .orElse(null);
+            // Parse webhook headers JSON to Map
+            Map<String, String> webhookHeaders = null;
+            String headersJson = rs.getString("webhook_headers");
+            if (headersJson != null && !headersJson.trim().isEmpty()) {
+                try {
+                    webhookHeaders = JsonUtils.readValue(headersJson, MAP_TYPE_REF);
+                } catch (Exception e) {
+                    log.warn("Failed to parse webhook headers JSON: '{}'", headersJson, e);
+                    webhookHeaders = Map.of();
+                }
+            }
+
+            // Build Webhook object
+            Webhook webhook = Webhook.builder()
+                    .id(UUID.fromString(rs.getString("webhook_id")))
+                    .url(rs.getString("webhook_url"))
+                    .secretToken(rs.getString("webhook_secret_token"))
+                    .headers(webhookHeaders)
+                    .createdAt(rs.getTimestamp("webhook_created_at").toInstant())
+                    .createdBy(rs.getString("webhook_created_by"))
+                    .lastUpdatedAt(rs.getTimestamp("webhook_last_updated_at").toInstant())
+                    .lastUpdatedBy(rs.getString("webhook_last_updated_by"))
+                    .build();
 
             // Parse triggers JSON array
             List<AlertTrigger> triggers = Optional.ofNullable(rs.getString("triggers_json"))
@@ -163,54 +226,11 @@ interface AlertDAO {
                     .enabled(rs.getBoolean("enabled"))
                     .webhook(webhook)
                     .triggers(triggers)
-                    .createdAt(rs.getTimestamp("created_at") != null
-                            ? rs.getTimestamp("created_at").toInstant()
-                            : null)
+                    .createdAt(rs.getTimestamp("created_at").toInstant())
                     .createdBy(rs.getString("created_by"))
-                    .lastUpdatedAt(rs.getTimestamp("last_updated_at") != null
-                            ? rs.getTimestamp("last_updated_at").toInstant()
-                            : null)
+                    .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())
                     .lastUpdatedBy(rs.getString("last_updated_by"))
                     .build();
-        }
-
-        private Webhook mapWebhook(JsonNode webhookNode) {
-            try {
-                // Parse webhook headers if present
-                Map<String, String> webhookHeaders = Optional.ofNullable(webhookNode.get("headers"))
-                        .map(this::parseHeaders)
-                        .orElse(null);
-
-                return Webhook.builder()
-                        .id(UUID.fromString(webhookNode.get("id").asText()))
-                        .url(webhookNode.get("url").asText())
-                        .secretToken(webhookNode.get("secret_token").asText())
-                        .headers(webhookHeaders)
-                        .createdAt(Instant.from(FORMATTER.parse(webhookNode.get("created_at").asText())))
-                        .createdBy(webhookNode.get("created_by").asText())
-                        .lastUpdatedAt(Instant.from(FORMATTER.parse(webhookNode.get("last_updated_at").asText())))
-                        .lastUpdatedBy(webhookNode.get("last_updated_by").asText())
-                        .build();
-            } catch (Exception e) {
-                log.warn("Failed to parse webhook JSON: '{}'", webhookNode, e);
-                return null;
-            }
-        }
-
-        private Map<String, String> parseHeaders(JsonNode headersNode) {
-            try {
-                if (headersNode.isTextual()) {
-                    String headersStr = headersNode.asText();
-                    if (!headersStr.trim().isEmpty()) {
-                        return JsonUtils.readValue(headersStr, MAP_TYPE_REF);
-                    }
-                } else if (headersNode.isObject()) {
-                    return JsonUtils.MAPPER.convertValue(headersNode, MAP_TYPE_REF);
-                }
-            } catch (Exception e) {
-                log.warn("Failed to parse webhook headers: '{}'", headersNode, e);
-            }
-            return Map.of();
         }
 
         private List<AlertTrigger> mapTriggers(JsonNode triggersNode) {
