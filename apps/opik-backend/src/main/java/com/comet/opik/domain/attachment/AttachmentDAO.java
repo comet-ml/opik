@@ -254,9 +254,9 @@ class AttachmentDAOImpl implements AttachmentDAO {
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(DELETE_ATTACHMENTS_BY_FILE_NAMES);
             statement
-                    .bind("entity_ids", entityIds)
+                    .bind("entity_ids", entityIds.toArray(UUID[]::new))
                     .bind("entity_type", entityType.getValue())
-                    .bind("file_names", fileNames);
+                    .bind("file_names", fileNames.toArray(String[]::new));
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)
