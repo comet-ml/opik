@@ -20,6 +20,16 @@ interface TraceThreadMapper {
     TraceThreadMapper INSTANCE = Mappers.getMapper(TraceThreadMapper.class);
 
     @Mapping(target = "lastUpdatedBy", source = "userName")
+    @Mapping(target = "tags", ignore = true)
+    @Mapping(target = "sampling", expression = "java(java.util.Map.of())")
+    @Mapping(target = "scoredAt", ignore = true)
+    @Mapping(target = "startTime", ignore = true)
+    @Mapping(target = "endTime", ignore = true)
+    @Mapping(target = "duration", ignore = true)
+    @Mapping(target = "feedbackScores", expression = "java(java.util.Map.of())")
+    @Mapping(target = "firstMessage", ignore = true)
+    @Mapping(target = "lastMessage", ignore = true)
+    @Mapping(target = "numberOfMessages", ignore = true)
     TraceThreadModel mapFromThreadIdModel(TraceThreadIdModel traceThread, String userName, TraceThreadStatus status,
             Instant lastUpdatedAt);
 
@@ -44,7 +54,30 @@ interface TraceThreadMapper {
                                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
                         .orElse(Map.of()))
                 .scoredAt(row.get("scored_at", Instant.class))
+                .startTime(getOptionalValue(row, "start_time", Instant.class))
+                .endTime(getOptionalValue(row, "end_time", Instant.class))
+                .duration(getOptionalValue(row, "duration", Double.class))
+                .feedbackScores(Optional.ofNullable(getOptionalValue(row, "feedback_scores", Map.class))
+                        .map(scores -> (Map<String, Integer>) scores)
+                        .orElse(Map.of()))
+                .firstMessage(getOptionalValue(row, "first_message", String.class))
+                .lastMessage(getOptionalValue(row, "last_message", String.class))
+                .numberOfMessages(getOptionalValue(row, "number_of_messages", Long.class))
                 .build();
+    }
+
+    /**
+     * Helper method to safely get values from database rows that might not have certain columns.
+     * This is needed because some queries (e.g., simple trace_threads table) don't have execution time fields,
+     * while others (e.g., aggregated thread queries) do have them.
+     */
+    default <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
+        try {
+            return row.get(columnName, type);
+        } catch (Exception e) {
+            // Column doesn't exist in this query result - return null
+            return null;
+        }
     }
 
     default ProjectWithPendingClosureTraceThreads mapToProjectWithPendingClosureThreads(Row row) {
