@@ -1,27 +1,35 @@
-# Opik Development Runner Script for Windows
-# PowerShell version with feature parity to dev-runner.sh
-
-#Requires -Version 5.1
+# Opik Development Runner Script
 
 [CmdletBinding()]
-param(
-    [Parameter(Position = 0)]
-    [string]$Action = "",
-    
-    [switch]$DebugMode
+param (
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$options = @()
 )
 
-# Set strict mode for better error handling
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Variables
-$script:DEBUG_MODE = $DebugMode.IsPresent -or ($env:DEBUG_MODE -eq "true")
+$script:DEBUG_MODE = $false
+
+# Process debug flag
+if ($options -contains '--debug') {
+    $script:DEBUG_MODE = $true
+    $options = $options | Where-Object { $_ -ne '--debug' }
+}
+
+# Also check environment variable
+if ($env:DEBUG_MODE -eq "true") {
+    $script:DEBUG_MODE = $true
+}
+
+# Get the main action (first remaining option)
+$Action = if ($options.Count -gt 0) { $options[0] } else { '' }
 
 # Reconstruct original command for error messages
 $commandArgs = @()
 if ($Action) { $commandArgs += $Action }
-if ($DebugMode.IsPresent) { $commandArgs += "--debug" }
+if ($script:DEBUG_MODE) { $commandArgs += "--debug" }
 $script:ORIGINAL_COMMAND = "$PSCommandPath $($commandArgs -join ' ')"
 
 # Configuration
