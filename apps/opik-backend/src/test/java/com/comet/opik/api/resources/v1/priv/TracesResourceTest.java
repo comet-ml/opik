@@ -7451,13 +7451,14 @@ class TracesResourceTest {
 
             // Then the trace should have attachments stripped and replaced with references
             // Wait for async processing and attachment stripping
+            // Use truncate=true to get attachment references instead of re-injected full base64 data
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+                Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
                 assertThat(retrievedTrace).isNotNull();
                 // Ensure trace is retrieved successfully before proceeding with assertions
             });
 
-            Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
             assertThat(retrievedTrace).isNotNull();
 
             JsonNode retrievedInput = retrievedTrace.input();
@@ -7465,9 +7466,9 @@ class TracesResourceTest {
 
             String retrievedInputString = retrievedInput.toString();
 
-            // Verify the base64 data is replaced by attachment references (with timestamps)
-            assertThat(retrievedInputString).containsPattern("attachment-1-\\d+\\.png");
-            assertThat(retrievedInputString).containsPattern("attachment-2-\\d+\\.gif");
+            // Verify the base64 data is replaced by attachment references (bracketed, with context prefix and timestamp)
+            assertThat(retrievedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+            assertThat(retrievedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
             assertThat(retrievedInputString).doesNotContain(base64Png);
             assertThat(retrievedInputString).doesNotContain(base64Gif);
 
@@ -7978,10 +7979,12 @@ class TracesResourceTest {
             // Wait for async processing and attachment stripping
             var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
 
+            // Use truncate=true to get attachment references instead of re-injected full base64 data
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 // Ensure all traces can be retrieved successfully before proceeding with assertions
                 for (var originalTrace : traces) {
-                    Trace retrievedTrace = traceResourceClient.getById(originalTrace.id(), TEST_WORKSPACE, API_KEY);
+                    Trace retrievedTrace = traceResourceClient.getById(originalTrace.id(), TEST_WORKSPACE, API_KEY,
+                            true);
                     assertThat(retrievedTrace).isNotNull();
                 }
             });
@@ -7990,7 +7993,7 @@ class TracesResourceTest {
             // Verify each trace has its attachments processed
             for (int i = 0; i < traces.size(); i++) {
                 var originalTrace = traces.get(i);
-                var retrievedTrace = traceResourceClient.getById(originalTrace.id(), TEST_WORKSPACE, API_KEY);
+                var retrievedTrace = traceResourceClient.getById(originalTrace.id(), TEST_WORKSPACE, API_KEY, true);
                 assertThat(retrievedTrace).isNotNull();
 
                 // Verify original base64 data is not present in any field
@@ -8010,19 +8013,19 @@ class TracesResourceTest {
                 assertThat(metadataString).doesNotContain(base64Gif);
                 assertThat(metadataString).doesNotContain(base64Pdf);
 
-                // Verify attachment references are present based on trace content (with timestamps)
+                // Verify attachment references are present based on trace content (bracketed, with context prefix and timestamp)
                 switch (i) {
                     case 0 : // First trace: PNG in input, GIF in output
-                        assertThat(inputString).containsPattern("input-attachment-1-\\d+\\.png");
-                        assertThat(outputString).containsPattern("output-attachment-1-\\d+\\.gif");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.gif\\]");
                         break;
                     case 1 : // Second trace: PDF in input, PNG in metadata
-                        assertThat(inputString).containsPattern("input-attachment-1-\\d+\\.pdf");
-                        assertThat(metadataString).containsPattern("metadata-attachment-1-\\d+\\.png");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.pdf\\]");
+                        assertThat(metadataString).containsPattern("\\[metadata-attachment-\\d+-\\d+\\.png\\]");
                         break;
                     case 2 : // Third trace: GIF and PDF in input
-                        assertThat(inputString).containsPattern("input-attachment-1-\\d+\\.gif");
-                        assertThat(inputString).containsPattern("input-attachment-2-\\d+\\.pdf");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.pdf\\]");
                         break;
                 }
 

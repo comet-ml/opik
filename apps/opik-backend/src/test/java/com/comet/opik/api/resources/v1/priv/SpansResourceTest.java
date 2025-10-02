@@ -5360,24 +5360,21 @@ class SpansResourceTest {
             // Then the span should have attachments stripped and replaced with references
             // Wait for async processing and attachment stripping
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
+                // Use truncate=true to get attachment references instead of reinjected base64
+                Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
                 assertThat(retrievedSpan).isNotNull();
-                // Ensure span is retrieved successfully before proceeding with assertions
+
+                // Verify the base64 data is replaced by attachment references (with timestamps)
+                JsonNode retrievedInput = retrievedSpan.input();
+                assertThat(retrievedInput).isNotNull();
+                String retrievedInputString = retrievedInput.toString();
+
+                // References are wrapped in brackets and prefixed with the context (input)
+                assertThat(retrievedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                assertThat(retrievedInputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
+                assertThat(retrievedInputString).doesNotContain(base64Png);
+                assertThat(retrievedInputString).doesNotContain(base64Gif);
             });
-
-            Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY);
-            assertThat(retrievedSpan).isNotNull();
-
-            JsonNode retrievedInput = retrievedSpan.input();
-            assertThat(retrievedInput).isNotNull();
-
-            String retrievedInputString = retrievedInput.toString();
-
-            // Verify the base64 data is replaced by attachment references (with timestamps)
-            assertThat(retrievedInputString).containsPattern("attachment-1-\\d+\\.png");
-            assertThat(retrievedInputString).containsPattern("attachment-2-\\d+\\.gif");
-            assertThat(retrievedInputString).doesNotContain(base64Png);
-            assertThat(retrievedInputString).doesNotContain(base64Gif);
 
             // Note: Attachment verification would require proper API setup
             // For now, we just verify that the base64 data was stripped from the input
