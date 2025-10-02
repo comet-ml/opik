@@ -31,7 +31,7 @@ const EditAnnotationQueueButton: React.FunctionComponent<
       />
       <Button size="sm" variant="outline" onClick={handleOpenEditDialog}>
         <Pencil className="mr-1.5 size-3.5" />
-        Edit queue
+        Edit
       </Button>
     </>
   );

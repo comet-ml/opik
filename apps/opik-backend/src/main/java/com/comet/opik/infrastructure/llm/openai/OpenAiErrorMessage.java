@@ -33,6 +33,7 @@ public record OpenAiErrorMessage(OpenAiError error) implements LlmProviderError<
         return switch (error.code) {
             case "invalid_api_key" -> 401;
             case "internal_error" -> 500;
+            case "invalid_request_error" -> 400;
             default -> null;
         };
     }
