@@ -97,9 +97,10 @@ class Trace:
         Returns:
             None
         """
-        update_trace_message = messages.UpdateTraceMessage(
+        update_trace(
             trace_id=self.id,
             project_name=self._project_name,
+            message_streamer=self._streamer,
             end_time=end_time,
             metadata=metadata,
             input=input,
@@ -108,7 +109,6 @@ class Trace:
             error_info=error_info,
             thread_id=thread_id,
         )
-        self._streamer.put(update_trace_message)
 
     def span(
         self,
@@ -215,3 +215,53 @@ class Trace:
         )
 
         self._streamer.put(add_trace_feedback_batch_message)
+
+
+def update_trace(
+    trace_id: str,
+    project_name: str,
+    message_streamer: streamer.Streamer,
+    end_time: Optional[datetime.datetime] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    input: Optional[Dict[str, Any]] = None,
+    output: Optional[Dict[str, Any]] = None,
+    tags: Optional[List[Any]] = None,
+    error_info: Optional[ErrorInfoDict] = None,
+    thread_id: Optional[str] = None,
+) -> None:
+    """
+    Update an existing trace with new information.
+    This function sends an UpdateTraceMessage to the provided message_streamer,
+    allowing you to update various fields of a trace, such as its end time,
+    metadata, input, output, tags, error information and thread association.
+
+    Args:
+        trace_id: The unique identifier of the trace to update.
+        project_name: The name of the project associated with the trace.
+        message_streamer: The message streamer used to send the update.
+        end_time: The end time of the trace. Defaults to None.
+        metadata: Additional metadata for the trace. Defaults to None.
+        input: Input data associated with the trace. Defaults to None.
+        output: Output data associated with the trace. Defaults to None.
+        tags: List of tags to associate with the trace. Defaults to None.
+        error_info: Error information related to the trace. Defaults to None.
+        thread_id : The thread ID associated with the trace. Defaults to None.
+    Returns:
+        None
+    Usage Notes:
+        - This function does not return a value; it sends an update message to the message streamer.
+        - All parameters except trace_id, project_name and message_streamer are optional.
+        - Only the fields provided will be updated in the trace.
+    """
+    update_trace_message = messages.UpdateTraceMessage(
+        trace_id=trace_id,
+        project_name=project_name,
+        end_time=end_time,
+        metadata=metadata,
+        input=input,
+        output=output,
+        tags=tags,
+        error_info=error_info,
+        thread_id=thread_id,
+    )
+    message_streamer.put(update_trace_message)
