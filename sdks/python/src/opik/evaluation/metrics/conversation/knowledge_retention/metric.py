@@ -51,7 +51,40 @@ _REQUEST_KEYWORDS = {
 
 
 class KnowledgeRetentionMetric(BaseMetric):
-    """Checks whether final assistant replies retain earlier user-provided facts."""
+    """
+    Measure how many user-provided facts resurface in the closing assistant reply.
+
+    The metric extracts salient, non-stopword terms from earlier user turns,
+    excluding explicit requests (for example, questions or pleas for help). When the
+    final assistant response omits those key terms, the score drops, signalling the
+    assistant may have forgotten essential context. Scores range from `0.0`
+    (nothing retained) to `1.0` (all extracted facts referenced).
+
+    Args:
+        name: Display name for the metric result. Defaults to
+            ``"knowledge_retention_metric"``.
+        track: Whether the metric should automatically track results. Defaults to
+            ``True``.
+        project_name: Optional Opik project name for tracking. Defaults to ``None``.
+        turns_to_consider: How many of the earliest user turns should be mined for
+            facts. Defaults to ``5``.
+
+    Example:
+        >>> from opik.evaluation.metrics import KnowledgeRetentionMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "My new router is a Netgear Nighthawk."},
+        ...     {"role": "assistant", "content": "Great choice!"},
+        ...     {"role": "user", "content": "Please remind me about the Netgear router setup."},
+        ...     {
+        ...         "role": "assistant",
+        ...         "content": "Be sure to update the Netgear Nighthawk firmware first.",
+        ...     },
+        ... ]
+        >>> metric = KnowledgeRetentionMetric(turns_to_consider=3)
+        >>> result = metric.score(conversation)
+        >>> float(result.value)  # doctest: +SKIP
+        1.0
+    """
 
     def __init__(
         self,

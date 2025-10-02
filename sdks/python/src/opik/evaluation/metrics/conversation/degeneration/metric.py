@@ -23,9 +23,41 @@ def _ngram_counts(tokens: List[str], n: int) -> Counter:
 
 
 class ConversationDegenerationMetric(BaseMetric):
-    """Detect repetition/degeneration patterns across assistant turns.
+    """
+    Score how strongly an assistant conversation shows degeneration or repetition.
 
-    Scores range from 0 (no degeneration risk) to 1 (high repetition/degeneration).
+    The metric inspects each assistant turn, measuring repeated n-grams, overlap with
+    the previous reply, low lexical diversity, and presence of known fallback
+    phrases (for example, "as an AI language model..."). Each turn receives a
+    degeneration score between `0.0` and `1.0`; the overall metric reports the peak
+    risk observed so you can quickly flag sections where the assistant got stuck or
+    stopped being helpful. Detailed per-turn diagnostics are returned in the
+    ``ScoreResult.metadata`` payload.
+
+    Args:
+        name: Display name for the metric result. Defaults to
+            ``"conversation_degeneration_metric"``.
+        track: Whether the metric should automatically track to an Opik project.
+            Defaults to ``True``.
+        project_name: Optional project to store tracked results in. Defaults to
+            ``None`` (inherit global setting).
+        ngram_size: Size of the n-grams used to detect repetition within a single
+            response. Must be at least ``2``. Defaults to ``3``.
+        fallback_phrases: Custom list of phrases that should be treated as
+            degeneration signatures. If ``None``, a sensible default list is used.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationDegenerationMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "Can you draft a short bio for Ada?"},
+        ...     {"role": "assistant", "content": "Sure, here is a short bio for Ada."},
+        ...     {"role": "user", "content": "Could you add more detail?"},
+        ...     {"role": "assistant", "content": "Sure, here is a short bio for Ada."},
+        ... ]
+        >>> metric = ConversationDegenerationMetric(ngram_size=3)
+        >>> result = metric.score(conversation)
+        >>> float(result.value)  # doctest: +SKIP
+        0.75
     """
 
     def __init__(

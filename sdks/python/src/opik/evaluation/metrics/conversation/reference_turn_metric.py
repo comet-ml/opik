@@ -9,7 +9,43 @@ from opik.evaluation.metrics.conversation import types as conversation_types
 
 
 class ConversationReferenceMetric(BaseMetric):
-    """Aggregates single-turn reference metrics across a conversation."""
+    """
+    Base helper that lifts turn-level reference metrics to conversation scope.
+
+    Subclasses supply a turn metric (for example ROUGE, BLEU, METEOR) and the role
+    to evaluate. ``ConversationReferenceMetric`` then aligns turns between the
+    candidate and reference conversations, averages the per-turn scores, and applies
+    an optional penalty when one side has extra turns so gaps are reflected in the
+    final score.
+
+    Args:
+        turn_metric: The underlying metric used to evaluate individual turn pairs.
+        target_role: Conversation role to extract and compare across transcripts.
+            Defaults to ``"assistant"``.
+        missing_turn_penalty: Amount deducted for each unmatched turn. Must be in
+            ``[0.0, 1.0]``.
+        name: Display name for the metric. Defaults to
+            ``"conversation_reference_metric"``.
+        track: Whether the metric should be tracked automatically. Defaults to
+            ``True``.
+        project_name: Optional Opik project for tracking. Defaults to ``None``.
+
+    Example:
+        >>> from opik.evaluation.metrics.conversation.reference_turn_metric import (
+        ...     ConversationReferenceMetric,
+        ... )
+        >>> from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU
+        >>> conversation = [
+        ...     {"role": "assistant", "content": "Answer"},
+        ... ]
+        >>> reference = [
+        ...     {"role": "assistant", "content": "Reference answer"},
+        ... ]
+        >>> metric = ConversationReferenceMetric(turn_metric=SentenceBLEU(track=False))
+        >>> result = metric.score(conversation, reference)
+        >>> float(result.value)  # doctest: +SKIP
+        0.74
+    """
 
     def __init__(
         self,

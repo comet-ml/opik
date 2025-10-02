@@ -23,7 +23,34 @@ from . import conversation_thread_metric, types as conversation_types
 
 
 class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetric):
-    """Wrap a GEval-based judge so it can score whole conversations."""
+    """
+    Wrap a GEval-style judge so it can evaluate an entire conversation transcript.
+
+    The wrapper extracts the latest assistant turn from the conversation and sends
+    it to the provided judge. Results are normalised into a ``ScoreResult`` so they
+    can plug into the wider Opik evaluation pipeline. Any errors raised by the
+    underlying judge are captured and reported as a failed score computation.
+
+    Args:
+        judge: A GEval-compatible metric instance that accepts ``output`` as its
+            primary argument.
+        name: Optional override for the metric name used in results. When ``None``
+            the name is derived from the wrapped judge.
+
+    Example:
+        >>> from opik.evaluation.metrics.conversation.g_eval_wrappers import (
+        ...     GEvalConversationMetric,
+        ... )
+        >>> from opik.evaluation.metrics.llm_judges.qa_suite import DialogueHelpfulnessJudge
+        >>> conversation = [
+        ...     {"role": "user", "content": "Summarise these notes."},
+        ...     {"role": "assistant", "content": "Here is a concise summary..."},
+        ... ]
+        >>> metric = GEvalConversationMetric(judge=DialogueHelpfulnessJudge(model="gpt-4"))
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        0.83
+    """
 
     def __init__(
         self,
@@ -100,6 +127,30 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
 
 
 class ConversationComplianceRiskMetric(GEvalConversationMetric):
+    """
+    Evaluate the latest assistant response for compliance and risk exposure.
+
+    This metric forwards the final assistant turn to
+    :class:`~opik.evaluation.metrics.llm_judges.compliance_risk.metric.ComplianceRiskJudge`
+    and returns its assessment as a conversation-level ``ScoreResult``.
+
+    Args:
+        model: Optional model name or identifier understood by the judge.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+        temperature: Sampling temperature supplied to the underlying judge model.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationComplianceRiskMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "Generate an employment contract."},
+        ...     {"role": "assistant", "content": "Here is a standard contract template..."},
+        ... ]
+        >>> metric = ConversationComplianceRiskMetric(model="gpt-4")
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        0.12
+    """
     def __init__(
         self,
         model: Optional[str] = None,
@@ -119,6 +170,29 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
 
 
 class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
+    """
+    Score how helpful the closing assistant message is within the dialogue.
+
+    The metric uses :class:`~opik.evaluation.metrics.llm_judges.qa_suite.DialogueHelpfulnessJudge`
+    to evaluate usefulness and responsiveness of the final assistant turn.
+
+    Args:
+        model: Optional model name passed to the judge.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project. Defaults to ``None``.
+        temperature: Temperature fed into the judge's underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationDialogueHelpfulnessMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "How do I reset my password?"},
+        ...     {"role": "assistant", "content": "Click the reset link and follow the steps."},
+        ... ]
+        >>> metric = ConversationDialogueHelpfulnessMetric(model="gpt-4")
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        0.88
+    """
     def __init__(
         self,
         model: Optional[str] = None,
@@ -138,6 +212,29 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
 
 
 class ConversationQARelevanceMetric(GEvalConversationMetric):
+    """
+    Quantify how relevant the assistant's final answer is to the preceding query.
+
+    This metric wraps :class:`~opik.evaluation.metrics.llm_judges.qa_suite.QARelevanceJudge`
+    and is useful when the conversation emulates a Q&A exchange.
+
+    Args:
+        model: Optional model name used by the judge backend.
+        track: Whether to automatically track outcomes. Defaults to ``True``.
+        project_name: Optional project for tracked scores. Defaults to ``None``.
+        temperature: Judge sampling temperature.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationQARelevanceMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "Who wrote Dune?"},
+        ...     {"role": "assistant", "content": "Frank Herbert wrote Dune."},
+        ... ]
+        >>> metric = ConversationQARelevanceMetric(model="gpt-4")
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        1.0
+    """
     def __init__(
         self,
         model: Optional[str] = None,
@@ -157,6 +254,30 @@ class ConversationQARelevanceMetric(GEvalConversationMetric):
 
 
 class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
+    """
+    Assess the coherence of a summary-style assistant response.
+
+    The metric invokes :class:`~opik.evaluation.metrics.llm_judges.qa_suite.SummarizationCoherenceJudge`
+    to rate whether the summary flows naturally and captures the conversation
+    structure.
+
+    Args:
+        model: Optional model name or identifier for the judge.
+        track: Whether to track metric results automatically. Defaults to ``True``.
+        project_name: Optional project name for tracked scores. Defaults to ``None``.
+        temperature: Sampling temperature passed to the judge model.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationSummarizationCoherenceMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "Summarise this chat."},
+        ...     {"role": "assistant", "content": "Summary: we discussed timelines and budgets."},
+        ... ]
+        >>> metric = ConversationSummarizationCoherenceMetric(model="gpt-4")
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        0.91
+    """
     def __init__(
         self,
         model: Optional[str] = None,
@@ -176,6 +297,30 @@ class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
 
 
 class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
+    """
+    Check whether a dialogue summary stays faithful to the source turns.
+
+    It delegates scoring to
+    :class:`~opik.evaluation.metrics.llm_judges.qa_suite.SummarizationConsistencyJudge`
+    and reports the result at the conversation level.
+
+    Args:
+        model: Optional model name passed through to the judge.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project. Defaults to ``None``.
+        temperature: Temperature parameter supplied to the judge model.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationSummarizationConsistencyMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "Give me a summary."},
+        ...     {"role": "assistant", "content": "Summary: project ships next week."},
+        ... ]
+        >>> metric = ConversationSummarizationConsistencyMetric(model="gpt-4")
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        0.95
+    """
     def __init__(
         self,
         model: Optional[str] = None,
@@ -195,6 +340,30 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
 
 
 class ConversationPromptPerplexityMetric(GEvalConversationMetric):
+    """
+    Estimate the perplexity of the prompt implied by the full conversation.
+
+    This wrapper forwards the final assistant response to
+    :class:`~opik.evaluation.metrics.llm_judges.prompt_diagnostics.metric.PromptPerplexityJudge`
+    so you can flag confusing or unstable prompts.
+
+    Args:
+        model: Optional model name for the judge backend.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional project used for tracked scores. Defaults to ``None``.
+        temperature: Judge sampling temperature.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationPromptPerplexityMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "Rewrite the prompt if it seems unclear."},
+        ...     {"role": "assistant", "content": "The instructions are ambiguous..."},
+        ... ]
+        >>> metric = ConversationPromptPerplexityMetric(model="gpt-4")
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        0.37
+    """
     def __init__(
         self,
         model: Optional[str] = None,
@@ -214,6 +383,30 @@ class ConversationPromptPerplexityMetric(GEvalConversationMetric):
 
 
 class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
+    """
+    Measure how uncertain the assistant appears about executing the prompt.
+
+    The metric pipes the latest assistant reply into
+    :class:`~opik.evaluation.metrics.llm_judges.prompt_diagnostics.metric.PromptUncertaintyJudge`
+    and returns the judge's score in a conversation-friendly format.
+
+    Args:
+        model: Optional model name for the judge to use.
+        track: Whether to automatically track the metric. Defaults to ``True``.
+        project_name: Optional tracking project. Defaults to ``None``.
+        temperature: Sampling temperature for the judge model.
+
+    Example:
+        >>> from opik.evaluation.metrics import ConversationPromptUncertaintyMetric
+        >>> conversation = [
+        ...     {"role": "user", "content": "Follow the brief precisely."},
+        ...     {"role": "assistant", "content": "I'm not fully certain which part to prioritise."},
+        ... ]
+        >>> metric = ConversationPromptUncertaintyMetric(model="gpt-4")
+        >>> result = metric.score(conversation)
+        >>> result.value  # doctest: +SKIP
+        0.42
+    """
     def __init__(
         self,
         model: Optional[str] = None,
