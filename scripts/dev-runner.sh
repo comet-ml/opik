@@ -542,7 +542,12 @@ show_access_information() {
     
     echo ""
     echo -e "${BLUE}Alternative - Environment Variables:${NC}"
-    echo "  export OPIK_URL_OVERRIDE='${ui_url}'"
+    # When no manual edit is required (BE-only mode), append /api to the URL
+    if [ "$show_manual_edit" = true ]; then
+        echo "  export OPIK_URL_OVERRIDE='${ui_url}'"
+    else
+        echo "  export OPIK_URL_OVERRIDE='${ui_url}/api'"
+    fi
     echo "  export OPIK_WORKSPACE='default'"
     echo ""
     echo -e "${YELLOW}Important Notes:${NC}"
