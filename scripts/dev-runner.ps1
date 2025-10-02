@@ -8,7 +8,7 @@ param(
     [Parameter(Position = 0)]
     [string]$Action = "",
     
-    [switch]$Debug
+    [switch]$DebugMode
 )
 
 # Set strict mode for better error handling
@@ -16,12 +16,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 # Variables
-$script:DEBUG_MODE = $Debug.IsPresent -or ($env:DEBUG_MODE -eq "true")
+$script:DEBUG_MODE = $DebugMode.IsPresent -or ($env:DEBUG_MODE -eq "true")
 
 # Reconstruct original command for error messages
 $commandArgs = @()
 if ($Action) { $commandArgs += $Action }
-if ($Debug.IsPresent) { $commandArgs += "--debug" }
+if ($DebugMode.IsPresent) { $commandArgs += "--debug" }
 $script:ORIGINAL_COMMAND = "$PSCommandPath $($commandArgs -join ' ')"
 
 # Configuration
