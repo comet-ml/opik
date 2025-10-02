@@ -10,7 +10,28 @@ from opik.exceptions import MetricComputationError
 
 
 class SpearmanRanking(BaseMetric):
-    """Compute Spearman's rank correlation for two equal-length rankings."""
+    """
+    Compute Spearman's rank correlation for two rankings of the same items.
+
+    Scores are normalised to ``[0.0, 1.0]`` where `1.0` indicates perfect rank
+    agreement and `0.0` indicates complete disagreement (``rho = -1``).
+
+    Args:
+        name: Display name for the metric result. Defaults to
+            ``"spearman_ranking_metric"``.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+
+    Example:
+        >>> from opik.evaluation.metrics import SpearmanRanking
+        >>> metric = SpearmanRanking()
+        >>> result = metric.score(
+        ...     output=["b", "a", "c"],
+        ...     reference=["a", "b", "c"],
+        ... )
+        >>> round(result.metadata["rho"], 2)  # doctest: +SKIP
+        -0.5
+    """
 
     def __init__(
         self,

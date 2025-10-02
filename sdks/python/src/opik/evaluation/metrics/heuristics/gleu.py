@@ -13,16 +13,27 @@ GleuFn = Callable[[Sequence[Sequence[str]], Sequence[str]], float]
 
 
 class GLEU(base_metric.BaseMetric):
-    """GLEU sentence-level metric using NLTK's implementation.
+    """
+    Sentence-level GLEU metric powered by ``nltk.translate.gleu_score``.
 
     Args:
         gleu_fn: Optional custom scoring callable compatible with
             ``nltk.translate.gleu_score.sentence_gleu``. Useful for testing.
-        min_len: Minimum n-gram length.
-        max_len: Maximum n-gram length.
-        name: Optional metric name.
-        track: Whether to track automatically.
-        project_name: Optional project name for tracking.
+        min_len: Minimum n-gram size considered.
+        max_len: Maximum n-gram size considered.
+        name: Display name for the metric result.
+        track: Whether to automatically track metric results.
+        project_name: Optional tracking project name.
+
+    Example:
+        >>> from opik.evaluation.metrics import GLEU
+        >>> metric = GLEU(min_len=1, max_len=4)
+        >>> result = metric.score(
+        ...     output="The cat sat on the mat",
+        ...     reference="The cat is on the mat",
+        ... )
+        >>> round(result.value, 3)  # doctest: +SKIP
+        0.816
     """
 
     def __init__(

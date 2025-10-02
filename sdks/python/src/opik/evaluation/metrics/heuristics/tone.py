@@ -16,7 +16,28 @@ from .tone_resources import (
 
 
 class ToneGuard(BaseMetric):
-    """Flags tone issues such as negativity, shouting, or forbidden phrases."""
+    """
+    Flag tone issues like excessive negativity, shouting, or forbidden phrases.
+
+    Args:
+        name: Display name for the metric result. Defaults to ``"tone_guard"``.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+        min_sentiment: Minimum sentiment score required (``-1.0`` to ``1.0`` scale).
+        max_upper_ratio: Maximum allowed ratio of uppercase characters.
+        max_exclamations: Cap on the number of exclamation marks.
+        positive_lexicon: Optional iterable of positive tokens counted for sentiment.
+        negative_lexicon: Optional iterable of negative tokens counted for sentiment.
+        forbidden_phrases: Optional sequence of phrases that immediately fail the
+            check.
+
+    Example:
+        >>> from opik.evaluation.metrics import ToneGuard
+        >>> metric = ToneGuard(max_exclamations=2)
+        >>> result = metric.score("THANK YOU for your patience!!!")
+        >>> result.value  # doctest: +SKIP
+        0.0
+    """
 
     def __init__(
         self,

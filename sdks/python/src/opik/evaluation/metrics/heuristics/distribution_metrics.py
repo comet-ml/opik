@@ -15,7 +15,17 @@ def _default_tokenizer(text: str) -> Iterable[str]:
 
 
 class _DistributionMetricBase(base_metric.BaseMetric):
-    """Base class shared by histogram-based text distribution metrics."""
+    """
+    Internal helper for metrics that compare token distributions.
+
+    Args:
+        tokenizer: Optional tokenizer returning an iterable of tokens given text.
+        name: Display name for the metric.
+        track: Whether to automatically track metric results.
+        project_name: Optional tracking project.
+        normalize: When ``True`` the histogram is converted to probabilities.
+        smoothing: Optional additive constant applied during KL-like computations.
+    """
 
     def __init__(
         self,
@@ -52,7 +62,27 @@ class _DistributionMetricBase(base_metric.BaseMetric):
 
 
 class JSDivergence(_DistributionMetricBase):
-    """Jensen–Shannon divergence similarity metric returning ``1 - JSD``."""
+    """
+    Compute Jensen–Shannon similarity (``1 - JSD``) between two texts.
+
+    Args:
+        tokenizer: Optional tokenizer function. Defaults to whitespace split.
+        base: Logarithm base used when computing divergence (> ``1.0``).
+        normalize: Whether to normalise token counts to probabilities first.
+        name: Display name for the metric result.
+        track: Whether to automatically track metric results.
+        project_name: Optional tracking project name.
+
+    Example:
+        >>> from opik.evaluation.metrics import JSDivergence
+        >>> metric = JSDivergence()
+        >>> result = metric.score(
+        ...     output="cat cat sat",
+        ...     reference="cat sat on mat",
+        ... )
+        >>> round(result.value, 3)  # doctest: +SKIP
+        0.812
+    """
 
     def __init__(
         self,
@@ -140,7 +170,24 @@ class JSDivergence(_DistributionMetricBase):
 
 
 class JSDistance(JSDivergence):
-    """Returns the raw Jensen–Shannon divergence (distance)."""
+    """
+    Return the raw Jensen–Shannon divergence instead of similarity.
+
+    Args:
+        tokenizer: Optional tokenizer function.
+        base: Logarithm base used for the divergence calculation.
+        normalize: Whether to normalise counts into probabilities.
+        name: Display name for the metric result.
+        track: Whether to automatically track metric results.
+        project_name: Optional tracking project name.
+
+    Example:
+        >>> from opik.evaluation.metrics import JSDistance
+        >>> metric = JSDistance()
+        >>> result = metric.score("a a b", reference="a b b")
+        >>> round(result.value, 3)  # doctest: +SKIP
+        0.188
+    """
 
     def __init__(
         self,
@@ -176,7 +223,26 @@ class JSDistance(JSDivergence):
 
 
 class KLDivergence(_DistributionMetricBase):
-    """Computes the KL divergence between token distributions."""
+    """
+    Compute the (optionally symmetric) KL divergence between token distributions.
+
+    Args:
+        tokenizer: Optional tokenizer function. Defaults to whitespace split.
+        direction: Direction to compute (``"pq"``, ``"qp"``, or ``"avg"`` for
+            symmetric).
+        normalize: Whether to normalise token counts to probabilities first.
+        smoothing: Additive smoothing constant to avoid divide-by-zero.
+        name: Display name for the metric result.
+        track: Whether to automatically track metric results.
+        project_name: Optional tracking project name.
+
+    Example:
+        >>> from opik.evaluation.metrics import KLDivergence
+        >>> metric = KLDivergence(direction="avg")
+        >>> result = metric.score("hello hello world", reference="hello world")
+        >>> round(result.value, 4)  # doctest: +SKIP
+        0.0583
+    """
 
     def __init__(
         self,

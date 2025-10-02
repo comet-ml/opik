@@ -177,6 +177,15 @@ class ROUGE(base_metric.BaseMetric):
 
 
 def _weighted_lcs(tokens_a: List[str], tokens_b: List[str]) -> float:
+    """Compute the weighted longest common subsequence used by ROUGE-W.
+
+    Args:
+        tokens_a: Token sequence for the candidate text.
+        tokens_b: Token sequence for the reference text.
+
+    Returns:
+        Weighted LCS score as defined in the ROUGE-W paper.
+    """
     len_a, len_b = len(tokens_a), len(tokens_b)
     dp = [[0] * (len_b + 1) for _ in range(len_a + 1)]
     score = 0.0

@@ -15,7 +15,24 @@ except ImportError:  # pragma: no cover - optional dependency
 
 
 class VADERSentiment(BaseMetric):
-    """Compute VADER sentiment scores for a piece of text."""
+    """
+    Compute the VADER compound sentiment for a piece of text.
+
+    Args:
+        name: Display name for the metric result. Defaults to
+            ``"vader_sentiment_metric"``.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+        analyzer: Optional pre-initialised ``SentimentIntensityAnalyzer`` or
+            compatible callable.
+
+    Example:
+        >>> from opik.evaluation.metrics import VADERSentiment
+        >>> metric = VADERSentiment()
+        >>> result = metric.score("I absolutely love this experience!")  # doctest: +SKIP
+        >>> round(result.value, 2)  # doctest: +SKIP
+        0.94
+    """
 
     def __init__(
         self,

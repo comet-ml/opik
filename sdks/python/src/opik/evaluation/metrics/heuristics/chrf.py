@@ -17,7 +17,34 @@ ChrFFn = Callable[[Sequence[str], Sequence[str]], float]
 
 
 class ChrF(BaseMetric):
-    """Computes the chrF/chrF++ score between output and references."""
+    """
+    Compute chrF / chrF++ scores between a candidate string and references.
+
+    By default the implementation delegates to ``nltk.translate.chrf_score`` and
+    supports both chrF (character n-gram overlap) and chrF++ (when ``word_order``
+    is non-zero). Scores range from `0.0` (no overlap) to `1.0` (perfect match).
+
+    Args:
+        name: Display name for the metric result. Defaults to ``"chrf_metric"``.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+        beta: Weighting between precision and recall (``beta = 2`` is standard).
+        ignore_whitespace: Whether whitespace is ignored before scoring.
+        char_order: Maximum character n-gram order.
+        word_order: Maximum word n-gram order (set ``>0`` to enable chrF++).
+        lowercase: Whether to lowercase candidate and references prior to scoring.
+        chrf_fn: Optional custom scoring callable for testing or offline usage.
+
+    Example:
+        >>> from opik.evaluation.metrics import ChrF
+        >>> metric = ChrF(beta=2.0, char_order=6, lowercase=True)
+        >>> result = metric.score(
+        ...     output="The quick brown fox",
+        ...     reference="The quick brown fox jumps",
+        ... )
+        >>> round(result.value, 4)  # doctest: +SKIP
+        0.8795
+    """
 
     def __init__(
         self,

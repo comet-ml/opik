@@ -38,7 +38,27 @@ def _split_sentences(text: str) -> list[str]:
 
 
 class ReadabilityGuard(BaseMetric):
-    """Checks whether text falls within configured readability bounds."""
+    """
+    Ensure generated text stays inside configured readability grade bounds.
+
+    The metric computes Flesch Reading Ease and Flesch–Kincaid grade levels using a
+    lightweight syllable counter. If the calculated grade lies within
+    ``[min_grade, max_grade]`` the score is ``1.0``; otherwise ``0.0``.
+
+    Args:
+        name: Display name for the metric result. Defaults to ``"readability_guard"``.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+        min_grade: Inclusive lower bound for the FK grade (``None`` disables).
+        max_grade: Inclusive upper bound for the FK grade (``None`` disables).
+
+    Example:
+        >>> from opik.evaluation.metrics import ReadabilityGuard
+        >>> metric = ReadabilityGuard(min_grade=4, max_grade=9)
+        >>> result = metric.score("This is a short, clear explanation suitable for kids.")
+        >>> result.value  # doctest: +SKIP
+        1.0
+    """
 
     def __init__(
         self,
