@@ -6162,6 +6162,14 @@ class DatasetsResourceTest {
             var feedbackScores = List.of(feedbackScore1, feedbackScore2);
             traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
 
+            // Fetch traces to get actual durations
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+            var createdTrace2 = traceResourceClient.getById(trace2.id(), workspaceName, apiKey);
+            var traceDurations = List.of(createdTrace1.duration(), createdTrace2.duration())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+
             // Calculate expected values from test data
             var experimentItemsCount = (long) experimentItemsBatch.experimentItems().size();
             var traceCount = (long) feedbackScores.size(); // One trace per feedback score
@@ -6169,6 +6177,9 @@ class DatasetsResourceTest {
                     .map(FeedbackScoreItem::value)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .divide(BigDecimal.valueOf(feedbackScores.size()), java.math.RoundingMode.HALF_UP);
+
+            // Calculate duration percentiles from actual trace durations
+            var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
 
             var stats = datasetResourceClient.getDatasetExperimentItemsStats(
                     datasetId,
@@ -6184,7 +6195,9 @@ class DatasetsResourceTest {
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
                     new PercentageValueStat(StatsMapper.DURATION,
                             new PercentageValues(
-                                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)), // Placeholder for duration
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
                     new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
 
             // Assert the whole ProjectStats object using TraceAssertions
@@ -6263,6 +6276,10 @@ class DatasetsResourceTest {
             traceResourceClient.feedbackScores(List.of(feedbackScore1, feedbackScore2), apiKey,
                     workspaceName);
 
+            // Fetch traces to get actual durations
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+            var createdTrace2 = traceResourceClient.getById(trace2.id(), workspaceName, apiKey);
+
             var outputFilter = List.of(ExperimentsComparisonFilter.builder()
                     .field(ExperimentsComparisonValidKnownField.OUTPUT.getQueryParamField())
                     .operator(Operator.CONTAINS)
@@ -6279,6 +6296,13 @@ class DatasetsResourceTest {
                     .map(FeedbackScoreItem::value)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .divide(BigDecimal.valueOf(matchingFeedbackScores.size()), java.math.RoundingMode.HALF_UP);
+
+            // Calculate duration percentiles from trace1 only (trace2 is filtered out)
+            var traceDurations = List.of(createdTrace1.duration())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+            var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
 
             var stats = datasetResourceClient.getDatasetExperimentItemsStats(
                     datasetId,
@@ -6304,7 +6328,9 @@ class DatasetsResourceTest {
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
                     new PercentageValueStat(StatsMapper.DURATION,
                             new PercentageValues(
-                                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)), // Placeholder for duration
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
                     new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
 
             // Assert the whole ProjectStats object using TraceAssertions
@@ -6415,6 +6441,11 @@ class DatasetsResourceTest {
 
             traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
 
+            // Fetch traces to get actual durations
+            var createdTrace1 = traceResourceClient.getById(trace1.id(), workspaceName, apiKey);
+            var createdTrace2 = traceResourceClient.getById(trace2.id(), workspaceName, apiKey);
+            var createdTrace3 = traceResourceClient.getById(trace3.id(), workspaceName, apiKey);
+
             // Calculate expected values from test data
             var experimentItemsCount = (long) allExperimentItems.size();
             var traceCount = (long) feedbackScores.size();
@@ -6422,6 +6453,13 @@ class DatasetsResourceTest {
                     .map(FeedbackScoreItem::value)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .divide(BigDecimal.valueOf(feedbackScores.size()), java.math.RoundingMode.HALF_UP);
+
+            // Calculate duration percentiles from all three traces
+            var traceDurations = List.of(createdTrace1.duration(), createdTrace2.duration(), createdTrace3.duration())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+            var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
 
             var stats = datasetResourceClient.getDatasetExperimentItemsStats(
                     datasetId,
@@ -6437,7 +6475,9 @@ class DatasetsResourceTest {
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
                     new PercentageValueStat(StatsMapper.DURATION,
                             new PercentageValues(
-                                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)), // Placeholder for duration
+                                    durationPercentiles.get(0), // p50
+                                    durationPercentiles.get(1), // p90
+                                    durationPercentiles.get(2))), // p99
                     new AvgValueStat("feedback_scores.quality", expectedAvgValue.doubleValue()));
 
             // Assert the whole ProjectStats object using TraceAssertions
