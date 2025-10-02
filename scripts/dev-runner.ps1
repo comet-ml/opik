@@ -17,7 +17,12 @@ $ErrorActionPreference = "Stop"
 
 # Variables
 $script:DEBUG_MODE = $Debug.IsPresent -or ($env:DEBUG_MODE -eq "true")
-$script:ORIGINAL_COMMAND = "$PSCommandPath $($args -join ' ')"
+
+# Reconstruct original command for error messages
+$commandArgs = @()
+if ($Action) { $commandArgs += $Action }
+if ($Debug.IsPresent) { $commandArgs += "--debug" }
+$script:ORIGINAL_COMMAND = "$PSCommandPath $($commandArgs -join ' ')"
 
 # Configuration
 $script:SCRIPT_DIR = Split-Path -Parent $PSCommandPath
