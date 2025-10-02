@@ -29,7 +29,7 @@ const CopySMELinkButton: React.FC<CopySMELinkButtonProps> = ({
   return (
     <Button size="sm" variant="outline" onClick={handleCopySMELink}>
       <Copy className="mr-1.5 size-3.5" />
-      Share queue
+      Share
     </Button>
   );
 };

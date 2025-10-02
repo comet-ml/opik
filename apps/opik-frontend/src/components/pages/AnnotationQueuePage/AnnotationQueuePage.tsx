@@ -20,6 +20,7 @@ import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELinkButton";
 import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELinkButton";
+import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -68,6 +69,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         {annotationQueue && (
           <div className="flex items-center gap-2">
             <CopySMELinkButton annotationQueue={annotationQueue} />
+            <EditAnnotationQueueButton annotationQueue={annotationQueue} />
             <OpenSMELinkButton annotationQueue={annotationQueue} />
           </div>
         )}

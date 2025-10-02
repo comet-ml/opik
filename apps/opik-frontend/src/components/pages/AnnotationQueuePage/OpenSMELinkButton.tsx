@@ -26,7 +26,7 @@ const OpenSMELinkButton: React.FunctionComponent<OpenSMELinkButtonProps> = ({
     >
       <Button size="sm">
         <SquareArrowOutUpRight className="mr-1.5 size-3.5" />
-        Annotate queue
+        Annotate
       </Button>
     </Link>
   );
