@@ -35,11 +35,17 @@ $script:ORIGINAL_COMMAND = "$PSCommandPath $($commandArgs -join ' ')"
 # Configuration
 $script:SCRIPT_DIR = Split-Path -Parent $PSCommandPath
 $script:PROJECT_ROOT = Split-Path -Parent $SCRIPT_DIR
-$script:BACKEND_DIR = Join-Path $PROJECT_ROOT "apps\opik-backend"
-$script:FRONTEND_DIR = Join-Path $PROJECT_ROOT "apps\opik-frontend"
+$script:BACKEND_DIR = Join-Path (Join-Path $PROJECT_ROOT "apps") "opik-backend"
+$script:FRONTEND_DIR = Join-Path (Join-Path $PROJECT_ROOT "apps") "opik-frontend"
 
 # Cross-platform temp directory handling
-$script:TEMP_DIR = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { "/tmp" }
+$script:TEMP_DIR = if ($env:TEMP) { 
+    $env:TEMP 
+} elseif ($env:TMPDIR) { 
+    $env:TMPDIR 
+} else { 
+    [System.IO.Path]::GetTempPath().TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+}
 
 $script:BACKEND_PID_FILE = Join-Path $script:TEMP_DIR "opik-backend.pid"
 $script:FRONTEND_PID_FILE = Join-Path $script:TEMP_DIR "opik-frontend.pid"
@@ -92,7 +98,8 @@ function Test-CommandExists {
 
 # Function to find JAR files in target directory
 function Find-JarFiles {
-    $jarFiles = Get-ChildItem -Path "$script:BACKEND_DIR\target" -Filter "opik-backend-*.jar" -File -ErrorAction SilentlyContinue | 
+    $targetDir = Join-Path $script:BACKEND_DIR "target"
+    $jarFiles = Get-ChildItem -Path $targetDir -Filter "opik-backend-*.jar" -File -ErrorAction SilentlyContinue | 
         Where-Object { $_.Name -notmatch "original" -and $_.Name -notmatch "sources" -and $_.Name -notmatch "javadoc" }
     
     if ($jarFiles.Count -eq 0) {
@@ -103,7 +110,7 @@ function Find-JarFiles {
         Write-LogInfo "Using JAR file: $script:JAR_FILE"
     }
     else {
-        Write-LogWarning "Multiple backend JAR files found in target\:"
+        Write-LogWarning "Multiple backend JAR files found in target directory:"
         foreach ($jar in $jarFiles) {
             Write-LogWarning "  - $($jar.Name)"
         }
@@ -111,7 +118,7 @@ function Find-JarFiles {
         # Sort JAR files by version (using natural sort)
         $script:JAR_FILE = ($jarFiles | Sort-Object { [regex]::Replace($_.Name, '\d+', { $args[0].Value.PadLeft(20) }) } | Select-Object -Last 1).FullName
         Write-LogWarning "Automatically selected JAR with highest version: $script:JAR_FILE"
-        Write-LogWarning "To use a different JAR, clean up target\ directory and rebuild"
+        Write-LogWarning "To use a different JAR, clean up target directory and rebuild"
     }
     
     return $script:JAR_FILE
@@ -129,9 +136,9 @@ function Start-DockerServices {
         $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
         
         if (Test-Path $opikScript) {
-            # Use pwsh -File to properly invoke the script with $MyInvocation context
-            pwsh -File $opikScript $Mode --port-mapping
-            if ($LASTEXITCODE -eq 0) {
+            # Invoke opik.ps1 script directly
+            & $opikScript $Mode --port-mapping
+            if ($?) {
                 Write-LogSuccess "Docker services started successfully"
             }
             else {
@@ -160,9 +167,9 @@ function Stop-DockerServices {
         $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
         
         if (Test-Path $opikScript) {
-            # Use pwsh -File to properly invoke the script with $MyInvocation context
-            pwsh -File $opikScript $Mode --stop
-            if ($LASTEXITCODE -eq 0) {
+            # Invoke opik.ps1 script directly
+            & $opikScript $Mode --stop
+            if ($?) {
                 Write-LogSuccess "Docker services stopped"
             }
             else {
@@ -185,9 +192,9 @@ function Test-DockerServices {
         $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
         
         if (Test-Path $opikScript) {
-            # Use pwsh -File to properly invoke the script with $MyInvocation context
-            pwsh -File $opikScript $Mode --verify 2>&1 | Out-Null
-            return $LASTEXITCODE -eq 0
+            # Invoke opik.ps1 script directly
+            & $opikScript $Mode --verify 2>&1 | Out-Null
+            return $?
         }
         return $false
     }
@@ -351,7 +358,7 @@ function Invoke-DbMigrations {
         # Find and validate the JAR file
         $jarFile = Find-JarFiles
         if (-not $jarFile) {
-            Write-LogWarning "No backend JAR file found in target\. Building backend automatically..."
+            Write-LogWarning "No backend JAR file found in target directory. Building backend automatically..."
             Build-Backend
             
             # Re-scan for JAR files after build
@@ -427,7 +434,7 @@ function Start-Backend {
             }
         }
         
-        # Note: Environment variables will be passed via shell command
+        # Set environment variables for the process
         if ($script:DEBUG_MODE) {
             Write-LogDebug "Debug logging enabled - GENERAL_LOG_LEVEL=DEBUG, OPIK_LOG_LEVEL=DEBUG"
         }
@@ -435,7 +442,7 @@ function Start-Backend {
         # Find and validate the JAR file
         $jarFile = Find-JarFiles
         if (-not $jarFile) {
-            Write-LogWarning "No backend JAR file found in target\. Building backend automatically..."
+            Write-LogWarning "No backend JAR file found in target directory. Building backend automatically..."
             Build-Backend
             
             # Re-scan for JAR files after build
@@ -456,8 +463,8 @@ function Start-Backend {
             $env:OPIK_LOG_LEVEL = "DEBUG"
         }
         
-        # Start backend in background using Start-Process (cross-platform)
-        # Use separate files for stdout and stderr since PowerShell doesn't allow same file
+        # Start backend in background using Start-Process
+        # Use separate files for stdout and stderr
         $stdoutLog = "$script:BACKEND_LOG_FILE"
         $stderrLog = "$script:BACKEND_LOG_FILE.err"
         
@@ -542,8 +549,8 @@ function Start-Frontend {
         
         Write-LogDebug "Starting frontend with: npm run start"
         
-        # Start frontend in background using Start-Process (cross-platform)
-        # Use separate files for stdout and stderr since PowerShell doesn't allow same file
+        # Start frontend in background using Start-Process
+        # Use separate files for stdout and stderr
         $stdoutLog = "$script:FRONTEND_LOG_FILE"
         $stderrLog = "$script:FRONTEND_LOG_FILE.err"
         
@@ -673,7 +680,7 @@ function Stop-Frontend {
                 Write-LogWarning "Force killing frontend..."
                 
                 # Try to find and kill child processes first (best effort)
-                # This uses Get-CimInstance on Windows only, silently fails elsewhere
+                # Uses Windows WMI/CIM to enumerate child processes
                 try {
                     $childProcesses = @(Get-CimInstance Win32_Process -ErrorAction Stop | 
                         Where-Object { $_.ParentProcessId -eq $frontendPid })
@@ -687,8 +694,8 @@ function Stop-Frontend {
                     }
                 }
                 catch {
-                    # Silently ignore if Get-CimInstance not available (e.g., on macOS/Linux)
-                    Write-LogDebug "Could not enumerate child processes (this is normal on non-Windows platforms)"
+                    # Silently ignore if WMI/CIM service is not available
+                    Write-LogDebug "Could not enumerate child processes (WMI/CIM service may not be running)"
                 }
                 
                 # Kill the main process with force
@@ -782,7 +789,7 @@ function Show-AccessInformation {
         Write-Host "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
         Write-Host ""
         Write-Host "Edit the configuration file:" -ForegroundColor Blue
-        Write-Host "  # Open the configuration file, by default: ~/.opik.config"
+        Write-Host "  # Open the configuration file, by default: `$HOME\.opik.config"
         Write-Host ""
         Write-Host "  # Change this line:"
         Write-Host "  url_override = http://localhost:8080/api/"
@@ -807,7 +814,7 @@ function Show-AccessInformation {
     Write-Host "  `$env:OPIK_WORKSPACE = 'default'"
     Write-Host ""
     Write-Host "Important Notes:" -ForegroundColor Yellow
-    Write-Host "  • The configuration file is located at ~/.opik.config by default"
+    Write-Host "  • The configuration file is located at `$HOME\.opik.config by default"
     
     if ($ShowManualEdit) {
         Write-Host "  • You MUST remove '/api' from the URL for local development"
