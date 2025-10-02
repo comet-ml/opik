@@ -203,19 +203,18 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
               className="mb-4"
               {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
             />
-            <div className="flex items-center justify-between mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <h3 className="comet-title-xs">Select an annotation queue</h3>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7"
                 onClick={() => {
                   setOpen(false);
                   setOpenDialog(true);
                 }}
                 disabled={noValidRows}
               >
-                <Plus className="mr-2 h-4 w-4" />
+                <Plus className="mr-2 size-4" />
                 Create new annotation queue
               </Button>
             </div>

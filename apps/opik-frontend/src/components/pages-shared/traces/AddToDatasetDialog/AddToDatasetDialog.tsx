@@ -224,7 +224,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7"
                 onClick={() => {
                   setOpen(false);
                   setOpenDialog(true);
