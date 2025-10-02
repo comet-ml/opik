@@ -129,7 +129,8 @@ function Start-DockerServices {
         $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
         
         if (Test-Path $opikScript) {
-            & $opikScript $Mode --port-mapping
+            # Use pwsh -File to properly invoke the script with $MyInvocation context
+            pwsh -File $opikScript $Mode --port-mapping
             if ($LASTEXITCODE -eq 0) {
                 Write-LogSuccess "Docker services started successfully"
             }
@@ -159,7 +160,8 @@ function Stop-DockerServices {
         $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
         
         if (Test-Path $opikScript) {
-            & $opikScript $Mode --stop
+            # Use pwsh -File to properly invoke the script with $MyInvocation context
+            pwsh -File $opikScript $Mode --stop
             if ($LASTEXITCODE -eq 0) {
                 Write-LogSuccess "Docker services stopped"
             }
@@ -183,7 +185,8 @@ function Test-DockerServices {
         $opikScript = Join-Path $script:PROJECT_ROOT "opik.ps1"
         
         if (Test-Path $opikScript) {
-            & $opikScript $Mode --verify 2>&1 | Out-Null
+            # Use pwsh -File to properly invoke the script with $MyInvocation context
+            pwsh -File $opikScript $Mode --verify 2>&1 | Out-Null
             return $LASTEXITCODE -eq 0
         }
         return $false
