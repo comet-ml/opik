@@ -707,46 +707,34 @@ function Stop-Frontend {
         Write-LogWarning "Frontend is not running"
     }
     
-    # Clean up any orphaned npm/node/vite processes related to frontend directory
-    # Use platform-specific command to find processes with frontend directory in command line
-    try {
-        if ($IsWindows -or ($PSVersionTable.PSVersion.Major -lt 6)) {
-            # Windows: use Get-CimInstance to check command line
-            $orphanedProcesses = Get-CimInstance Win32_Process -ErrorAction Stop | 
-                Where-Object { 
-                    ($_.Name -eq 'node.exe' -or $_.Name -eq 'npm.cmd' -or $_.Name -eq 'vite.exe') -and 
-                    $_.CommandLine -like "*$($script:FRONTEND_DIR)*"
-                }
-            
-            if ($orphanedProcesses) {
-                Write-LogWarning "Found potential orphaned frontend processes..."
-                foreach ($proc in $orphanedProcesses) {
-                    Write-LogWarning "Cleaning up orphaned process: PID $($proc.ProcessId) - $($proc.Name)"
-                    Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-                }
+    # Clean up any remaining node/npm processes (brute force cleanup for development)
+    # This is a development tool, so it's safe to kill all node/npm/vite processes
+    Write-LogDebug "Checking for remaining node/npm/vite processes..."
+    
+    # Get all node/npm/vite processes
+    $nodeProcesses = Get-Process -Name node -ErrorAction SilentlyContinue
+    $npmProcesses = Get-Process -Name npm -ErrorAction SilentlyContinue
+    $viteProcesses = Get-Process -Name vite -ErrorAction SilentlyContinue
+    
+    $allProcesses = @()
+    if ($nodeProcesses) { $allProcesses += $nodeProcesses }
+    if ($npmProcesses) { $allProcesses += $npmProcesses }
+    if ($viteProcesses) { $allProcesses += $viteProcesses }
+    
+    # Filter out the frontend PID we already tried to kill
+    $orphanedProcesses = $allProcesses | Where-Object { $_.Id -ne $frontendPid }
+    
+    if ($orphanedProcesses) {
+        Write-LogWarning "Found $($orphanedProcesses.Count) remaining node/npm/vite process(es), cleaning up..."
+        foreach ($proc in $orphanedProcesses) {
+            try {
+                Write-LogDebug "Stopping process: PID $($proc.Id) - $($proc.Name)"
+                Stop-Process -Id $proc.Id -Force -ErrorAction Stop
+            }
+            catch {
+                Write-LogDebug "Could not stop process $($proc.Id): $_"
             }
         }
-        else {
-            # Unix-like: use pgrep to find processes with frontend directory path
-            $orphanedPids = sh -c "pgrep -f '$($script:FRONTEND_DIR)' 2>/dev/null"
-            if ($orphanedPids) {
-                $pids = $orphanedPids -split "`n" | Where-Object { $_ -and $_ -ne $frontendPid }
-                if ($pids) {
-                    Write-LogWarning "Found potential orphaned frontend processes..."
-                    foreach ($pid in $pids) {
-                        # Verify it's a node/npm/vite process
-                        $processInfo = sh -c "ps -p $pid -o comm= 2>/dev/null"
-                        if ($processInfo -and ($processInfo -match 'node|npm|vite')) {
-                            Write-LogWarning "Cleaning up orphaned process: PID $pid - $processInfo"
-                            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-                        }
-                    }
-                }
-            }
-        }
-    }
-    catch {
-        Write-LogDebug "Could not check for orphaned processes: $_"
     }
 }
 
