@@ -655,6 +655,18 @@ stop_services() {
     log_success "=== Stop Complete ==="
 }
 
+# Function to run migrations
+migrate_services() {
+    log_info "=== Running Database Migrations ==="
+    log_info "Step 1/3: Starting infrastructure..."
+    start_infrastructure
+    log_info "Step 2/3: Building backend..."
+    build_backend
+    log_info "Step 3/3: Running DB migrations..."
+    run_db_migrations
+    log_success "=== Migrations Complete ==="
+}
+
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
@@ -759,6 +771,15 @@ show_usage() {
     echo "  $0 --debug --verify     # Check status with debug output"
 }
 
+# Function to handle unknown options
+handle_unknown_option() {
+    local option="$1"
+    log_error "Unknown option: $option"
+    echo ""
+    show_usage
+    exit 1
+}
+
 # Function to show logs
 show_logs() {
     log_info "=== Recent Logs ==="
@@ -814,9 +835,7 @@ case "${1:-}" in
         build_frontend
         ;;
     "--migrate")
-        start_infrastructure
-        build_backend
-        run_db_migrations
+        migrate_services
         ;;
     "--start")
         start_services
@@ -859,9 +878,6 @@ case "${1:-}" in
         restart_services
         ;;
     *)
-        log_error "Unknown option: $1"
-        echo ""
-        show_usage
-        exit 1
+        handle_unknown_option "$1"
         ;;
 esac
