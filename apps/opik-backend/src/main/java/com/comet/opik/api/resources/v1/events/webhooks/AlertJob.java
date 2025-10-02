@@ -14,12 +14,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Scheduled job responsible for managing alert buckets and triggering webhooks.
@@ -39,26 +42,50 @@ import java.util.UUID;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AlertJob extends Job {
 
+    private static final String SCAN_LOCK_KEY = "alert_job:scan_lock";
+    private static final long LOCK_WAIT_TIME_SECONDS = 0; // Don't wait if lock is not available
+    private static final long LOCK_LEASE_TIME_SECONDS = 10; // Auto-release lock after 10 seconds
+
     private final @NonNull AlertBucketService bucketService;
     private final @NonNull AlertService alertService;
     private final @NonNull WebhookPublisher webhookPublisher;
     private final @NonNull WebhookConfig webhookConfig;
+    private final @NonNull RedissonClient redissonClient;
 
     @Override
     public void doJob(JobExecutionContext context) {
         log.info("Starting alert job - checking for buckets to process");
 
-        bucketService.getBucketsReadyToProcess()
-                .flatMap(this::processBucket)
-                .onErrorContinue((throwable, bucketKey) -> {
-                    log.error("Failed to process bucket '{}': {}",
-                            bucketKey, throwable.getMessage(), throwable);
-                })
-                .subscribe(
-                        __ -> {
-                            /* Successfully processed bucket */ },
-                        error -> log.error("Error occurred during alert job execution:", error),
-                        () -> log.info("Alert job finished processing all ready buckets"));
+        // Use distributed lock to prevent overlapping scans in case of slow Redis SCAN operations
+        RLock lock = redissonClient.getLock(SCAN_LOCK_KEY);
+
+        try {
+            boolean lockAcquired = lock.tryLock(LOCK_WAIT_TIME_SECONDS, LOCK_LEASE_TIME_SECONDS, TimeUnit.SECONDS);
+
+            if (!lockAcquired) {
+                log.info("Another job instance is already scanning buckets, skipping this execution");
+                return;
+            }
+
+            try {
+                // Block until all buckets are processed to ensure job completion before next execution
+                bucketService.getBucketsReadyToProcess()
+                        .flatMap(this::processBucket)
+                        .onErrorContinue((throwable, bucketKey) -> {
+                            log.error("Failed to process bucket '{}': {}",
+                                    bucketKey, throwable.getMessage(), throwable);
+                        })
+                        .doOnComplete(() -> log.info("Alert job finished processing all ready buckets"))
+                        .blockLast(); // Block to ensure job waits for completion
+            } finally {
+                lock.unlock();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            log.error("Alert job interrupted while acquiring lock", exception);
+        } catch (Exception exception) {
+            log.error("Error occurred during alert job execution:", exception);
+        }
     }
 
     /**

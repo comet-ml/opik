@@ -87,5 +87,8 @@ public class WebhookConfig implements StreamConfiguration {
         @Valid @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         private Duration bucketTtl = Duration.minutes(3);
+
+        @Valid @JsonProperty
+        @Min(1) @Max(100) private int concurrency = 10;
     }
 }

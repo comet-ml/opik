@@ -39,7 +39,6 @@ public class AlertBucketService {
     private static final String FIRST_SEEN_KEY = "firstSeen";
     private static final String WINDOW_SIZE_KEY = "windowSize";
     private static final String WORKSPACE_ID_KEY = "workspaceId";
-    private static final int CONCURRENCY = 10;
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final @NonNull WebhookConfig webhookConfig;
@@ -139,7 +138,7 @@ public class AlertBucketService {
                             .filter(tuple -> isReady(bucketKey, tuple, now))
                             .map(__ -> bucketKey)
                             .switchIfEmpty(Mono.empty());
-                }, CONCURRENCY) // Process up to 10 buckets in parallel
+                }, webhookConfig.getDebouncing().getConcurrency()) // Process buckets in parallel based on config
                 .doOnComplete(() -> log.debug("Finished checking for buckets ready to process"))
                 .doOnError(error -> log.error("Failed to check for buckets: {}", error.getMessage(), error));
     }
