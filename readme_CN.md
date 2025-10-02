@@ -187,8 +187,8 @@ opik configure
 
 最简单的跟踪方式是使用直接集成，Opik 支持多种框架，包括 Google ADK、Autogen、AG2 和 Flowise AI 等：
 
-| 集成                      | 描述                                            | 文档                                                                                                                                                                          |
-| ------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 集成                      | 描述                                            | 文档                                                                                                                                                                  |
+| ------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **ADK**                   | 记录 Google Agent Development Kit (ADK) 的跟踪  | [文档](https://www.comet.com/docs/opik/integrations/adk?utm_source=opik&utm_medium=github&utm_content=google_adk_link&utm_campaign=opik)                              |
 | **AG2**                   | 记录 AG2 LLM 调用的跟踪                         | [文档](https://www.comet.com/docs/opik/integrations/ag2?utm_source=opik&utm_medium=github&utm_content=ag2_link&utm_campaign=opik)                                     |
 | **aisuite**               | 记录 aisuite LLM 调用的跟踪                     | [文档](https://www.comet.com/docs/opik/integrations/aisuite?utm_source=opik&utm_medium=github&utm_content=aisuite_link&utm_campaign=opik)                             |
@@ -207,7 +207,8 @@ opik configure
 | **DSPy**                  | 记录 DSPy 运行的跟踪                            | [文档](https://www.comet.com/docs/opik/integrations/dspy?utm_source=opik&utm_medium=github&utm_content=dspy_link&utm_campaign=opik)                                   |
 | **Flowise AI**            | 记录 Flowise AI 可视化 LLM 应用的跟踪           | [文档](https://www.comet.com/docs/opik/integrations/flowise?utm_source=opik&utm_medium=github&utm_content=flowise_link&utm_campaign=opik)                             |
 | **Fireworks AI**          | 记录 Fireworks AI LLM 调用的跟踪                | [文档](https://www.comet.com/docs/opik/integrations/fireworks-ai?utm_source=opik&utm_medium=github&utm_content=fireworks_ai_link&utm_campaign=opik)                   |
-| **Gemini**                | 记录 Google Gemini LLM 调用的跟踪               | [文档](https://www.comet.com/docs/opik/integrations/gemini?utm_source=opik&utm_medium=github&utm_content=gemini_link&utm_campaign=opik)                               |
+| **Gemini (Python)**       | 记录 Google Gemini LLM 调用的跟踪               | [文档](https://www.comet.com/docs/opik/integrations/gemini?utm_source=opik&utm_medium=github&utm_content=gemini_link&utm_campaign=opik)                               |
+| **Gemini (TypeScript)**   | 记录 Google Gemini TypeScript SDK 调用的跟踪    | [文档](https://www.comet.com/docs/opik/integrations/gemini-typescript?utm_source=opik&utm_medium=github&utm_content=gemini_typescript_link&utm_campaign=opik)         |
 | **Groq**                  | 记录 Groq LLM 调用的跟踪                        | [文档](https://www.comet.com/docs/opik/integrations/groq?utm_source=opik&utm_medium=github&utm_content=groq_link&utm_campaign=opik)                                   |
 | **Guardrails**            | 记录 Guardrails AI 验证的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/guardrails-ai?utm_source=opik&utm_medium=github&utm_content=guardrails_link&utm_campaign=opik)                    |
 | **Haystack**              | 记录 Haystack 调用的跟踪                        | [文档](https://www.comet.com/docs/opik/integrations/haystack?utm_source=opik&utm_medium=github&utm_content=haystack_link&utm_campaign=opik)                           |
@@ -226,7 +227,7 @@ opik configure
 | **OpenAI Agents**         | 记录 OpenAI Agents SDK 调用的跟踪               | [文档](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik)                 |
 | **Novita AI**             | 记录 Novita AI LLM 调用的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/novita-ai?utm_source=opik&utm_medium=github&utm_content=novita_ai_link&utm_campaign=opik)                         |
 | **OpenRouter**            | 记录 OpenRouter LLM 调用的跟踪                  | [文档](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik)                       |
-| **OpenTelemetry**         | 记录 OpenTelemetry 支持的调用跟踪               | [文档](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik)                     |
+| **OpenTelemetry**         | 记录 OpenTelemetry 支持的调用跟踪               | [文档](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik)             |
 | **Pipecat**               | 记录 Pipecat 实时语音智能体调用的跟踪           | [文档](https://www.comet.com/docs/opik/integrations/pipecat?utm_source=opik&utm_medium=github&utm_content=pipecat_link&utm_campaign=opik)                             |
 | **Predibase**             | 记录 Predibase LLM 调用的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/predibase?utm_source=opik&utm_medium=github&utm_content=predibase_link&utm_campaign=opik)                         |
 | **Pydantic AI**           | 记录 PydanticAI 智能体调用的跟踪                | [文档](https://www.comet.com/docs/opik/integrations/pydantic-ai?utm_source=opik&utm_medium=github&utm_content=pydantic_ai_link&utm_campaign=opik)                     |
