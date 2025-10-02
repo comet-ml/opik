@@ -18,6 +18,8 @@ import ConfigurationTab from "@/components/pages/AnnotationQueuePage/Configurati
 import QueueItemsTab from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELinkButton";
+import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELinkButton";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -63,6 +65,12 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         direction="horizontal"
       >
         <h1 className="comet-title-l truncate break-words">{queueName}</h1>
+        {annotationQueue && (
+          <div className="flex items-center gap-2">
+            <CopySMELinkButton annotationQueue={annotationQueue} />
+            <OpenSMELinkButton annotationQueue={annotationQueue} />
+          </div>
+        )}
       </PageBodyStickyContainer>
       {annotationQueue?.description && (
         <PageBodyStickyContainer
