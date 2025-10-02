@@ -654,9 +654,6 @@ function Stop-Frontend {
         if ($process) {
             Write-LogInfo "Stopping frontend (PID: $frontendPid)..."
             
-            # Get all child processes before killing parent
-            $childProcesses = Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $frontendPid }
-            
             # Try graceful shutdown first
             Stop-Process -Id $frontendPid -ErrorAction SilentlyContinue
             
@@ -674,17 +671,28 @@ function Stop-Frontend {
             $process = Get-Process -Id $frontendPid -ErrorAction SilentlyContinue
             if ($process) {
                 Write-LogWarning "Force killing frontend..."
-                Stop-Process -Id $frontendPid -Force -ErrorAction SilentlyContinue
                 
-                # Kill child processes
-                foreach ($childProc in $childProcesses) {
-                    $childId = $childProc.ProcessId
-                    $childProcess = Get-Process -Id $childId -ErrorAction SilentlyContinue
-                    if ($childProcess) {
-                        Write-LogWarning "Killing child process (PID: $childId)..."
-                        Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue
+                # Try to find and kill child processes first (best effort)
+                # This uses Get-CimInstance on Windows only, silently fails elsewhere
+                try {
+                    $childProcesses = @(Get-CimInstance Win32_Process -ErrorAction Stop | 
+                        Where-Object { $_.ParentProcessId -eq $frontendPid })
+                    
+                    if ($childProcesses.Count -gt 0) {
+                        Write-LogWarning "Found $($childProcesses.Count) child process(es), killing them first..."
+                        foreach ($childProc in $childProcesses) {
+                            $childId = $childProc.ProcessId
+                            Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue
+                        }
                     }
                 }
+                catch {
+                    # Silently ignore if Get-CimInstance not available (e.g., on macOS/Linux)
+                    Write-LogDebug "Could not enumerate child processes (this is normal on non-Windows platforms)"
+                }
+                
+                # Kill the main process with force
+                Stop-Process -Id $frontendPid -Force -ErrorAction SilentlyContinue
             }
             
             Write-LogSuccess "Frontend stopped"
