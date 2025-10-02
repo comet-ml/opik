@@ -229,39 +229,56 @@ jobs:
 
       - name: Publish to NPM (with retry)
         id: npm_publish
-        uses: nick-fields/retry-action@v3
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: |
-            cd ${{ env.WORKING_DIR }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
 
-            NEW_VERSION="${{ steps.version.outputs.new_version }}"
-            PACKAGE_NAME=$(node -p "require('./package.json').name")
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📦 Publishing to NPM"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Package: $PACKAGE_NAME"
+          echo "Version: $NEW_VERSION"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "📦 Publishing to NPM"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "Package: $PACKAGE_NAME"
-            echo "Version: $NEW_VERSION"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          # Retry logic: 3 attempts with 10 second delays
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+          SUCCESS=false
 
-            npm publish --access public
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "📤 Publish attempt $ATTEMPT of $MAX_ATTEMPTS..."
+            
+            if npm publish --access public; then
+              SUCCESS=true
+              break
+            else
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                echo "⚠️  Attempt $ATTEMPT failed, retrying in 10 seconds..."
+                sleep 10
+              fi
+              ATTEMPT=$((ATTEMPT + 1))
+            fi
+          done
 
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "✅ Successfully published to NPM"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo ""
-            echo "📦 Package: $PACKAGE_NAME@$NEW_VERSION"
-            echo "🔗 NPM: https://www.npmjs.com/package/$PACKAGE_NAME/v/$NEW_VERSION"
-            echo ""
-            echo "Install with:"
-            echo "  npm install $PACKAGE_NAME@$NEW_VERSION"
-            echo ""
+          if [ "$SUCCESS" = false ]; then
+            echo "❌ Failed to publish after $MAX_ATTEMPTS attempts"
+            exit 1
+          fi
 
-            # Save package name for later steps
-            echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Successfully published to NPM"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📦 Package: $PACKAGE_NAME@$NEW_VERSION"
+          echo "🔗 NPM: https://www.npmjs.com/package/$PACKAGE_NAME/v/$NEW_VERSION"
+          echo ""
+          echo "Install with:"
+          echo "  npm install $PACKAGE_NAME@$NEW_VERSION"
+          echo ""
+
+          # Save package name for later steps
+          echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
