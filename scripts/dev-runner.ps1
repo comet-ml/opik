@@ -455,13 +455,13 @@ function Start-Backend {
         Write-LogDebug "Command: java -jar $jarFile server config.yml"
         
         # Start backend in background with output redirected to log file
-        # Use Start-Process for better cross-platform compatibility
+        # Use shell to combine stdout and stderr into single log file
+        $shellCmd = "java -jar `"$jarFile`" server config.yml > `"$script:BACKEND_LOG_FILE`" 2>&1"
+        
         $processParams = @{
-            FilePath = "java"
-            ArgumentList = @("-jar", $jarFile, "server", "config.yml")
+            FilePath = "sh"
+            ArgumentList = @("-c", $shellCmd)
             WorkingDirectory = $script:BACKEND_DIR
-            RedirectStandardOutput = $script:BACKEND_LOG_FILE
-            RedirectStandardError = $script:BACKEND_LOG_FILE
             NoNewWindow = $true
             PassThru = $true
         }
@@ -533,15 +533,15 @@ function Start-Frontend {
         Write-LogDebug "Starting frontend with: npm run start"
         
         # Start frontend in background with output redirected to log file
-        # Use Start-Process for better cross-platform compatibility
+        # Use shell to combine stdout and stderr into single log file
         $env:CI = "true"
         
+        $shellCmd = "npm run start > `"$script:FRONTEND_LOG_FILE`" 2>&1"
+        
         $processParams = @{
-            FilePath = "npm"
-            ArgumentList = @("run", "start")
+            FilePath = "sh"
+            ArgumentList = @("-c", $shellCmd)
             WorkingDirectory = $script:FRONTEND_DIR
-            RedirectStandardOutput = $script:FRONTEND_LOG_FILE
-            RedirectStandardError = $script:FRONTEND_LOG_FILE
             NoNewWindow = $true
             PassThru = $true
         }
@@ -683,18 +683,19 @@ function Stop-Frontend {
 
 # Helper function to display backend process status
 function Get-BackendStatus {
-    if ((Test-Path $script:BACKEND_PID_FILE) -and (Get-Process -Id (Get-Content $script:BACKEND_PID_FILE) -ErrorAction SilentlyContinue)) {
-        $pid = Get-Content $script:BACKEND_PID_FILE
-        Write-Host "Backend: " -NoNewline
-        Write-Host "RUNNING" -ForegroundColor Green -NoNewline
-        Write-Host " (PID: $pid)"
-        return $true
+    if (Test-Path $script:BACKEND_PID_FILE) {
+        $pid = Get-Content $script:BACKEND_PID_FILE -ErrorAction SilentlyContinue
+        if ($pid -and (Get-Process -Id $pid -ErrorAction SilentlyContinue)) {
+            Write-Host "Backend: " -NoNewline
+            Write-Host "RUNNING" -ForegroundColor Green -NoNewline
+            Write-Host " (PID: $pid)"
+            return $true
+        }
     }
-    else {
-        Write-Host "Backend: " -NoNewline
-        Write-Host "STOPPED" -ForegroundColor Red
-        return $false
-    }
+    
+    Write-Host "Backend: " -NoNewline
+    Write-Host "STOPPED" -ForegroundColor Red
+    return $false
 }
 
 # Helper function to display access information
@@ -784,14 +785,17 @@ function Test-Services {
     
     # Frontend status
     $frontendRunning = $false
-    if ((Test-Path $script:FRONTEND_PID_FILE) -and (Get-Process -Id (Get-Content $script:FRONTEND_PID_FILE) -ErrorAction SilentlyContinue)) {
-        $pid = Get-Content $script:FRONTEND_PID_FILE
-        Write-Host "Frontend: " -NoNewline
-        Write-Host "RUNNING" -ForegroundColor Green -NoNewline
-        Write-Host " (PID: $pid)"
-        $frontendRunning = $true
+    if (Test-Path $script:FRONTEND_PID_FILE) {
+        $pid = Get-Content $script:FRONTEND_PID_FILE -ErrorAction SilentlyContinue
+        if ($pid -and (Get-Process -Id $pid -ErrorAction SilentlyContinue)) {
+            Write-Host "Frontend: " -NoNewline
+            Write-Host "RUNNING" -ForegroundColor Green -NoNewline
+            Write-Host " (PID: $pid)"
+            $frontendRunning = $true
+        }
     }
-    else {
+    
+    if (-not $frontendRunning) {
         Write-Host "Frontend: " -NoNewline
         Write-Host "STOPPED" -ForegroundColor Red
     }
