@@ -394,6 +394,9 @@ navigation:
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
                 slug: llama_index
+              - page: Microsoft Agent Framework (Python)
+                path: docs/tracing/integrations/microsoft-agent-framework.mdx
+                slug: microsoft-agent-framework
               - page: OpenAI Agents
                 path: docs/tracing/integrations/openai_agents.mdx
                 slug: openai_agents
