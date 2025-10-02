@@ -355,7 +355,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "bytedance/ui-tars-1.5-7b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE,
+      value:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE,
       label: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
     },
     {
@@ -363,15 +364,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "cognitivecomputations/dolphin3.0-mistral-24b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B_FREE,
+      value:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B_FREE,
       label: "cognitivecomputations/dolphin3.0-mistral-24b:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B,
+      value:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B,
       label: "cognitivecomputations/dolphin3.0-r1-mistral-24b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B_FREE,
+      value:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B_FREE,
       label: "cognitivecomputations/dolphin3.0-r1-mistral-24b:free",
     },
     {
@@ -939,7 +943,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nousresearch/deephermes-3-llama-3-8b-preview",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_LLAMA_3_8B_PREVIEW_FREE,
+      value:
+        PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_LLAMA_3_8B_PREVIEW_FREE,
       label: "nousresearch/deephermes-3-llama-3-8b-preview:free",
     },
     {
