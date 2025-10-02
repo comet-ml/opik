@@ -11,43 +11,6 @@ Opik makes it easy to integrate with your existing LLM application, here are som
 popular integrations:
 
 <Tabs>
-  <Tab title="OpenAI (Python)" value="openai-python-sdk">
-    If you are using the OpenAI Python SDK, you can integrate by:
-
-    <Steps>
-      <Step>
-        Install the Opik Python SDK:
-
-        ```bash
-        pip install opik
-        ```
-      </Step>
-      <Step>
-        Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
-        Cloud or your Opik server address if you are self-hosting:
-
-        ```bash
-        opik configure
-        ```
-      </Step>
-      <Step>
-        Wrap your OpenAI client with the `track_openai` function:
-
-        ```python
-        from opik.integrations.openai import track_openai
-        from openai import OpenAI
-
-        # Wrap your OpenAI client
-        openai_client = OpenAI()
-        openai_client = track_openai(openai_client)
-        ```
-
-        All OpenAI calls made using the `openai_client` will now be logged to Opik.
-
-      </Step>
-    </Steps>
-
-  </Tab>
   <Tab title="OpenAI (TS)" value="openai-ts-sdk">
     If you are using the OpenAI TypeScript SDK, you can integrate by:
 
@@ -148,6 +111,43 @@ popular integrations:
         ```
 
         All AI SDK calls with `experimental_telemetry: { isEnabled: true }` will now be logged to Opik.
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="OpenAI (Python)" value="openai-python-sdk">
+    If you are using the OpenAI Python SDK, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik Python SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
+        Cloud or your Opik server address if you are self-hosting:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Wrap your OpenAI client with the `track_openai` function:
+
+        ```python
+        from opik.integrations.openai import track_openai
+        from openai import OpenAI
+
+        # Wrap your OpenAI client
+        openai_client = OpenAI()
+        openai_client = track_openai(openai_client)
+        ```
+
+        All OpenAI calls made using the `openai_client` will now be logged to Opik.
+
       </Step>
     </Steps>
 
@@ -332,22 +332,10 @@ don't want to write any code, you can find more information about the playground
 
 Now that you have logged your first LLM calls and chains to Opik, why not check out:
 
-1. [In depth guide on logging LLM calls](/tracing/log_traces): Learn how to customize the data that is logged to Opik and how to log conversations.
-2. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation metrics (Hallucination, Answer Relevance, Context Recall, etc.) that you can use to score your LLM responses.
-3. [Opik Experiments](/evaluation/concepts): Opik allows you to automated the evaluation process of your LLM application so that you no longer need to manually review every LLM response.
-
-## How can I diagnose issues with Opik?
-
-If you are experiencing any problems using Opik, such as receiving 400 or 500 errors from the backend, or being unable to connect at all, we recommend running the following command in your terminal:
-
-```bash
-opik healthcheck
-```
-
-This command will analyze your configuration and backend connectivity, providing useful insights into potential issues.
-
-<Frame>
-  <img src="../img/healthcheck.png" />
-</Frame>
-
-Reviewing these sections can help pinpoint the source of the problem and suggest possible resolutions.
+1. [In depth guide on agent observability](/tracing/log_traces): Learn how to customize the data
+   that is logged to Opik and how to log conversations.
+2. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation
+   metrics (Hallucination, Answer Relevance, Context Recall, etc.) that you can use to score your
+   LLM responses.
+3. [Opik Experiments](/evaluation/concepts): Opik allows you to automated the evaluation process of
+   your LLM application so that you no longer need to manually review every LLM response.
