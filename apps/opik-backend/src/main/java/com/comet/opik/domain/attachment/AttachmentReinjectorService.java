@@ -205,8 +205,8 @@ public class AttachmentReinjectorService {
                 String base64 = tuple.getT2();
 
                 // Replace all occurrences of this reference with base64
-                // JsonNode.toString() escapes quotes, so we need to search for \"[reference]\"
-                modifiedJson = modifiedJson.replace("\\\"" + reference + "\\\"", "\\\"" + base64 + "\\\"");
+                // The reference is already wrapped in brackets, just replace it with the base64 data
+                modifiedJson = modifiedJson.replace(reference, base64);
             }
 
             try {
