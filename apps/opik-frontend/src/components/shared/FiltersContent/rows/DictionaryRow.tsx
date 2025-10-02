@@ -1,6 +1,6 @@
 import React from "react";
 import { Filter, FilterOperator, FilterRowConfig } from "@/types/filters";
-import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
+import OperatorSelector from "@/components/shared/FiltersContent/OperatorSelector";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import {
   DEFAULT_OPERATORS,

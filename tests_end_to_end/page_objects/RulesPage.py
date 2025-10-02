@@ -45,8 +45,8 @@ class RulesPage:
         self.page.get_by_placeholder("Rule name").fill(rule_name)
 
         # Set sampling rate to 100%
-        sampling_value = self.page.locator("#sampling_rate-input")
-        sampling_value.fill("1")
+        # sampling_value = self.page.locator("#sampling_rate-input")
+        # sampling_value.fill("1")
 
         # Select model based on configuration
         self.page.get_by_role("combobox").filter(has_text="Select an LLM model").click()

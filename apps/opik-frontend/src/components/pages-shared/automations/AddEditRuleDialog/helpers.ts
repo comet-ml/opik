@@ -1,8 +1,12 @@
+import uniqid from "uniqid";
+
 import {
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
+import { Filter } from "@/types/filters";
+import { ColumnData } from "@/types/shared";
 
 export const getUIRuleType = (ruleType: EVALUATORS_RULE_TYPE) =>
   ({
@@ -37,3 +41,30 @@ export const getBackendRuleType = (
         EVALUATORS_RULE_TYPE.thread_python_code,
     },
   })[scope][uiType];
+
+const getFilterTypeByField = (
+  field: string,
+  columns: ColumnData<unknown>[],
+): string => {
+  const column = columns.find((col) => col.id === field);
+  return column?.type || "string";
+};
+
+export const normalizeFilters = (
+  filters: Filter[],
+  columns: ColumnData<unknown>[],
+): Filter[] => {
+  if (!filters || filters.length === 0) return [];
+
+  return filters.map(
+    (filter) =>
+      ({
+        id: filter.id || uniqid(),
+        field: filter.field || "",
+        type: filter.type || getFilterTypeByField(filter.field, columns),
+        operator: filter.operator || "",
+        key: filter.key || "",
+        value: filter.value || "",
+      }) as Filter,
+  );
+};

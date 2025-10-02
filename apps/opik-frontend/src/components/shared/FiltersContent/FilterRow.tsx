@@ -7,13 +7,13 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import ColumnSelector from "@/components/shared/ColumnSelector/ColumnSelector";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
-import StringRow from "@/components/shared/FiltersButton/rows/StringRow";
-import NumberRow from "@/components/shared/FiltersButton/rows/NumberRow";
-import ListRow from "@/components/shared/FiltersButton/rows/ListRow";
-import TimeRow from "@/components/shared/FiltersButton/rows/TimeRow";
-import DictionaryRow from "@/components/shared/FiltersButton/rows/DictionaryRow";
-import DefaultRow from "@/components/shared/FiltersButton/rows/DefaultRow";
-import CategoryRow from "@/components/shared/FiltersButton/rows/CategoryRow";
+import StringRow from "@/components/shared/FiltersContent/rows/StringRow";
+import NumberRow from "@/components/shared/FiltersContent/rows/NumberRow";
+import ListRow from "@/components/shared/FiltersContent/rows/ListRow";
+import TimeRow from "@/components/shared/FiltersContent/rows/TimeRow";
+import DictionaryRow from "@/components/shared/FiltersContent/rows/DictionaryRow";
+import DefaultRow from "@/components/shared/FiltersContent/rows/DefaultRow";
+import CategoryRow from "@/components/shared/FiltersContent/rows/CategoryRow";
 import { createFilter } from "@/lib/filters";
 
 type FilterRowProps<TColumnData> = {

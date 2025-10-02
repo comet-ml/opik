@@ -1,6 +1,7 @@
 package com.comet.opik.api.evaluators;
 
 import com.comet.opik.api.Page;
+import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
@@ -64,6 +65,10 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     @JsonView({View.Public.class, View.Write.class})
     @Builder.Default
     private final boolean enabled = true;
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Builder.Default
+    private final List<TraceFilter> filters = List.of();
 
     @JsonIgnore
     @NotNull private final T code;

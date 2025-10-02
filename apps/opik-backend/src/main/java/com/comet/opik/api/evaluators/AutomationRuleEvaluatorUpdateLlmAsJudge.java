@@ -1,5 +1,6 @@
 package com.comet.opik.api.evaluators;
 
+import com.comet.opik.api.filter.TraceFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -11,6 +12,7 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -22,11 +24,12 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.Ll
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUpdateLlmAsJudge extends AutomationRuleEvaluatorUpdate<LlmAsJudgeCode> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "code", "projectId"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateLlmAsJudge(
-            @NotBlank String name, float samplingRate, boolean enabled, @NotNull LlmAsJudgeCode code,
+            @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
+            @NotNull LlmAsJudgeCode code,
             @NotNull UUID projectId) {
-        super(name, samplingRate, enabled, code, projectId);
+        super(name, samplingRate, enabled, filters, code, projectId);
     }
 
     /**

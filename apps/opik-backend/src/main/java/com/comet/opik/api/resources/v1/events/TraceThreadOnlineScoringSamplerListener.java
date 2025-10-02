@@ -4,7 +4,13 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceThreadsCreated;
+import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.TraceThreadFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -23,10 +29,12 @@ import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
+import static com.comet.opik.api.filter.TraceThreadField.*;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
@@ -44,8 +52,10 @@ public class TraceThreadOnlineScoringSamplerListener {
 
     private final SecureRandom secureRandom;
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
+    private final TraceThreadFilterEvaluationService filterEvaluationService;
     private final Logger userFacingLogger;
     private final TraceThreadService traceThreadService;
+    private final TraceService traceService;
 
     /**
      * Initializes a SecureRandom instance for trace thread processing.
@@ -54,9 +64,13 @@ public class TraceThreadOnlineScoringSamplerListener {
     @Inject
     public TraceThreadOnlineScoringSamplerListener(
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
-            @NonNull TraceThreadService traceThreadService) {
+            @NonNull TraceThreadFilterEvaluationService filterEvaluationService,
+            @NonNull TraceThreadService traceThreadService,
+            @NonNull TraceService traceService) {
         this.ruleEvaluatorService = ruleEvaluatorService;
+        this.filterEvaluationService = filterEvaluationService;
         this.traceThreadService = traceThreadService;
+        this.traceService = traceService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(TraceThreadOnlineScoringSamplerListener.class);
         try {
             this.secureRandom = SecureRandom.getInstanceStrong();
@@ -143,24 +157,34 @@ public class TraceThreadOnlineScoringSamplerListener {
                                                 "The threadModelId '{}' was skipped for rule: '{}' as the rule is disabled",
                                                 traceThreadModelId, evaluator.getName());
                                     }
-                                } else {
-                                    shouldBeSampled = secureRandom.nextDouble() < evaluator.getSamplingRate();
+                                } else
+                                    if (!shouldSampleTraceThread(evaluator,
+                                            traceThreadModelMap.get(traceThreadModelId))) {
+                                                try (var logContext = createThreadLoggingContext(workspaceId, evaluator,
+                                                        traceThreadModelId)) {
+                                                    userFacingLogger.info(
+                                                            "The threadModelId '{}' was skipped for rule: '{}' as it does not match the filters",
+                                                            traceThreadModelId, evaluator.getName());
+                                                }
+                                            } else {
+                                                shouldBeSampled = secureRandom.nextDouble() < evaluator
+                                                        .getSamplingRate();
 
-                                    try (var logContext = createThreadLoggingContext(workspaceId, evaluator,
-                                            traceThreadModelId)) {
-                                        if (!shouldBeSampled) {
-                                            userFacingLogger.info(
-                                                    "The threadModelId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
-                                                    traceThreadModelId, evaluator.getName(),
-                                                    evaluator.getSamplingRate());
-                                        } else {
-                                            userFacingLogger.info(
-                                                    "The threadModelId '{}' will be sampled for rule: '{}' with sampling rate '{}'",
-                                                    traceThreadModelId, evaluator.getName(),
-                                                    evaluator.getSamplingRate());
-                                        }
-                                    }
-                                }
+                                                try (var logContext = createThreadLoggingContext(workspaceId, evaluator,
+                                                        traceThreadModelId)) {
+                                                    if (!shouldBeSampled) {
+                                                        userFacingLogger.info(
+                                                                "The threadModelId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
+                                                                traceThreadModelId, evaluator.getName(),
+                                                                evaluator.getSamplingRate());
+                                                    } else {
+                                                        userFacingLogger.info(
+                                                                "The threadModelId '{}' will be sampled for rule: '{}' with sampling rate '{}'",
+                                                                traceThreadModelId, evaluator.getName(),
+                                                                evaluator.getSamplingRate());
+                                                    }
+                                                }
+                                            }
 
                                 return new TraceThreadSampling(traceThreadModelMap.get(traceThreadModelId),
                                         Map.of(evaluator.getId(), shouldBeSampled));
@@ -180,6 +204,101 @@ public class TraceThreadOnlineScoringSamplerListener {
     private Map<UUID, Boolean> groupRuleSampling(Map<UUID, Boolean> acc, Map<UUID, Boolean> current) {
         acc.putAll(current);
         return acc;
+    }
+
+    /**
+     * Determines if a thread should be sampled based on the rule's filters.
+     * Converts TraceFilter objects to TraceThreadFilter objects and evaluates them.
+     *
+     * @param evaluator the automation rule evaluator containing filters
+     * @param thread the thread to evaluate
+     * @return true if the thread matches all filters and should be sampled, false otherwise
+     */
+    private boolean shouldSampleTraceThread(AutomationRuleEvaluator<?> evaluator, TraceThreadModel thread) {
+        List<TraceFilter> traceFilters = evaluator.getFilters();
+        if (traceFilters.isEmpty()) {
+            return true; // No filters means all threads should be sampled
+        }
+
+        // Convert TraceFilter to TraceThreadFilter
+        List<TraceThreadFilter> threadFilters = convertFilters(traceFilters);
+
+        // Evaluate filters against the thread
+        return filterEvaluationService.matchesAllFilters(threadFilters, thread);
+    }
+
+    /**
+     * Converts a list of TraceFilter objects to TraceThreadFilter objects.
+     * Maps trace fields to equivalent thread fields where possible.
+     */
+    private List<TraceThreadFilter> convertFilters(List<TraceFilter> traceFilters) {
+        return traceFilters.stream()
+                .map(this::convertFilter)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * Converts a single TraceFilter to TraceThreadFilter.
+     * Maps trace fields to equivalent thread fields.
+     */
+    private TraceThreadFilter convertFilter(TraceFilter traceFilter) {
+        TraceThreadField threadField = convertFieldToThreadField(traceFilter.field());
+        if (threadField == null) {
+            log.warn("Cannot convert trace field '{}' to thread field, skipping filter", traceFilter.field());
+            return null;
+        }
+
+        String value = traceFilter.value();
+
+        // Convert duration values from seconds to milliseconds for proper comparison
+        if (threadField == DURATION && value != null) {
+            try {
+                double seconds = Double.parseDouble(value);
+                long milliseconds = (long) (seconds * 1000);
+                log.info("Converting duration filter from {} seconds to {} milliseconds", seconds, milliseconds);
+                value = String.valueOf(milliseconds);
+            } catch (NumberFormatException e) {
+                log.warn("Invalid duration value '{}' for thread filter conversion", value);
+            }
+        }
+
+        return TraceThreadFilter.builder()
+                .field(threadField)
+                .operator(traceFilter.operator())
+                .key(traceFilter.key())
+                .value(value)
+                .build();
+    }
+
+    /**
+     * Maps TraceField to TraceThreadField where possible.
+     * Returns null for fields that don't have thread equivalents.
+     */
+    private TraceThreadField convertFieldToThreadField(Field traceField) {
+        return switch (traceField.toString()) {
+            case "ID" -> ID;
+            case "START_TIME" -> START_TIME;
+            case "END_TIME" -> END_TIME;
+            case "CREATED_AT" -> CREATED_AT;
+            case "LAST_UPDATED_AT" -> LAST_UPDATED_AT;
+            case "TAGS" -> TAGS;
+            case "STATUS" -> STATUS;
+            case "DURATION" -> DURATION;
+            case "FEEDBACK_SCORES" -> FEEDBACK_SCORES;
+            // Fields that don't have thread equivalents
+            case "NAME", "INPUT", "OUTPUT", "INPUT_JSON", "OUTPUT_JSON", "METADATA",
+                    "TOTAL_ESTIMATED_COST", "LLM_SPAN_COUNT", "USAGE_COMPLETION_TOKENS",
+                    "USAGE_PROMPT_TOKENS", "USAGE_TOTAL_TOKENS", "THREAD_ID", "GUARDRAILS",
+                    "VISIBILITY_MODE", "ERROR_INFO", "CUSTOM" -> {
+                log.debug("Trace field '{}' has no equivalent in thread model", traceField);
+                yield null;
+            }
+            default -> {
+                log.warn("Unknown trace field '{}' for conversion to thread field", traceField);
+                yield null;
+            }
+        };
     }
 
     private LogContextAware.Closable createThreadLoggingContext(String workspaceId,
