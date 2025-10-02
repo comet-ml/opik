@@ -1,11 +1,15 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { ExternalLink } from "lucide-react";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { DropdownOption } from "@/types/shared";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
 import useAppStore from "@/store/AppStore";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 const DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS = 1000;
 
@@ -79,9 +83,36 @@ const FeedbackDefinitionsSelectBox: React.FC<
         multiselect: false as const,
       };
 
+  const actionPanel = useMemo(
+    () => (
+      <div className="px-0.5">
+        <Separator className="my-1" />
+        <Button
+          variant="link"
+          className="w-full justify-start gap-1 px-2"
+          asChild
+        >
+          <Link
+            to="/$workspaceName/configuration"
+            params={{ workspaceName }}
+            search={{ tab: "feedback-definitions" }}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1"
+          >
+            <span>Add new feedback definition</span>
+            <ExternalLink className="size-3" />
+          </Link>
+        </Button>
+      </div>
+    ),
+    [workspaceName],
+  );
+
   return (
     <LoadableSelectBox
       {...loadableSelectBoxProps}
+      actionPanel={actionPanel}
       onLoadMore={
         total > DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS && !isLoadedMore
           ? loadMoreHandler
