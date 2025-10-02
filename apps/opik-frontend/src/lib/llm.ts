@@ -143,16 +143,28 @@ export const stringifyMessageContent = (
     includeImagePlaceholders = true,
   }: { includeImagePlaceholders?: boolean } = {},
 ) => {
-  const textSegments = getMessageContentTextSegments(content);
-  const imageSegments = getMessageContentImageSegments(content);
+  if (isString(content)) {
+    return content.trim();
+  }
 
-  const imagePlaceholders = includeImagePlaceholders
-    ? imageSegments.map(
-        (segment) => `<<<image>>>${segment.image_url.url}<<</image>>>`,
-      )
-    : [];
+  if (!isStructuredMessageContent(content)) {
+    return "";
+  }
 
-  return [...textSegments, ...imagePlaceholders].join("\n\n").trim();
+  const segments: string[] = [];
+
+  content.forEach((item) => {
+    if (item.type === "text") {
+      segments.push(item.text);
+      return;
+    }
+
+    if (item.type === "image_url" && includeImagePlaceholders) {
+      segments.push(`<<<image>>>${item.image_url.url}<<</image>>>`);
+    }
+  });
+
+  return segments.join("\n\n").trim();
 };
 
 export const serializeMessageContentForStorage = (
