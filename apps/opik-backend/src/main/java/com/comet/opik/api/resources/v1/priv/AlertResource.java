@@ -174,4 +174,27 @@ public class AlertResource {
 
         return Response.noContent().build();
     }
+
+    @POST
+    @Path("/webhook/test")
+    @Operation(operationId = "testWebhook", summary = "Test alert webhook", description = "Test alert webhook", responses = {
+            //TODO: update to actual response
+            @ApiResponse(responseCode = "200", description = "Webhook test", content = @Content(schema = @Schema(implementation = Alert.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response testWebhook(
+            @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert,
+            @Context UriInfo uriInfo) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Testing alert webhook with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
+
+        var response = alertService.testWebhook(alert);
+
+        log.info("Tested alert webhook with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
 }
