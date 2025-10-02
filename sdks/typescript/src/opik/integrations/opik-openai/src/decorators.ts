@@ -131,8 +131,7 @@ const wrapMethod = <T extends GenericMethod>(
           });
 
           if (!hasUserProvidedParent) {
-            rootTracer.update({ output });
-            rootTracer.end();
+            rootTracer.update({ output, endTime: new Date() });
           }
 
           return result;
@@ -274,8 +273,7 @@ function wrapAsyncIterable<T>(
     });
 
     if (!hasUserProvidedParent) {
-      rootTracer.update({ output: finalOutput });
-      rootTracer.end();
+      rootTracer.update({ output: finalOutput, endTime: new Date() });
     }
   }
 
