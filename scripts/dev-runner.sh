@@ -488,6 +488,88 @@ stop_frontend() {
     fi
 }
 
+# Helper function to check backend process status
+# Returns: 0 if running, 1 if stopped
+check_backend_process_status() {
+    if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Helper function to display backend process status
+# Args: $1 = label (e.g., "Backend" or "Backend Process")
+display_backend_process_status() {
+    local label="${1:-Backend}"
+    
+    if check_backend_process_status; then
+        echo -e "${label}: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
+        return 0
+    else
+        echo -e "${label}: ${RED}STOPPED${NC}"
+        return 1
+    fi
+}
+
+# Helper function to display access information
+# Args: $1 = UI URL (e.g., "http://localhost:5174" or "http://localhost:5173")
+#       $2 = configure command (e.g., "opik configure" or "opik configure --use_local")
+#       $3 = show manual edit warning (true/false)
+show_access_information() {
+    local ui_url="$1"
+    local configure_command="$2"
+    local show_manual_edit="${3:-true}"
+    
+    echo ""
+    echo -e "${GREEN}🚀 Opik Development Environment is Ready!${NC}"
+    echo -e "${BLUE}📊  Access the UI:     ${ui_url}${NC}"
+    echo -e "${BLUE}🛠️  API ping Endpoint: http://localhost:8080/is-alive/ping${NC}"
+    echo ""
+    echo -e "${BLUE}ℹ️  SDK Configuration Required:${NC}"
+    echo -e "To use the Opik SDK with your local development environment, you MUST configure it to point to your local instance."
+    echo ""
+    echo -e "${BLUE}Run SDK Configuration Command:${NC}"
+    echo "  ${configure_command}"
+    
+    if [ "$show_manual_edit" = true ]; then
+        echo "  # When prompted:"
+        echo "  #   - Choose 'Local deployment' option"
+        echo "  #   - Enter URL: http://localhost:8080"
+        echo ""
+        echo -e "${YELLOW}⚠️  IMPORTANT: Manual Configuration File Edit Required!${NC}"
+        echo -e "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
+        echo ""
+        echo -e "${BLUE}Edit the configuration file:${NC}"
+        echo "  # Open the configuration file, by default: ~/.opik.config"
+        echo ""
+        echo "  # Change this line:"
+        echo "  url_override = http://localhost:8080/api/"
+        echo ""
+        echo "  # To this (remove '/api'):"
+        echo "  url_override = http://localhost:8080"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Alternative - Environment Variables:${NC}"
+    echo "  export OPIK_URL_OVERRIDE='${ui_url}'"
+    echo "  export OPIK_WORKSPACE='default'"
+    echo ""
+    echo -e "${YELLOW}Important Notes:${NC}"
+
+    echo "  • The configuration file is located at ~/.opik.config by default"
+
+    if [ "$show_manual_edit" = true ]; then
+        echo "  • You MUST remove '/api' from the URL for local development"
+    fi
+    
+    echo "  • Default workspace is 'default'"
+    echo "  • No API key required for local instances"
+    echo ""
+    echo -e "${BLUE}📖 For complete configuration documentation, visit:${NC}"
+    echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
+}
+
 # Function to verify services
 verify_services() {
     log_info "=== Opik Development Status ==="
@@ -503,11 +585,8 @@ verify_services() {
     
     # Backend status
     local backend_running=false
-    if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
-        echo -e "Backend: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
+    if display_backend_process_status "Backend"; then
         backend_running=true
-    else
-        echo -e "Backend: ${RED}STOPPED${NC}"
     fi
     
     # Frontend status
@@ -521,44 +600,7 @@ verify_services() {
 
     # Show access information if all services are running
     if [ "$infra_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
-        echo ""
-        echo -e "${GREEN}🚀 Opik Development Environment is Ready!${NC}"
-        echo -e "${BLUE}📊  Access the UI:     http://localhost:5174${NC}"
-        echo -e "${BLUE}🛠️  API ping Endpoint: http://localhost:8080/is-alive/ping${NC}"
-        echo ""
-        echo -e "${BLUE}ℹ️  SDK Configuration Required:${NC}"
-        echo -e "To use the Opik SDK with your local development environment, you MUST configure it to point to your local instance."
-        echo ""
-        echo -e "${BLUE}Step 1 - Run Python SDK Configuration (CLI):${NC}"
-        echo "  opik configure"
-        echo "  # When prompted:"
-        echo "  #   - Choose 'Local deployment' option"
-        echo "  #   - Enter URL: http://localhost:8080"
-        echo ""
-        echo -e "${YELLOW}⚠️  IMPORTANT: Manual Configuration File Edit Required!${NC}"
-        echo -e "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
-        echo ""
-        echo -e "${BLUE}Step 2 - Edit the configuration file:${NC}"
-        echo "  # Open the configuration file, by default: ~/.opik.config"
-        echo ""
-        echo "  # Change this line:"
-        echo "  url_override = http://localhost:8080/api/"
-        echo ""
-        echo "  # To this (remove '/api'):"
-        echo "  url_override = http://localhost:8080"
-        echo ""
-        echo -e "${BLUE}Alternative for previous steps - Environment Variables:${NC}"
-        echo "  export OPIK_URL_OVERRIDE='http://localhost:8080'"
-        echo "  export OPIK_WORKSPACE='default'"
-        echo ""
-        echo -e "${YELLOW}Important Notes:${NC}"
-        echo "  • The configuration file is located at ~/.opik.config by default"
-        echo "  • You MUST remove '/api' from the URL for local development"
-        echo "  • Default workspace is 'default'"
-        echo "  • No API key required for local instances"
-        echo ""
-        echo -e "${BLUE}📖 For complete configuration documentation, visit:${NC}"
-        echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
+        show_access_information "http://localhost:5174" "opik configure" true
     fi
 
     echo ""
@@ -582,58 +624,13 @@ verify_be_only_services() {
     
     # Backend process status
     local backend_running=false
-    if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
-        echo -e "Backend Process: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
+    if display_backend_process_status "Backend Process"; then
         backend_running=true
-    else
-        echo -e "Backend Process: ${RED}STOPPED${NC}"
     fi
 
     # Show access information if all services are running
     if [ "$docker_services_running" = true ] && [ "$backend_running" = true ]; then
-        echo ""
-        echo -e "${GREEN}🚀 Opik BE-Only Development Environment is Ready!${NC}"
-        echo -e "${BLUE}📊  Access the UI:     http://localhost:5173${NC}"
-        echo -e "${BLUE}🛠️  API ping Endpoint: http://localhost:8080/is-alive/ping${NC}"
-        echo ""
-        echo -e "${BLUE}⚙️  Mode: Backend as Process + Frontend in Docker${NC}"
-        echo -e "   • Backend runs as local process (PID: $(cat "$BACKEND_PID_FILE"))"
-        echo -e "   • Frontend runs in Docker container"
-        echo -e "   • Infrastructure services run in Docker"
-        echo ""
-        echo -e "${BLUE}ℹ️  SDK Configuration Required:${NC}"
-        echo -e "To use the Opik SDK with your local development environment, you MUST configure it to point to your local instance."
-        echo ""
-        echo -e "${BLUE}Step 1 - Run Python SDK Configuration (CLI):${NC}"
-        echo "  opik configure"
-        echo "  # When prompted:"
-        echo "  #   - Choose 'Local deployment' option"
-        echo "  #   - Enter URL: http://localhost:8080"
-        echo ""
-        echo -e "${YELLOW}⚠️  IMPORTANT: Manual Configuration File Edit Required!${NC}"
-        echo -e "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
-        echo ""
-        echo -e "${BLUE}Step 2 - Edit the configuration file:${NC}"
-        echo "  # Open the configuration file, by default: ~/.opik.config"
-        echo ""
-        echo "  # Change this line:"
-        echo "  url_override = http://localhost:8080/api/"
-        echo ""
-        echo "  # To this (remove '/api'):"
-        echo "  url_override = http://localhost:8080"
-        echo ""
-        echo -e "${BLUE}Alternative for previous steps - Environment Variables:${NC}"
-        echo "  export OPIK_URL_OVERRIDE='http://localhost:8080'"
-        echo "  export OPIK_WORKSPACE='default'"
-        echo ""
-        echo -e "${YELLOW}Important Notes:${NC}"
-        echo "  • The configuration file is located at ~/.opik.config by default"
-        echo "  • You MUST remove '/api' from the URL for local development"
-        echo "  • Default workspace is 'default'"
-        echo "  • No API key required for local instances"
-        echo ""
-        echo -e "${BLUE}📖 For complete configuration documentation, visit:${NC}"
-        echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
+        show_access_information "http://localhost:5173" "opik configure --use_local" false
     fi
 
     echo ""
