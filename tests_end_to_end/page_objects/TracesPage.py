@@ -151,7 +151,7 @@ class TracesPage:
 
     def add_all_traces_to_new_dataset(self, dataset_name: str):
         self.page.get_by_label("Select all").click()
-        self.page.get_by_role("button", name="Add to")
+        self.page.get_by_role("button", name="Add to").click()
         self.page.get_by_role("menuitem", name="Dataset").click()
         self.page.get_by_role("button", name="Create new dataset").click()
         self.page.get_by_placeholder("Dataset name").fill(dataset_name)
