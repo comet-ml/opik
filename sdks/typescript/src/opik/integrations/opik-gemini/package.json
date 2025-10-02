@@ -1,7 +1,7 @@
 {
   "name": "opik-gemini",
   "description": "Opik TypeScript and JavaScript SDK integration with Google Gemini AI",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engines": {
     "node": ">=18"
   },
@@ -67,12 +67,13 @@
     "opik": "^1.7.25"
   },
   "devDependencies": {
+    "@eslint/js": "^9.20.0",
     "eslint": "^9.34.0",
+    "globals": "^15.14.0",
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.42.0",
-    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.5"
   }
 }
