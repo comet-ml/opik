@@ -312,6 +312,104 @@ export class Alerts {
         }
     }
 
+    /**
+     * Update alert
+     *
+     * @param {string} id
+     * @param {OpikApi.AlertWrite} request
+     * @param {Alerts.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.ConflictError}
+     * @throws {@link OpikApi.UnprocessableEntityError}
+     *
+     * @example
+     *     await client.alerts.updateAlert("id", {
+     *         name: "name",
+     *         webhook: {
+     *             url: "url",
+     *             secretToken: "secret_token"
+     *         }
+     *     })
+     */
+    public updateAlert(
+        id: string,
+        request: OpikApi.AlertWrite,
+        requestOptions?: Alerts.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateAlert(id, request, requestOptions));
+    }
+
+    private async __updateAlert(
+        id: string,
+        request: OpikApi.AlertWrite,
+        requestOptions?: Alerts.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/alerts/${encodeURIComponent(id)}`,
+            ),
+            method: "PUT",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.AlertWrite.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError("Timeout exceeded when calling PUT /v1/private/alerts/{id}.");
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
     protected async _getCustomAuthorizationHeaders() {
         const apiKeyValue = await core.Supplier.get(this._options.apiKey);
         return { Authorization: apiKeyValue };

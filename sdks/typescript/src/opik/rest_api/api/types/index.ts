@@ -15,6 +15,7 @@ export * from "./AlertTriggerConfigWriteType";
 export * from "./AlertTriggerConfigWrite";
 export * from "./AlertTriggerWriteEventType";
 export * from "./AlertTriggerWrite";
+export * from "./AlertWrite";
 export * from "./WebhookWrite";
 export * from "./BatchDelete";
 export * from "./AlertTriggerConfigPublicType";

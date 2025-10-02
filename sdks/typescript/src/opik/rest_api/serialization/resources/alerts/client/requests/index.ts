@@ -1,1 +1,0 @@
-export { AlertWrite } from "./AlertWrite";
