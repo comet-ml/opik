@@ -455,20 +455,12 @@ function Start-Backend {
             $envPrefix += " GENERAL_LOG_LEVEL=DEBUG OPIK_LOG_LEVEL=DEBUG"
         }
         
-        # Start backend in background with output redirected to log file
-        # Use exec to replace shell process with java, so the PID is the Java process
-        # Environment variables must come BEFORE exec
-        $shellCmd = "cd '$script:BACKEND_DIR' && $envPrefix exec java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1"
+        # Start backend in background with nohup and capture the PID
+        # Use nohup with & to run in background, then echo $! to get the PID
+        $shellCmd = "cd '$script:BACKEND_DIR' && $envPrefix nohup java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1 & echo `$!"
         
-        $processParams = @{
-            FilePath = "sh"
-            ArgumentList = @("-c", $shellCmd)
-            NoNewWindow = $true
-            PassThru = $true
-        }
-        
-        $process = Start-Process @processParams
-        $backendPid = $process.Id
+        $processOutput = sh -c $shellCmd
+        $backendPid = $processOutput.Trim()
         Set-Content -Path $script:BACKEND_PID_FILE -Value $backendPid
         
         Write-LogDebug "Backend process started with PID: $backendPid"
@@ -533,20 +525,12 @@ function Start-Frontend {
         
         Write-LogDebug "Starting frontend with: npm run start"
         
-        # Start frontend in background with output redirected to log file
-        # Use exec to replace shell process with npm, so the PID is the npm process
-        # Environment variables must come BEFORE exec
-        $shellCmd = "cd '$script:FRONTEND_DIR' && $envPrefix exec npm run start > '$script:FRONTEND_LOG_FILE' 2>&1"
+        # Start frontend in background with nohup and capture the PID
+        # Use nohup with & to run in background, then echo $! to get the PID
+        $shellCmd = "cd '$script:FRONTEND_DIR' && $envPrefix nohup npm run start > '$script:FRONTEND_LOG_FILE' 2>&1 & echo `$!"
         
-        $processParams = @{
-            FilePath = "sh"
-            ArgumentList = @("-c", $shellCmd)
-            NoNewWindow = $true
-            PassThru = $true
-        }
-        
-        $process = Start-Process @processParams
-        $frontendPid = $process.Id
+        $processOutput = sh -c $shellCmd
+        $frontendPid = $processOutput.Trim()
         Set-Content -Path $script:FRONTEND_PID_FILE -Value $frontendPid
         
         Write-LogDebug "Frontend process started with PID: $frontendPid"
