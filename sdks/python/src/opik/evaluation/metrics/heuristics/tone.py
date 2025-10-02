@@ -8,11 +8,43 @@ from typing import Any, Iterable, Optional, Sequence
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
-from .tone_resources import (
-    FORBIDDEN_PHRASES,
-    NEGATIVE_LEXICON,
-    POSITIVE_LEXICON,
-)
+
+# Default tone lexicons/phrases kept inline for easier discoverability.
+_POSITIVE_LEXICON = {
+    "appreciate",
+    "assist",
+    "glad",
+    "helpful",
+    "please",
+    "thank",
+    "welcome",
+    "happy",
+    "support",
+    "great",
+    "excellent",
+    "wonderful",
+}
+
+_NEGATIVE_LEXICON = {
+    "angry",
+    "awful",
+    "bad",
+    "complain",
+    "frustrated",
+    "hate",
+    "incompetent",
+    "terrible",
+    "useless",
+    "stupid",
+    "idiot",
+}
+
+_FORBIDDEN_PHRASES = {
+    "shut up",
+    "this is pointless",
+    "not my problem",
+    "i refuse to assist",
+}
 
 
 class ToneGuard(BaseMetric):
@@ -56,12 +88,12 @@ class ToneGuard(BaseMetric):
         self._max_upper_ratio = max_upper_ratio
         self._max_exclamations = max_exclamations
         self._positive = set(
-            word.lower() for word in (positive_lexicon or POSITIVE_LEXICON)
+            word.lower() for word in (positive_lexicon or _POSITIVE_LEXICON)
         )
         self._negative = set(
-            word.lower() for word in (negative_lexicon or NEGATIVE_LEXICON)
+            word.lower() for word in (negative_lexicon or _NEGATIVE_LEXICON)
         )
-        phrases = forbidden_phrases or FORBIDDEN_PHRASES
+        phrases = forbidden_phrases or _FORBIDDEN_PHRASES
         self._forbidden = [phrase.lower() for phrase in phrases]
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
