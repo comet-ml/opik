@@ -113,9 +113,16 @@ get_system_info() {
   fi
   
   # Docker Compose version - safe with fallback
+  # Try both V2 (docker compose) and V1 (docker-compose) commands
   local docker_compose_version="unknown"
   if command -v docker >/dev/null 2>&1; then
+    # Try Docker Compose V2 (plugin)
     docker_compose_version=$(docker compose version 2>/dev/null | awk '{print $4}' || echo "unknown")
+  fi
+  
+  # If V2 failed, try Docker Compose V1 (standalone)
+  if [[ "$docker_compose_version" == "unknown" ]] && command -v docker-compose >/dev/null 2>&1; then
+    docker_compose_version=$(docker-compose version --short 2>/dev/null || echo "unknown")
   fi
   
   # Return as pipe-delimited string (will be used in JSON payload)

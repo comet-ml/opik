@@ -121,8 +121,10 @@ function Get-SystemInfo {
     }
     
     # Docker Compose version - safe with fallback
+    # Try both V2 (docker compose) and V1 (docker-compose) commands
     $dockerComposeVersion = "unknown"
     try {
+        # Try Docker Compose V2 (plugin)
         $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
         if ($dockerCmd) {
             $composeOutput = (docker compose version 2>&1 | Out-String).Trim()
@@ -130,6 +132,17 @@ function Get-SystemInfo {
                 $dockerComposeVersion = $Matches[1]
             } elseif ($composeOutput -match '[\d.]+') {
                 $dockerComposeVersion = $Matches[0]
+            }
+        }
+        
+        # If V2 failed, try Docker Compose V1 (standalone)
+        if ($dockerComposeVersion -eq "unknown") {
+            $dockerComposeCmd = Get-Command docker-compose -ErrorAction SilentlyContinue
+            if ($dockerComposeCmd) {
+                $composeV1Output = (docker-compose version --short 2>&1 | Out-String).Trim()
+                if ($composeV1Output -match '[\d.]+') {
+                    $dockerComposeVersion = $Matches[0]
+                }
             }
         }
     } catch {
