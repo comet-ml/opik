@@ -64,8 +64,6 @@ import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELinkButton";
-import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
 import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
@@ -79,7 +77,6 @@ import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
-import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELinkButton";
 
 const TRACE_COLUMNS: ColumnData<Trace>[] = [
   {
@@ -567,8 +564,6 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
           />
         </div>
         <div className="flex items-center gap-2">
-          <OpenSMELinkButton annotationQueue={annotationQueue} />
-          <EditAnnotationQueueButton annotationQueue={annotationQueue} />
           <QueueItemActionsPanel
             items={selectedRows}
             annotationQueueId={annotationQueue.id}
@@ -586,7 +581,6 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           />
-          <CopySMELinkButton annotationQueue={annotationQueue} />
         </div>
       </PageBodyStickyContainer>
       <DataTable
