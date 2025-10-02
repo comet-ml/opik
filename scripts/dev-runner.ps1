@@ -427,13 +427,8 @@ function Start-Backend {
             }
         }
         
-        # Set environment variables
-        $env:CORS = "true"
-        
-        # Set debug logging if debug mode is enabled
+        # Note: Environment variables will be passed via shell command
         if ($script:DEBUG_MODE) {
-            $env:GENERAL_LOG_LEVEL = "DEBUG"
-            $env:OPIK_LOG_LEVEL = "DEBUG"
             Write-LogDebug "Debug logging enabled - GENERAL_LOG_LEVEL=DEBUG, OPIK_LOG_LEVEL=DEBUG"
         }
         
@@ -454,14 +449,20 @@ function Start-Backend {
         Write-LogDebug "Starting backend with JAR: $jarFile"
         Write-LogDebug "Command: java -jar $jarFile server config.yml"
         
+        # Build environment variable prefix for shell command
+        $envPrefix = "CORS=true"
+        if ($script:DEBUG_MODE) {
+            $envPrefix += " GENERAL_LOG_LEVEL=DEBUG OPIK_LOG_LEVEL=DEBUG"
+        }
+        
         # Start backend in background with output redirected to log file
         # Use shell to combine stdout and stderr into single log file
-        $shellCmd = "java -jar `"$jarFile`" server config.yml > `"$script:BACKEND_LOG_FILE`" 2>&1"
+        # Change directory first, then run java with environment variables
+        $shellCmd = "cd '$script:BACKEND_DIR' && $envPrefix java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1"
         
         $processParams = @{
             FilePath = "sh"
             ArgumentList = @("-c", $shellCmd)
-            WorkingDirectory = $script:BACKEND_DIR
             NoNewWindow = $true
             PassThru = $true
         }
@@ -520,28 +521,26 @@ function Start-Frontend {
             }
         }
         
-        # Set debug logging for frontend if debug mode is enabled
+        # Configure frontend to talk to local backend
+        Write-LogInfo "Frontend API base URL (VITE_BASE_API_URL) set to: http://localhost:8080"
+        
+        # Build environment variable prefix for shell command
+        $envPrefix = "CI=true VITE_BASE_API_URL='http://localhost:8080'"
         if ($script:DEBUG_MODE) {
-            $env:NODE_ENV = "development"
+            $envPrefix += " NODE_ENV=development"
             Write-LogDebug "Frontend debug mode enabled - NODE_ENV=development"
         }
-        
-        # Configure frontend to talk to local backend
-        $env:VITE_BASE_API_URL = "http://localhost:8080"
-        Write-LogInfo "Frontend API base URL (VITE_BASE_API_URL) set to: $env:VITE_BASE_API_URL"
         
         Write-LogDebug "Starting frontend with: npm run start"
         
         # Start frontend in background with output redirected to log file
         # Use shell to combine stdout and stderr into single log file
-        $env:CI = "true"
-        
-        $shellCmd = "npm run start > `"$script:FRONTEND_LOG_FILE`" 2>&1"
+        # Change directory first, then run npm with environment variables
+        $shellCmd = "cd '$script:FRONTEND_DIR' && $envPrefix npm run start > '$script:FRONTEND_LOG_FILE' 2>&1"
         
         $processParams = @{
             FilePath = "sh"
             ArgumentList = @("-c", $shellCmd)
-            WorkingDirectory = $script:FRONTEND_DIR
             NoNewWindow = $true
             PassThru = $true
         }
