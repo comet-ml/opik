@@ -335,9 +335,10 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
     assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-async def test_adk__parallel_agents__spans_created(fake_backend):
-    opik_tracer = OpikTracer(project_name="adk-test-parallel-agents")
-
+@pytest.mark.asyncio
+async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
+    fake_backend,
+):
     weather_agent = adk_agents.LlmAgent(
         name="weather_agent",
         model=MODEL_NAME,
@@ -398,7 +399,9 @@ async def test_adk__parallel_agents__spans_created(fake_backend):
     )
 
     runner = await _async_build_runner(root_agent)
-    opik_tracer = OpikTracer()
+
+    project_name = "adk-test-parallel-agents"
+    opik_tracer = OpikTracer(project_name=project_name)
     track_adk_agent_recursive(root_agent, opik_tracer)
 
     events = runner.run_async(
@@ -406,10 +409,204 @@ async def test_adk__parallel_agents__spans_created(fake_backend):
         session_id=SESSION_ID,
         new_message=genai_types.Content(
             role="user",
-            parts=[genai_types.Part(text="What's the weather and time in new york?")],
+            parts=[genai_types.Part(text="What's the weather and time in New York?")],
         ),
     )
 
     final_response = await _async_extract_final_response_text(events)
-    print("Final Response:")
-    print(final_response)
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="main_agent",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk_invocation_id": ANY_STRING,
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+            "_opik_graph_definition": ANY_DICT,
+        },
+        output=ANY_DICT.containing(
+            {"content": {"parts": [{"text": final_response}], "role": "model"}}
+        ),
+        input={
+            "role": "user",
+            "parts": [{"text": "What's the weather and time in New York?"}],
+        },
+        thread_id=ANY_BUT_NONE,
+        project_name=project_name,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="parallel_agent",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="general",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                project_name=project_name,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="weather_agent",
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        last_updated_at=ANY_BUT_NONE,
+                        metadata=ANY_DICT,
+                        type="general",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        project_name=project_name,
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name=MODEL_NAME,
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                last_updated_at=ANY_BUT_NONE,
+                                metadata=ANY_DICT,
+                                type="llm",
+                                input=ANY_DICT,
+                                output=ANY_DICT,
+                                provider=opik_adk_helpers.get_adk_provider(),
+                                model=MODEL_NAME,
+                                usage=ANY_DICT,
+                                project_name=project_name,
+                            ),
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name="get_weather",
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                last_updated_at=ANY_BUT_NONE,
+                                metadata=ANY_DICT,
+                                type="tool",
+                                input={"city": "New York"},
+                                output={
+                                    "status": "success",
+                                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
+                                },
+                                project_name=project_name,
+                            ),
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name=MODEL_NAME,
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                last_updated_at=ANY_BUT_NONE,
+                                metadata=ANY_DICT,
+                                type="llm",
+                                input=ANY_DICT,
+                                output=ANY_DICT,
+                                provider=opik_adk_helpers.get_adk_provider(),
+                                model=MODEL_NAME,
+                                usage=ANY_DICT,
+                                project_name=project_name,
+                            ),
+                        ],
+                    ),
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="timezone_agent",
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        last_updated_at=ANY_BUT_NONE,
+                        metadata=ANY_DICT,
+                        type="general",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        project_name=project_name,
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name=MODEL_NAME,
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                last_updated_at=ANY_BUT_NONE,
+                                metadata=ANY_DICT,
+                                type="llm",
+                                input=ANY_DICT,
+                                output=ANY_DICT,
+                                provider=opik_adk_helpers.get_adk_provider(),
+                                model=MODEL_NAME,
+                                usage=ANY_DICT,
+                                project_name=project_name,
+                            ),
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name="get_current_time",
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                last_updated_at=ANY_BUT_NONE,
+                                metadata=ANY_DICT,
+                                type="tool",
+                                input={"city": "New York"},
+                                output=ANY_DICT.containing(
+                                    {
+                                        "status": "success",
+                                        "report": ANY_BUT_NONE,
+                                    }
+                                ),
+                                project_name=project_name,
+                            ),
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name=MODEL_NAME,
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                last_updated_at=ANY_BUT_NONE,
+                                metadata=ANY_DICT,
+                                type="llm",
+                                input=ANY_DICT,
+                                output=ANY_DICT,
+                                provider=opik_adk_helpers.get_adk_provider(),
+                                model=MODEL_NAME,
+                                usage=ANY_DICT,
+                                project_name=project_name,
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="summary_agent",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="general",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                project_name=project_name,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name=MODEL_NAME,
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        last_updated_at=ANY_BUT_NONE,
+                        metadata=ANY_DICT,
+                        type="llm",
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        provider=opik_adk_helpers.get_adk_provider(),
+                        model=MODEL_NAME,
+                        usage=ANY_DICT,
+                        project_name=project_name,
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
