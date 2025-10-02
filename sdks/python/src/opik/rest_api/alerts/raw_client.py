@@ -216,6 +216,102 @@ class RawAlertsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def update_alert(
+        self,
+        id_: str,
+        *,
+        name: str,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update alert
+
+        Parameters
+        ----------
+        id_ : str
+
+        name : str
+
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/alerts/{jsonable_encoder(id_)}",
+            method="PUT",
+            json={
+                "id": id,
+                "name": name,
+                "enabled": enabled,
+                "webhook": convert_and_respect_annotation_metadata(
+                    object_=webhook, annotation=WebhookWrite, direction="write"
+                ),
+                "triggers": convert_and_respect_annotation_metadata(
+                    object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawAlertsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -397,6 +493,102 @@ class AsyncRawAlertsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def update_alert(
+        self,
+        id_: str,
+        *,
+        name: str,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update alert
+
+        Parameters
+        ----------
+        id_ : str
+
+        name : str
+
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/alerts/{jsonable_encoder(id_)}",
+            method="PUT",
+            json={
+                "id": id,
+                "name": name,
+                "enabled": enabled,
+                "webhook": convert_and_respect_annotation_metadata(
+                    object_=webhook, annotation=WebhookWrite, direction="write"
+                ),
+                "triggers": convert_and_respect_annotation_metadata(
+                    object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
