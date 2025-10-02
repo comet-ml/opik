@@ -97,9 +97,10 @@ class Trace:
         Returns:
             None
         """
-        update_trace_message = messages.UpdateTraceMessage(
+        update_trace(
             trace_id=self.id,
             project_name=self._project_name,
+            message_streamer=self._streamer,
             end_time=end_time,
             metadata=metadata,
             input=input,
@@ -108,7 +109,6 @@ class Trace:
             error_info=error_info,
             thread_id=thread_id,
         )
-        self._streamer.put(update_trace_message)
 
     def span(
         self,
@@ -215,3 +215,29 @@ class Trace:
         )
 
         self._streamer.put(add_trace_feedback_batch_message)
+
+
+def update_trace(
+    trace_id: str,
+    project_name: str,
+    message_streamer: streamer.Streamer,
+    end_time: Optional[datetime.datetime] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    input: Optional[Dict[str, Any]] = None,
+    output: Optional[Dict[str, Any]] = None,
+    tags: Optional[List[Any]] = None,
+    error_info: Optional[ErrorInfoDict] = None,
+    thread_id: Optional[str] = None,
+) -> None:
+    update_trace_message = messages.UpdateTraceMessage(
+        trace_id=trace_id,
+        project_name=project_name,
+        end_time=end_time,
+        metadata=metadata,
+        input=input,
+        output=output,
+        tags=tags,
+        error_info=error_info,
+        thread_id=thread_id,
+    )
+    message_streamer.put(update_trace_message)

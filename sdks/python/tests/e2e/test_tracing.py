@@ -1188,3 +1188,64 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
         data_sizes=data_sizes,
         timeout=30,
     )
+
+
+def test_opik_client__update_trace__happy_flow(opik_client: opik.Opik):
+    # test that the trace update works
+    project_name = "update_trace_happy_flow"
+    trace_name = "trace_name"
+    trace = opik_client.trace(
+        name=trace_name,
+        input={"input": "trace-input-value"},
+        output={"output": "trace-output-value"},
+        tags=["trace-tag"],
+        metadata={"trace-metadata-key": "trace-metadata-value"},
+        project_name=project_name,
+    )
+
+    opik_client.flush()
+
+    # verify that the trace was saved
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name=trace_name,
+        input={"input": "trace-input-value"},
+        output={"output": "trace-output-value"},
+        metadata={"trace-metadata-key": "trace-metadata-value"},
+        tags=["trace-tag"],
+        project_name=project_name,
+    )
+
+    #
+    # update the trace with new values
+    #
+    new_metadata = {"new-trace-metadata-key": "new-trace-metadata-value"}
+    new_tags = ["new-trace-tag"]
+    new_input = {"input": "new-trace-input-value"}
+    new_output = {"output": "new-trace-output-value"}
+    thread_id = id_helpers.generate_id()
+    opik_client.update_trace(
+        trace_id=trace.id,
+        project_name=project_name,
+        metadata=new_metadata,
+        tags=new_tags,
+        input=new_input,
+        output=new_output,
+        thread_id=thread_id,
+    )
+
+    opik_client.flush()
+
+    # verify that the trace was updated
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name=trace_name,
+        input=new_input,
+        output=new_output,
+        metadata=new_metadata,
+        tags=new_tags,
+        thread_id=thread_id,
+        project_name=project_name,
+    )

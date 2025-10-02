@@ -26,7 +26,7 @@ from .experiment import rest_operations as experiment_rest_operations
 from .prompt import Prompt, PromptType
 from .prompt.client import PromptClient
 from .threads import threads_client
-from .trace import migration as trace_migration
+from .trace import migration as trace_migration, trace_client
 from .. import (
     config,
     datetime_helpers,
@@ -562,6 +562,62 @@ class Opik:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+        )
+
+    def update_trace(
+        self,
+        trace_id: str,
+        project_name: str,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
+    ) -> None:
+        """
+        Update the trace attributes.
+
+        This method should only be used after the trace has been fully created and stored.
+        If called before or immediately after trace creation, the update may silently fail or result in incorrect data.
+
+        This method uses two parameters to identify the trace:
+            - `trace_id`
+            - `project_name`
+
+        These parameters **must match exactly** the values used when the trace was created.
+        If any of them are incorrect, the update may not apply and no error will be raised.
+
+        All other parameters are optional and will update the corresponding fields in the trace.
+        If a parameter is not provided, the existing value will remain unchanged.
+
+        Args:
+            trace_id: The unique identifier for the trace.
+            project_name: The project name to which the trace belongs.
+            end_time: The end time of the trace.
+            metadata: Additional metadata to be associated with the trace.
+            input: The input data for the trace.
+            output: The output data for the trace.
+            tags: A list of tags to be associated with the trace.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
+            thread_id: Used to group multiple traces into a thread.
+                The identifier is user-defined and has to be unique per project.
+
+        Returns:
+            None
+        """
+        trace_client.update_trace(
+            trace_id=trace_id,
+            project_name=project_name,
+            message_streamer=self._streamer,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            error_info=error_info,
+            thread_id=thread_id,
         )
 
     def log_spans_feedback_scores(
