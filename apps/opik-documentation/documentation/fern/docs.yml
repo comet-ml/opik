@@ -24,7 +24,9 @@ analytics:
     write-key: ${SEGMENT_WRITE_KEY}
   gtm:
     container-id: ${GTM_CONTAINER_ID}
-
+  posthog:
+    api-key: ${POSTHOG_API_KEY}
+    endpoint: ${POSTHOG_API_HOST}
 layout:
   searchbar-placement: header
   tabs-placement: header
