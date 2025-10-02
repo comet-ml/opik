@@ -214,6 +214,34 @@ def _freeze_for_cache(value: Any) -> Any:
 
 
 class GEval(base_metric.BaseMetric):
+    """
+    Generalised evaluation metric that prompts an LLM to grade another LLM output.
+
+    GEval builds a reusable chain-of-thought using the provided
+    ``task_introduction`` and ``evaluation_criteria`` prompts, then requests a
+    final score and rationale for each evaluated output.
+
+    Args:
+        task_introduction: Instruction describing the evaluator's persona/purpose.
+        evaluation_criteria: Detailed rubric presented to the evaluator.
+        model: Optional model identifier or ``OpikBaseModel`` for the judge.
+        name: Display name for the metric result. Defaults to ``"g_eval_metric"``.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the judge model.
+        seed: Optional seed for reproducible generation (if supported by the model).
+
+    Example:
+        >>> from opik.evaluation.metrics.llm_judges.g_eval.metric import GEval
+        >>> metric = GEval(
+        ...     task_introduction="You evaluate politeness of responses.",
+        ...     evaluation_criteria="Score from 1 (rude) to 5 (very polite).",
+        ...     model="gpt-4",
+        ... )
+        >>> result = metric.score(output="Thanks so much for your help!")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.9
+    """
     _CHAIN_OF_THOUGHT_CACHE: "OrderedDict[Tuple[str, str, str, Any], str]" = (
         OrderedDict()
     )
@@ -231,24 +259,6 @@ class GEval(base_metric.BaseMetric):
         temperature: float = 0.0,
         seed: Optional[int] = None,
     ):
-        """
-        A metric that evaluates an LLM output based on chain-of-thought built with the evaluation criteria provided
-        by the user.
-
-        For more details see the original paper: https://arxiv.org/pdf/2303.16634
-
-        Args:
-            task_introduction: An instruction for LLM used to generate an evaluation chain-of-thought and in evaluation call itself.
-                `opik.evaluation.models.LiteLLMChatModel` is used by default.
-            evaluation_criteria: The main task for G-Eval metric written in human language.
-            model: The LLM to use for evaluation. Can be a string (model name) or an `opik.evaluation.models.OpikBaseModel` subclass instance.
-            name: The name of the metric.
-            track: Whether to track the metric. Defaults to True.
-            project_name: Optional project name to track the metric in for the cases when
-                there is no parent span/trace to inherit project name from.
-            temperature: The temperature to use for the model. Defaults to 0.0.
-            seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
-        """
         super().__init__(
             name=name,
             track=track,
@@ -454,7 +464,24 @@ class GEval(base_metric.BaseMetric):
 
 
 class GEvalPreset(GEval):
-    """Pre-configured G-Eval variant with author-provided prompt templates."""
+    """
+    Pre-configured GEval variant with author-provided prompt templates.
+
+    Args:
+        preset: Key name from ``GEVAL_PRESETS`` describing the evaluation rubric.
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track metric results. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the judge model.
+        name: Optional override for the metric name (defaults to preset name).
+
+    Example:
+        >>> from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset
+        >>> metric = GEvalPreset(preset="qa_relevance", model="gpt-4")
+        >>> result = metric.score(output="Answer addresses the user's question.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.85
+    """
 
     def __init__(
         self,

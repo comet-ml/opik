@@ -18,7 +18,27 @@ class RevisEvalResponseFormat(pydantic.BaseModel):
 
 
 class RevisEvalJudge(BaseMetric):
-    """LLM judge that revises answers using grounded evidence (RevisEval)."""
+    """
+    LLM judge that revises answers using grounded evidence (RevisEval).
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance. When ``None``
+            the default judge model is fetched from ``models_factory``.
+        name: Display name for the metric result. Defaults to ``"reviseval_judge"``.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+
+    Example:
+        >>> from opik.evaluation.metrics import RevisEvalJudge
+        >>> judge = RevisEvalJudge(model="gpt-4")
+        >>> result = judge.score(
+        ...     question="What is the capital of France?",
+        ...     answer="It's Berlin.",
+        ...     context=["France's capital city is Paris."],
+        ... )
+        >>> result.value  # doctest: +SKIP
+        0.0
+    """
 
     def __init__(
         self,

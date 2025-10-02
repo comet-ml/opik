@@ -7,7 +7,23 @@ from opik.evaluation.models import base_model
 
 
 class AgentToolCorrectnessJudge(GEvalPreset):
-    """Evaluates whether an agent used tools correctly."""
+    """
+    Judge whether an agent invoked and interpreted tools correctly.
+
+    Args:
+        model: Optional model identifier or pre-configured ``OpikBaseModel``.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature supplied to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import AgentToolCorrectnessJudge
+        >>> judge = AgentToolCorrectnessJudge(model="gpt-4")
+        >>> transcript = "Agent called search_tool and used the answer correctly."
+        >>> result = judge.score(output=transcript)  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.8
+    """
 
     def __init__(
         self,
@@ -27,7 +43,22 @@ class AgentToolCorrectnessJudge(GEvalPreset):
 
 
 class AgentTaskCompletionJudge(GEvalPreset):
-    """Scores whether an agent completed the assigned task."""
+    """
+    Evaluate whether an agent successfully completed the original task.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature for the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import AgentTaskCompletionJudge
+        >>> judge = AgentTaskCompletionJudge(model="gpt-4")
+        >>> result = judge.score(output="Agent delivered the requested summary.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.9
+    """
 
     def __init__(
         self,

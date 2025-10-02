@@ -7,7 +7,22 @@ from opik.evaluation.models import base_model
 
 
 class ComplianceRiskJudge(GEvalPreset):
-    """Evaluates non-factual or non-compliant statements for regulated sectors."""
+    """
+    Evaluate responses for non-compliant or misleading claims in regulated sectors.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import ComplianceRiskJudge
+        >>> judge = ComplianceRiskJudge(model="gpt-4")
+        >>> result = judge.score(output="This pill cures diabetes in a week.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.97
+    """
 
     def __init__(
         self,

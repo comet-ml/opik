@@ -7,7 +7,22 @@ from opik.evaluation.models import base_model
 
 
 class SummarizationConsistencyJudge(GEvalPreset):
-    """Scores how faithful a summary is to its source content."""
+    """
+    Score how faithful a summary is to its source content.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import SummarizationConsistencyJudge
+        >>> judge = SummarizationConsistencyJudge(model="gpt-4")
+        >>> result = judge.score(output="Summary omits key fact.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.4
+    """
 
     def __init__(
         self,
@@ -27,7 +42,22 @@ class SummarizationConsistencyJudge(GEvalPreset):
 
 
 class SummarizationCoherenceJudge(GEvalPreset):
-    """Evaluates coherence and structure of generated summaries."""
+    """
+    Evaluate the coherence and structure of generated summaries.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import SummarizationCoherenceJudge
+        >>> judge = SummarizationCoherenceJudge(model="gpt-4")
+        >>> result = judge.score(output="Summary jumps between unrelated topics.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.5
+    """
 
     def __init__(
         self,
@@ -47,7 +77,22 @@ class SummarizationCoherenceJudge(GEvalPreset):
 
 
 class DialogueHelpfulnessJudge(GEvalPreset):
-    """Judges how helpful an assistant reply is within a dialogue."""
+    """
+    Judge how helpful an assistant reply is within a dialogue.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import DialogueHelpfulnessJudge
+        >>> judge = DialogueHelpfulnessJudge(model="gpt-4")
+        >>> result = judge.score(output="Assistant politely refuses without help.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.3
+    """
 
     def __init__(
         self,
@@ -67,7 +112,22 @@ class DialogueHelpfulnessJudge(GEvalPreset):
 
 
 class QARelevanceJudge(GEvalPreset):
-    """Checks whether an answer directly addresses the user question."""
+    """
+    Check whether an answer directly addresses the user question.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import QARelevanceJudge
+        >>> judge = QARelevanceJudge(model="gpt-4")
+        >>> result = judge.score(output="Answer rambles without addressing the ask.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.2
+    """
 
     def __init__(
         self,

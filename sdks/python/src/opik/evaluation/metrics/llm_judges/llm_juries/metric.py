@@ -10,7 +10,23 @@ import opik.exceptions as exceptions
 
 
 class LLMJuriesJudge(BaseMetric):
-    """Aggregate multiple judge metrics (the 'juries') into a consensus score."""
+    """
+    Aggregate multiple judge metrics into a consensus score.
+
+    Args:
+        judges: Iterable of judge metrics to execute for consensus.
+        name: Display name for the aggregated result. Defaults to
+            ``"llm_juries_judge"``.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project name. Defaults to ``None``.
+
+    Example:
+        >>> from opik.evaluation.metrics import LLMJuriesJudge, ComplianceRiskJudge
+        >>> juries = LLMJuriesJudge(judges=[ComplianceRiskJudge(model="gpt-4")])
+        >>> result = juries.score(output="Financial guarantees provided.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.6
+    """
 
     def __init__(
         self,

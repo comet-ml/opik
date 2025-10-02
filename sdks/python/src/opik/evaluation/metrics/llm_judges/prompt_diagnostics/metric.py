@@ -7,7 +7,22 @@ from opik.evaluation.models import base_model
 
 
 class PromptPerplexityJudge(GEvalPreset):
-    """Rates how difficult a prompt is for an LLM to interpret."""
+    """
+    Rate how difficult a prompt is for an LLM to interpret.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import PromptPerplexityJudge
+        >>> judge = PromptPerplexityJudge(model="gpt-4")
+        >>> result = judge.score(output="Summarise, translate, and critique simultaneously.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.7
+    """
 
     def __init__(
         self,
@@ -27,7 +42,22 @@ class PromptPerplexityJudge(GEvalPreset):
 
 
 class PromptUncertaintyJudge(GEvalPreset):
-    """Rates the amount of ambiguity/uncertainty in a prompt."""
+    """
+    Rate how ambiguous or underspecified a prompt feels to the model.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track judge outputs. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the underlying model.
+
+    Example:
+        >>> from opik.evaluation.metrics import PromptUncertaintyJudge
+        >>> judge = PromptUncertaintyJudge(model="gpt-4")
+        >>> result = judge.score(output="Do the right thing in the best way possible.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.8
+    """
 
     def __init__(
         self,

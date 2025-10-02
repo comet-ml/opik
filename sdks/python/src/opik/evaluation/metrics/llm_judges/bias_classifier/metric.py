@@ -7,7 +7,22 @@ from opik.evaluation.models import base_model
 
 
 class DemographicBiasJudge(GEvalPreset):
-    """Scores demographic bias present in a model response."""
+    """
+    Score demographic stereotyping or bias in a response.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the model.
+
+    Example:
+        >>> from opik.evaluation.metrics import DemographicBiasJudge
+        >>> judge = DemographicBiasJudge(model="gpt-4")
+        >>> result = judge.score(output="People from X group are always late.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.95
+    """
 
     def __init__(
         self,
@@ -27,7 +42,22 @@ class DemographicBiasJudge(GEvalPreset):
 
 
 class PoliticalBiasJudge(GEvalPreset):
-    """Scores political/ideological bias in a model response."""
+    """
+    Detect partisan or ideological bias in a response.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the model.
+
+    Example:
+        >>> from opik.evaluation.metrics import PoliticalBiasJudge
+        >>> judge = PoliticalBiasJudge(model="gpt-4")
+        >>> result = judge.score(output="Vote for candidate X because Y is corrupt")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.87
+    """
 
     def __init__(
         self,
@@ -47,7 +77,22 @@ class PoliticalBiasJudge(GEvalPreset):
 
 
 class GenderBiasJudge(GEvalPreset):
-    """Detects gender bias or stereotyping in responses."""
+    """
+    Detect gender stereotyping or exclusion in generated text.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the model.
+
+    Example:
+        >>> from opik.evaluation.metrics import GenderBiasJudge
+        >>> judge = GenderBiasJudge(model="gpt-4")
+        >>> result = judge.score(output="Women are naturally worse at math.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.93
+    """
 
     def __init__(
         self,
@@ -67,7 +112,22 @@ class GenderBiasJudge(GEvalPreset):
 
 
 class ReligiousBiasJudge(GEvalPreset):
-    """Evaluates religious bias or disrespectful content."""
+    """
+    Evaluate responses for religious bias or disrespectful language.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the model.
+
+    Example:
+        >>> from opik.evaluation.metrics import ReligiousBiasJudge
+        >>> judge = ReligiousBiasJudge(model="gpt-4")
+        >>> result = judge.score(output="Believers of X are all foolish.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.9
+    """
 
     def __init__(
         self,
@@ -87,7 +147,22 @@ class ReligiousBiasJudge(GEvalPreset):
 
 
 class RegionalBiasJudge(GEvalPreset):
-    """Assesses geographic or cultural bias in responses."""
+    """
+    Assess geographic or cultural bias in responses.
+
+    Args:
+        model: Optional model identifier or ``OpikBaseModel`` instance.
+        track: Whether to automatically track results. Defaults to ``True``.
+        project_name: Optional tracking project name.
+        temperature: Sampling temperature forwarded to the model.
+
+    Example:
+        >>> from opik.evaluation.metrics import RegionalBiasJudge
+        >>> judge = RegionalBiasJudge(model="gpt-4")
+        >>> result = judge.score(output="People from region Z are lazy.")  # doctest: +SKIP
+        >>> result.value  # doctest: +SKIP
+        0.88
+    """
 
     def __init__(
         self,
