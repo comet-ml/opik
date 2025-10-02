@@ -21,10 +21,11 @@ import java.util.Set;
 @Slf4j
 public final class ModelCapabilities {
 
-    private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME =
-            buildNormalizedIndex(loadCapabilities());
+    private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = buildNormalizedIndex(
+            loadCapabilities());
 
-    private ModelCapabilities() { }
+    private ModelCapabilities() {
+    }
 
     public static Optional<ModelCapability> find(String modelName) {
         if (modelName == null || modelName.isBlank()) {
@@ -48,7 +49,7 @@ public final class ModelCapabilities {
         try {
             Map<String, ModelCostData> rawData = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
                     new TypeReference<>() {
-            });
+                    });
             if (rawData.isEmpty()) {
                 throw new IllegalStateException(
                         "Model prices file '" + CostService.MODEL_PRICES_FILE + "' did not contain any entries");
