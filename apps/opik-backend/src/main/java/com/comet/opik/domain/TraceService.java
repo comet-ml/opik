@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -173,13 +174,15 @@ class TraceServiceImpl implements TraceService {
                 .distinct()
                 .toList();
 
-        // Delete existing attachments for all traces in the batch before processing
-        // This prevents duplicate attachments when the SDK sends the same trace data multiple times
+        // Delete only auto-stripped attachments for all traces in the batch before processing
+        // This prevents duplicate auto-stripped attachments when the SDK sends the same trace data multiple times
+        // while preserving user-uploaded attachments
         Set<UUID> traceIds = dedupedTraces.stream()
                 .map(Trace::id)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        return attachmentService.deleteByEntityIds(EntityType.TRACE, traceIds)
+        return attachmentService.deleteAutoStrippedAttachments(EntityType.TRACE, traceIds)
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String userName = ctx.get(RequestContext.USER_NAME);
@@ -453,7 +456,7 @@ class TraceServiceImpl implements TraceService {
                             // If truncate=false, reinject attachments into all traces
                             if (!resolvedCriteria.truncate()) {
                                 return Flux.fromIterable(tracePage.content())
-                                        .flatMap(trace -> attachmentReinjectorService
+                                        .concatMap(trace -> attachmentReinjectorService
                                                 .reinjectAttachments(trace, resolvedCriteria.truncate()))
                                         .collectList()
                                         .map(reinjectedTraces -> tracePage.toBuilder()
@@ -576,7 +579,7 @@ class TraceServiceImpl implements TraceService {
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.search(limit, it)
-                        .flatMap(trace -> {
+                        .concatMap(trace -> {
                             // If truncate=false, reinject attachments
                             if (!it.truncate()) {
                                 return attachmentReinjectorService.reinjectAttachments(trace,

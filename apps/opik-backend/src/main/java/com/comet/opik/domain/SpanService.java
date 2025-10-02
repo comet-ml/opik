@@ -75,7 +75,7 @@ public class SpanService {
                             // If truncate=false, reinject attachments into all spans
                             if (!resolvedCriteria.truncate()) {
                                 return Flux.fromIterable(spanPage.content())
-                                        .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span,
+                                        .concatMap(span -> attachmentReinjectorService.reinjectAttachments(span,
                                                 resolvedCriteria.truncate()))
                                         .collectList()
                                         .map(reinjectedSpans -> spanPage.toBuilder()
@@ -312,6 +312,7 @@ public class SpanService {
         // while preserving user-uploaded attachments
         Set<UUID> spanIds = dedupedSpans.stream()
                 .map(Span::id)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
         return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
@@ -393,7 +394,7 @@ public class SpanService {
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(resolvedCriteria -> spanDAO.search(limit, resolvedCriteria)
-                        .flatMap(span -> {
+                        .concatMap(span -> {
                             // If truncate=false, reinject attachments
                             if (!resolvedCriteria.truncate()) {
                                 return attachmentReinjectorService.reinjectAttachments(span,

@@ -163,8 +163,7 @@ public class SpansResource {
     @JsonView(View.Public.class)
     @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getById(@PathParam("id") @NotNull UUID id,
-            @QueryParam("truncate") @DefaultValue("false") boolean truncate) {
-
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "If true, returns references; if false, returns reinjected base64. Matches traces endpoint for consistency and API discoverability.") boolean truncate) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Getting span by id '{}' on workspace_id '{}' with truncate={}", id, workspaceId, truncate);

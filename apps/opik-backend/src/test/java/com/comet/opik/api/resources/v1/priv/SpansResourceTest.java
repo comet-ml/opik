@@ -16,6 +16,7 @@ import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Field;
@@ -5437,7 +5438,7 @@ class SpansResourceTest {
             assertThat(attachmentPage).isNotNull();
             assertThat(attachmentPage.content()).hasSize(2); // Should have exactly 2, not duplicates
 
-            // Test 1: Fetch with truncate=true (default behavior) - should show references
+            // Test 1: Fetch with truncate=true (explicitly set; default is truncate=false) - should show references
             Span truncatedSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY, true);
             assertThat(truncatedSpan).isNotNull();
 
@@ -6714,6 +6715,145 @@ class SpansResourceTest {
                     TEST_WORKSPACE,
                     200);
             assertThat(finalAttachmentPage.content()).hasSize(2); // Verify exactly 2 PNG attachments
+        }
+
+        @Test
+        @DisplayName("update: when updating span with auto-stripped and user-uploaded attachments, then only auto-stripped attachments are replaced")
+        void update__whenUpdatingSpanWithAutoStrippedAndUserUploadedAttachments__thenOnlyAutoStrippedAttachmentsAreReplaced()
+                throws Exception {
+            // Step 1: Create a span with 2 auto-stripped attachments (base64 in payload)
+            String base64Jpg1 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+            String base64Jpg2 = AttachmentPayloadUtilsTest.createLargeJpegBase64();
+
+            String originalInputJson = String.format(
+                    "{\"message\": \"Original images:\", " +
+                            "\"jpg1_data\": \"%s\", " +
+                            "\"jpg2_data\": \"%s\"}",
+                    base64Jpg1, base64Jpg2);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .build();
+
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            assertThat(spanId).isNotNull();
+
+            // Step 2: Wait for async processing and attachment stripping
+            AtomicReference<UUID> traceIdRef = new AtomicReference<>();
+            AtomicReference<UUID> parentSpanIdRef = new AtomicReference<>();
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
+                assertThat(retrievedSpan).isNotNull();
+                String inputString = retrievedSpan.input().toString();
+                assertThat(inputString).doesNotContain(base64Jpg1);
+                assertThat(inputString).doesNotContain(base64Jpg2);
+
+                traceIdRef.set(retrievedSpan.traceId());
+                parentSpanIdRef.set(retrievedSpan.parentSpanId());
+            });
+            UUID traceId = traceIdRef.get();
+            UUID parentSpanId = parentSpanIdRef.get();
+
+            // Verify we have 2 auto-stripped JPG attachments initially
+            UUID projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
+            String baseUrl = Base64.getUrlEncoder().encodeToString(baseURI.getBytes());
+            var initialAttachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.SPAN,
+                    spanId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+            assertThat(initialAttachmentPage.content()).hasSize(2); // 2 auto-stripped JPG attachments
+
+            // Step 3: Manually upload a user attachment (simulating SDK behavior)
+            String userFileName = "user-uploaded-doc.pdf";
+            byte[] userFileData = "This is a PDF document uploaded by the user via SDK".getBytes();
+            var userAttachmentInfo = new AttachmentInfo(
+                    userFileName,
+                    DEFAULT_PROJECT,
+                    EntityType.SPAN,
+                    spanId,
+                    null, // containerId
+                    "application/pdf");
+
+            attachmentResourceClient.uploadAttachment(userAttachmentInfo, userFileData, API_KEY, TEST_WORKSPACE, 204);
+
+            // Verify we now have 3 attachments total (2 auto-stripped + 1 user-uploaded)
+            var afterUserUploadPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.SPAN,
+                    spanId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+            assertThat(afterUserUploadPage.content()).hasSize(3);
+
+            // Step 4: Update the span with new base64 data (which will create new auto-stripped attachments)
+            String base64Png1 = AttachmentPayloadUtilsTest.createLargePngBase64();
+
+            String updatedInputJson = String.format(
+                    "{\"message\": \"Updated with PNG:\", " +
+                            "\"png_data\": \"%s\"}",
+                    base64Png1);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .traceId(traceId)
+                    .parentSpanId(parentSpanId)
+                    .input(JsonUtils.readTree(updatedInputJson))
+                    .build();
+
+            spanResourceClient.updateSpan(spanId, spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Step 5: Wait for async processing of the update
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                Span finalSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
+                assertThat(finalSpan).isNotNull();
+
+                String updatedInputString = finalSpan.input().toString();
+                assertThat(updatedInputString).contains("Updated with PNG:");
+
+                // Verify old JPG base64 and new PNG base64 are not present (replaced by references)
+                assertThat(updatedInputString).doesNotContain(base64Jpg1);
+                assertThat(updatedInputString).doesNotContain(base64Jpg2);
+                assertThat(updatedInputString).doesNotContain(base64Png1);
+
+                // Verify PNG attachment reference is present
+                assertThat(updatedInputString).containsPattern("input-attachment-1-\\d+\\.png");
+            });
+
+            // Step 6: Verify attachments - should have 1 new PNG + 1 user-uploaded PDF
+            // Old auto-stripped JPGs should be deleted, but user-uploaded PDF should remain
+            var finalAttachmentPage = attachmentResourceClient.attachmentList(
+                    projectId,
+                    EntityType.SPAN,
+                    spanId,
+                    baseUrl,
+                    API_KEY,
+                    TEST_WORKSPACE,
+                    200);
+
+            assertThat(finalAttachmentPage.content()).hasSize(2); // 1 PNG + 1 user PDF
+
+            // Verify the user-uploaded PDF is still there
+            boolean userPdfExists = finalAttachmentPage.content().stream()
+                    .anyMatch(att -> att.fileName().equals(userFileName));
+            assertThat(userPdfExists).isTrue();
+
+            // Verify we have a PNG attachment (auto-stripped from update)
+            boolean pngExists = finalAttachmentPage.content().stream()
+                    .anyMatch(att -> att.fileName().endsWith(".png"));
+            assertThat(pngExists).isTrue();
+
+            // Verify old JPG attachments are gone
+            boolean jpgExists = finalAttachmentPage.content().stream()
+                    .anyMatch(att -> att.fileName().endsWith(".jpg"));
+            assertThat(jpgExists).isFalse();
         }
     }
 
