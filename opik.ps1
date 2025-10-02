@@ -356,7 +356,14 @@ function Get-UIUrl {
 
 function New-OpikConfigIfMissing {
     # Cross-platform home directory handling
-    $homeDir = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { "~" }
+    # Use $HOME automatic variable as final fallback (always set by PowerShell)
+    $homeDir = if ($env:USERPROFILE) { 
+        $env:USERPROFILE 
+    } elseif ($env:HOME) { 
+        $env:HOME 
+    } else { 
+        $HOME  # PowerShell automatic variable (not environment variable)
+    }
     $configFile = Join-Path $homeDir ".opik.config"
     
     if (Test-Path $configFile) {
