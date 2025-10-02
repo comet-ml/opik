@@ -177,6 +177,10 @@ class TraceServiceImplTest {
             when(projectService.resolveProjectIdAndVerifyVisibility(projectId, null))
                     .thenReturn(Mono.just(projectId));
 
+            // Mock AttachmentReinjectorService to return trace unchanged (no reinjection needed for this test)
+            when(attachmentReinjectorService.reinjectAttachments(any(Trace.class), any(Boolean.class)))
+                    .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
             var actualResult = traceService
                     .find(page, size, TraceSearchCriteria.builder().projectId(projectId).build())
                     .block();
