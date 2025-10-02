@@ -489,16 +489,13 @@ stop_frontend() {
 }
 
 # Helper function to display backend process status
-# Args: $1 = label (e.g., "Backend" or "Backend Process")
 # Returns: 0 if running, 1 if stopped
 display_backend_process_status() {
-    local label="${1:-Backend}"
-    
     if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE")" 2>/dev/null; then
-        echo -e "${label}: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
+        echo -e "Backend: ${GREEN}RUNNING${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
         return 0
     else
-        echo -e "${label}: ${RED}STOPPED${NC}"
+        echo -e "Backend: ${RED}STOPPED${NC}"
         return 1
     fi
 }
@@ -576,7 +573,7 @@ verify_services() {
     
     # Backend status
     local backend_running=false
-    if display_backend_process_status "Backend"; then
+    if display_backend_process_status; then
         backend_running=true
     fi
     
@@ -615,7 +612,7 @@ verify_be_only_services() {
     
     # Backend process status
     local backend_running=false
-    if display_backend_process_status "Backend Process"; then
+    if display_backend_process_status; then
         backend_running=true
     fi
 
