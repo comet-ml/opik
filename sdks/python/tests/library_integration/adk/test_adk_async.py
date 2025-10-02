@@ -1,4 +1,4 @@
-from typing import Optional, AsyncIterator
+from typing import Optional, AsyncIterator, Union
 
 import pytest
 from google.adk import agents as adk_agents
@@ -8,7 +8,7 @@ from google.adk import sessions as adk_sessions
 from google.genai import types as genai_types
 
 import opik
-from opik.integrations.adk import OpikTracer
+from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 from opik.integrations.adk import helpers as opik_adk_helpers
 from . import agent_tools
 from .constants import (
@@ -29,7 +29,9 @@ from ...testlib import (
 )
 
 
-async def _async_build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
+async def _async_build_runner(
+    root_agent: Union[adk_agents.Agent, adk_agents.SequentialAgent],
+) -> adk_runners.Runner:
     session_service = adk_sessions.InMemorySessionService()
     _ = await session_service.create_session(
         app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
@@ -331,3 +333,83 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
     assert_dict_has_keys(trace_tree.spans[0].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+
+
+async def test_adk__parallel_agents__spans_created(fake_backend):
+    opik_tracer = OpikTracer(project_name="adk-test-parallel-agents")
+
+    weather_agent = adk_agents.LlmAgent(
+        name="weather_agent",
+        model=MODEL_NAME,
+        instruction="""You are a weather agent. When asked about a city:
+        1. ALWAYS call the get_weather tool with the city name
+        2. Return the weather information clearly
+        3. Start your response with 'WEATHER: ' followed by the weather details""",
+        description="Gets the weather info for the city.",
+        output_key="weather_info",
+        tools=[agent_tools.get_weather],
+    )
+
+    timezone_agent = adk_agents.LlmAgent(
+        name="timezone_agent",
+        model=MODEL_NAME,
+        instruction="""You are a time agent. When asked about a city:
+        1. ALWAYS call the get_current_time tool with the city name
+        2. Return the current time information clearly
+        3. Start your response with 'TIME: ' followed by the time details""",
+        description="Gets the time info.",
+        output_key="time_info",
+        tools=[agent_tools.get_current_time],
+    )
+
+    parallel_agent = adk_agents.ParallelAgent(
+        name="parallel_agent",
+        sub_agents=[weather_agent, timezone_agent],
+        description="Runs weather and time agents in parallel to get comprehensive city information.",
+    )
+
+    # Create a summary agent that will combine the parallel results
+    summary_agent = adk_agents.LlmAgent(
+        name="summary_agent",
+        model=MODEL_NAME,
+        instruction="""You are a summarizer agent. You will receive information from parallel agents that have gathered:
+        - weather_info: Weather information (starts with 'WEATHER:')
+        - time_info: Current time information (starts with 'TIME:')
+
+        Your task is to create a comprehensive response that includes BOTH pieces of information:
+
+        Format your response as:
+        "Here's the information for [city]:
+
+        Weather: [weather details]
+        Current Time: [time details]"
+
+        IMPORTANT: You must include both weather and time information. Do not omit either piece of information.
+        """,
+        description="Combines weather and time information from parallel agents into a comprehensive response.",
+        output_key="final_summary",
+    )
+
+    # Create a sequential agent that first runs parallel agents, then summarizes
+    root_agent = adk_agents.SequentialAgent(
+        name="main_agent",
+        sub_agents=[parallel_agent, summary_agent],
+        description="Runs weather and time agents in parallel, then summarizes the results.",
+    )
+
+    runner = await _async_build_runner(root_agent)
+    opik_tracer = OpikTracer()
+    track_adk_agent_recursive(root_agent, opik_tracer)
+
+    events = runner.run_async(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What's the weather and time in new york?")],
+        ),
+    )
+
+    final_response = await _async_extract_final_response_text(events)
+    print("Final Response:")
+    print(final_response)
