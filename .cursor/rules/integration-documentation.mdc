@@ -68,13 +68,17 @@ description: Start here to integrate Opik into your [INTEGRATION NAME]-based gen
 
 ### Language Specification Rules
 
-- **Include language specification** `(Python)`, `(JavaScript)`, `(Java)`, or `(.NET)` in the title **only if** there are multiple language integrations for the same service
+- **Include language specification** `(Python)`, `(TypeScript)`, `(JavaScript)`, `(Java)`, or `(.NET)` in the title **if and only if** there are multiple language integrations for the same service
+- **When multiple language versions exist**, BOTH/ALL versions must include the language specification in their titles
 - **Single language integrations** should not include language specification in the title
 - **Examples:**
-  - `title: Observability for OpenAI with Opik` (Python only)
-  - `title: Observability for OpenAI (TypeScript) with Opik` (TypeScript version)
-  - `title: Observability for Spring AI (Java) with Opik` (Java only)
-  - `title: Observability for Semantic Kernel (Python) with Opik` (Python version of Semantic Kernel)
+  - ✅ `title: Observability for LangChain (Python) with Opik` (Python version when TypeScript also exists)
+  - ✅ `title: Observability for LangChain (JavaScript) with Opik` (TypeScript version when Python also exists)
+  - ✅ `title: Observability for OpenAI (Python) with Opik` (Python version when TypeScript also exists)
+  - ✅ `title: Observability for OpenAI (TypeScript) with Opik` (TypeScript version when Python also exists)
+  - ✅ `title: Observability for Spring AI (Java) with Opik` (Java only, no other languages)
+  - ✅ `title: Observability for CrewAI with Opik` (Python only, no other languages)
+  - ❌ `title: Observability for LangChain with Opik` (Missing language spec when multiple versions exist)
 
 ### Content Structure
 
@@ -314,6 +318,7 @@ Before publishing integration documentation, verify:
 - [ ] Framework-specific instrumentation code is provided
 - [ ] Advanced usage section contains genuine framework-specific features (or is omitted entirely if no advanced features exist)
 - [ ] GitHub call-to-action is included
+- [ ] **Language specification in title**: If multiple language versions exist for the same integration (e.g., LangChain Python and JavaScript, OpenAI Python and TypeScript), BOTH/ALL versions include the language in the title metadata
 
 ### Integration Type Compatibility
 - [ ] **OpenTelemetry integrations** do NOT include SDK features (`@track`, evaluation, `opik.configure()`)
@@ -703,6 +708,8 @@ When modifying integrations, verify:
 - ❌ Adding Colab links in README files instead of pointing to comprehensive integration docs
 - ❌ Using old `/tracing/integrations/` URLs in README instead of `/integrations/`
 - ❌ Including "Try in Colab" column in README integration tables (use 3-column format only)
+- ❌ Missing language specification in title when multiple language versions exist (e.g., `LangChain` instead of `LangChain (Python)` when TypeScript version also exists)
+- ❌ Only adding language specification to one version when multiple exist (both/all versions must include language spec)
 
 ## 📖 Integration-Specific Guidance
 
