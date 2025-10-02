@@ -284,6 +284,7 @@ const usePromptDatasetItemCombination = ({
       runStreaming,
       datasetName,
       deleteAbortController,
+      hydrateDatasetItemData,
     ],
   );
 
