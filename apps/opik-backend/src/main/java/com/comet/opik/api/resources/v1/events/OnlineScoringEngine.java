@@ -26,6 +26,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -42,10 +43,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-
-import org.apache.commons.lang3.StringUtils;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -239,8 +236,7 @@ public class OnlineScoringEngine {
 
             String url = matcher.group(1).trim();
             if (!url.isEmpty()) {
-                String decodedUrl = URLDecoder.decode(url, StandardCharsets.UTF_8);
-                builder.addContent(ImageContent.from(decodedUrl));
+                builder.addContent(ImageContent.from(url));
             }
 
             lastIndex = matcher.end();
