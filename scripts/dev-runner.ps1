@@ -230,10 +230,24 @@ function Build-Backend {
     Push-Location $script:BACKEND_DIR
     
     try {
-        $mavenCmd = "mvn clean install -T 1C -Dmaven.test.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Dmaven.test.compile.skip=true -Dmaven.test.resources.skip=true -Dmaven.compiler.useIncrementalCompilation=false -Dresolve.skip=true"
-        Write-LogDebug "Running: $mavenCmd"
+        # Build Maven arguments as an array to avoid parsing issues with dots in property names
+        $mavenArgs = @(
+            "clean",
+            "install",
+            "-T", "1C",
+            "-Dmaven.test.skip=true",
+            "-Dspotless.skip=true",
+            "-Dmaven.javadoc.skip=true",
+            "-Dmaven.source.skip=true",
+            "-Dmaven.test.compile.skip=true",
+            "-Dmaven.test.resources.skip=true",
+            "-Dmaven.compiler.useIncrementalCompilation=false",
+            "-Dresolve.skip=true"
+        )
         
-        Invoke-Expression $mavenCmd
+        Write-LogDebug "Running: mvn $($mavenArgs -join ' ')"
+        
+        & mvn @mavenArgs
         
         if ($LASTEXITCODE -eq 0) {
             Write-LogSuccess "Backend build completed successfully"
