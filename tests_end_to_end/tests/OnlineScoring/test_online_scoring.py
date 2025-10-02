@@ -158,7 +158,7 @@ class TestOnlineScoring:
                     continue
                 raise AssertionError(
                     f"Failed to find Moderation cell after {max_retries} attempts.\n"
-                    f"Project name: {os.environ["OPIK_PROJECT_NAME"]}\n"
+                    f"Project name: {os.environ['OPIK_PROJECT_NAME']}\n"
                     f"Last error: {str(e)}"
                 ) from e
 
