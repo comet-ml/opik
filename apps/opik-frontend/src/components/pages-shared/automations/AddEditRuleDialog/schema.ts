@@ -12,12 +12,15 @@ import {
   LLM_MESSAGE_ROLE,
   LLM_SCHEMA_TYPE,
   LLMMessage,
+  LLMMessageContentItem,
   ProviderMessageType,
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import {
   getMessageContentTextSegments,
   isMessageContentEmpty,
+  stringifyMessageContent,
+  tryDeserializeMessageContent,
 } from "@/lib/llm";
 
 const RuleNameSchema = z
@@ -243,72 +246,28 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
-  messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
-
-type MessageContentItem =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+  messages.map(
+    (m) =>
+      ({
+        content: stringifyMessageContent(m.content),
+        role: m.role.toUpperCase(),
+      }) as ProviderMessageType,
+  );
 
 /**
- * Deserialize message content from string to structured format.
- * Converts `<<<image>>>URL<<</image>>>` placeholders back to structured content array.
+ * Normalize serialized message content into the structured shape expected by the form.
+ * Supports JSON arrays as well as legacy `<<<image>>>URL<<</image>>>` placeholder formats.
  */
 const deserializeMessageContent = (
-  content: string | MessageContentItem[],
-): string | MessageContentItem[] => {
+  content: string | LLMMessageContentItem[],
+): string | LLMMessageContentItem[] => {
   if (typeof content !== "string") {
     return content;
   }
 
-  // Check if content contains image placeholders
-  // Note: closing tag has 3 angle brackets: <<</image>>>
-  const imagePattern = /<<<image>>>(.+?)<<<\/image>>>/g;
-  if (!imagePattern.test(content)) {
-    return content;
-  }
-
-  // Parse into structured content array
-  const parts: MessageContentItem[] = [];
-  let lastIndex = 0;
-  imagePattern.lastIndex = 0; // Reset regex state
-
-  let match;
-  while ((match = imagePattern.exec(content)) !== null) {
-    // Add text before the image placeholder
-    if (match.index > lastIndex) {
-      const textSegment = content.substring(lastIndex, match.index);
-      if (textSegment) {
-        parts.push({
-          type: "text",
-          text: textSegment,
-        });
-      }
-    }
-
-    // Add image content
-    const imageUrl = match[1];
-    parts.push({
-      type: "image_url",
-      image_url: {
-        url: imageUrl,
-      },
-    });
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Add remaining text after last image
-  if (lastIndex < content.length) {
-    const trailingText = content.substring(lastIndex);
-    if (trailingText) {
-      parts.push({
-        type: "text",
-        text: trailingText,
-      });
-    }
-  }
-
-  return parts.length > 0 ? parts : content;
+  return tryDeserializeMessageContent(content) as
+    | string
+    | LLMMessageContentItem[];
 };
 
 const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
@@ -350,10 +309,16 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.seed = seed;
   }
 
+  const sanitizedSchema = data.schema.map((item) => {
+    const { unsaved: _ignoredUnsaved, ...rest } = item;
+    void _ignoredUnsaved;
+    return rest;
+  });
+
   return {
     model,
     messages: convertLLMToProviderMessages(data.messages),
     variables: data.variables,
-    schema: data.schema,
+    schema: sanitizedSchema as LLMJudgeObject["schema"],
   };
 };
