@@ -9,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
+import OperatorSelector from "@/components/shared/FiltersContent/OperatorSelector";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import TimePicker from "@/components/shared/TimePicker/TimePicker";
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";

@@ -1,6 +1,6 @@
 import React from "react";
 import { Filter } from "@/types/filters";
-import OperatorSelector from "@/components/shared/FiltersButton/OperatorSelector";
+import OperatorSelector from "@/components/shared/FiltersContent/OperatorSelector";
 import { DEFAULT_OPERATORS } from "@/constants/filters";
 import { Input } from "@/components/ui/input";
 
