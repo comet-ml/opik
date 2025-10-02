@@ -46,9 +46,7 @@ describe("automation schema serialization", () => {
     });
 
     expect(backendPayload.messages).toHaveLength(1);
-    expect(backendPayload.messages[0].content).toBe(
-      "Hello\n\n<<<image>>>https://example.com/cat.png<<</image>>>",
-    );
+    expect(backendPayload.messages[0].content).toEqual(imageContent);
     expect(
       Object.prototype.hasOwnProperty.call(backendPayload.schema[0], "unsaved"),
     ).toBe(false);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
@@ -22,6 +23,24 @@ export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
   prompt: PlaygroundPromptType;
 }
+
+const IMAGE_PLACEHOLDER_REGEX = /\[image(?:_\d+)?\]/i;
+
+const containsImagePlaceholder = (value: unknown): boolean => {
+  if (typeof value === "string") {
+    return IMAGE_PLACEHOLDER_REGEX.test(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(containsImagePlaceholder);
+  }
+
+  if (isObject(value)) {
+    return Object.values(value).some(containsImagePlaceholder);
+  }
+
+  return false;
+};
 
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
   const newDatasetItem = cloneDeep(datasetItem) as Record<string, unknown>;
@@ -124,6 +143,43 @@ const usePromptDatasetItemCombination = ({
 
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
+  const datasetItemDataCache = useRef(new Map<string, DatasetItem["data"]>());
+
+  const hydrateDatasetItemData = useCallback(
+    async (datasetItem?: DatasetItem): Promise<DatasetItem["data"]> => {
+      if (!datasetItem) {
+        return {};
+      }
+
+      const cached = datasetItemDataCache.current.get(datasetItem.id);
+      if (cached) {
+        return cached;
+      }
+
+      let hydratedData = datasetItem.data ?? {};
+
+      if (containsImagePlaceholder(hydratedData)) {
+        try {
+          const { data } = await api.get(
+            `${DATASETS_REST_ENDPOINT}items/${datasetItem.id}`,
+          );
+
+          if (data?.data) {
+            hydratedData = data.data as DatasetItem["data"];
+          }
+        } catch (error) {
+          console.warn(
+            "Failed to hydrate dataset item data with full payload",
+            error,
+          );
+        }
+      }
+
+      datasetItemDataCache.current.set(datasetItem.id, hydratedData);
+      return hydratedData;
+    },
+    [],
+  );
 
   const createCombinations = useCallback((): DatasetItemPromptCombination[] => {
     if (datasetItems.length > 0 && promptIds.length > 0) {
@@ -152,7 +208,7 @@ const usePromptDatasetItemCombination = ({
       const controller = new AbortController();
 
       const datasetItemId = datasetItem?.id || "";
-      const datasetItemData = datasetItem?.data || {};
+      const datasetItemData = await hydrateDatasetItemData(datasetItem);
       const key = `${datasetItemId}-${prompt.id}`;
 
       addAbortController(key, controller);

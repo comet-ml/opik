@@ -19,7 +19,6 @@ import { generateRandomString } from "@/lib/utils";
 import {
   getMessageContentTextSegments,
   isMessageContentEmpty,
-  stringifyMessageContent,
   tryDeserializeMessageContent,
 } from "@/lib/llm";
 
@@ -249,7 +248,7 @@ const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
   messages.map(
     (m) =>
       ({
-        content: stringifyMessageContent(m.content),
+        content: m.content,
         role: m.role.toUpperCase(),
       }) as ProviderMessageType,
   );
