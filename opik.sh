@@ -125,8 +125,8 @@ get_system_info() {
     docker_compose_version=$(docker-compose version --short 2>/dev/null || echo "unknown")
   fi
   
-  # Return as pipe-delimited string (will be used in JSON payload)
-  echo "$os_info|$python_version|$docker_version|$docker_compose_version"
+  # Return as triple-pipe-delimited string (using ||| to avoid conflicts with single pipes in version strings)
+  echo "$os_info|||$python_version|||$docker_version|||$docker_compose_version"
 }
 
 get_docker_compose_cmd() {
@@ -430,8 +430,8 @@ EOF
     event_type="opik_os_install_started"
     
     # Get system info safely - wrapped to prevent script failure
-    system_info=$(get_system_info 2>/dev/null || echo "unknown|unknown|unknown|unknown")
-    IFS='|' read -r os_info python_ver docker_ver docker_compose_ver <<< "$system_info"
+    system_info=$(get_system_info 2>/dev/null || echo "unknown|||unknown|||unknown|||unknown")
+    IFS='|||' read -r os_info python_ver docker_ver docker_compose_ver <<< "$system_info"
     
     debugLog "[DEBUG] System info: OS=$os_info, Python=$python_ver, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
     
