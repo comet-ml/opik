@@ -457,7 +457,8 @@ function Start-Backend {
         
         # Start backend in background with output redirected to log file
         # Use exec to replace shell process with java, so the PID is the Java process
-        $shellCmd = "cd '$script:BACKEND_DIR' && exec $envPrefix java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1"
+        # Environment variables must come BEFORE exec
+        $shellCmd = "cd '$script:BACKEND_DIR' && $envPrefix exec java -jar '$jarFile' server config.yml > '$script:BACKEND_LOG_FILE' 2>&1"
         
         $processParams = @{
             FilePath = "sh"
@@ -534,7 +535,8 @@ function Start-Frontend {
         
         # Start frontend in background with output redirected to log file
         # Use exec to replace shell process with npm, so the PID is the npm process
-        $shellCmd = "cd '$script:FRONTEND_DIR' && exec $envPrefix npm run start > '$script:FRONTEND_LOG_FILE' 2>&1"
+        # Environment variables must come BEFORE exec
+        $shellCmd = "cd '$script:FRONTEND_DIR' && $envPrefix exec npm run start > '$script:FRONTEND_LOG_FILE' 2>&1"
         
         $processParams = @{
             FilePath = "sh"
