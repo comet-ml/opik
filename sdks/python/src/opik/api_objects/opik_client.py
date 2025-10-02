@@ -5,9 +5,28 @@ import logging
 from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
-from opik.api_objects import opik_query_language
 
+from . import (
+    constants,
+    dataset,
+    experiment,
+    optimization,
+    helpers,
+    opik_query_language,
+    search_helpers,
+    span,
+    trace,
+)
+from .attachment import Attachment
+from .attachment import client as attachment_client
+from .attachment import converters as attachment_converters
+from .dataset import rest_operations as dataset_rest_operations
+from .experiment import helpers as experiment_helpers
+from .experiment import rest_operations as experiment_rest_operations
+from .prompt import Prompt, PromptType
+from .prompt.client import PromptClient
 from .threads import threads_client
+from .trace import migration as trace_migration
 from .. import (
     config,
     datetime_helpers,
@@ -31,25 +50,6 @@ from ..rest_api.types import (
     trace_filter_public,
 )
 from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
-from . import (
-    constants,
-    dataset,
-    experiment,
-    optimization,
-    helpers,
-    span,
-    trace,
-)
-from .attachment import converters as attachment_converters
-from .attachment import Attachment
-from .attachment import client as attachment_client
-from . import rest_stream_parser
-from .dataset import rest_operations as dataset_rest_operations
-from .experiment import helpers as experiment_helpers
-from .experiment import rest_operations as experiment_rest_operations
-from .prompt import Prompt, PromptType
-from .prompt.client import PromptClient
-from .trace import migration as trace_migration
 
 LOGGER = logging.getLogger(__name__)
 
@@ -971,9 +971,13 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        wait_for_at_least: Optional[int] = None,
+        wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[trace_public.TracePublic]:
         """
-        Search for traces in the given project.
+        Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
+        to be found before returning within the specified timeout. If wait_for_at_least number of traces are not found
+        within the specified timeout, an exception will be raised.
 
         Args:
             project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -1014,25 +1018,41 @@ class Opik:
                 If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            wait_for_at_least: The minimum number of traces to wait for before returning.
+            wait_for_timeout: The timeout for waiting for traces.
+
+        Raises:
+            exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
         filters_ = helpers.parse_filter_expressions(
             filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
         )
 
-        traces = rest_stream_parser.read_and_parse_full_stream(
-            read_source=lambda current_batch_size,
-            last_retrieved_id: self._rest_client.traces.search_traces(
-                project_name=project_name or self._project_name,
-                filters=filters_,
-                limit=current_batch_size,
-                truncate=truncate,
-                last_retrieved_id=last_retrieved_id,
-            ),
+        search_functor = functools.partial(
+            search_helpers.search_traces_with_filters,
+            rest_client=self._rest_client,
+            project_name=project_name or self._project_name,
+            filters=filters_,
             max_results=max_results,
-            parsed_item_class=trace_public.TracePublic,
+            truncate=truncate,
         )
 
-        return traces
+        if wait_for_at_least is None:
+            return search_functor()
+
+        # do synchronization with backend if wait_for_at_least is provided until a specific number of traces are found
+        result = search_helpers.search_and_wait_for_done(
+            search_functor=search_functor,
+            wait_for_at_least=wait_for_at_least,
+            wait_for_timeout=wait_for_timeout,
+            sleep_time=5,
+        )
+        if len(result) < wait_for_at_least:
+            raise exceptions.SearchTimeoutError(
+                f"Timeout after {wait_for_timeout} seconds: expected {wait_for_at_least} traces, but only {len(result)} were found."
+            )
+
+        return result
 
     def search_spans(
         self,
@@ -1041,10 +1061,14 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        wait_for_at_least: Optional[int] = None,
+        wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
-        metadata, tags, etc. or based on the trace ID.
+        metadata, tags, etc. or based on the trace ID. Also, you can wait for at least a certain number of spans
+        to be found before returning within the specified timeout. If wait_for_at_least number of spans are not found
+        within the specified timeout, an exception will be raised.
 
         Args:
             project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
@@ -1086,26 +1110,42 @@ class Opik:
                 If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
             truncate: Whether to truncate image data stored in input, output, or metadata
+            wait_for_at_least: The minimum number of spans to wait for before returning.
+            wait_for_timeout: The timeout for waiting for spans.
+
+        Raises:
+            exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
         filters = helpers.parse_filter_expressions(
             filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
         )
 
-        spans = rest_stream_parser.read_and_parse_full_stream(
-            read_source=lambda current_batch_size,
-            last_retrieved_id: self._rest_client.spans.search_spans(
-                trace_id=trace_id,
-                project_name=project_name or self._project_name,
-                filters=filters,
-                limit=current_batch_size,
-                truncate=truncate,
-                last_retrieved_id=last_retrieved_id,
-            ),
+        search_functor = functools.partial(
+            search_helpers.search_spans_with_filters,
+            rest_client=self._rest_client,
+            project_name=project_name or self._project_name,
+            trace_id=trace_id,
+            filters=filters,
             max_results=max_results,
-            parsed_item_class=span_public.SpanPublic,
+            truncate=truncate,
         )
 
-        return spans
+        if wait_for_at_least is None:
+            return search_functor()
+
+        # do synchronization with backend if wait_for_at_least is provided until a specific number of spans are found
+        result = search_helpers.search_and_wait_for_done(
+            search_functor=search_functor,
+            wait_for_at_least=wait_for_at_least,
+            wait_for_timeout=wait_for_timeout,
+            sleep_time=5,
+        )
+        if len(result) < wait_for_at_least:
+            raise exceptions.SearchTimeoutError(
+                f"Timeout after {wait_for_timeout} seconds: expected {wait_for_at_least} spans, but only {len(result)} were found."
+            )
+
+        return result
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """

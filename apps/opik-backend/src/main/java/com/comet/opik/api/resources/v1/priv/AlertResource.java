@@ -4,6 +4,10 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.AlertFilter;
+import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.sorting.SortingFactoryAlerts;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -18,13 +22,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -33,6 +41,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.UUID;
 
 @Path("/v1/private/alerts")
@@ -46,6 +55,8 @@ public class AlertResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull AlertService alertService;
+    private final @NonNull SortingFactoryAlerts sortingFactory;
+    private final @NonNull FiltersFactory filtersFactory;
 
     @POST
     @Operation(operationId = "createAlert", summary = "Create alert", description = "Create alert", responses = {
@@ -72,6 +83,54 @@ public class AlertResource {
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(alertId)).build();
 
         return Response.created(uri).build();
+    }
+
+    @PUT
+    @Path("{id}")
+    @Operation(operationId = "updateAlert", summary = "Update alert", description = "Update alert", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response updateAlert(@PathParam("id") UUID id,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating alert with id '{}', on workspace_id '{}'", id, workspaceId);
+
+        alertService.update(id, alert);
+
+        log.info("Updated alert with id '{}', on workspace_id '{}'", id, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Operation(operationId = "findAlerts", summary = "Find alerts", description = "Find alerts", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = Alert.AlertPage.class))),
+    })
+    @JsonView(Alert.View.Public.class)
+    public Response findAlerts(
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting alerts on workspace_id '{}', page '{}', size '{}'", workspaceId, page,
+                size);
+
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+        var alertFilters = filtersFactory.newFilters(filters, AlertFilter.LIST_TYPE_REFERENCE);
+        Alert.AlertPage alertPage = alertService.find(page, size, sortingFields, alertFilters);
+
+        log.info("Got alerts on workspace_id '{}', count '{}'", workspaceId, alertPage.size());
+
+        return Response.ok(alertPage).build();
     }
 
     @GET

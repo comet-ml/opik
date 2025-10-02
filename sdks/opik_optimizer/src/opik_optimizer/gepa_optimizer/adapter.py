@@ -78,7 +78,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         prompt_variant = _apply_system_text(self._base_prompt, system_text)
 
         agent_class = create_litellm_agent_class(
-            prompt_variant, optimizer=self._optimizer
+            prompt_variant, optimizer_ref=self._optimizer
         )
         agent = agent_class(prompt_variant)
 

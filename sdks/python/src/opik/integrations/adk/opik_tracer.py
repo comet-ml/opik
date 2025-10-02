@@ -288,6 +288,7 @@ class OpikTracer:
                 LOGGER.warning(
                     f"No current span found in context for tool: {tool.name}"
                 )
+                _log_tool_context_warning(context=tool_context)
 
         except Exception as e:
             LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
@@ -321,6 +322,7 @@ class OpikTracer:
                 LOGGER.warning(
                     f"No current span found in context for tool output update: {tool.name}"
                 )
+                _log_tool_context_warning(context=tool_context)
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
@@ -355,3 +357,12 @@ def _try_add_agent_graph_to_metadata(
         }
     except Exception:
         LOGGER.error("Failed to build mermaid graph for agent.", exc_info=True)
+
+
+def _log_tool_context_warning(context: tool_context.ToolContext) -> None:
+    if context is not None:
+        warning = f"Function call id: {context.function_call_id}, agent name: {context.agent_name}"
+        if context.actions is not None:
+            warning += f", is escalate: {context.actions.escalate}, transfer to: {context.actions.transfer_to_agent}"
+
+        LOGGER.warning(warning)

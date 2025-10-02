@@ -140,3 +140,9 @@ class BaseLLMError(OpikException):
 
     def __str__(self) -> str:
         return f"LLM infrastructure error: {self.message}"
+
+
+class SearchTimeoutError(OpikException):
+    """Exception raised when a search times out."""
+
+    pass

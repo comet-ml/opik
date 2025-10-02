@@ -24,10 +24,6 @@ jobs:
           echo "BRANCH_NAME=github-actions/NA-automatically-update-model-prices-file-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
 
-      - name: Generate supported models documentation
-        run: |
-          python3 scripts/generate_supported_models_mdx.py
-
       - name: Create branch
         uses: JosiahSiegel/remote-branch-action@v1.2.0
         with:
@@ -39,23 +35,21 @@ jobs:
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "Github Actions (${{ github.actor }})"
           git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
-          git add apps/opik-documentation/documentation/fern/docs/tracing/supported_models.mdx
-          git commit --allow-empty -m "[NA] [BE] [DOCS] Update model prices file and supported models documentation"
+          git commit --allow-empty -m "[NA] [BE] Update model prices file"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ env.BRANCH_NAME }}
-          title: "[NA] [BE] [DOCS] Update model prices file and supported models documentation"
+          title: "[NA] [BE] Update model prices file"
           body: |
             ## Details
             Automated update of `model_prices_and_context_window.json` file and regeneration of supported models documentation.
             
             **Files updated:**
             - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` - Latest model pricing data from LiteLLM
-            - `apps/opik-documentation/documentation/fern/docs/tracing/supported_models.mdx` - Auto-generated documentation page
-          
+            
             ## Change checklist
             - [X] User facing change
             - [X] Documentation update

@@ -240,7 +240,6 @@ Opik currently calculates costs automatically for all LLM calls in the following
 - [Haystack Integration](/integrations/haystack)
 - [LlamaIndex Integration](/integrations/llama_index)
 
-
 ### Supported Providers
 
 Cost tracking is supported for the following LLM providers (as defined in `opik.LLMProvider` enum):
@@ -253,11 +252,10 @@ Cost tracking is supported for the following LLM providers (as defined in `opik.
 - **AWS Bedrock** (`bedrock`) - Models hosted by AWS Bedrock (https://aws.amazon.com/bedrock)
 - **Groq** (`groq`) - Models hosted by Groq (https://groq.com)
 
+You can find a complete list of supported models for these providers in the
+[model_prices_and_context_window.json file](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/model_prices_and_context_window.json).
+
 <Tip>
   We are actively expanding our cost tracking support. Need support for additional models or providers? Please [open a
   feature request](https://github.com/comet-ml/opik/issues) to help us prioritize development.
 </Tip>
-
-## Complete Model List
-
-For a comprehensive list of all supported models with detailed pricing information, visit the [Supported Models](/tracing/supported_models) page. This page is automatically generated from the latest model pricing data and includes:

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useMatches, useNavigate } from "@tanstack/react-router";
 import copy from "clipboard-copy";
 import sortBy from "lodash/sortBy";
 import {
@@ -52,11 +52,15 @@ import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 
 const UserMenu = () => {
   const navigate = useNavigate();
+  const matches = useMatches();
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
   const [openQuickstart, setOpenQuickstart] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const hideUpgradeButton = matches.some(
+    (match) => match.staticData?.hideUpgradeButton,
+  );
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -145,7 +149,7 @@ const UserMenu = () => {
   };
 
   const renderUpgradeButton = () => {
-    if (isOrganizationAdmin && !isAcademic) {
+    if (isOrganizationAdmin && !isAcademic && !hideUpgradeButton) {
       return (
         <a
           href={buildUrl(

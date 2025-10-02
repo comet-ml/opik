@@ -1,16 +1,53 @@
-import tests.unit.mcp.stub_opik  # noqa: F401
-from pathlib import Path
-
+import copy
 import json
 import logging
 import sys
 import textwrap
 import types
-from contextvars import ContextVar
-from typing import Any, Optional
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
+from pathlib import Path
+from typing import Any, Optional
+from types import SimpleNamespace
 
 import pytest
+
+import tests.unit.mcp.stub_opik  # noqa: F401
+
+from opik_optimizer import ChatPrompt
+from opik_optimizer.evolutionary_optimizer import reporting as evo_reporting
+from opik_optimizer.evolutionary_optimizer.mcp import (
+    EvolutionaryMCPContext,
+    finalize_mcp_result,
+    generate_tool_description_variations,
+    tool_description_mutation,
+)
+from opik_optimizer.mcp_utils import mcp_workflow
+from opik_optimizer.mcp_utils.mcp import (
+    MCPManifest,
+    ToolSignature,
+    dump_mcp_signature,
+    extract_description_from_system,
+    load_mcp_signature,
+    signature_updates,
+    system_prompt_from_tool,
+    tools_from_signatures,
+    validate_tool_arguments,
+)
+from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator
+from opik_optimizer.mcp_utils.mcp_workflow import (
+    MCPToolInvocation,
+    ensure_argument_via_resolver,
+    extract_tool_arguments,
+    make_argument_summary_builder,
+    make_follow_up_builder,
+    make_similarity_metric,
+    preview_dataset_tool_invocation,
+)
+from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (
+    _sync_tool_description_in_system,
+)
+from opik_optimizer.optimization_result import OptimizationResult
 
 
 root = Path(__file__).resolve().parents[3]
@@ -27,35 +64,6 @@ if "opik_optimizer.utils" not in sys.modules:
     utils_pkg = types.ModuleType("opik_optimizer.utils")
     utils_pkg.__path__ = [str(src_root / "opik_optimizer" / "utils")]
     sys.modules["opik_optimizer.utils"] = utils_pkg
-
-from opik_optimizer import ChatPrompt  # noqa: E402
-from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (  # noqa: E402
-    _sync_tool_description_in_system,
-)
-
-
-from opik_optimizer.mcp_utils.mcp import (  # noqa: E402
-    MCPManifest,
-    ToolSignature,
-    dump_mcp_signature,
-    extract_description_from_system,
-    load_mcp_signature,
-    signature_updates,
-    system_prompt_from_tool,
-    tools_from_signatures,
-    validate_tool_arguments,
-)
-from opik_optimizer.mcp_utils import mcp_workflow  # noqa: E402
-from opik_optimizer.mcp_utils.mcp_workflow import (  # noqa: E402
-    MCPToolInvocation,
-    ensure_argument_via_resolver,
-    extract_tool_arguments,
-    make_argument_summary_builder,
-    make_follow_up_builder,
-    make_similarity_metric,
-    preview_dataset_tool_invocation,
-)
-from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator  # noqa: E402
 
 
 def _sample_tool_entry() -> dict[str, Any]:
@@ -171,6 +179,219 @@ def test_make_argument_summary_builder_formats_arguments() -> None:
     assert "Identifier: lib" in summary
     assert "Topic: routing" in summary
     assert "abcdefghij" in summary  # preview truncated
+
+
+def test_mcp_tool_invocation_cache_behaviour(monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest = MCPManifest.from_dict(
+        {
+            "name": "stub",
+            "command": "echo",
+            "args": ["stub"],
+            "env": {},
+        }
+    )
+
+    invocation = MCPToolInvocation(
+        manifest=manifest,
+        tool_name="doc_lookup",
+        cache_enabled=True,
+        preview_chars=10,
+    )
+
+    call_count = {"value": 0}
+
+    def fake_call_tool(name: str, payload: dict[str, Any]) -> Any:
+        call_count["value"] += 1
+        return SimpleNamespace(content=f"result for {payload}")
+
+    monkeypatch.setattr(
+        mcp_workflow,
+        "call_tool_from_manifest",
+        lambda manifest_obj, name, payload: fake_call_tool(name, payload),
+    )
+
+    monkeypatch.setattr(
+        mcp_workflow,
+        "response_to_text",
+        lambda response: response.content,
+    )
+
+    result1 = invocation.invoke({"query": "docs"})
+    result2 = invocation.invoke({"query": "docs"})
+    result3 = invocation.invoke({"query": "docs"}, use_cache=False)
+
+    assert call_count["value"] == 2
+    assert result1 == result2
+    assert result3 == result1
+
+
+def test_mcp_tool_invocation_cache_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest = MCPManifest.from_dict(
+        {
+            "name": "stub",
+            "command": "echo",
+            "args": ["stub"],
+            "env": {},
+        }
+    )
+
+    invocation = MCPToolInvocation(
+        manifest=manifest,
+        tool_name="doc_lookup",
+        cache_enabled=False,
+    )
+
+    call_count = {"value": 0}
+
+    monkeypatch.setattr(
+        mcp_workflow,
+        "call_tool_from_manifest",
+        lambda manifest_obj, name, payload: SimpleNamespace(
+            content=f"payload={payload}"
+        ),
+    )
+
+    monkeypatch.setattr(
+        evo_reporting,
+        "display_tool_description",
+        lambda *args, **kwargs: None,
+        raising=False,
+    )
+
+    def fake_converter(response: Any) -> str:
+        call_count["value"] += 1
+        return response.content
+
+    monkeypatch.setattr(mcp_workflow, "response_to_text", fake_converter)
+
+    invocation.invoke({"query": "docs"})
+    invocation.invoke({"query": "docs"})
+    invocation.clear_cache()
+
+    assert call_count["value"] == 2
+
+
+def test_generate_tool_description_variations(monkeypatch: pytest.MonkeyPatch) -> None:
+    tool_entry = _sample_tool_entry()
+    prompt = ChatPrompt(
+        system=(
+            "Instruction\n<<TOOL_DESCRIPTION>>Find documentation snippets."
+            "<<END_TOOL_DESCRIPTION>>"
+        ),
+        user="{query}",
+        tools=[copy.deepcopy(tool_entry)],
+    )
+
+    context = EvolutionaryMCPContext(
+        tool_name="doc_lookup",
+        tool_segment_id="tool:doc_lookup",
+        original_description=tool_entry["function"]["description"],
+        tool_metadata=tool_entry,
+        panel_style="green",
+    )
+
+    monkeypatch.setattr(
+        evo_reporting, "display_tool_description", lambda *args, **kwargs: None
+    )
+
+    optimizer = SimpleNamespace(
+        _current_optimization_id="opt-id",
+        _call_model=lambda *args, **kwargs: json.dumps(
+            {
+                "prompts": [
+                    {
+                        "tool_description": "Refined documentation helper.",
+                        "improvement_focus": "clarity",
+                    }
+                ]
+            }
+        ),
+    )
+
+    candidates = generate_tool_description_variations(optimizer, prompt, context, 2)
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.tools is not None
+    assert (
+        candidate.tools[0]["function"]["description"] == "Refined documentation helper."
+    )
+    assert candidate.system is not None
+    assert "Refined documentation helper." in candidate.system
+
+
+def test_tool_description_mutation_and_finalize(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_entry = _sample_tool_entry()
+    prompt = ChatPrompt(
+        system=(
+            "Instruction\n<<TOOL_DESCRIPTION>>Find documentation snippets."
+            "<<END_TOOL_DESCRIPTION>>"
+        ),
+        user="{query}",
+        tools=[copy.deepcopy(tool_entry)],
+    )
+
+    context = EvolutionaryMCPContext(
+        tool_name="doc_lookup",
+        tool_segment_id="tool:doc_lookup",
+        original_description=tool_entry["function"]["description"],
+        tool_metadata=tool_entry,
+        panel_style="green",
+    )
+
+    monkeypatch.setattr(
+        evo_reporting, "display_tool_description", lambda *args, **kwargs: None
+    )
+
+    optimizer = SimpleNamespace(
+        _current_optimization_id="opt-id",
+        _call_model=lambda *args, **kwargs: json.dumps(
+            {
+                "prompts": [
+                    {
+                        "tool_description": "Updated documentation helper.",
+                        "improvement_focus": "coverage",
+                    }
+                ]
+            }
+        ),
+    )
+
+    mutated = tool_description_mutation(optimizer, prompt, context)
+    assert mutated is not None
+    assert mutated.tools is not None
+    assert (
+        mutated.tools[0]["function"]["description"] == "Updated documentation helper."
+    )
+
+    result = OptimizationResult(
+        optimizer="EvolutionaryOptimizer",
+        prompt=mutated.get_messages(),
+        score=0.5,
+        initial_prompt=prompt.get_messages(),
+        initial_score=0.4,
+        metric_name="dummy_metric",
+        details={"final_tools": mutated.tools},
+    )
+
+    finalize_mcp_result(result, context, "green")
+    assert result.tool_prompts is not None
+    assert result.tool_prompts["doc_lookup"] == "Updated documentation helper."
+
+    fallback_result = OptimizationResult(
+        optimizer="EvolutionaryOptimizer",
+        prompt=prompt.get_messages(),
+        score=0.1,
+        initial_prompt=prompt.get_messages(),
+        initial_score=0.1,
+        metric_name="dummy_metric",
+        details={},
+    )
+
+    finalize_mcp_result(fallback_result, context, "green")
+    assert fallback_result.tool_prompts is not None
+    assert fallback_result.tool_prompts["doc_lookup"] == context.original_description
 
 
 def test_preview_dataset_tool_invocation(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,10 +1,12 @@
 from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 
 import json
 import logging
 import random
 
 from . import prompts as evo_prompts
+from .mcp import EvolutionaryMCPContext, tool_description_mutation
 from ..optimization_config import chat_prompt
 from .. import utils
 from . import reporting
@@ -21,12 +23,24 @@ class MutationOps:
         output_style_guidance: str
         _get_task_description_for_llm: Any
         _call_model: Any
+        _mcp_context: EvolutionaryMCPContext | None
+        _update_individual_with_prompt: Callable[[Any, chat_prompt.ChatPrompt], Any]
 
     def _deap_mutation(
         self, individual: Any, initial_prompt: chat_prompt.ChatPrompt
     ) -> Any:
         """Enhanced mutation operation with multiple strategies."""
         prompt = chat_prompt.ChatPrompt(messages=individual)
+
+        mcp_context = getattr(self, "_mcp_context", None)
+        if mcp_context is not None:
+            mutated_prompt = tool_description_mutation(self, prompt, mcp_context)
+            if mutated_prompt is not None:
+                reporting.display_success(
+                    "      Mutation successful, tool description updated (MCP mutation).",
+                    verbose=self.verbose,
+                )
+                return self._update_individual_with_prompt(individual, mutated_prompt)
 
         # Choose mutation strategy based on current diversity
         diversity = self._calculate_population_diversity()
@@ -49,21 +63,21 @@ class MutationOps:
                 "      Mutation successful, prompt has been edited by randomizing words (word-level mutation).",
                 verbose=self.verbose,
             )
-            return type(individual)(mutated_prompt.get_messages())
+            return self._update_individual_with_prompt(individual, mutated_prompt)
         elif mutation_choice > semantic_threshold:
             mutated_prompt = self._structural_mutation(prompt)
             reporting.display_success(
                 "      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
                 verbose=self.verbose,
             )
-            return type(individual)(mutated_prompt.get_messages())
+            return self._update_individual_with_prompt(individual, mutated_prompt)
         else:
             mutated_prompt = self._semantic_mutation(prompt, initial_prompt)
             reporting.display_success(
                 "      Mutation successful, prompt has been edited using an LLM (semantic mutation).",
                 verbose=self.verbose,
             )
-            return type(individual)(mutated_prompt.get_messages())
+            return self._update_individual_with_prompt(individual, mutated_prompt)
 
     def _semantic_mutation(
         self, prompt: chat_prompt.ChatPrompt, initial_prompt: chat_prompt.ChatPrompt

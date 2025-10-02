@@ -1,20 +1,31 @@
-import opik
 import pickle
+from typing import Optional, Iterator, Dict
+
+import google.adk
 import pydantic
 import pytest
-from typing import Optional, Iterator, Dict
-from . import agent_tools
-import google.adk
 from google.adk import agents as adk_agents
+from google.adk import events as adk_events
 from google.adk import runners as adk_runners
 from google.adk import sessions as adk_sessions
-from google.adk import events as adk_events
+from google.adk.agents import run_config
 from google.adk.models import lite_llm as adk_lite_llm
 from google.adk.tools import agent_tool as adk_agent_tool
-from google.adk.agents import run_config
 from google.genai import types as genai_types
 
+import opik
+from opik import semantic_version
 from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
+from opik.integrations.adk import helpers as opik_adk_helpers
+from opik.integrations.adk import opik_tracer, legacy_opik_tracer
+from . import agent_tools
+from .constants import (
+    APP_NAME,
+    USER_ID,
+    SESSION_ID,
+    MODEL_NAME,
+    EXPECTED_USAGE_KEYS_GOOGLE,
+)
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -23,18 +34,6 @@ from ...testlib import (
     TraceModel,
     assert_dict_has_keys,
     assert_equal,
-)
-
-from opik.integrations.adk import helpers as opik_adk_helpers
-from opik.integrations.adk import opik_tracer, legacy_opik_tracer
-from opik import semantic_version
-
-from .constants import (
-    APP_NAME,
-    USER_ID,
-    SESSION_ID,
-    MODEL_NAME,
-    EXPECTED_USAGE_KEYS_GOOGLE,
 )
 
 pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
@@ -1744,3 +1743,140 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+@pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
+    reason="Test only applies to ADK versions > 1.3.0",
+)
+def test_adk__transfer_to_agent__tracked_and_span_created(
+    fake_backend,
+):
+    project_name = "adk_transfer_to_agent_test"
+    opik_tracer = OpikTracer(project_name=project_name)
+
+    translator_to_english = adk_agents.Agent(
+        name="Translator",
+        model=MODEL_NAME,
+        description="Translates text to English.",
+        instruction="Translate text to English.",
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+    )
+
+    root_agent = adk_agents.Agent(
+        name="Text_Assistant",
+        model=MODEL_NAME,
+        instruction="Translate text to English.",
+        sub_agents=[translator_to_english],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    INPUT_GERMAN_TEXT = (
+        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
+        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert,\n"
+        "um Muster in der Sprache zu erkennen. Sie verwenden eine Art neuronales Netzwerk,\n"
+        "das Transformer genannt wird. Dieses ermöglicht es ihnen, den Kontext und die Beziehungen\n"
+        "zwischen Wörtern zu verstehen.\n"
+        "Wenn man einem LLM eine Eingabe gibt, sagt es die wahrscheinlichsten nächsten Wörter\n"
+        "voraus – basierend auf allem, was es während des Trainings gelernt hat.\n"
+        "Es „versteht“ nicht im menschlichen Sinne, aber es erzeugt Antworten, die oft intelligent wirken,\n"
+        "weil es so viele Daten gesehen hat.\n"
+        "Je mehr Daten und Training ein Modell hat, desto besser kann es Aufgaben wie das Beantworten von Fragen,\n"
+        "das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen.\n"
+    )
+
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+        ),
+    )
+    _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+
+    provider = opik_adk_helpers.get_adk_provider()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="Text_Assistant",
+        project_name=project_name,
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name=MODEL_NAME,
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                type="llm",
+                usage=ANY_DICT,
+                end_time=ANY_BUT_NONE,
+                project_name=project_name,
+                model=MODEL_NAME,
+                provider=provider,
+                last_updated_at=ANY_BUT_NONE,
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="execute_tool transfer_to_agent",
+                type="general",
+                end_time=ANY_BUT_NONE,
+                project_name=project_name,
+                last_updated_at=ANY_BUT_NONE,
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="Translator",
+                input={"parts": [{"text": INPUT_GERMAN_TEXT}], "role": "user"},
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                type="general",
+                end_time=ANY_BUT_NONE,
+                project_name=project_name,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name=MODEL_NAME,
+                        input=ANY_DICT,
+                        output=ANY_DICT,
+                        metadata=ANY_DICT,
+                        type="llm",
+                        usage=ANY_DICT,
+                        end_time=ANY_BUT_NONE,
+                        project_name=project_name,
+                        model=MODEL_NAME,
+                        provider=provider,
+                        last_updated_at=ANY_BUT_NONE,
+                    )
+                ],
+                last_updated_at=ANY_BUT_NONE,
+            ),
+        ],
+        thread_id=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert len(fake_backend.trace_trees) > 0
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
+    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+    assert_dict_has_keys(trace_tree.spans[2].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)

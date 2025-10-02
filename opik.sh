@@ -5,6 +5,7 @@ INFRA_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-redis-1" "opik-minio-
 BACKEND_CONTAINERS=("opik-python-backend-1" "opik-backend-1")
 OPIK_CONTAINERS=("opik-frontend-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
+LOCAL_BE_CONTAINERS=("opik-python-backend-1" "opik-frontend-1")
 
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead
 CONTAINERS=()
@@ -14,6 +15,8 @@ set_containers_for_profile() {
     CONTAINERS=("${INFRA_CONTAINERS[@]}")
   elif [[ "$BACKEND" == "true" ]]; then
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${BACKEND_CONTAINERS[@]}")
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    CONTAINERS=("${INFRA_CONTAINERS[@]}" "${LOCAL_BE_CONTAINERS[@]}")
   else
     # Full Opik (default)
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${BACKEND_CONTAINERS[@]}" "${OPIK_CONTAINERS[@]}")
@@ -31,6 +34,8 @@ get_verify_cmd() {
     cmd="$cmd --infra"
   elif [[ "$BACKEND" == "true" ]]; then
     cmd="$cmd --backend"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    cmd="$cmd --local-be"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
@@ -53,6 +58,8 @@ get_start_cmd() {
     cmd="$cmd --infra"
   elif [[ "$BACKEND" == "true" ]]; then
     cmd="$cmd --backend"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    cmd="$cmd --local-be"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
@@ -77,13 +84,16 @@ get_docker_compose_cmd() {
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
-  
+
   # Add profiles based on the selected mode (accumulative)
   if [[ "$INFRA" == "true" ]]; then
     # No profile needed - infrastructure services start by default
     :
   elif [[ "$BACKEND" == "true" ]]; then
     cmd="$cmd --profile backend"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be.yaml"
+    cmd="$cmd --profile local-be"
   else
     # Full Opik (default) - includes all dependencies
     cmd="$cmd --profile opik"
@@ -134,6 +144,7 @@ print_usage() {
   echo "  --port-mapping  Enable port mapping for all containers by using the override file (can be combined with other flags)"
   echo "  --infra         Start only infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.)"
   echo "  --backend       Start only infrastructure + backend services (Backend, Python Backend etc.)"
+  echo "  --local-be      Start all services EXCEPT backend (for local backend development)"
   echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
   echo "  --help          Show this help message"
   echo ""
@@ -289,6 +300,17 @@ print_banner() {
   elif [[ "$BACKEND" == "true" ]]; then
     echo "║  ✅ Backend services started successfully!                      ║"
     echo "║                                                                 ║"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    echo "║  ✅ Local backend mode services started successfully!           ║"
+    echo "║                                                                 ║"
+    echo "║  ⚙️  Backend Configuration:                                      ║"
+    echo "║     Backend is NOT running in Docker                            ║"
+    echo "║     Start your local backend on port 8080                       ║"
+    echo "║     Frontend will proxy to: http://localhost:8080               ║"
+    echo "║                                                                 ║"
+    echo "║  📊 Access the UI (start backend first):                        ║"
+    echo "║     $ui_url                                       ║"
+    echo "║                                                                 ║"
   else
     echo "║  ✅ All services started successfully!                          ║"
     echo "║                                                                 ║"
@@ -402,6 +424,7 @@ export OPIK_FRONTEND_FLAVOR=default
 # Default: full opik (all profiles)
 INFRA=false
 BACKEND=false
+LOCAL_BE=false
 
 if [[ "$*" == *"--build"* ]]; then
   BUILD_MODE=true
@@ -435,21 +458,37 @@ if [[ "$*" == *"--backend"* ]]; then
   set -- ${@/--backend/}
 fi
 
+if [[ "$*" == *"--local-be"* ]]; then
+  LOCAL_BE=true
+  export OPIK_FRONTEND_FLAVOR=local_be
+  # Remove the flag from arguments
+  set -- ${@/--local-be/}
+fi
+
 # Check for guardrails flag
 if [[ "$*" == *"--guardrails"* ]]; then
   GUARDRAILS_ENABLED=true
-  export OPIK_FRONTEND_FLAVOR=guardrails
+  # Only override flavor if not already set by local-be
+  if [[ "$OPIK_FRONTEND_FLAVOR" == "default" ]]; then
+    export OPIK_FRONTEND_FLAVOR=guardrails
+  fi
   export TOGGLE_GUARDRAILS_ENABLED=true
   # Remove the flag from arguments
   set -- ${@/--guardrails/}
 fi
 
 # Validate mutually exclusive profile flags
-if [[ "$INFRA" == "true" && "$BACKEND" == "true" ]]; then
-  echo "❌ Error: --infra and --backend flags are mutually exclusive."
+profile_count=0
+[[ "$INFRA" == "true" ]] && ((profile_count++))
+[[ "$BACKEND" == "true" ]] && ((profile_count++))
+[[ "$LOCAL_BE" == "true" ]] && ((profile_count++))
+
+if [[ $profile_count -gt 1 ]]; then
+  echo "❌ Error: --infra, --backend, and --local-be flags are mutually exclusive."
   echo "   Choose one of the following:"
   echo "   • ./opik.sh --infra      (infrastructure services only)"
   echo "   • ./opik.sh --backend    (infrastructure + backend services)"
+  echo "   • ./opik.sh --local-be   (all services except backend - for local backend development)"
   echo "   • ./opik.sh              (full Opik suite - default)"
   exit 1
 fi

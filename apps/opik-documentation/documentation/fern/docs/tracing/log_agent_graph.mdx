@@ -1,0 +1,60 @@
+Agent Graphs are a great way to visualize the flow of an agent and simplifies it's debugging.
+
+<Frame>
+  <img src="/img/tracing/agent_definition.png" />
+</Frame>
+
+Opik supports logging agent graphs for the following frameworks:
+
+1. LangGraph
+2. Manual Tracking
+
+## LangGraph
+
+You can log the agent execution graph by specifying the `graph` parameter in the
+[OpikTracer](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) callback:
+
+```python
+from opik.integrations.langchain import OpikTracer
+
+opik_tracer = OpikTracer(graph=app.get_graph(xray=True))
+```
+
+Opik will log the agent graph definition in the Opik dashboard which you can access by clicking on
+`Show Agent Graph` in the trace sidebar.
+
+## Manual Tracking
+
+You can also log the agent graph definition manually by logging the agent graph definition as a
+mermaid graph definition in the metadata of the trace:
+
+```python
+import opik
+from opik import opik_context
+
+@opik.track
+def chat_agent(input: str):
+  # Update the current trace with the agent graph definition
+  opik_context.update_current_trace(
+    metadata={
+      "_opik_graph_definition": {
+        "format": "mermaid",
+            "data": "graph TD; U[User]-->A[Agent]; A-->L[LLM]; L-->A; A-->R[Answer];"
+      }
+    }
+  )
+  return "Hello, how can I help you today?"
+
+chat_agent("Hi there!")
+```
+
+Opik will log the agent graph definition in the Opik dashboard which you can access by clicking on
+`Show Agent Graph` in the trace sidebar.
+
+## Next steps
+
+Why not check out:
+
+- [Opik's 50+ integrations](/integrations/overview)
+- [Logging traces](/tracing/log_traces)
+- [Evaluating agents](/evaluation/evaluate_agents)

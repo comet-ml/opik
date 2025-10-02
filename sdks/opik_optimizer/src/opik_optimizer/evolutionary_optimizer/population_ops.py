@@ -8,6 +8,7 @@ from deap import creator as _creator
 
 from . import prompts as evo_prompts
 from . import reporting
+from .mcp import EvolutionaryMCPContext, initialize_population_mcp
 from ..optimization_config import chat_prompt
 from .. import utils
 
@@ -22,6 +23,7 @@ class PopulationOps:
         output_style_guidance: str
         _call_model: Any
         toolbox: Any
+        _mcp_context: EvolutionaryMCPContext | None
     # Hints for mixin attributes provided by the primary optimizer class
     _gens_since_pop_improvement: int
     _best_primary_score_history: list[float]
@@ -39,6 +41,9 @@ class PopulationOps:
         including some 'fresh start' prompts based purely on task description.
         All generated prompts should aim to elicit answers matching self.output_style_guidance.
         """
+        mcp_context = getattr(self, "_mcp_context", None)
+        if mcp_context is not None:
+            return initialize_population_mcp(self, prompt, mcp_context)
         with reporting.initializing_population(verbose=self.verbose) as init_pop_report:
             init_pop_report.start(self.population_size)
 
