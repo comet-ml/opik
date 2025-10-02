@@ -101,7 +101,12 @@ get_system_info() {
   # Docker version - safe with fallback
   local docker_version="unknown"
   if command -v docker >/dev/null 2>&1; then
-    docker_version=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',' || echo "unknown")
+    local docker_output=$(docker --version 2>/dev/null || echo "")
+    if [[ -n "$docker_output" ]]; then
+      # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
+      docker_version=$(echo "$docker_output" | sed -n 's/^Docker version \([^,]*\).*/\1/p' || echo "unknown")
+      [[ -z "$docker_version" ]] && docker_version="unknown"
+    fi
   fi
   
   # Docker Compose version - safe with fallback
@@ -109,7 +114,12 @@ get_system_info() {
   local docker_compose_version="unknown"
   if command -v docker >/dev/null 2>&1; then
     # Try Docker Compose V2 (plugin)
-    docker_compose_version=$(docker compose version 2>/dev/null | awk '{print $4}' || echo "unknown")
+    local compose_output=$(docker compose version 2>/dev/null || echo "")
+    if [[ -n "$compose_output" ]]; then
+      # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
+      docker_compose_version=$(echo "$compose_output" | sed -n 's/^Docker Compose version \(.*\)$/\1/p' || echo "unknown")
+      [[ -z "$docker_compose_version" ]] && docker_compose_version="unknown"
+    fi
   fi
   
   # If V2 failed, try Docker Compose V1 (standalone)
@@ -117,8 +127,8 @@ get_system_info() {
     docker_compose_version=$(docker-compose version --short 2>/dev/null || echo "unknown")
   fi
   
-  # Return as triple-pipe-delimited string (using ||| to avoid conflicts with single pipes in version strings)
-  echo "$os_info|||$docker_version|||$docker_compose_version"
+  # Return as tab-delimited string (tabs are extremely unlikely in version strings)
+  printf "%s\t%s\t%s" "$os_info" "$docker_version" "$docker_compose_version"
 }
 
 get_docker_compose_cmd() {
@@ -422,8 +432,8 @@ EOF
     event_type="opik_os_install_started"
     
     # Get system info safely - wrapped to prevent script failure
-    system_info=$(get_system_info 2>/dev/null || echo "unknown|||unknown|||unknown")
-    IFS='|||' read -r os_info docker_ver docker_compose_ver <<< "$system_info"
+    system_info=$(get_system_info 2>/dev/null || printf "unknown\tunknown\tunknown")
+    IFS=$'\t' read -r os_info docker_ver docker_compose_ver <<< "$system_info"
     
     debugLog "[DEBUG] System info: OS=$os_info, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
     

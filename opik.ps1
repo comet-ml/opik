@@ -89,7 +89,8 @@ function Get-SystemInfo {
         $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
         if ($dockerCmd) {
             $dockerOutput = (docker --version 2>&1 | Out-String).Trim()
-            if ($dockerOutput -match 'Docker version ([\d.]+)') {
+            # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
+            if ($dockerOutput -match 'Docker version ([^,\s]+)') {
                 $dockerVersion = $Matches[1]
             }
         }
@@ -105,10 +106,9 @@ function Get-SystemInfo {
         $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
         if ($dockerCmd) {
             $composeOutput = (docker compose version 2>&1 | Out-String).Trim()
-            if ($composeOutput -match 'version ([\d.]+)') {
-                $dockerComposeVersion = $Matches[1]
-            } elseif ($composeOutput -match '[\d.]+') {
-                $dockerComposeVersion = $Matches[0]
+            # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
+            if ($composeOutput -match 'Docker Compose version (.+)$') {
+                $dockerComposeVersion = $Matches[1].Trim()
             }
         }
         
@@ -117,8 +117,8 @@ function Get-SystemInfo {
             $dockerComposeCmd = Get-Command docker-compose -ErrorAction SilentlyContinue
             if ($dockerComposeCmd) {
                 $composeV1Output = (docker-compose version --short 2>&1 | Out-String).Trim()
-                if ($composeV1Output -match '[\d.]+') {
-                    $dockerComposeVersion = $Matches[0]
+                if (-not [string]::IsNullOrWhiteSpace($composeV1Output)) {
+                    $dockerComposeVersion = $composeV1Output
                 }
             }
         }
