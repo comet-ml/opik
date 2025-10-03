@@ -4,7 +4,9 @@ import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Webhook;
+import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.filter.AlertField;
 import com.comet.opik.api.filter.AlertFilter;
 import com.comet.opik.api.filter.Operator;
@@ -24,11 +26,16 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.github.tomakehurst.wiremock.WireMockServer;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.HttpStatus;
+import org.eclipse.jetty.http.HttpHeader;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -47,8 +54,11 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -56,6 +66,11 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -779,6 +794,143 @@ class AlertResourceTest {
 
             alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Webhook:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TestWebhook {
+
+        private WireMockServer externalWebhookServer;
+        private static final String WEBHOOK_PATH = "/webhook";
+
+        @BeforeAll
+        void setUpAll() {
+            externalWebhookServer = new WireMockServer(0);
+            externalWebhookServer.start();
+        }
+
+        @AfterAll
+        void tearDownAll() {
+            if (externalWebhookServer != null) {
+                externalWebhookServer.stop();
+            }
+        }
+
+        @BeforeEach
+        void setUp() {
+            externalWebhookServer.resetAll();
+        }
+
+        @Test
+        @DisplayName("Success: should test webhook successfully when webhook server responds with 2xx")
+        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult() {
+            // Given
+            var mock = prepareMockWorkspace();
+            var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
+
+            // Setup WireMock to return successful response
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            // Create alert with webhook
+            var alert = generateAlert();
+            var webhook = alert.webhook().toBuilder()
+                    .url(webhookUrl)
+                    .build();
+            alert = alert.toBuilder()
+                    .webhook(webhook)
+                    .build();
+
+            // When
+            var result = alertResourceClient.testWebhook(alert, mock.getLeft(), mock.getRight());
+            assertThat(result.status()).isEqualTo(WebhookTestResult.Status.SUCCESS);
+            assertThat(result.statusCode()).isEqualTo(200);
+            assertThat(result.errorMessage()).isNull();
+
+            assertWebhookTestResultRequest(alert, result.requestBody());
+
+            // Verify HTTP call was made
+            externalWebhookServer.verify(postRequestedFor(urlEqualTo(WEBHOOK_PATH))
+                    .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON)));
+        }
+
+        @Test
+        @DisplayName("Success: should test webhook and return failure when webhook server responds with non-2xx")
+        void testWebhook__whenWebhookServerRespondsWithError__thenReturnFailureResult() {
+            // Given
+            var mock = prepareMockWorkspace();
+            var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
+
+            // Setup WireMock to return error response
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(500)
+                            .withBody("Internal Server Error")));
+
+            // Create alert with webhook
+            var alert = generateAlert();
+            var webhook = alert.webhook().toBuilder()
+                    .url(webhookUrl)
+                    .build();
+            alert = alert.toBuilder()
+                    .webhook(webhook)
+                    .build();
+
+            // When
+            var result = alertResourceClient.testWebhook(alert, mock.getLeft(), mock.getRight());
+            assertThat(result.status()).isEqualTo(WebhookTestResult.Status.FAILURE);
+            assertThat(result.statusCode()).isEqualTo(500);
+            assertThat(result.errorMessage()).isNotNull();
+
+            assertWebhookTestResultRequest(alert, result.requestBody());
+
+            // Verify HTTP call was made
+            externalWebhookServer.verify(postRequestedFor(urlEqualTo(WEBHOOK_PATH))
+                    .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON)));
+        }
+
+        private void assertWebhookTestResultRequest(Alert alert, String testResultRequestBody) {
+            WebhookEvent<?> actualEvent = JsonUtils.readValue(testResultRequestBody, WebhookEvent.class);
+
+            // Verify the webhook event is not null
+            assertThat(actualEvent).isNotNull();
+
+            // Verify event metadata
+            assertThat(actualEvent.getId()).isNotNull();
+            assertThat(actualEvent.getUrl()).isEqualTo(alert.webhook().url());
+            assertThat(actualEvent.getAlertId()).isEqualTo(alert.id());
+            assertThat(actualEvent.getCreatedAt()).isNotNull();
+            assertThat(actualEvent.getMaxRetries()).isEqualTo(1);
+
+            // Verify headers
+            var expectedHeaders = Optional.ofNullable(alert.webhook().headers()).orElse(Map.of());
+            assertThat(actualEvent.getHeaders()).isEqualTo(expectedHeaders);
+            assertThat(actualEvent.getEventType()).isEqualTo(alert.triggers().getFirst().eventType());
+
+            // Verify payload
+            Map<String, Object> payload = (Map<String, Object>) actualEvent.getPayload();
+
+            // Verify payload fields
+            assertThat(payload.get("alertId")).isEqualTo(alert.id().toString());
+            assertThat(payload.get("alertName")).isEqualTo(alert.name());
+            assertThat(payload.get("eventType")).isEqualTo(alert.triggers().getFirst().eventType().getValue());
+            assertThat(payload.get("aggregationType")).isEqualTo("consolidated");
+
+            // Verify eventIds
+            var eventIds = (Collection<String>) payload.get("eventIds");
+            assertThat(eventIds).hasSize(1);
+
+            // Verify eventCount
+            assertThat(payload.get("eventCount")).isEqualTo(1);
+
+            // Verify message format
+            assertThat(payload.get("message").toString()).isEqualTo(String.format("Alert '%s': %d %s events aggregated",
+                    alert.name(), eventIds.size(), alert.triggers().getFirst().eventType().getValue()));
         }
     }
 
