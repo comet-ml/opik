@@ -1,4 +1,4 @@
-import tests.unit.mcp.stub_opik  # noqa: F401
+from . import stub_opik  # noqa: F401
 import importlib
 import sys
 import types

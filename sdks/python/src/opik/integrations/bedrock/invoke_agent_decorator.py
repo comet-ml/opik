@@ -6,7 +6,8 @@ import opik.dict_utils as dict_utils
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
-from . import helpers, stream_wrappers
+from . import helpers
+from .converse import stream_wrappers as converse_stream_wrappers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class BedrockInvokeAgentDecorator(base_track_decorator.BaseTrackDecorator):
         if isinstance(output, dict) and "completion" in output:
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
 
-            wrapped_stream = stream_wrappers.wrap_stream(
+            wrapped_stream = converse_stream_wrappers.wrap_stream(
                 stream=output["completion"],
                 capture_output=capture_output,
                 span_to_end=span_to_end,
