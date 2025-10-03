@@ -221,13 +221,15 @@ public class TracesResource {
     @Operation(operationId = "getTraceById", summary = "Get trace by id", description = "Get trace by id", responses = {
             @ApiResponse(responseCode = "200", description = "Trace resource", content = @Content(schema = @Schema(implementation = Trace.class)))})
     @JsonView(Trace.View.Public.class)
-    public Response getById(@PathParam("id") UUID id) {
+    public Response getById(
+            @PathParam("id") UUID id,
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting trace by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Getting trace by id '{}' on workspace_id '{}', truncate '{}'", id, workspaceId, truncate);
 
-        Trace trace = service.get(id)
+        Trace trace = service.get(id, truncate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
