@@ -27,7 +27,7 @@ public record Webhook(
                 Alert.View.Write.class}) @NotBlank String url,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) @NotBlank @Size(max = 250) String secretToken,
+                Alert.View.Write.class}) @Size(max = 250) String secretToken,
 
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) Map<@NotBlank String, @NotBlank String> headers,

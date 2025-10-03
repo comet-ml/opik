@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -29,10 +30,10 @@ public record Alert(
                 Alert.View.Write.class}) @JsonProperty(defaultValue = "true") Boolean enabled,
 
         @JsonView({
-                Alert.View.Public.class, Alert.View.Write.class}) @NotNull Webhook webhook,
+                Alert.View.Public.class, Alert.View.Write.class}) @Valid @NotNull Webhook webhook,
 
         @JsonView({
-                Alert.View.Public.class, Alert.View.Write.class}) List<AlertTrigger> triggers,
+                Alert.View.Public.class, Alert.View.Write.class}) List<@Valid AlertTrigger> triggers,
 
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
