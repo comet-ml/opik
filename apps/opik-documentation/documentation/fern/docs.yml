@@ -225,9 +225,6 @@ navigation:
               - page: Context recall
                 path: docs/evaluation/metrics/context_recall.mdx
                 slug: context_recall
-              - page: RevisEval
-                path: docs/evaluation/metrics/reviseval.mdx
-                slug: reviseval
               - page: Trajectory accuracy
                 path: docs/evaluation/metrics/trajectory_accuracy.mdx
                 slug: trajectory_accuracy

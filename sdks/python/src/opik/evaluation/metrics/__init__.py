@@ -146,7 +146,6 @@ __all__ = [
     "QARelevanceJudge",
     "SummarizationCoherenceJudge",
     "SummarizationConsistencyJudge",
-    "RevisEvalJudge",
     "LLMJuriesJudge",
     # "Factuality",
 ]
