@@ -65,7 +65,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
               disabled={disabled}
             >
               <Database className="mr-2 size-4" />
-              Add to dataset
+              Dataset
             </DropdownMenuItem>
           )}
           {showAddToQueue && (
@@ -77,7 +77,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
               disabled={disabled}
             >
               <UserPen className="mr-2 size-4" />
-              Add to annotation queue
+              Annotation queue
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

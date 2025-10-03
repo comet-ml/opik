@@ -1,5 +1,6 @@
 import { LLMJudgeSchema, ProviderMessageType } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { Filters } from "@/types/filters";
 
 export enum EVALUATORS_RULE_TYPE {
   llm_judge = "llm_as_judge",
@@ -64,6 +65,7 @@ export type EvaluatorsRule = {
   project_name?: string;
   sampling_rate: number;
   enabled?: boolean;
+  filters?: Filters;
   created_at: string;
   created_by: string;
   last_updated_at: string;

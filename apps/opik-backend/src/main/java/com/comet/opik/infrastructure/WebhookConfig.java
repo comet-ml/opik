@@ -4,6 +4,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -61,9 +62,39 @@ public class WebhookConfig implements StreamConfiguration {
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration connectionTimeout = Duration.seconds(5);
 
+    // Debouncing configuration
+    @Valid @JsonProperty
+    private DebouncingConfig debouncing = new DebouncingConfig();
+
     @Override
     @JsonIgnore
     public Codec getCodec() {
         return CODEC;
+    }
+
+    /**
+     * Configuration for webhook event debouncing and aggregation.
+     */
+    @Data
+    public static class DebouncingConfig {
+
+        @Valid @JsonProperty
+        private boolean enabled = true;
+
+        @Valid @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration windowSize = Duration.seconds(60);
+
+        @Valid @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration bucketTtl = Duration.minutes(3);
+
+        @Valid @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration alertJobTimeout = Duration.seconds(4);
+
+        @Valid @JsonProperty
+        @MaxDuration(value = 500, unit = TimeUnit.MILLISECONDS)
+        private Duration alertJobLockWaitTimeout = Duration.milliseconds(100);
     }
 }

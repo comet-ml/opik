@@ -781,8 +781,8 @@ def create_moderation_rule_fixture(
     rule_name = "Test Moderation Rule"
     traces_page.page.get_by_role("button", name="Create your first rule").click()
     traces_page.page.get_by_placeholder("Rule name").fill(rule_name)
-    sampling_value = traces_page.page.locator("#sampling_rate-input")
-    sampling_value.fill("1")
+    # sampling_value = traces_page.page.locator("#sampling_rate-input")
+    # sampling_value.fill("1")
 
     traces_page.page.get_by_role("combobox").filter(
         has_text="Select an LLM model"

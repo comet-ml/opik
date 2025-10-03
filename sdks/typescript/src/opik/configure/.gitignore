@@ -1,0 +1,37 @@
+.DS_Store
+
+# Thumbnails
+._*
+
+# Files that might appear on external disk
+.Spotlight-V100
+.Trashes
+
+docs/_build
+docs/doctrees
+
+build
+!bin/build
+node_modules
+npm-debug.log
+ios
+./android
+yarn-error.log
+
+scratch/
+
+*.pyc
+
+.idea
+*.sublime-*
+
+dist/
+coverage/
+plugins
+
+.eslintcache
+.vscode/launch.json
+.env
+.vercel
+
+e2e-tests/fixtures/.tracking/*

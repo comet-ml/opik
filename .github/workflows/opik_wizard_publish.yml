@@ -1,0 +1,145 @@
+name: Opik TypeScript Configure Publish
+run-name: "Opik TypeScript Configure Publish from ${{github.ref_name}} by @${{ github.actor }}"
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ github.event.inputs.version || inputs.version }}
+      IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
+    defaults:
+      run:
+        working-directory: sdks/typescript/src/opik/configure
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate version format
+        if: ${{ env.IS_RELEASE }}
+        run: |
+          if ! [[ "${{ env.VERSION }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Invalid version format '${{ env.VERSION }}'. Expected format: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
+      - name: Update version
+        if: ${{ env.IS_RELEASE }}
+        run: pnpm version ${{ env.VERSION }} --no-git-tag-version
+
+      - name: Lint and format check
+        run: |
+          pnpm run fmt:check || echo "Warning: Format check failed"
+          pnpm run lint || echo "Warning: Lint check failed"
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Verify build
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Error: Build failed - dist directory not found"
+            exit 1
+          fi
+
+      - name: Check if version already exists on NPM
+        if: ${{ env.IS_RELEASE }}
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          if npm view "$PACKAGE_NAME@${{ env.VERSION }}" version 2>/dev/null; then
+            echo "Error: Version ${{ env.VERSION }} already exists on NPM"
+            exit 1
+          fi
+          echo "Version check passed - ${{ env.VERSION }} is available"
+
+      - name: Commit version changes
+        if: ${{ env.IS_RELEASE }}
+        run: |
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "github-actions"
+          git add package.json pnpm-lock.yaml
+          git diff --staged --quiet || git commit -m "chore: update Opik Configure version to ${{ env.VERSION }}"
+
+      - name: Create git tag
+        if: ${{ env.IS_RELEASE }}
+        run: |
+          git tag -a "configure-v${{ env.VERSION }}" -m "Release Opik Configure v${{ env.VERSION }}"
+
+      - name: Publish to NPM
+        if: ${{ env.IS_RELEASE }}
+        run: |
+          echo "Publishing opik-configure version ${{ env.VERSION }} to NPM..."
+          pnpm publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Push changes and tags
+        if: ${{ env.IS_RELEASE }}
+        run: |
+          git push origin ${{ github.ref }}
+          git push origin "configure-v${{ env.VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## Workflow Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Is Release**: ${{ env.IS_RELEASE }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ env.IS_RELEASE }}" == "true" ]; then
+            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Git tag created: configure-v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ Dry run completed - no changes published" >> $GITHUB_STEP_SUMMARY
+          fi

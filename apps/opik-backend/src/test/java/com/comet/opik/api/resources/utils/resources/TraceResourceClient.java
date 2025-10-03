@@ -187,8 +187,13 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public Trace getById(UUID id, String workspaceName, String apiKey) {
+        return getById(id, workspaceName, apiKey, false);
+    }
+
+    public Trace getById(UUID id, String workspaceName, String apiKey, boolean truncate) {
         var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
+                .queryParam("truncate", truncate)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

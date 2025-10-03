@@ -1,1 +1,1 @@
-export { type AlertWrite } from "./AlertWrite";
+export { type FindAlertsRequest } from "./FindAlertsRequest";

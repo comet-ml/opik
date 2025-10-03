@@ -369,7 +369,6 @@ public class AttachmentStripperService {
 
             // Skip if not a recognizable file type (Tika returns these for non-binary data)
             if ("application/octet-stream".equals(mimeType) || "text/plain".equals(mimeType)) {
-                log.debug("Skipping base64 string - detected as {} (not an attachment)", mimeType);
                 attachmentsSkipped.add(1);
                 return null;
             }
@@ -397,18 +396,12 @@ public class AttachmentStripperService {
                 uploadAttachmentViaMultipart(attachmentInfo, bytes, workspaceId, userName);
             }
 
-            log.info("Successfully processed attachment: fileName='{}', type='{}', size='{}' bytes",
-                    fileName, mimeType, bytes.length);
-
             // Record successful attachment processing
             attachmentsProcessed.add(1);
-
-            log.debug("Replaced base64 attachment with attachment name: {}", fileName);
             return "[" + fileName + "]";
 
         } catch (IllegalArgumentException e) {
             // Not valid base64, ignore silently
-            log.debug("String is not valid base64, skipping attachment processing: {}", e.getMessage());
             attachmentsSkipped.add(1);
             return null;
         } catch (IOException | InterruptedException e) {
@@ -527,8 +520,6 @@ public class AttachmentStripperService {
                     .build();
 
             attachmentService.completeMultiPartUpload(completeRequest, workspaceId, userName);
-
-            log.debug("Completed multipart upload for attachment: {}", attachmentInfo.fileName());
 
         } catch (IOException | InterruptedException e) {
             log.error("Failed to upload attachment '{}' via multipart upload: {}",

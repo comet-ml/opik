@@ -176,7 +176,11 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Span getById(UUID id, String workspaceName, String apiKey) {
-        try (var response = callGetSpanIdApi(id, workspaceName, apiKey)) {
+        return getById(id, workspaceName, apiKey, false);
+    }
+
+    public Span getById(UUID id, String workspaceName, String apiKey, boolean truncate) {
+        try (var response = callGetSpanIdApi(id, workspaceName, apiKey, truncate)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();
             return response.readEntity(Span.class);
@@ -184,8 +188,13 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey) {
+        return callGetSpanIdApi(id, workspaceName, apiKey, false);
+    }
+
+    public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey, boolean truncate) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
+                .queryParam("truncate", truncate)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

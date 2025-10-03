@@ -39,11 +39,12 @@ type AddEditDatasetDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onDatasetCreated?: (dataset: Dataset) => void;
+  hideUpload?: boolean;
 };
 
 const AddEditDatasetDialog: React.FunctionComponent<
   AddEditDatasetDialogProps
-> = ({ dataset, open, setOpen, onDatasetCreated }) => {
+> = ({ dataset, open, setOpen, onDatasetCreated, hideUpload }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
 
@@ -242,7 +243,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
               maxLength={255}
             />
           </div>
-          {!isEdit && (
+          {!isEdit && !hideUpload && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Upload a CSV (optional)</Label>
               <Description className="tracking-normal">

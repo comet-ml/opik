@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import get from "lodash/get";
 import isUndefined from "lodash/isUndefined";
-import { Database, MessageCircleWarning } from "lucide-react";
+import { Database, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Span, Trace } from "@/types/traces";
@@ -29,7 +29,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/components/ui/toast";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 
-const DEFAULT_SIZE = 5;
+const DEFAULT_SIZE = 100;
 
 type AddToDatasetDialogProps = {
   rows: Array<Trace | Span>;
@@ -219,22 +219,26 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
               ]}
             />
-            <div className="flex gap-2.5">
-              <SearchInput
-                searchText={search}
-                setSearchText={setSearch}
-              ></SearchInput>
+            <div className="my-2 flex items-center justify-between">
+              <h3 className="comet-title-xs">Select a dataset</h3>
               <Button
-                variant="secondary"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setOpen(false);
                   setOpenDialog(true);
                 }}
                 disabled={noValidRows}
               >
+                <Plus className="mr-2 size-4" />
                 Create new dataset
               </Button>
             </div>
+            <SearchInput
+              searchText={search}
+              setSearchText={setSearch}
+              className="w-full"
+            />
             {renderAlert()}
             <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderListItems()}
@@ -257,6 +261,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={addToDatasetHandler}
+        hideUpload={true}
       />
     </>
   );

@@ -70,6 +70,12 @@ public interface AttachmentService {
      */
     Mono<Void> deleteSpecificAttachments(List<AttachmentInfo> attachments, UUID entityId, EntityType entityType,
             UUID containerId);
+
+    /**
+     * Delete only auto-stripped attachments (those matching the pattern {context}-attachment-{num}-{timestamp}.{ext})
+     * for the given entity IDs. User-uploaded attachments are preserved.
+     */
+    Mono<Long> deleteAutoStrippedAttachments(EntityType entityType, Set<UUID> entityIds);
 }
 
 @Slf4j
@@ -367,6 +373,42 @@ class AttachmentServiceImpl implements AttachmentService {
                     return Mono.empty(); // Continue processing
                 })
                 .then();
+    }
+
+    @Override
+    public Mono<Long> deleteAutoStrippedAttachments(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+                .flatMap(attachments -> {
+                    // Filter to only auto-stripped attachments
+                    List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils
+                            .filterAutoStrippedAttachments(attachments);
+
+                    if (autoStrippedAttachments.isEmpty()) {
+                        log.info("No auto-stripped attachments found for entityType '{}', entityIds count '{}'",
+                                entityType, entityIds.size());
+                        return Mono.just(0L);
+                    }
+
+                    log.info(
+                            "Deleting '{}' auto-stripped attachments (out of '{}' total) for entityType '{}', entityIds count '{}'",
+                            autoStrippedAttachments.size(), attachments.size(), entityType, entityIds.size());
+
+                    Set<String> fileNames = autoStrippedAttachments.stream()
+                            .map(AttachmentInfo::fileName)
+                            .collect(Collectors.toSet());
+
+                    // Delete files from storage
+                    return Mono.fromRunnable(() -> fileService.deleteObjects(fileNames))
+                            .onErrorResume(error -> {
+                                log.warn("Failed to delete files from storage: {}", error.getMessage());
+                                return Mono.empty(); // Continue with DB deletion even if file deletion fails
+                            })
+                            .then(attachmentDAO.deleteByFileNames(entityType, entityIds, fileNames));
+                });
     }
 
 }

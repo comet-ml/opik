@@ -134,7 +134,6 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
-        // Note: workspace_id is bound automatically by bindWorkspaceIdToFlux in findLogs
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));

@@ -4,6 +4,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { Card } from "@/components/ui/card";
 import TraceDataViewer from "./TraceDataViewer";
 import SMEFlowLayout from "../SMEFlowLayout";
+import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import CommentAndScoreViewer from "@/components/pages/SMEFlowPage/AnnotationView/CommentAndScoreViewer";
@@ -78,37 +79,43 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
       header={header}
       footer={
         <>
-          <div className="comet-body-s flex items-center text-light-slate">
-            {currentIndex + 1} of {queueItems.length}
+          <ReturnToAnnotationQueueButton />
+          <div className="flex items-center gap-2">
+            <div className="comet-body-s flex items-center text-light-slate">
+              {currentIndex + 1} of {queueItems.length}
+            </div>
+            <TooltipWrapper content="Previous item" hotkeys={LEFT_HOTKEYS}>
+              <Button
+                variant="outline"
+                onClick={handlePrevious}
+                disabled={isFirstItem}
+              >
+                <ChevronLeft className="mr-2 size-4" />
+                Previous
+              </Button>
+            </TooltipWrapper>
+            <TooltipWrapper content="Skip to next item" hotkeys={RIGHT_HOTKEYS}>
+              <Button
+                variant="outline"
+                onClick={handleNext}
+                disabled={isLastItem}
+              >
+                Skip
+                <ChevronRight className="ml-2 size-4" />
+              </Button>
+            </TooltipWrapper>
+            <TooltipWrapper
+              content="Submit and continue"
+              hotkeys={ENTER_HOTKEYS}
+            >
+              <Button
+                onClick={handleSubmit}
+                disabled={!validationState.canSubmit}
+              >
+                {isLastUnprocessedItem ? "Submit & Complete" : "Submit + Next"}
+              </Button>
+            </TooltipWrapper>
           </div>
-          <TooltipWrapper content="Previous item" hotkeys={LEFT_HOTKEYS}>
-            <Button
-              variant="outline"
-              onClick={handlePrevious}
-              disabled={isFirstItem}
-            >
-              <ChevronLeft className="mr-2 size-4" />
-              Previous
-            </Button>
-          </TooltipWrapper>
-          <TooltipWrapper content="Skip to next item" hotkeys={RIGHT_HOTKEYS}>
-            <Button
-              variant="outline"
-              onClick={handleNext}
-              disabled={isLastItem}
-            >
-              Skip
-              <ChevronRight className="ml-2 size-4" />
-            </Button>
-          </TooltipWrapper>
-          <TooltipWrapper content="Submit and continue" hotkeys={ENTER_HOTKEYS}>
-            <Button
-              onClick={handleSubmit}
-              disabled={!validationState.canSubmit}
-            >
-              {isLastUnprocessedItem ? "Submit & Complete" : "Submit + Next"}
-            </Button>
-          </TooltipWrapper>
         </>
       }
     >

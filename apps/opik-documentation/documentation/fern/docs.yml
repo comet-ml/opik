@@ -24,7 +24,9 @@ analytics:
     write-key: ${SEGMENT_WRITE_KEY}
   gtm:
     container-id: ${GTM_CONTAINER_ID}
-
+  posthog:
+    api-key: ${POSTHOG_API_KEY}
+    endpoint: ${POSTHOG_API_HOST}
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -315,186 +317,214 @@ navigation:
       - page: Overview
         path: docs/tracing/integrations/overview.mdx
         slug: overview
-      - section: Frameworks
+      - section: TypeScript
         skip-slug: true
-        collapsed: true
+        icon: fa-brands fa-js
         contents:
-          - page: AG2
-            path: docs/tracing/integrations/ag2.mdx
-            slug: ag2
-          - page: Agno
-            path: docs/tracing/integrations/agno.mdx
-            slug: agno
-          - page: Autogen
-            path: docs/tracing/integrations/autogen.mdx
-            slug: autogen
-          - page: BeeAI
-            path: docs/tracing/integrations/beeai.mdx
-            slug: beeai
-          - page: Crewai
-            path: docs/tracing/integrations/crewai.mdx
-            slug: crewai
-          - page: DSPY
-            path: docs/tracing/integrations/dspy.mdx
-            slug: dspy
-          - page: Google Agent Development Kit
-            path: docs/tracing/integrations/adk.mdx
-            slug: adk
-          - page: Haystack
-            path: docs/tracing/integrations/haystack.mdx
-            slug: haystack
-          - page: Instructor
-            path: docs/tracing/integrations/instructor.mdx
-            slug: instructor
-          - page: LangChain (Python)
-            path: docs/tracing/integrations/langchain.mdx
-            slug: langchain
-          - page: LangChain (JS/TS)
-            path: docs/tracing/integrations/langchainjs.mdx
-            slug: langchainjs
-          - page: LangGraph
-            path: docs/tracing/integrations/langgraph.mdx
-            slug: langgraph
-          - page: LiveKit Agents
-            path: docs/tracing/integrations/livekit.mdx
-            slug: livekit
-          - page: Llama Index
-            path: docs/tracing/integrations/llama_index.mdx
-            slug: llama_index
-          - page: Mastra
-            path: docs/tracing/integrations/mastra.mdx
-            slug: mastra
-          - page: OpenAI Agents
-            path: docs/tracing/integrations/openai_agents.mdx
-            slug: openai_agents
-          - page: Pipecat
-            path: docs/tracing/integrations/pipecat.mdx
-            slug: pipecat
-          - page: Pydantic AI
-            path: docs/tracing/integrations/pydantic-ai.mdx
-            slug: pydantic-ai
-          - page: Semantic Kernel
-            path: docs/tracing/integrations/semantic-kernel.mdx
-            slug: semantic-kernel
-          - page: Smolagents
-            path: docs/tracing/integrations/smolagents.mdx
-            slug: smolagents
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
+              - page: BeeAI
+                path: docs/tracing/integrations/beeai.mdx
+                slug: beeai
+              - page: LangChain
+                path: docs/tracing/integrations/langchainjs.mdx
+                slug: langchainjs
+              - page: Mastra
+                path: docs/tracing/integrations/mastra.mdx
+                slug: mastra
+              - page: Vercel AI SDK
+                path: docs/tracing/integrations/vercel-ai-sdk.mdx
+                slug: vercel-ai-sdk
+          - section: Model Providers
+            skip-slug: true
+            contents:
+              - page: Cloudflare Workers AI
+                path: docs/tracing/integrations/cloudflare-workers-ai.mdx
+                slug: cloudflare-workers-ai
+              - page: Gemini
+                path: docs/tracing/integrations/gemini-typescript.mdx
+                slug: gemini-typescript
+              - page: OpenAI
+                path: docs/tracing/integrations/openai-typescript.mdx
+                slug: openai-typescript
+          - page: Opik TypeScript SDK
+            path: docs/reference/typescript-sdk/overview.mdx
+            slug: typescript-sdk
+      - section: Python
+        skip-slug: true
+        icon: fa-brands fa-python
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: AG2
+                path: docs/tracing/integrations/ag2.mdx
+                slug: ag2
+              - page: Autogen
+                path: docs/tracing/integrations/autogen.mdx
+                slug: autogen
+              - page: CrewAI
+                path: docs/tracing/integrations/crewai.mdx
+                slug: crewai
+              - page: DSPy
+                path: docs/tracing/integrations/dspy.mdx
+                slug: dspy
+              - page: Google ADK
+                path: docs/tracing/integrations/adk.mdx
+                slug: adk
+              - page: Haystack
+                path: docs/tracing/integrations/haystack.mdx
+                slug: haystack
+              - page: Instructor
+                path: docs/tracing/integrations/instructor.mdx
+                slug: instructor
+              - page: LangChain
+                path: docs/tracing/integrations/langchain.mdx
+                slug: langchain
+              - page: LangGraph
+                path: docs/tracing/integrations/langgraph.mdx
+                slug: langgraph
+              - page: LiveKit Agents
+                path: docs/tracing/integrations/livekit.mdx
+                slug: livekit
+              - page: Llama Index
+                path: docs/tracing/integrations/llama_index.mdx
+                slug: llama_index
+              - page: Microsoft Agent Framework
+                path: docs/tracing/integrations/microsoft-agent-framework.mdx
+                slug: microsoft-agent-framework
+              - page: OpenAI Agents
+                path: docs/tracing/integrations/openai_agents.mdx
+                slug: openai_agents
+              - page: Pipecat
+                path: docs/tracing/integrations/pipecat.mdx
+                slug: pipecat
+              - page: Pydantic AI
+                path: docs/tracing/integrations/pydantic-ai.mdx
+                slug: pydantic-ai
+              - page: Semantic Kernel
+                path: docs/tracing/integrations/semantic-kernel.mdx
+                slug: semantic-kernel
+              - page: Smolagents
+                path: docs/tracing/integrations/smolagents.mdx
+                slug: smolagents
+              - page: Strands Agents
+                path: docs/tracing/integrations/strands-agents.mdx
+                slug: strands-agents
+              - page: VoltAgent
+                path: docs/tracing/integrations/voltagent.mdx
+                slug: voltagent
+          - section: Model Providers
+            skip-slug: true
+            contents:
+              - page: Anthropic
+                path: docs/tracing/integrations/anthropic.mdx
+                slug: anthropic
+              - page: Bedrock
+                path: docs/tracing/integrations/bedrock.mdx
+                slug: bedrock
+              - page: BytePlus
+                path: docs/tracing/integrations/byteplus.mdx
+                slug: byteplus
+              - page: Cohere
+                path: docs/tracing/integrations/cohere.mdx
+                slug: cohere
+              - page: DeepSeek
+                path: docs/tracing/integrations/deepseek.mdx
+                slug: deepseek
+              - page: Fireworks AI
+                path: docs/tracing/integrations/fireworks-ai.mdx
+                slug: fireworks-ai
+              - page: Gemini
+                path: docs/tracing/integrations/gemini.mdx
+                slug: gemini
+              - page: Groq
+                path: docs/tracing/integrations/groq.mdx
+                slug: groq
+              - page: Mistral AI
+                path: docs/tracing/integrations/mistral.mdx
+                slug: mistral
+              - page: Novita AI
+                path: docs/tracing/integrations/novita-ai.mdx
+                slug: novita-ai
+              - page: Ollama
+                path: docs/tracing/integrations/ollama.mdx
+                slug: ollama
+              - page: OpenAI
+                path: docs/tracing/integrations/openai.mdx
+                slug: openai
+              - page: Predibase
+                path: docs/tracing/integrations/predibase.mdx
+                slug: predibase
+              - page: Together AI
+                path: docs/tracing/integrations/together-ai.mdx
+                slug: together-ai
+              - page: WatsonX
+                path: docs/tracing/integrations/watsonx.mdx
+                slug: watsonx
+              - page: xAI Grok
+                path: docs/tracing/integrations/xai-grok.mdx
+                slug: xai-grok
+          - section: Dataset Management
+            skip-slug: true
+            contents:
+              - page: Gretel
+                path: docs/tracing/integrations/gretel.mdx
+                slug: gretel
+              - page: Hugging Face Datasets
+                path: docs/tracing/integrations/huggingface-datasets.mdx
+                slug: huggingface-datasets
+          - section: Evaluation
+            skip-slug: true
+            contents:
+              - page: Ragas
+                path: docs/tracing/integrations/ragas.mdx
+                slug: ragas
+          - section: Gateways
+            skip-slug: true
+            contents:
+              - page: AISuite
+                path: docs/tracing/integrations/aisuite.mdx
+                slug: aisuite
+              - page: LiteLLM
+                path: docs/tracing/integrations/litellm.mdx
+                slug: litellm
+              - page: OpenRouter
+                path: docs/tracing/integrations/openrouter.mdx
+                slug: openrouter
+          - section: Other
+            skip-slug: true
+            contents:
+              - page: Guardrails AI
+                path: docs/tracing/integrations/guardrails-ai.mdx
+                slug: guardrails-ai
+          - page: Opik Python SDK
+            path: docs/reference/python-sdk/overview.mdx
+            slug: python-sdk
+          - page: OpenTelemetry Python SDK
+            path: docs/tracing/opentelemetry/python-sdk.mdx
+            slug: opentelemetry-python-sdk
+      - section: Java
+        skip-slug: true
+        icon: fa-brands fa-java
+        contents:
           - page: Spring AI
             path: docs/tracing/integrations/spring-ai.mdx
             slug: spring-ai
-          - page: Strands Agents
-            path: docs/tracing/integrations/strands-agents.mdx
-            slug: strands-agents
-          - page: Vercel AI SDK
-            path: docs/tracing/integrations/vercel-ai-sdk.mdx
-            slug: vercel-ai-sdk
-          - page: VoltAgent
-            path: docs/tracing/integrations/voltagent.mdx
-            slug: voltagent
-      - section: Model Providers
+      - section: Ruby
         skip-slug: true
-        collapsed: true
+        icon: fa-solid fa-gem
         contents:
-          - page: Anthropic
-            path: docs/tracing/integrations/anthropic.mdx
-            slug: anthropic
-          - page: Bedrock
-            path: docs/tracing/integrations/bedrock.mdx
-            slug: bedrock
-          - page: BytePlus
-            path: docs/tracing/integrations/byteplus.mdx
-            slug: byteplus
-          - page: Cloudflare Workers AI
-            path: docs/tracing/integrations/cloudflare-workers-ai.mdx
-            slug: cloudflare-workers-ai
-          - page: Cohere
-            path: docs/tracing/integrations/cohere.mdx
-            slug: cohere
-          - page: DeepSeek
-            path: docs/tracing/integrations/deepseek.mdx
-            slug: deepseek
-          - page: Fireworks AI
-            path: docs/tracing/integrations/fireworks-ai.mdx
-            slug: fireworks-ai
-          - page: Gemini
-            path: docs/tracing/integrations/gemini.mdx
-            slug: gemini
-          - page: Groq
-            path: docs/tracing/integrations/groq.mdx
-            slug: groq
-          - page: Mistral AI
-            path: docs/tracing/integrations/mistral.mdx
-            slug: mistral
-          - page: Novita AI
-            path: docs/tracing/integrations/novita-ai.mdx
-            slug: novita-ai
-          - page: Ollama
-            path: docs/tracing/integrations/ollama.mdx
-            slug: ollama
-          - page: OpenAI (Python)
-            path: docs/tracing/integrations/openai.mdx
-            slug: openai
-          - page: OpenAI (JS/TS)
-            path: docs/tracing/integrations/openai-typescript.mdx
-            slug: openai-typescript
-          - page: Predibase
-            path: docs/tracing/integrations/predibase.mdx
-            slug: predibase
-          - page: Together AI
-            path: docs/tracing/integrations/together-ai.mdx
-            slug: together-ai
-          - page: WatsonX
-            path: docs/tracing/integrations/watsonx.mdx
-            slug: watsonx
-          - page: xAI Grok
-            path: docs/tracing/integrations/xai-grok.mdx
-            slug: xai-grok
-      - section: Manual Integration
+          - page: OpenTelemetry Ruby SDK
+            path: docs/reference/ruby-otel-sdk/overview.mdx
+            slug: opentelemetry-ruby-sdk
+      - section: No-Code
         skip-slug: true
-        collapsed: true
-        contents:
-          - page: Python SDK
-            path: docs/reference/python-sdk/overview.mdx
-            slug: python-sdk
-          - page: TypeScript SDK
-            path: docs/reference/typescript-sdk/overview.mdx
-            slug: typescript-sdk
-          - page: OpenTelemetry
-            path: docs/tracing/opentelemetry/overview.mdx
-            slug: opentelemetry
-      - section: Dataset Management
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Gretel
-            path: docs/tracing/integrations/gretel.mdx
-            slug: gretel
-          - page: Hugging Face Datasets
-            path: docs/tracing/integrations/huggingface-datasets.mdx
-            slug: huggingface-datasets
-      - section: Evaluation
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Ragas
-            path: docs/tracing/integrations/ragas.mdx
-            slug: ragas
-      - section: Gateways
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: AISuite
-            path: docs/tracing/integrations/aisuite.mdx
-            slug: aisuite
-          - page: LiteLLM
-            path: docs/tracing/integrations/litellm.mdx
-            slug: litellm
-          - page: OpenRouter
-            path: docs/tracing/integrations/openrouter.mdx
-            slug: openrouter
-      - section: No-Code Tools
-        skip-slug: true
-        collapsed: true
+        icon: fa-solid fa-wand-magic-sparkles
         contents:
           - page: Cursor
             path: docs/tracing/integrations/cursor.mdx
@@ -511,26 +541,13 @@ navigation:
           # - page: OpenWebUI
           #   path: docs/tracing/integrations/openwebui.mdx
           #   slug: openwebui
-      - section: OpenTelemetry
+      - section: Multi-Language
         skip-slug: true
-        collapsed: true
+        icon: fa-solid fa-globe
         contents:
-          - page: OpenTelemetry Overview
+          - page: OpenTelemetry
             path: docs/tracing/opentelemetry/overview.mdx
             slug: opentelemetry
-          - page: OpenTelemetry Python SDK
-            path: docs/tracing/opentelemetry/python-sdk.mdx
-            slug: opentelemetry-python-sdk
-          - page: OpenTelemetry Ruby SDK
-            path: docs/reference/ruby-otel-sdk/overview.mdx
-            slug: opentelemetry-ruby-sdk
-      - section: Other
-        skip-slug: true
-        collapsed: true
-        contents:
-          - page: Guardrails AI
-            path: docs/tracing/integrations/guardrails-ai.mdx
-            slug: guardrails-ai
   - tab: agent-optimization
     layout:
       - page: Opik Agent Optimizer
@@ -658,6 +675,9 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
+          - page: Opik Configure
+            path: docs/reference/typescript-sdk/opik-configure.mdx
+            slug: opik-configure
           - section: Evaluation
             slug: evaluation
             contents:

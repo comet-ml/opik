@@ -11,6 +11,7 @@ import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -20,8 +21,10 @@ import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -51,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -74,6 +78,8 @@ public interface TraceService {
     Mono<Void> update(TraceUpdate trace, UUID id);
 
     Mono<Trace> get(UUID id);
+
+    Mono<Trace> get(UUID id, boolean truncate);
 
     Mono<TraceDetails> getTraceDetailsById(UUID id);
 
@@ -104,6 +110,8 @@ public interface TraceService {
     Mono<Long> countTraces(Set<UUID> projectIds);
 
     Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria);
+
+    Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
 }
 
 @Slf4j
@@ -123,6 +131,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull TraceSortingFactory traceSortingFactory;
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentService attachmentService;
+    private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
 
     @Override
     @WithSpan
@@ -167,23 +176,35 @@ class TraceServiceImpl implements TraceService {
                 .distinct()
                 .toList();
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
+        // Delete only auto-stripped attachments for all traces in the batch before processing
+        // This prevents duplicate auto-stripped attachments when the SDK sends the same trace data multiple times
+        // while preserving user-uploaded attachments
+        Set<UUID> traceIds = dedupedTraces.stream()
+                .map(Trace::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
 
-            Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
-                    .flatMap(projectService::getOrCreate)
-                    .collectList()
-                    .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
-                    .flatMapMany(Flux::fromIterable)
-                    .flatMap(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId, userName,
-                            trace.projectName()))
-                    .collectList();
+        return attachmentService.deleteAutoStrippedAttachments(EntityType.TRACE, traceIds)
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
 
-            return resolveProjects
-                    .flatMap(traces -> template.nonTransaction(connection -> dao.batchInsert(traces, connection))
-                            .doOnSuccess(__ -> eventBus.post(new TracesCreated(traces, workspaceId, userName))));
-        });
+                    Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
+                            .flatMap(projectService::getOrCreate)
+                            .collectList()
+                            .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
+                            .flatMapMany(Flux::fromIterable)
+                            .flatMap(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId,
+                                    userName,
+                                    trace.projectName()))
+                            .collectList();
+
+                    return resolveProjects
+                            .flatMap(traces -> template
+                                    .nonTransaction(connection -> dao.batchInsert(traces, connection))
+                                    .doOnSuccess(
+                                            __ -> eventBus.post(new TracesCreated(traces, workspaceId, userName))));
+                }));
     }
 
     private List<Trace> dedupTraces(List<Trace> initialTraces) {
@@ -340,15 +361,20 @@ class TraceServiceImpl implements TraceService {
             attachmentStripperService.stripAttachmentsFromTraceUpdate(
                     traceUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate ->
-            // Step 3: Update the trace in database transaction
+            // Step 3: Update in database transaction
             template.nonTransaction(connection -> dao.update(processedUpdate, id, connection))
                     .then(Mono.defer(() -> {
-                        // Step 4: Delete old attachments OUTSIDE the database transaction
-                        if (!existingAttachments.isEmpty()) {
-                            return attachmentService.deleteSpecificAttachments(existingAttachments,
-                                    id, EntityType.TRACE, trace.projectId());
+                        // Step 4: Delete only auto-stripped attachments from the old data
+                        // User-uploaded attachments are preserved unless explicitly removed by user
+                        List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils
+                                .filterAutoStrippedAttachments(existingAttachments);
+
+                        if (autoStrippedAttachments.isEmpty()) {
+                            return Mono.empty();
                         }
-                        return Mono.empty();
+
+                        return attachmentService.deleteSpecificAttachments(autoStrippedAttachments, id,
+                                EntityType.TRACE, trace.projectId());
                     }))));
         });
     }
@@ -378,8 +404,15 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Trace> get(@NonNull UUID id) {
+        return get(id, false);
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Trace> get(@NonNull UUID id, boolean truncate) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
-                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))));
+                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))))
+                .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, truncate));
     }
 
     @Override
@@ -420,7 +453,20 @@ class TraceServiceImpl implements TraceService {
     public Mono<TracePage> find(int page, int size, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMap(resolvedCriteria -> template
-                        .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection)))
+                        .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection))
+                        .flatMap(tracePage -> {
+                            // If truncate=false, reinject attachments into all traces
+                            if (!resolvedCriteria.truncate()) {
+                                return Flux.fromIterable(tracePage.content())
+                                        .concatMap(trace -> attachmentReinjectorService
+                                                .reinjectAttachments(trace, resolvedCriteria.truncate()))
+                                        .collectList()
+                                        .map(reinjectedTraces -> tracePage.toBuilder()
+                                                .content(reinjectedTraces)
+                                                .build());
+                            }
+                            return Mono.just(tracePage);
+                        }))
                 .switchIfEmpty(Mono.just(TracePage.empty(page, traceSortingFactory.getSortableFields())));
     }
 
@@ -534,7 +580,15 @@ class TraceServiceImpl implements TraceService {
     @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
-                .flatMapMany(it -> dao.search(limit, it));
+                .flatMapMany(it -> dao.search(limit, it)
+                        .concatMap(trace -> {
+                            // If truncate=false, reinject attachments
+                            if (!it.truncate()) {
+                                return attachmentReinjectorService.reinjectAttachments(trace,
+                                        it.truncate());
+                            }
+                            return Mono.just(trace);
+                        }));
     }
 
     @Override
@@ -546,6 +600,12 @@ class TraceServiceImpl implements TraceService {
     public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.threadsSearch(limit, it));
+    }
+
+    @Override
+    public Mono<List<TraceThread>> getMinimalThreadInfoByIds(@NonNull UUID projectId, @NonNull Set<String> threadId) {
+        return dao.getMinimalThreadInfoByIds(projectId, threadId)
+                .switchIfEmpty(Mono.just(List.of()));
     }
 
 }
