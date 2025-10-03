@@ -214,7 +214,11 @@ def test_docs_advanced_example() -> None:
             {
                 "name": "model",
                 "distribution": "categorical",
-                "choices": ["openai/gpt-4o-mini", "openai/gpt-4o", "openai/gpt-4-turbo"],
+                "choices": [
+                    "openai/gpt-4o-mini",
+                    "openai/gpt-4o",
+                    "openai/gpt-4-turbo",
+                ],
             },
         ]
     )
@@ -225,7 +229,11 @@ def test_docs_advanced_example() -> None:
     # Verify categorical model
     model = next(p for p in parameter_space.parameters if p.name == "model")
     assert model.distribution == ParameterType.CATEGORICAL
-    assert model.choices == ["openai/gpt-4o-mini", "openai/gpt-4o", "openai/gpt-4-turbo"]
+    assert model.choices == [
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o",
+        "openai/gpt-4-turbo",
+    ]
 
 
 def test_docs_float_parameter_example() -> None:
