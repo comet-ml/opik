@@ -11,6 +11,7 @@ import { ExperimentItem } from "@/types/datasets";
 import { TRACE_VISIBILITY_MODE } from "@/types/traces";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
+const MESSAGE_HEADER = (type: string) => `---[ ${type.toUpperCase()} MESSAGE ]---\n`;
 
 export const generateTagVariant = (label: string) => {
   const hash = md5(label);
@@ -56,25 +57,34 @@ const prettifyOpenAIMessageLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    const lastMessage = last(message.messages);
-    if (lastMessage && isObject(lastMessage) && "content" in lastMessage) {
-      if (isString(lastMessage.content) && lastMessage.content.length > 0) {
-        return lastMessage.content;
-      } else if (isArray(lastMessage.content)) {
-        const lastTextContent = findLast(
-          lastMessage.content,
-          (c) => c.type === "text",
-        );
+    const extractedMessages: string[] = [];
 
-        if (
-          lastTextContent &&
-          "text" in lastTextContent &&
-          isString(lastTextContent.text) &&
-          lastTextContent.text.length > 0
-        ) {
-          return lastTextContent.text;
+    for (const msg of message.messages) {
+      if (isObject(msg) && "role" in msg && "content" in msg) {
+        const role = get(msg, "role", "unknown");
+
+        if (isString(msg.content) && msg.content.length > 0) {
+          extractedMessages.push(MESSAGE_HEADER(role) + msg.content);
+        } else if (isArray(msg.content)) {
+          const lastTextContent = findLast(
+            msg.content,
+            (c) => isObject(c) && "type" in c && c.type === "text",
+          );
+
+          if (
+            lastTextContent &&
+            "text" in lastTextContent &&
+            isString(lastTextContent.text) &&
+            lastTextContent.text.length > 0
+          ) {
+            extractedMessages.push(MESSAGE_HEADER(role) + lastTextContent.text);
+          }
         }
       }
+    }
+
+    if (extractedMessages.length > 0) {
+      return extractedMessages.join(MESSAGES_DIVIDER);
     }
   } else if (
     config.type === "output" &&
@@ -106,18 +116,20 @@ const prettifyOpenAIAgentsMessageLogic = (
     "input" in message &&
     isArray(message.input)
   ) {
-    const userMessages = message.input.filter(
-      (m) =>
-        isObject(m) &&
-        "role" in m &&
-        m.role === "user" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
+    const userMessages = message.input
+      .filter(
+        (m) =>
+          isObject(m) &&
+          "role" in m &&
+          m.role === "user" &&
+          "content" in m &&
+          isString(m.content) &&
+          m.content !== "",
+      )
+      .map((m) => MESSAGE_HEADER(m.role as string) + m.content);
 
     if (userMessages.length > 0) {
-      return userMessages.map((m) => m.content).join(MESSAGES_DIVIDER);
+      return userMessages.join(MESSAGES_DIVIDER);
     }
   } else if (
     config.type === "output" &&
@@ -136,9 +148,9 @@ const prettifyOpenAIAgentsMessageLogic = (
         isArray(m.content),
     );
 
-    const userMessages = assistantMessageObjects.reduce<string[]>((acc, m) => {
-      return acc.concat(
-        m.content
+    const assistantMessages = assistantMessageObjects.reduce<string[]>(
+      (acc, m) => {
+        const textContents = m.content
           .filter(
             (c: unknown) =>
               isObject(c) &&
@@ -148,12 +160,15 @@ const prettifyOpenAIAgentsMessageLogic = (
               isString(c.text) &&
               c.text !== "",
           )
-          .map((c: { text: string }) => c.text),
-      );
-    }, []);
+          .map((c: { text: string }) => MESSAGE_HEADER("assistant") + c.text);
 
-    if (userMessages.length > 0) {
-      return userMessages.join(MESSAGES_DIVIDER);
+        return acc.concat(textContents);
+      },
+      [],
+    );
+
+    if (assistantMessages.length > 0) {
+      return assistantMessages.join(MESSAGES_DIVIDER);
     }
   }
 
@@ -207,19 +222,20 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    // Find the first human message
-    const humanMessages = message.messages.filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
+    const humanMessages = message.messages
+      .filter(
+        (m) =>
+          isObject(m) &&
+          "type" in m &&
+          m.type === "human" &&
+          "content" in m &&
+          isString(m.content) &&
+          m.content !== "",
+      )
+      .map((m) => MESSAGE_HEADER(m.type as string) + m.content);
 
     if (humanMessages.length > 0) {
-      return humanMessages[0].content;
+      return humanMessages.join(MESSAGES_DIVIDER);
     }
   } else if (
     config.type === "output" &&
@@ -227,19 +243,13 @@ const prettifyLangGraphLogic = (
     "messages" in message &&
     isArray(message.messages)
   ) {
-    // Get the last AI message, and extract the string output from the various supported formats
-    const aiMessages = [];
+    const aiMessages: string[] = [];
 
-    // Iterate on all AI messages
     for (const m of message.messages) {
       if (isObject(m) && "type" in m && m.type === "ai" && "content" in m) {
-        // The message can either contains a string attribute named `content`
         if (isString(m.content)) {
-          aiMessages.push(m.content);
-        }
-        // Or content can be an array with text content. For example when using OpenAI chat model with the Responses API
-        // https://python.langchain.com/docs/integrations/chat/openai/#responses-api
-        else if (isArray(m.content)) {
+          aiMessages.push(MESSAGE_HEADER(m.type) + m.content);
+        } else if (isArray(m.content)) {
           const textItems = m.content.filter(
             (c) =>
               isObject(c) &&
@@ -250,16 +260,18 @@ const prettifyLangGraphLogic = (
               c.text !== "",
           );
 
-          // Check that there is only one text item
-          if (textItems.length === 1) {
-            aiMessages.push(textItems[0].text);
+          if (textItems.length > 0) {
+            const content = textItems
+              .map((item: { text: string }) => item.text)
+              .join(" ");
+            aiMessages.push(MESSAGE_HEADER(m.type) + content);
           }
         }
       }
     }
 
     if (aiMessages.length > 0) {
-      return last(aiMessages);
+      return aiMessages.join(MESSAGES_DIVIDER);
     }
   }
 };
@@ -324,13 +336,6 @@ const prettifyLangChainLogic = (
   }
 };
 
-/**
- * Prettifies Demo project's blocks-based message format.
- *
- * Handles two formats:
- * - Direct: { blocks: [{ block_type: "text", text: "..." }] }
- * - Nested: { output: { blocks: [{ block_type: "text", text: "..." }] } }
- */
 const prettifyDemoProjectLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -351,12 +356,10 @@ const prettifyDemoProjectLogic = (
       : undefined;
   };
 
-  // Handle direct blocks structure: { blocks: [...] }
   if (isObject(message) && "blocks" in message && isArray(message.blocks)) {
     return extractTextFromBlocks(message.blocks);
   }
 
-  // Handle nested blocks structure: { output: { blocks: [...] } }
   if (
     config.type === "output" &&
     isObject(message) &&
@@ -383,7 +386,7 @@ const prettifyGenericLogic = (
       "query",
       "input_prompt",
       "prompt",
-      "sys.query", // Dify
+      "sys.query",
     ],
     output: ["answer", "output", "response"],
   };
