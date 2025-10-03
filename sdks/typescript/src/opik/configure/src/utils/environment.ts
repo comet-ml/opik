@@ -14,7 +14,7 @@ export function isNonInteractiveEnvironment(): boolean {
 }
 
 export function readEnvironment(): Record<string, unknown> {
-  const result = readEnv('OPIK_WIZARD');
+  const result = readEnv('OPIK_CONFIGURE');
 
   return result;
 }

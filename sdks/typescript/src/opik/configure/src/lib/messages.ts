@@ -21,7 +21,7 @@ export const getPRDescription = ({
   
   Note: This used the ${
     integrationConfig.name
-  } wizard to setup Opik, this is still in alpha and like all AI, might have got it wrong. Please check the installation carefully!
+  } CLI to setup Opik, this is still in alpha and like all AI, might have got it wrong. Please check the installation carefully!
   
   Learn more about Opik + ${integrationConfig.name}: ${
     integrationConfig.docsUrl

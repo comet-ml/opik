@@ -12,7 +12,7 @@ module.exports = [
       'eslint.config.cjs',
     ],
   },
-  { files: ['src/**/*.{js,mjs,cjs,ts}', 'bin.ts'] },
+  { files: ['src/**/*.{js,mjs,cjs,ts,d.ts}', 'bin.ts'] },
   { languageOptions: { globals: globals.node } },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,

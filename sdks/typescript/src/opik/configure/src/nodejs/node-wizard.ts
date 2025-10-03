@@ -1,5 +1,4 @@
 import {
-  abortIfCancelled,
   checkAndAskToUpdateConfig,
   confirmContinueIfNoOrDirtyGitRepo,
   DeploymentType,
@@ -18,7 +17,6 @@ import { debug } from '../utils/debug';
 import type { WizardOptions } from '../utils/types';
 import { getOutroMessage } from '../lib/messages';
 import {
-  addEditorRulesStep,
   addOrUpdateEnvironmentVariablesStep,
   runPrettierStep,
   createOpikClientStep,
@@ -28,10 +26,10 @@ import { buildOpikApiUrl } from '../utils/urls';
 import { analytics } from '../utils/analytics';
 
 export async function runNodejsWizard(options: WizardOptions): Promise<void> {
-  debug('Starting Node.js wizard');
+  debug('Starting Node.js CLI');
 
   printWelcome({
-    wizardName: 'Opik Node.js wizard',
+    wizardName: 'Opik Node.js CLI',
   });
 
   debug('Detecting TypeScript usage');
@@ -65,7 +63,7 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
   const shouldUpdateConfig = await checkAndAskToUpdateConfig(options);
 
   if (!shouldUpdateConfig) {
-    debug('User chose to keep existing configuration, finishing wizard');
+    debug('User chose to keep existing configuration, finishing CLI');
     analytics.capture('kept existing config');
     clack.outro(
       'Opik setup complete! Your existing configuration has been preserved.',
@@ -188,29 +186,29 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
   debug('Prettier completed');
 
   // Ask if user wants to add Cursor rules (only if running in Cursor)
-  let addedEditorRules = false;
-  const addCursorRules = await abortIfCancelled(
-    clack.confirm({
-      message:
-        'Do you want to add Opik integration rules for your AI assistant?',
-      initialValue: true,
-    }),
-  );
+  // let addedEditorRules = false;
+  // const addCursorRules = await abortIfCancelled(
+  //   clack.confirm({
+  //     message:
+  //       'Do you want to add Opik integration rules for your AI assistant?',
+  //     initialValue: true,
+  //   }),
+  // );
 
-  if (addCursorRules) {
-    debug('Adding editor rules');
-    addedEditorRules = await addEditorRulesStep({
-      installDir: options.installDir,
-      rulesName: 'nodejs-rules.md',
-    });
-    debug(`Editor rules added: ${addedEditorRules}`);
+  // if (addCursorRules) {
+  //   debug('Adding editor rules');
+  //   addedEditorRules = await addEditorRulesStep({
+  //     installDir: options.installDir,
+  //     rulesName: 'nodejs-rules.md',
+  //   });
+  //   debug(`Editor rules added: ${addedEditorRules}`);
 
-    analytics.capture('editor rules added', {
-      success: addedEditorRules,
-    });
-  } else {
-    clack.log.info('Skipping Opik Cursor rules setup');
-  }
+  //   analytics.capture('editor rules added', {
+  //     success: addedEditorRules,
+  //   });
+  // } else {
+  //   clack.log.info('Skipping Opik Cursor rules setup');
+  // }
 
   debug('Uploading environment variables');
   const uploadedEnvVars = await uploadEnvironmentVariablesStep(
@@ -240,18 +238,18 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
   debug('Generating outro message');
   const outroMessage = getOutroMessage({
     integration: Integration.nodejs,
-    addedEditorRules,
+    addedEditorRules: false,
     packageManager: packageManagerForOutro,
     envFileChanged: addedEnvVariables ? relativeEnvFilePath : undefined,
     uploadedEnvVars,
   });
 
   analytics.capture('nodejs wizard completed', {
-    addedEditorRules,
+    addedEditorRules: false,
     envFileChanged: !!addedEnvVariables,
     uploadedEnvVarsCount: uploadedEnvVars.length,
   });
 
-  debug('Wizard completed successfully');
+  debug('CLI completed successfully');
   clack.outro(outroMessage);
 }

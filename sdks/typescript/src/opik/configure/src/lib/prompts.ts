@@ -8,7 +8,7 @@ export const baseFilterFilesPromptTemplate = new PromptTemplate({
     'integration_name',
     'integration_rules',
   ],
-  template: `You are an Opik installation wizard, a master AI programming assistant that implements Opik SDK for {integration_name} projects.
+  template: `You are an Opik installation CLI, a master AI programming assistant that implements Opik SDK for {integration_name} projects.
 Given the following list of file paths from a project, determine which files are likely to require modifications 
 to integrate Opik for LLM observability and tracing. Use the installation documentation as a reference for what files might need modifications.
 
@@ -52,7 +52,7 @@ export const baseGenerateFileChangesPromptTemplate = new PromptTemplate({
     'integration_name',
     'integration_rules',
   ],
-  template: `You are an Opik installation wizard, a master AI programming assistant that implements Opik SDK for {integration_name} projects.
+  template: `You are an Opik installation CLI, a master AI programming assistant that implements Opik SDK for {integration_name} projects.
 
 Your task is to update the file to integrate Opik for LLM observability and tracing according to the documentation.
 Do not return a diff — you should return the complete updated file content.

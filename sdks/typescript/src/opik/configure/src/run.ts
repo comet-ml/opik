@@ -58,7 +58,7 @@ export async function runWizard(argv: Args) {
   analytics.setTag('forceInstall', wizardOptions.forceInstall);
   analytics.setTag('default', wizardOptions.default);
 
-  clack.intro(`Welcome to the Opik setup wizard ✨`);
+  clack.intro(`Welcome to the Opik configure tool ✨`);
 
   const integration = finalArgs.integration ?? (await getIntegrationForSetup());
 
@@ -71,9 +71,9 @@ export async function runWizard(argv: Args) {
         await runNodejsWizard(wizardOptions);
         break;
       default:
-        clack.log.error('No setup wizard selected!');
+        clack.log.error('No setup CLI selected!');
         analytics.capture('wizard error', {
-          error: 'No setup wizard selected',
+          error: 'No setup CLI selected',
         });
         await analytics.shutdown('error');
         process.exit(1);
@@ -90,7 +90,7 @@ export async function runWizard(argv: Args) {
 
     if (error instanceof RateLimitError) {
       clack.log.error(
-        'Opik wizard usage limit reached. Please try again later.',
+        'Opik configure CLI usage limit reached. Please try again later.',
       );
     } else {
       if (error instanceof Error) {

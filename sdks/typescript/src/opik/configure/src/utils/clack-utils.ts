@@ -63,7 +63,7 @@ export interface CliSetupConfigContent {
 
 export async function abort(message?: string, status?: number): Promise<never> {
   await analytics.shutdown('cancelled');
-  clack.outro(message ?? 'Wizard setup cancelled.');
+  clack.outro(message ?? 'Setup cancelled.');
   return process.exit(status ?? 1);
 }
 
@@ -85,7 +85,7 @@ export async function abortIfCancelled<T>(
     await analytics.shutdown('cancelled');
 
     clack.cancel(
-      `Wizard setup cancelled. You can read the documentation for ${
+      `Setup cancelled. You can read the documentation for ${
         integration ?? 'Opik'
       } at ${chalk.cyan(docsUrl)} to continue with the setup manually.`,
     );
@@ -118,7 +118,7 @@ export async function confirmContinueIfNoOrDirtyGitRepo(
       : await abortIfCancelled(
           clack.confirm({
             message:
-              'You are not inside a git repository. The wizard will create and update files. Do you want to continue anyway?',
+              'You are not inside a git repository. The CLI will create and update files. Do you want to continue anyway?',
           }),
         );
 
@@ -136,7 +136,7 @@ export async function confirmContinueIfNoOrDirtyGitRepo(
 
 ${uncommittedOrUntrackedFiles.join('\n')}
 
-The wizard will create and update files.`,
+The CLI will create and update files.`,
     );
     const continueWithDirtyRepo = await abortIfCancelled(
       clack.confirm({
@@ -233,7 +233,7 @@ export async function confirmContinueIfPackageVersionNotSupported({
 
   clack.note(
     note ??
-      `Please upgrade to ${acceptableVersions} if you wish to use the Opik wizard.`,
+      `Please upgrade to ${acceptableVersions} if you wish to use the Opik configure CLI.`,
   );
   const continueWithUnsupportedVersion = await abortIfCancelled(
     clack.confirm({
@@ -317,7 +317,7 @@ export async function installPackage({
             fs.writeFileSync(
               join(
                 process.cwd(),
-                `opik-wizard-installation-error-${Date.now()}.log`,
+                `opik-configure-installation-error-${Date.now()}.log`,
               ),
               JSON.stringify({
                 stdout,
@@ -339,7 +339,7 @@ export async function installPackage({
       `${chalk.red(
         'Encountered the following error during installation:',
       )}\n\n${String(e)}\n\n${chalk.dim(
-        `The wizard has created a \`opik-wizard-installation-error-*.log\` file. If you think this issue is caused by the Opik wizard, create an issue on GitHub and include the log file's content:\n${ISSUES_URL}`,
+        `The opik-configure has created a \`opik-configure-installation-error-*.log\` file. If you think this issue is caused by the opik-configure, create an issue on GitHub and include the log file's content:\n${ISSUES_URL}`,
       )}`,
     );
     await abort();
@@ -439,7 +439,7 @@ export async function getPackageDotJson({
       });
 
       clack.log.error(
-        'Could not find package.json. Make sure to run the Opik wizard in the root of your app!',
+        'Could not find package.json. Make sure to run the Opik configure CLI in the root of your app!',
       );
       return abort();
     });
@@ -675,9 +675,9 @@ async function handleSelfHostedDeploymentConfig(): Promise<string> {
 
 /**
  *
- * Use this function to get project data for the wizard.
+ * Use this function to get project data for the CLI.
  *
- * @param options wizard options
+ * @param options CLI options
  * @returns project data (token, url)
  */
 export async function getOrAskForProjectData(): Promise<{
@@ -844,7 +844,7 @@ export async function getOrAskForProjectData(): Promise<{
   if (!projectApiKey) {
     clack.log.error(`Didn't receive a project API key. This shouldn't happen :(
 
-Please let us know if you think this is a bug in the wizard:
+Please let us know if you think this is a bug in the CLI:
 ${chalk.cyan(ISSUES_URL)}`);
 
     clack.log
@@ -874,7 +874,7 @@ async function askForWizardLogin(options: {
       await axios.post<{ hash: string }>(`${options.url}/api/wizard/initialize`)
     ).data.hash;
   } catch (e: unknown) {
-    clack.log.error('Loading wizard failed.');
+    clack.log.error('Loading CLI failed.');
     clack.log.info(JSON.stringify(e, null, 2));
     await abort(
       chalk.red(
@@ -945,7 +945,7 @@ async function askForWizardLogin(options: {
         'Login timed out. No worries - it happens to the best of us.',
       );
 
-      void abort('Please restart the wizard and log in to complete the setup.');
+      void abort('Please restart the CLI and log in to complete the setup.');
     }, 180_000);
   });
 
@@ -1008,7 +1008,7 @@ export async function askForToolConfigPath(
  * Afterwards asks the user if they added the code snippet to their file.
  *
  * While there's no point in providing a "no" answer here, it gives users time to fulfill the
- * task before the wizard continues with additional steps.
+ * task before the CLI continues with additional steps.
  *
  * Use this function if you want to show users instructions on how to add/modify
  * code in their file. This is helpful if automatic insertion failed or is not possible/feasible.
@@ -1022,7 +1022,7 @@ export async function askForToolConfigPath(
  * @param hint (optional) a hint to be printed after the main instruction to add
  * the code from @param codeSnippet to their @param filename.
  *
- * TODO: refactor copy paste instructions across different wizards to use this function.
+ * TODO: refactor copy paste instructions across different CLI flows to use this function.
  *       this might require adding a custom message parameter to the function
  */
 export async function showCopyPasteInstructions(
@@ -1169,7 +1169,7 @@ export async function askForAIConsent(options: Pick<WizardOptions, 'default'>) {
     ? true
     : await abortIfCancelled(
         clack.select({
-          message: 'This setup wizard uses AI, are you happy to continue? ✨',
+          message: 'This setup CLI uses AI, are you happy to continue? ✨',
           options: [
             {
               label: 'Yes',

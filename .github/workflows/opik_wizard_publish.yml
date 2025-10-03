@@ -1,5 +1,5 @@
-name: Opik Wizard Publish
-run-name: "Opik Wizard Publish from ${{github.ref_name}} by @${{ github.actor }}"
+name: Opik TypeScript Configure Publish
+run-name: "Opik TypeScript Configure Publish from ${{github.ref_name}} by @${{ github.actor }}"
 
 permissions:
   contents: write
@@ -38,7 +38,7 @@ jobs:
       IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
     defaults:
       run:
-        working-directory: sdks/typescript/src/opik/wizard
+        working-directory: sdks/typescript/src/opik/configure
 
     steps:
       - uses: actions/checkout@v4
@@ -104,17 +104,17 @@ jobs:
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
           git add package.json pnpm-lock.yaml
-          git diff --staged --quiet || git commit -m "chore: update Opik Wizard version to ${{ env.VERSION }}"
+          git diff --staged --quiet || git commit -m "chore: update Opik Configure version to ${{ env.VERSION }}"
 
       - name: Create git tag
         if: ${{ env.IS_RELEASE }}
         run: |
-          git tag -a "wizard-v${{ env.VERSION }}" -m "Release Opik Wizard v${{ env.VERSION }}"
+          git tag -a "configure-v${{ env.VERSION }}" -m "Release Opik Configure v${{ env.VERSION }}"
 
       - name: Publish to NPM
         if: ${{ env.IS_RELEASE }}
         run: |
-          echo "Publishing @opikjs/opik-wizard version ${{ env.VERSION }} to NPM..."
+          echo "Publishing opik-configure version ${{ env.VERSION }} to NPM..."
           pnpm publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -123,7 +123,7 @@ jobs:
         if: ${{ env.IS_RELEASE }}
         run: |
           git push origin ${{ github.ref }}
-          git push origin "wizard-v${{ env.VERSION }}"
+          git push origin "configure-v${{ env.VERSION }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
@@ -138,8 +138,8 @@ jobs:
           echo "- **Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ env.IS_RELEASE }}" == "true" ]; then
-            echo "✅ Package published to NPM: [@opikjs/opik-wizard@${{ env.VERSION }}](https://www.npmjs.com/package/@opikjs/opik-wizard/v/${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Git tag created: wizard-v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Git tag created: configure-v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "ℹ️ Dry run completed - no changes published" >> $GITHUB_STEP_SUMMARY
           fi
