@@ -19,6 +19,8 @@ type UseProjectStatisticsListParams = {
 type UseProjectStatisticsListResponse = {
   content: ProjectStatistic[];
   total: number;
+  page: number;
+  size: number;
 };
 
 const getProjectStatisticsList = async (

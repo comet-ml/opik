@@ -1,5 +1,6 @@
 package com.comet.opik.api.sorting;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -14,10 +15,17 @@ import java.util.UUID;
 public record SortingField(
         @NotBlank String field,
         Direction direction,
-        String bindKeyParam) {
+        @JsonIgnore String bindKeyParam) {
 
     public SortingField(@NotBlank String field, Direction direction) {
         this(field, direction, UUID.randomUUID().toString().replace("-", ""));
+    }
+
+    public SortingField {
+        // Ensure bindKeyParam is never null
+        if (bindKeyParam == null) {
+            bindKeyParam = UUID.randomUUID().toString().replace("-", "");
+        }
     }
 
     public String dbField() {

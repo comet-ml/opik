@@ -84,7 +84,7 @@ public class ProjectsResource {
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
             @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = ProjectPage.class)))
     })
-    @JsonView({View.Public.class})
+    @JsonView({Project.View.Detailed.class})
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
@@ -100,10 +100,11 @@ public class ProjectsResource {
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
         log.info("Find projects by '{}' on workspaceId '{}'", criteria, workspaceId);
-        Page<Project> projectPage = projectService.find(page, size, criteria, sortingFields);
-        log.info("Found projects by '{}', count '{}' on workspaceId '{}'", criteria, projectPage.size(), workspaceId);
+        Page<Project> projectsPage = projectService.find(page, size, criteria, sortingFields);
+        log.info("Found projects by '{}', count '{}' on workspaceId '{}'", criteria, projectsPage.size(),
+                workspaceId);
 
-        return Response.ok().entity(projectPage).build();
+        return Response.ok(projectsPage).build();
     }
 
     @GET
