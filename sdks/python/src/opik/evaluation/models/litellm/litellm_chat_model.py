@@ -294,14 +294,14 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 )
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
-                if attempt < max_attempts - 1:
-                    backoff = 0.5 * (2**attempt)
-                    time.sleep(backoff)
+                if attempt >= max_attempts - 1:
+                    break
 
-        # If we exhausted all retries, raise the last exception
-        if last_exception is not None:
-            raise last_exception
-        raise exceptions.BaseLLMError(
+                backoff = 0.5 * (2**attempt)
+                time.sleep(backoff)
+
+        # Exhausted retries
+        raise last_exception or exceptions.BaseLLMError(
             "LLM completion failed without raising an exception"
         )
 
