@@ -272,9 +272,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         # Extract retry configuration before filtering params
         retries = kwargs.pop("__opik_retries", 3)
         try:
-            attempts = max(1, int(retries))
+            max_attempts = max(1, int(retries))
         except (TypeError, ValueError):
-            attempts = 1
+            max_attempts = 1
 
         # we need to pop messages first, and after we will check the rest params
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
@@ -286,17 +286,24 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         ):
             all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
-        backoff = 0.5
-        for attempt in range(attempts):
+        last_exception = None
+        for attempt in range(max_attempts):
             try:
                 return self._engine.completion(
                     model=self.model_name, messages=messages, **all_kwargs
                 )
             except Exception as exc:  # noqa: BLE001
-                if attempt == attempts - 1:
-                    raise
-                time.sleep(backoff)
-                backoff *= 2
+                last_exception = exc
+                if attempt < max_attempts - 1:
+                    backoff = 0.5 * (2**attempt)
+                    time.sleep(backoff)
+
+        # If we exhausted all retries, raise the last exception
+        if last_exception is not None:
+            raise last_exception
+        raise exceptions.BaseLLMError(
+            "LLM completion failed without raising an exception"
+        )
 
     async def agenerate_string(
         self,
