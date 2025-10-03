@@ -745,46 +745,55 @@ export async function getOrAskForProjectData(): Promise<{
     host = cloudUrl;
   }
 
-  // Step 4: API Key (only for cloud and self-hosted)
-  if (deploymentType !== DeploymentType.LOCAL) {
-    clack.log.info(
-      `${chalk.bold('You can find your Opik API key here:')}\n${chalk.cyan(
-        `${host}account-settings/apiKeys`,
-      )}`,
-    );
-
-    projectApiKey = await abortIfCancelled(
-      clack.text({
-        message: 'Enter your Opik API key',
-        placeholder: '...',
-        validate: (value: string) => {
-          if (!value || value.trim() === '') {
-            return 'API key is required';
-          }
-          return undefined;
-        },
-      }),
-      'nodejs' as Integration,
-    );
-  }
-
-  // Step 5: Workspace Name (only for cloud and self-hosted)
+  // Step 4 & 5: API Key and Workspace Name validation (only for cloud and self-hosted)
   let workspaceName: string;
 
   if (deploymentType === DeploymentType.LOCAL) {
     // Local deployment uses default workspace
     workspaceName = 'default';
   } else {
-    // Try to fetch the default workspace for cloud/self-hosted
+    // Loop until we get a valid API key that returns a workspace name
+    let apiKeyValidated = false;
     let defaultWorkspaceName: string | undefined;
-    try {
-      defaultWorkspaceName = await getDefaultWorkspace(projectApiKey, host);
-    } catch (error) {
-      debug(
-        `Failed to fetch default workspace: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+
+    while (!apiKeyValidated) {
+      clack.log.info(
+        `${chalk.bold('You can find your Opik API key here:')}\n${chalk.cyan(
+          `${host}account-settings/apiKeys`,
+        )}`,
       );
+
+      projectApiKey = await abortIfCancelled(
+        clack.text({
+          message: 'Enter your Opik API key',
+          placeholder: '...',
+          validate: (value: string) => {
+            if (!value || value.trim() === '') {
+              return 'API key is required';
+            }
+            return undefined;
+          },
+        }),
+        'nodejs' as Integration,
+      );
+
+      // Try to fetch the default workspace to validate the API key
+      try {
+        defaultWorkspaceName = await getDefaultWorkspace(projectApiKey, host);
+        apiKeyValidated = true; // API key is valid, we got the workspace name
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        debug(`Failed to fetch default workspace: ${errorMessage}`);
+
+        clack.log.error(
+          `${chalk.red('Invalid API key')}\n${chalk.dim(
+            'Please check your API key and try again.',
+          )}`,
+        );
+
+        // Loop will continue, asking for API key again
+      }
     }
 
     // Ask for workspace name with default if available

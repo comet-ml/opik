@@ -3,6 +3,7 @@ import clack from '../utils/clack';
 import { getDotGitignore } from '../utils/file-utils';
 import * as fs from 'fs';
 import path from 'path';
+import { OPIK_ENV_VARS } from '../lib/env-constants';
 
 export async function addOrUpdateEnvironmentVariablesStep({
   installDir,
@@ -35,43 +36,34 @@ export async function addOrUpdateEnvironmentVariablesStep({
   if (dotEnvFileExists) {
     try {
       let dotEnvFileContent = fs.readFileSync(targetEnvFilePath, 'utf8');
-      let updated = false;
 
+      // Remove all existing OPIK variables first
+      for (const varName of Object.values(OPIK_ENV_VARS)) {
+        const regex = new RegExp(`^${varName}=.*$`, 'gm');
+        dotEnvFileContent = dotEnvFileContent.replace(regex, '');
+      }
+
+      // Clean up multiple consecutive newlines
+      dotEnvFileContent = dotEnvFileContent.replace(/\n{3,}/g, '\n\n');
+      dotEnvFileContent = dotEnvFileContent.trim();
+
+      // Add new environment variables
       for (const [key, value] of Object.entries(variables)) {
-        const regex = new RegExp(`^${key}=.*$`, 'm');
-
-        if (dotEnvFileContent.match(regex)) {
-          dotEnvFileContent = dotEnvFileContent.replace(
-            regex,
-            `${key}=${value}`,
-          );
-          updated = true;
-        } else {
-          if (!dotEnvFileContent.endsWith('\n')) {
-            dotEnvFileContent += '\n';
-          }
-          dotEnvFileContent += `${key}=${value}\n`;
-          updated = true;
+        if (!dotEnvFileContent.endsWith('\n') && dotEnvFileContent.length > 0) {
+          dotEnvFileContent += '\n';
         }
+        dotEnvFileContent += `${key}=${value}\n`;
       }
 
-      if (updated) {
-        await fs.promises.writeFile(targetEnvFilePath, dotEnvFileContent, {
-          encoding: 'utf8',
-          flag: 'w',
-        });
-        clack.log.success(
-          `Updated environment variables in ${chalk.bold.cyan(
-            relativeEnvFilePath,
-          )}`,
-        );
-      } else {
-        clack.log.success(
-          `${chalk.bold.cyan(
-            relativeEnvFilePath,
-          )} already has the necessary environment variables.`,
-        );
-      }
+      await fs.promises.writeFile(targetEnvFilePath, dotEnvFileContent, {
+        encoding: 'utf8',
+        flag: 'w',
+      });
+      clack.log.success(
+        `Updated environment variables in ${chalk.bold.cyan(
+          relativeEnvFilePath,
+        )}`,
+      );
 
       addedEnvVariables = true;
     } catch {
