@@ -38,7 +38,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
     - Easy debugging with browser dev tools
 
     **Prerequisites:**
-    - Node.js 18+ with npm
+    - Node.js 18+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
     - Java Development Kit (JDK) 21 (for backend)
     - Apache Maven 3.8+ (for backend)
   </Tab>
@@ -72,17 +72,19 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
 
     Set up each component manually:
 
-    1. **Start backend services:**
+    1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
        ```bash
        ./opik.sh --backend --port-mapping
        ```
+      Check that the backend is running: http://localhost:8080/is-alive/ping
 
     2. **Configure environment variables:**
-       Create `apps/opik-frontend/.env.development`:
+       Update `apps/opik-frontend/.env.development`:
        ```ini
        VITE_BASE_URL=/
        VITE_BASE_API_URL=http://localhost:8080
        ```
+      This tells the frontend development server where to find the backend API.
 
     3. **Install dependencies:**
        ```bash
@@ -98,7 +100,7 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
     Access the UI at `http://localhost:5174`.
 
     **Prerequisites:**
-    - Node.js 18+ with npm
+    - Node.js 18+ with npm. You can download it from [nodejs.org](https://nodejs.org/).
     - Docker and Docker Compose (for backend)
   </Tab>
 </Tabs>
@@ -118,5 +120,3 @@ npm run typecheck # TypeScript type checking
 ```
 
 Commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
-
-</Steps>
