@@ -87,17 +87,14 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) =>
-      row.webhook?.created_at ? formatDate(row.webhook.created_at) : "-",
+    accessorFn: (row) => (row.created_at ? formatDate(row.created_at) : "-"),
   },
   {
     id: "last_updated_at",
     label: "Updated",
     type: COLUMN_TYPE.time,
     accessorFn: (row) =>
-      row.webhook?.last_updated_at
-        ? formatDate(row.webhook.last_updated_at)
-        : "-",
+      row.last_updated_at ? formatDate(row.last_updated_at) : "-",
   },
 ];
 
