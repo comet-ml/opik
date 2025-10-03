@@ -18,8 +18,14 @@ def track_bedrock(
 ) -> "BedrockRuntimeClient":
     """Adds Opik tracking to an AWS Bedrock client.
 
-    Tracks calls to `converse()`, `converse_stream()`, `invoke_model()`, and `invoke_model_with_response_stream()` methods
+    Tracks calls to `converse()`, `converse_stream()`, `invoke_model()`, and `invoke_model_with_response_stream()` methods.
     Can be used within other Opik-tracked functions.
+
+    Supported Model subproviders for InvokeModel API (both streaming and non-streaming):
+    - **Anthropic** (Claude)
+    - **Amazon** (Nova)
+    - **Meta** (Llama)
+    - **Mistral** (Pixtral)
 
     Args:
         client: An instance of an AWS Bedrock client (botocore.client.BedrockRuntime or botocore.client.AgentsforBedrockRuntime).
@@ -84,7 +90,7 @@ def track_bedrock(
             type="llm",
             name="bedrock_invoke_model_stream",
             project_name=project_name,
-            generations_aggregator=invoke_model_chunks_aggregator.aggregate_invoke_model_with_response_stream_chunks,
+            generations_aggregator=invoke_model_chunks_aggregator.aggregate_chunks_to_dataclass,
         )
         tracked_invoke_model_stream = stream_wrapper(
             client.invoke_model_with_response_stream

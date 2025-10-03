@@ -11,7 +11,6 @@ chunks_aggregator/
 ├── __init__.py              # Public API and main aggregation logic
 ├── base.py                  # Base types and protocols
 ├── claude.py                # Claude/Anthropic aggregator
-├── deepseek.py              # DeepSeek aggregator
 ├── llama.py                 # Meta Llama aggregator
 ├── mistral.py               # Mistral/Pixtral aggregator
 ├── nova.py                  # Amazon Nova aggregator
@@ -28,8 +27,6 @@ chunks_aggregator/
   - Returns: `{generation, prompt_token_count, generation_token_count, stop_reason, usage}`
 - **Mistral** (Mistral AI): Pixtral Large 2502
   - Returns: `{id, object, model, choices, usage}` (OpenAI-compatible)
-- **DeepSeek**: DeepSeek-R1
-  - Returns: `{choices: [{message: {reasoning_content, content}, stop_reason}], usage}`
 
 ## Adding a New Format
 
@@ -118,7 +115,7 @@ response = client.invoke_model_with_response_stream(
 )
 
 # Automatically detects and aggregates your format
-result = aggregate_invoke_model_with_response_stream_chunks(list(response['body']))
+result = aggregate_chunks_to_dataclass(list(response['body']))
 ```
 
 ## Benefits

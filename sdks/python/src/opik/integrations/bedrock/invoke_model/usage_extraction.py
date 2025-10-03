@@ -70,18 +70,6 @@ def try_extract_usage_from_bedrock_response(
                 LOGGER.debug("Mistral usage extracted: %s", bedrock_formatted_usage)
                 return opik_usage
 
-        elif subprovider == "deepseek":
-            # DeepSeek models don't provide usage in non-streaming mode
-            # Return zero usage as they don't expose token counts
-            bedrock_formatted_usage = usage_converters.deepseek_to_bedrock_usage(
-                response
-            )
-            opik_usage = llm_usage.OpikUsage.from_bedrock_dict(bedrock_formatted_usage)
-            LOGGER.debug(
-                "DeepSeek usage extracted (zeros): %s", bedrock_formatted_usage
-            )
-            return opik_usage
-
         elif subprovider == "amazon":
             # Nova models already use Bedrock format
             usage_dict = response["body"].get("usage", {})

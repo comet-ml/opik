@@ -5,7 +5,6 @@ from typing import Any, Callable, Dict, List
 
 from .base import ChunkAggregator
 from . import claude
-from . import deepseek
 from . import llama
 from . import mistral
 from . import nova
@@ -41,19 +40,8 @@ def _is_mistral_format(chunk_data: Dict[str, Any]) -> bool:
     )
 
 
-def _is_deepseek_format(chunk_data: Dict[str, Any]) -> bool:
-    """Check if chunk is DeepSeek format (choices with reasoning_content)."""
-    return (
-        "choices" in chunk_data
-        and chunk_data["choices"]
-        and "message" in chunk_data["choices"][0]
-        and "reasoning_content" in chunk_data["choices"][0]["message"]
-    )
-
-
 # Format detectors registry (ordered by specificity - most specific first)
 _DETECTORS: Dict[str, FormatDetector] = {
-    "deepseek": _is_deepseek_format,  # Most specific (has reasoning_content)
     "mistral": _is_mistral_format,  # Specific (has object field)
     "llama": _is_llama_format,  # Specific (has generation field)
     "nova": _is_nova_format,  # Specific (has contentBlockDelta)
@@ -63,7 +51,6 @@ _DETECTORS: Dict[str, FormatDetector] = {
 # Aggregators registry
 _AGGREGATORS: Dict[str, ChunkAggregator] = {
     "claude": claude.ClaudeAggregator(),
-    "deepseek": deepseek.DeepSeekAggregator(),
     "llama": llama.LlamaAggregator(),
     "mistral": mistral.MistralAggregator(),
     "nova": nova.NovaAggregator(),

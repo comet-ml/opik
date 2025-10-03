@@ -72,18 +72,6 @@ def openai_to_bedrock_usage(openai_usage: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def deepseek_to_bedrock_usage(deepseek_response: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Convert DeepSeek response to Bedrock-style usage.
-    DeepSeek doesn't provide usage in non-streaming mode, so we return zeros.
-    """
-    return {
-        "inputTokens": 0,
-        "outputTokens": 0,
-        "totalTokens": 0,
-    }
-
-
 def nova_to_bedrock_usage(nova_usage: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert Nova-style usage (already in Bedrock format) - pass through.

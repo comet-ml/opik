@@ -109,7 +109,7 @@ def wrap_invoke_model_with_response_stream_response(
     finally:
         if error_info is None:
             output = generations_aggregator(items)
-            output["ResponseMetadata"] = response_metadata
+            output.response_metadata = response_metadata
         else:
             output = None
 

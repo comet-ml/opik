@@ -5,11 +5,12 @@ from typing_extensions import override
 
 import opik
 import opik.dict_utils as dict_utils
+from opik import llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
 from .. import helpers
-from . import stream_wrappers, usage_extraction
+from . import stream_wrappers, usage_extraction, response_types
 
 import botocore.response
 import botocore.eventstream
@@ -76,23 +77,37 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        output = cast(Dict[str, Any], output)
-        output, metadata = dict_utils.split_dict_by_keys(
-            output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
-        )
-        subprovider = _extract_subprovider_from_model_id(
-            cast(str, current_span_data.model)
-        )
-        opik_usage = usage_extraction.try_extract_usage_from_bedrock_response(
-            subprovider, output
-        )
+        # Check if this is a structured aggregated response dataclass
+        if isinstance(output, response_types.BedrockAggregatedResponse):
+            # This is a structured aggregated streaming response
+            opik_usage = llm_usage.build_opik_usage(
+                provider=opik.LLMProvider.BEDROCK, usage=output.usage
+            )
 
-        result = arguments_helpers.EndSpanParameters(
-            output=output,
-            provider=opik.LLMProvider.BEDROCK,
-            usage=opik_usage,
-            metadata=metadata,
-        )
+            result = arguments_helpers.EndSpanParameters(
+                output=output.to_output_format(),  # Native format in body
+                provider=opik.LLMProvider.BEDROCK,
+                usage=opik_usage,
+                metadata=output.to_metadata_format(),
+            )
+        else:
+            # Regular non-streaming response (dict)
+            output, metadata = dict_utils.split_dict_by_keys(
+                output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
+            )
+            subprovider = _extract_subprovider_from_model_id(
+                cast(str, current_span_data.model)
+            )
+            opik_usage = usage_extraction.try_extract_usage_from_bedrock_response(  # type: ignore
+                subprovider, output
+            )
+
+            result = arguments_helpers.EndSpanParameters(
+                output=output,
+                provider=opik.LLMProvider.BEDROCK,
+                usage=opik_usage,
+                metadata=metadata,
+            )
 
         return result
 
