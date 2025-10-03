@@ -286,21 +286,17 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             attempts = 1
         backoff = 0.5
 
-        last_exception: Optional[Exception] = None
         for attempt in range(attempts):
             try:
                 return self._engine.completion(
                     model=self.model_name, messages=messages, **all_kwargs
                 )
             except Exception as exc:  # noqa: BLE001
-                last_exception = exc
                 if attempt == attempts - 1:
                     raise
                 time.sleep(backoff)
                 backoff *= 2
 
-        if last_exception is not None:
-            raise last_exception
         raise exceptions.BaseLLMError(
             "LLM completion failed without executing any attempts; "
             "check retry configuration."
