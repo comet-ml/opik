@@ -83,20 +83,20 @@ class ParameterSpec(BaseModel):
                 raise ValueError("step must be positive when provided")
 
             if self.distribution == ParameterType.INT:
-                self.low = int(self.low)
-                self.high = int(self.high)
+                object.__setattr__(self, "low", int(self.low))
+                object.__setattr__(self, "high", int(self.high))
                 if self.step is not None:
-                    self.step = int(self.step)
+                    object.__setattr__(self, "step", int(self.step))
         elif self.distribution == ParameterType.CATEGORICAL:
             if not self.choices:
                 raise ValueError("categorical parameters require non-empty 'choices'")
         elif self.distribution == ParameterType.BOOL:
             if not self.choices:
-                self.choices = [False, True]
+                object.__setattr__(self, "choices", [False, True])
         else:  # pragma: no cover - safety fallback
             raise ValueError(f"Unsupported distribution: {self.distribution}")
 
-        self._resolved_target = self._resolve_target()
+        object.__setattr__(self, "_resolved_target", self._resolve_target())
         return self
 
     @property
