@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 import opik.semantic_version as semantic_version
 
 from .. import base_model
-from . import opik_monitor, warning_filters
+from . import opik_monitor, warning_filters, util
 from opik import exceptions
 
 LOGGER = logging.getLogger(__name__)
@@ -32,31 +32,6 @@ def _log_warning(message: str, *args: Any) -> None:
         root_logger.log(logging.WARNING, message, *args)
 
 
-def _normalise_choice(choice: Any) -> Dict[str, Any]:
-    """Produce a dict view of a LiteLLM choice regardless of response type.
-
-    LiteLLM may return raw dicts, Pydantic models, or dataclasses. Normalising to a
-    dict here keeps downstream parsing logic consistent and backwards compatible
-    with older client versions.
-    """
-
-    if isinstance(choice, dict):
-        return choice
-    if hasattr(choice, "model_dump") and callable(choice.model_dump):
-        try:
-            return choice.model_dump()
-        except TypeError:
-            pass
-    normalised: Dict[str, Any] = {}
-    message = getattr(choice, "message", None)
-    if message is not None:
-        normalised["message"] = message
-    logprobs = getattr(choice, "logprobs", None)
-    if logprobs is not None:
-        normalised["logprobs"] = logprobs
-    return normalised
-
-
 def _extract_message_content(choice: Dict[str, Any]) -> Optional[str]:
     message = choice.get("message")
     if isinstance(message, dict):
@@ -74,7 +49,7 @@ def _first_choice(response: Any) -> Dict[str, Any]:
         raise exceptions.BaseLLMError(
             "LLM response did not contain any choices to parse."
         )
-    return _normalise_choice(choices[0])
+    return util.normalise_choice(choices[0])
 
 
 class LiteLLMChatModel(base_model.OpikBaseModel):
