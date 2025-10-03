@@ -394,7 +394,7 @@ navigation:
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
                 slug: llama_index
-              - page: Microsoft Agent Framework
+              - page: Microsoft Agent Framework (Python)
                 path: docs/tracing/integrations/microsoft-agent-framework.mdx
                 slug: microsoft-agent-framework
               - page: OpenAI Agents
@@ -515,6 +515,16 @@ navigation:
           - page: Spring AI
             path: docs/tracing/integrations/spring-ai.mdx
             slug: spring-ai
+      - section: .NET
+        skip-slug: true
+        icon: fa-solid fa-code
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: Microsoft Agent Framework (.NET)
+                path: docs/tracing/integrations/microsoft-agent-framework-dotnet.mdx
+                slug: microsoft-agent-framework-dotnet
       - section: Ruby
         skip-slug: true
         icon: fa-solid fa-gem
