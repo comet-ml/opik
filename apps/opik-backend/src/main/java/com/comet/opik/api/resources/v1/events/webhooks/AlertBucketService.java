@@ -11,10 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.options.KeysScanOptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -34,7 +32,8 @@ import java.util.UUID;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AlertBucketService {
 
-    private static final String BUCKET_KEY_PREFIX = "alert_bucket:";
+    private static final String BUCKET_KEY_PREFIX = "opik:alert_bucket:";
+    private static final String BUCKET_INDEX_KEY = "opik:alert_bucket_index"; // ZSET: score=readyTimestamp, value=bucketKey
     private static final String EVENT_IDS_KEY = "eventIds";
     private static final String FIRST_SEEN_KEY = "firstSeen";
     private static final String WINDOW_SIZE_KEY = "windowSize";
@@ -84,18 +83,23 @@ public class AlertBucketService {
                             .flatMap(firstSeen -> {
                                 if (firstSeen == null || firstSeen.isEmpty()) {
                                     // First event in bucket - store timestamp, window size, workspace ID, and set TTL
-                                    String timestamp = String.valueOf(Instant.now().toEpochMilli());
+                                    long firstSeenMillis = Instant.now().toEpochMilli();
+                                    String timestamp = String.valueOf(firstSeenMillis);
                                     String windowSize = String.valueOf(currentWindowSizeMillis);
+                                    
+                                    // Calculate when this bucket will be ready to process
+                                    double readyTimestamp = firstSeenMillis + currentWindowSizeMillis;
 
                                     log.debug(
-                                            "First event in bucket '{}', storing timestamp: '{}', windowSize: '{}'ms, and workspaceId: '{}'",
-                                            bucketKey, timestamp, windowSize, workspaceId);
+                                            "First event in bucket '{}', storing timestamp: '{}', windowSize: '{}'ms, readyTimestamp: '{}', and workspaceId: '{}'",
+                                            bucketKey, timestamp, windowSize, readyTimestamp, workspaceId);
 
                                     return bucket.put(FIRST_SEEN_KEY, timestamp)
                                             .then(bucket.put(WINDOW_SIZE_KEY, windowSize))
                                             .then(bucket.put(WORKSPACE_ID_KEY, workspaceId))
                                             .then(bucket.expire(java.time.Duration.ofMillis(
                                                     webhookConfig.getDebouncing().getBucketTtl().toMilliseconds())))
+                                            .then(addBucketToIndex(bucketKey, readyTimestamp))
                                             .then();
                                 } else {
                                     // Subsequent event - keep original timestamp, window size, workspace ID, and TTL
@@ -113,51 +117,92 @@ public class AlertBucketService {
     }
 
     /**
-     * Retrieves all bucket keys that are ready to be processed.
-     * A bucket is ready if (now - firstSeen) >= bucket's stored window size.
+     * Adds a bucket key to the index with its ready timestamp as the score.
+     * This allows efficient retrieval of buckets ready to be processed.
+     * Also sets/renews the TTL on the index to 2x the bucket TTL duration.
+     * 
+     * Note: If the index doesn't exist yet (first bucket or after expiration),
+     * the add() operation will automatically create it, and expire() will set its TTL.
+     *
+     * @param bucketKey the bucket key
+     * @param readyTimestamp the timestamp when the bucket will be ready (firstSeen + windowSize)
+     * @return Mono that completes when the bucket is added to the index
+     */
+    private Mono<Void> addBucketToIndex(String bucketKey, double readyTimestamp) {
+        var index = redissonClient.getScoredSortedSet(BUCKET_INDEX_KEY);
+        long indexTtlMillis = webhookConfig.getDebouncing().getBucketTtl().toMilliseconds() * 2;
+        
+        return index.add(readyTimestamp, bucketKey)
+                .flatMap(added -> {
+                    if (added) {
+                        log.debug("Added bucket '{}' to index with ready timestamp '{}'", bucketKey, readyTimestamp);
+                    } else {
+                        log.debug("Bucket '{}' already exists in index", bucketKey);
+                    }
+                    // Set/renew TTL on the index to keep it alive as long as there's activity
+                    // This works whether the index was just created or already existed
+                    return index.expire(java.time.Duration.ofMillis(indexTtlMillis));
+                })
+                .doOnError(error -> log.error("Failed to add bucket '{}' to index: {}", 
+                        bucketKey, error.getMessage(), error))
+                .then();
+    }
+
+    /**
+     * Removes a bucket key from the index.
+     * Also renews the TTL on the index to 2x the bucket TTL duration.
+     *
+     * @param bucketKey the bucket key to remove
+     * @return Mono that completes when the bucket is removed from the index
+     */
+    private Mono<Void> removeBucketFromIndex(String bucketKey) {
+        var index = redissonClient.getScoredSortedSet(BUCKET_INDEX_KEY);
+        long indexTtlMillis = webhookConfig.getDebouncing().getBucketTtl().toMilliseconds() * 2;
+        
+        return index.remove(bucketKey)
+                .flatMap(removed -> {
+                    if (removed) {
+                        log.debug("Removed bucket '{}' from index", bucketKey);
+                    } else {
+                        log.debug("Bucket '{}' was not in index or already removed", bucketKey);
+                    }
+                    // Renew TTL on the index to keep it alive as long as there's activity
+                    return index.expire(java.time.Duration.ofMillis(indexTtlMillis));
+                })
+                .doOnError(error -> log.error("Failed to remove bucket '{}' from index: {}", 
+                        bucketKey, error.getMessage(), error))
+                .then();
+    }
+
+    /**
+     * Retrieves all bucket keys that are ready to be processed using an indexed lookup.
+     * Uses a Redis Sorted Set (ZSET) to efficiently query buckets by their ready timestamp.
+     * This is O(log(N) + M) where N is total buckets and M is ready buckets, 
+     * much better than the previous O(N) full keyspace scan.
+     * 
+     * A bucket is ready if its stored ready timestamp (firstSeen + windowSize) <= now.
      * This ensures that configuration changes do not affect existing buckets:
      * - Old buckets continue to use their original window size
      * - New buckets created after config change use the new window size
+     * 
+     * The index itself has a TTL (2x bucket TTL) that's renewed on each add/remove operation.
+     * If there's no activity, the entire index expires automatically.
      *
      * @return Flux of bucket keys ready for processing
      */
     public Flux<String> getBucketsReadyToProcess() {
-        Instant now = Instant.now();
-        String pattern = BUCKET_KEY_PREFIX + "*";
+        long nowMillis = Instant.now().toEpochMilli();
 
-        log.debug("Checking for buckets ready to process");
+        log.debug("Checking for buckets ready to process using indexed lookup (up to timestamp: '{}')", nowMillis);
 
-        return redissonClient.getKeys().getKeys(KeysScanOptions.defaults().pattern(pattern))
-                .flatMap(bucketKey -> {
-                    RMapReactive<String, String> bucket = redissonClient.getMap(bucketKey);
-
-                    // Get both firstSeen and windowSize from the bucket
-                    return Mono.zip(
-                            bucket.get(FIRST_SEEN_KEY).map(Long::parseLong),
-                            bucket.get(WINDOW_SIZE_KEY).map(Long::parseLong))
-                            .filter(tuple -> isReady(bucketKey, tuple, now))
-                            .map(__ -> bucketKey)
-                            .switchIfEmpty(Mono.empty());
-                }, webhookConfig.getDebouncing().getConcurrency()) // Process buckets in parallel based on config
+        // Query the sorted set for all buckets with score <= now
+        // This is O(log(N) + M) instead of O(N) for scanning all keys
+        return redissonClient.getScoredSortedSet(BUCKET_INDEX_KEY)
+                .valueRange(Double.NEGATIVE_INFINITY, true, nowMillis, true)
+                .flatMapMany(collection -> Flux.fromIterable(collection)
+                        .map(Object::toString))
                 .doOnComplete(() -> log.debug("Finished checking for buckets ready to process"))
-                .doOnError(error -> log.error("Failed to check for buckets: {}", error.getMessage(), error));
-    }
-
-    private static boolean isReady(String bucketKey, Tuple2<Long, Long> tuple, Instant now) {
-        long firstSeenMillis = tuple.getT1();
-        long bucketWindowMillis = tuple.getT2();
-        long elapsedMillis = now.toEpochMilli() - firstSeenMillis;
-        boolean ready = elapsedMillis >= bucketWindowMillis;
-
-        if (ready) {
-            log.debug("Bucket '{}' is ready (elapsed: '{}ms' >= stored window: '{}ms')",
-                    bucketKey, elapsedMillis, bucketWindowMillis);
-        } else {
-            log.debug("Bucket '{}' not ready yet (elapsed: '{}ms' < stored window: '{}ms')",
-                    bucketKey, elapsedMillis, bucketWindowMillis);
-        }
-
-        return ready;
+                .doOnError(error -> log.error("Failed to check for buckets using index: {}", error.getMessage(), error));
     }
 
     /**
@@ -227,10 +272,10 @@ public class AlertBucketService {
     }
 
     /**
-     * Deletes a processed bucket from Redis.
+     * Deletes a processed bucket from Redis and removes it from the index.
      *
      * @param bucketKey the bucket key to delete
-     * @return Mono that completes when the bucket is deleted
+     * @return Mono that completes when the bucket is deleted and removed from index
      */
     public Mono<Void> deleteBucket(@NonNull String bucketKey) {
         return redissonClient.getBucket(bucketKey)
@@ -244,7 +289,7 @@ public class AlertBucketService {
                 })
                 .doOnError(error -> log.error("Failed to delete bucket '{}': {}",
                         bucketKey, error.getMessage(), error))
-                .then();
+                .then(removeBucketFromIndex(bucketKey));
     }
 
     /**
