@@ -20,6 +20,9 @@ class GLEU(base_metric.BaseMetric):
       - NLTK Reference Documentation on GLEU
         https://www.nltk.org/api/nltk.translate.gleu_score.html
       - OECD Catalogue of Tools & Metrics for Trustworthy AI
+        https://oecd.ai/en/catalogue/metrics/google-bleu-gleu
+      - Hugging Face Evaluate: Google BLEU (GLEU) metric overview
+        https://huggingface.co/spaces/evaluate-metric/google_bleu
 
     Args:
         gleu_fn: Optional custom scoring callable compatible with
