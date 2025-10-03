@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -50,7 +51,8 @@ class AttachmentUploadListenerTest {
 
     @BeforeEach
     void setUp() {
-        when(config.getS3Config()).thenReturn(s3Config);
+        // Use lenient stubbing since some tests may not invoke this (e.g., base64 decode failures)
+        lenient().when(config.getS3Config()).thenReturn(s3Config);
         listener = new AttachmentUploadListener(attachmentService, config);
         // Use reflection to set the HttpClient mock for testing
         setHttpClientField(listener, httpClient);
@@ -157,7 +159,8 @@ class AttachmentUploadListenerTest {
     @Test
     void processAttachmentUpload__invalidBase64__shouldHandleGracefully() {
         // Given
-        when(s3Config.isMinIO()).thenReturn(true); // Path doesn't matter for base64 decode failure
+        // Use lenient stubbing as this is never actually called (base64 decode fails first)
+        lenient().when(s3Config.isMinIO()).thenReturn(true);
         String invalidBase64Data = "invalid-base64-data!@#$%";
         AttachmentUploadRequested event = new AttachmentUploadRequested(
                 "invalid.txt", "text/plain", invalidBase64Data, "workspace-id", "user-name",
