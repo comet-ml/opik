@@ -81,9 +81,16 @@ class Contains(base_metric.BaseMetric):
         # Use provided reference, else fall back to default
         ref = reference if reference is not None else self._default_reference
 
-        if not ref:  # Reject None or empty string
+        # Handle missing reference (None) separately
+        if ref is None:
             raise ValueError(
-                "Invalid reference string provided. Reference must be a non-empty string. "
+                "No reference string provided. Either pass `reference` to `score()` or set a default reference when creating the metric."
+            )
+
+        # Handle empty string separately
+        if ref == "":
+            raise ValueError(
+                "Invalid reference string provided. Reference must be a non-empty string."
             )
 
         value = output if self._case_sensitive else output.lower()
