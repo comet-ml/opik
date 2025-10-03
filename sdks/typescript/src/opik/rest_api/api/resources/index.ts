@@ -28,6 +28,7 @@ export * as serviceToggles from "./serviceToggles";
 export * as traces from "./traces";
 export * as workspaces from "./workspaces";
 export * as redirect from "./redirect";
+export * from "./alerts/client/requests";
 export * from "./annotationQueues/client/requests";
 export * from "./attachments/client/requests";
 export * from "./automationRuleEvaluators/client/requests";
