@@ -303,6 +303,8 @@ serviceToggles:
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: "false"
   # Default: false
+  # Description: Whether or not Alert feature is enabled
+  alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
