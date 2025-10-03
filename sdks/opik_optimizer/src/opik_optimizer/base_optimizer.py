@@ -475,7 +475,7 @@ class BaseOptimizer(ABC):
         prompt: "chat_prompt.ChatPrompt",
         dataset: Dataset,
         metric: Callable,
-        parameter_space: "ParameterSearchSpace",
+        parameter_space: Any,
         experiment_config: dict | None = None,
         n_trials: int | None = None,
         n_samples: int | None = None,
