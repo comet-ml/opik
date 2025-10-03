@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, List, Optional
 
+from opik.evaluation import preprocessing
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -81,7 +82,7 @@ class PromptInjectionGuard(BaseMetric):
         self._keywords = [kw.lower() for kw in (keywords or _SUSPICIOUS_KEYWORDS)]
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
-        processed = self._preprocess(output)
+        processed = preprocessing.normalize_text(output)
         if not processed.strip():
             return ScoreResult(
                 value=0.0, name=self.name, reason="Empty output", metadata={}
