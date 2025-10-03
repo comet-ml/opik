@@ -51,6 +51,50 @@ class OptimizationResult(pydantic.BaseModel):
     def model_dump(self, *kargs: Any, **kwargs: Any) -> dict[str, Any]:
         return super().model_dump(*kargs, **kwargs)
 
+    def get_optimized_model_kwargs(self) -> dict[str, Any]:
+        """
+        Extract optimized model_kwargs for use in other optimizers.
+
+        Returns:
+            Dictionary of optimized model kwargs, empty dict if not available
+        """
+        return self.details.get("optimized_model_kwargs", {})
+
+    def get_optimized_model(self) -> str | None:
+        """
+        Extract optimized model name.
+
+        Returns:
+            Model name string if available, None otherwise
+        """
+        return self.details.get("optimized_model")
+
+    def get_optimized_parameters(self) -> dict[str, Any]:
+        """
+        Extract optimized parameter values.
+
+        Returns:
+            Dictionary of optimized parameters, empty dict if not available
+        """
+        return self.details.get("optimized_parameters", {})
+
+    def apply_to_prompt(self, prompt: Any) -> Any:
+        """
+        Apply optimized parameters to a prompt.
+
+        Args:
+            prompt: ChatPrompt instance to apply optimizations to
+
+        Returns:
+            New ChatPrompt instance with optimized parameters applied
+        """
+        prompt_copy = prompt.copy()
+        if "optimized_model_kwargs" in self.details:
+            prompt_copy.model_kwargs = self.details["optimized_model_kwargs"]
+        if "optimized_model" in self.details:
+            prompt_copy.model = self.details["optimized_model"]
+        return prompt_copy
+
     def _calculate_improvement_str(self) -> str:
         """Helper to calculate improvement percentage string."""
         initial_s = self.initial_score
@@ -128,6 +172,7 @@ class OptimizationResult(pydantic.BaseModel):
         precision = self.details.get("parameter_precision", 6)
 
         if optimized_params:
+
             def _format_range(desc: dict[str, Any]) -> str:
                 if "min" in desc and "max" in desc:
                     step_str = (
@@ -159,7 +204,9 @@ class OptimizationResult(pydantic.BaseModel):
                 if not stage_ranges:
                     for stage, params in search_ranges.items():
                         if name in params:
-                            stage_ranges.append(f"{stage}: {_format_range(params[name])}")
+                            stage_ranges.append(
+                                f"{stage}: {_format_range(params[name])}"
+                            )
                 joined_ranges = "\n".join(stage_ranges) if stage_ranges else "N/A"
                 rows.append(
                     {
@@ -348,7 +395,9 @@ class OptimizationResult(pydantic.BaseModel):
                 if not ranges_parts:
                     for stage, params in search_ranges.items():
                         if name in params:
-                            ranges_parts.append(f"{stage}: {_format_range(params[name])}")
+                            ranges_parts.append(
+                                f"{stage}: {_format_range(params[name])}"
+                            )
 
                 summary_table.add_row(
                     name,
