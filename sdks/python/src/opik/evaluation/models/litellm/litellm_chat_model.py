@@ -3,8 +3,8 @@ import logging
 import warnings
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Type
-import time
 import pydantic
+import tenacity
 
 if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse
@@ -163,79 +163,28 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                     )
                     self._unsupported_warned.add(key)
 
-        if self.model_name.startswith("gpt-5"):
-            unsupported_params = []
-
-            if "temperature" in filtered_params:
-                value = filtered_params["temperature"]
-                try:
-                    numeric_value = float(value)
-                except (TypeError, ValueError):
-                    numeric_value = None
-                if numeric_value is None or abs(numeric_value - 1.0) > 1e-6:
-                    unsupported_params.append(("temperature", value))
-
-            for param in ("logprobs", "top_logprobs"):
-                if param in filtered_params:
-                    unsupported_params.append((param, filtered_params[param]))
-
-            for param, value in unsupported_params:
-                filtered_params.pop(param, None)
-                if param not in self._unsupported_warned:
-                    if param == "temperature":
-                        _log_warning(
-                            "Model %s only supports temperature=1. Dropping temperature=%s.",
-                            self.model_name,
-                            value,
-                        )
-                    else:
-                        _log_warning(
-                            "Model %s does not support %s. Dropping the parameter.",
-                            self.model_name,
-                            param,
-                        )
-                    self._unsupported_warned.add(param)
+        util.apply_model_specific_filters(
+            model_name=self.model_name,
+            params=filtered_params,
+            already_warned=self._unsupported_warned,
+            warn=self._warn_about_unsupported_param,
+        )
 
         return filtered_params
 
-    def generate_string(
-        self,
-        input: str,
-        response_format: Optional[Type[pydantic.BaseModel]] = None,
-        **kwargs: Any,
-    ) -> str:
-        """
-        Simplified interface to generate a string output from the model.
-        You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input
-
-        Args:
-            input: The input string based on which the model will generate the output.
-            response_format: pydantic model specifying the expected output string format.
-            kwargs: Additional arguments that may be used by the model for string generation.
-
-        Returns:
-            str: The generated string output.
-        """
-        if response_format is not None:
-            kwargs["response_format"] = response_format
-
-        valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
-
-        request = [
-            {
-                "content": input,
-                "role": "user",
-            },
-        ]
-
-        with base_model.get_provider_response(
-            model_provider=self,
-            messages=request,
-            **valid_litellm_params,
-        ) as response:
-            choice = _first_choice(response)
-            content = _extract_message_content(choice)
-            return base_model.check_model_output_string(content)
+    def _warn_about_unsupported_param(self, param: str, value: Any) -> None:
+        if param == "temperature":
+            _log_warning(
+                "Model %s only supports temperature=1. Dropping temperature=%s.",
+                self.model_name,
+                value,
+            )
+        else:
+            _log_warning(
+                "Model %s does not support %s. Dropping the parameter.",
+                self.model_name,
+                param,
+            )
 
     def generate_provider_response(
         self,
@@ -275,23 +224,17 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         ):
             all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
-        last_exception = None
-        for attempt in range(max_attempts):
-            try:
-                return self._engine.completion(
-                    model=self.model_name, messages=messages, **all_kwargs
-                )
-            except Exception as exc:  # noqa: BLE001
-                last_exception = exc
-                if attempt >= max_attempts - 1:
-                    break
+        retrying = tenacity.Retrying(
+            reraise=True,
+            stop=tenacity.stop_after_attempt(max_attempts),
+            wait=tenacity.wait_exponential(multiplier=0.5, min=0.5, max=8.0),
+        )
 
-                backoff = 0.5 * (2**attempt)
-                time.sleep(backoff)
-
-        # Exhausted retries
-        raise last_exception or exceptions.BaseLLMError(
-            "LLM completion failed without raising an exception"
+        return retrying.call(
+            self._engine.completion,
+            model=self.model_name,
+            messages=messages,
+            **all_kwargs,
         )
 
     async def agenerate_string(
@@ -350,14 +293,28 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             Any: The response from the model provider, which can be of any type depending on the use case and LLM.
         """
 
+        retries = kwargs.pop("__opik_retries", 3)
+        try:
+            max_attempts = max(1, int(retries))
+        except (TypeError, ValueError):
+            max_attempts = 1
+
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
         all_kwargs = {**self._completion_kwargs, **valid_litellm_params}
 
         if opik_monitor.enabled_in_config():
             all_kwargs = opik_monitor.try_add_opik_monitoring_to_params(all_kwargs)
 
-        response = await self._engine.acompletion(
-            model=self.model_name, messages=messages, **all_kwargs
+        retrying = tenacity.AsyncRetrying(
+            reraise=True,
+            stop=tenacity.stop_after_attempt(max_attempts),
+            wait=tenacity.wait_exponential(multiplier=0.5, min=0.5, max=8.0),
         )
 
-        return response
+        async for attempt in retrying:
+            with attempt:
+                return await self._engine.acompletion(
+                    model=self.model_name, messages=messages, **all_kwargs
+                )
+
+        raise exceptions.BaseLLMError("Async LLM completion failed without raising an exception")  # pragma: no cover
