@@ -14,6 +14,9 @@ importers:
       '@clack/prompts':
         specifier: 0.7.0
         version: 0.7.0
+      '@langchain/core':
+        specifier: ^0.3.78
+        version: 0.3.78(openai@4.85.4(ws@8.18.1)(zod@3.24.2))
       axios:
         specifier: 1.7.4
         version: 1.7.4
@@ -72,9 +75,6 @@ importers:
       '@eslint/js':
         specifier: ^9.20.0
         version: 9.36.0
-      '@langchain/core':
-        specifier: ^0.3.78
-        version: 0.3.78(openai@4.85.4(ws@8.18.1)(zod@3.24.2))
       '@types/glob':
         specifier: ^7.2.0
         version: 7.2.0
