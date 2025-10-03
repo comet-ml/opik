@@ -88,7 +88,7 @@ We provide multiple development modes optimized for different workflows:
 | **Docker Mode** | Full stack testing, closest to production | `./opik.sh --build` | Slow |
 | **Local Process** | Fast BE + FE development with hot reload | `scripts/dev-runner.sh` | Fast |
 | **BE-Only** | Backend development only | `scripts/dev-runner.sh --be-only-restart` | Fast |
-| **Infrastructure** | SDK/Integration development | `./opik.sh --infra --port-mapping` | Medium |
+| **Infrastructure** | Manual with IDE development | `./opik.sh --infra --port-mapping` | Medium |
 
 ### Docker Mode (Full Stack)
 
