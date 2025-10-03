@@ -59,9 +59,7 @@ class GEval(base_metric.BaseMetric):
         0.9
     """
 
-    _CHAIN_OF_THOUGHT_CACHE: "OrderedDict[Tuple[str, str, str, Any], str]" = (
-        OrderedDict()
-    )
+    _CHAIN_OF_THOUGHT_CACHE: "OrderedDict[Tuple[str, str, str, Any], str]" = OrderedDict()
     _CHAIN_OF_THOUGHT_LOCK: Lock = Lock()
     _MAX_CHAIN_OF_THOUGHT_CACHE = 128
 
