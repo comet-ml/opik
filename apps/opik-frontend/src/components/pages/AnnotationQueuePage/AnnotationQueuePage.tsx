@@ -21,6 +21,8 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import CopySMELinkButton from "@/components/pages/AnnotationQueuePage/CopySMELinkButton";
 import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELinkButton";
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
+import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
+import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -70,6 +72,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           <div className="flex items-center gap-2">
             <CopySMELinkButton annotationQueue={annotationQueue} />
             <EditAnnotationQueueButton annotationQueue={annotationQueue} />
+            <ExportAnnotatedDataButton annotationQueue={annotationQueue} />
             <OpenSMELinkButton annotationQueue={annotationQueue} />
           </div>
         )}
@@ -105,6 +108,9 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
               resource={RESOURCE_TYPE.project}
               asTag
             />
+          )}
+          {annotationQueue && (
+            <AnnotationQueueProgressTag annotationQueue={annotationQueue} />
           )}
         </div>
         <div className="flex h-11 items-center gap-2">

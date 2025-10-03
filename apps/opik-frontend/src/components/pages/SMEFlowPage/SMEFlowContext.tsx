@@ -7,7 +7,7 @@ import React, {
   useCallback,
 } from "react";
 import cloneDeep from "lodash/cloneDeep";
-import isNumber from "lodash/isNumber";
+import omit from "lodash/omit";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useSearch } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -25,7 +25,6 @@ import {
   TraceFeedbackScore,
   FEEDBACK_SCORE_TYPE,
 } from "@/types/traces";
-import { CommentItem } from "@/types/comment";
 import { useLoggedInUserName } from "@/store/AppStore";
 import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMutation";
 import useCreateThreadCommentMutation from "@/api/traces/useCreateThreadCommentMutation";
@@ -39,9 +38,12 @@ import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackSc
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types";
 import { ThreadStatus } from "@/types/thread";
-import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
+import {
+  getAnnotationQueueItemId,
+  getFeedbackScoresByUser,
+  getLastCommentByUser,
+} from "@/lib/annotation-queues";
 import { hasValuesByAuthor } from "@/lib/feedback-scores";
-import omit from "lodash/omit";
 
 const isItemProcessed = (
   item: Trace | Thread,
@@ -57,61 +59,6 @@ const isItemProcessed = (
       ? Boolean(score.value_by_author?.[userName])
       : score.last_updated_by === userName;
   });
-};
-
-const getFeedbackScoresByUser = (
-  feedbackScores: TraceFeedbackScore[],
-  userName: string | undefined,
-  feedbackDefinitionNames: string[],
-): TraceFeedbackScore[] => {
-  if (!userName) return [];
-
-  return feedbackScores
-    .filter(
-      (feedbackScore) =>
-        feedbackScore && feedbackDefinitionNames.includes(feedbackScore.name),
-    )
-    .map((feedbackScore): TraceFeedbackScore | undefined => {
-      if (!userName) return feedbackScore;
-
-      if (hasValuesByAuthor(feedbackScore)) {
-        const userValue = feedbackScore.value_by_author?.[userName];
-        if (userValue) {
-          const rawValue = userValue.value;
-          return {
-            name: feedbackScore.name,
-            value: isNumber(rawValue) ? rawValue : 0,
-            reason: userValue.reason ?? "",
-            category_name: userValue.category_name ?? "",
-            source: userValue.source,
-            created_by: userName,
-            last_updated_at: userValue.last_updated_at,
-            last_updated_by: userName,
-          };
-        }
-      } else if (userName === feedbackScore.last_updated_by) {
-        return omit(feedbackScore, "value_by_author");
-      }
-    })
-    .filter((score): score is TraceFeedbackScore => score !== undefined);
-};
-
-const getLastCommentByUser = (
-  comments: CommentItem[] | undefined,
-  userName: string | undefined,
-): CommentItem | undefined => {
-  if (!comments || !userName) return undefined;
-
-  const userComments = comments.filter(
-    (comment) => comment.created_by === userName,
-  );
-  if (userComments.length === 0) return undefined;
-
-  return userComments.reduce((latest, current) =>
-    new Date(current.created_at) > new Date(latest.created_at)
-      ? current
-      : latest,
-  );
 };
 
 export interface ValidationError {
