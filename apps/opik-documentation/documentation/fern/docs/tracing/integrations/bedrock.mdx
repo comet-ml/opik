@@ -5,7 +5,7 @@ description: Start here to integrate Opik into your AWS Bedrock-based genai appl
 
 [AWS Bedrock](https://aws.amazon.com/bedrock/) is a fully managed service that provides access to high-performing foundation models (FMs) from leading AI companies like AI21 Labs, Anthropic, Cohere, Meta, Mistral AI, Stability AI, and Amazon through a single API.
 
-This guide explains how to integrate Opik with the Bedrock Python SDK. By using the `track_bedrock` method provided by opik, you can easily track and evaluate your Bedrock API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+This guide explains how to integrate Opik with the Bedrock Python SDK, supporting both the **Converse API** and the **Invoke Model API**. By using the `track_bedrock` method provided by Opik, you can easily track and evaluate your Bedrock API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
 ## Account Setup
 
@@ -49,7 +49,7 @@ import boto3
 REGION = "us-east-1"
 MODEL_ID = "us.meta.llama3-2-3b-instruct-v1:0"
 
-bedrock = boto3.client(
+bedrock_client = boto3.client(
     service_name="bedrock-runtime",
     region_name=REGION,
     # aws_access_key_id=ACCESS_KEY,
@@ -60,22 +60,211 @@ bedrock = boto3.client(
 
 ## Logging LLM calls
 
-In order to log the LLM calls to Opik, you will need to create the wrap the boto3 client with `track_bedrock`. When making calls with that wrapped client, all calls will be logged to Opik:
+Opik supports both AWS Bedrock APIs: the **Converse API** (unified interface) and the **Invoke Model API** (model-specific formats). To log LLM calls to Opik, wrap your boto3 client with `track_bedrock`:
 
 ```python
+import os
 from opik.integrations.bedrock import track_bedrock
 
-bedrock_client = track_bedrock(bedrock, project_name="bedrock-integration-demo")
+# Set project name via environment variable
+os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+bedrock_client = track_bedrock(bedrock_client)
+```
+
+<Tip>
+  Despite the Invoke Model API using different input/output formats for each model provider, Opik automatically handles format detection and cost tracking for all supported models, providing unified observability across different model formats.
+</Tip>
+
+### Converse API (Unified Interface)
+
+The Converse API provides a unified interface across all supported models:
+
+```python
+import os
+import boto3
+from opik.integrations.bedrock import track_bedrock
+
+# Set project name via environment variable
+os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+# Initialize and track the Bedrock client
+bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+bedrock_client = track_bedrock(bedrock_client)
 
 PROMPT = "Why is it important to use a LLM Monitoring like CometML Opik tool that allows you to log traces and spans when working with LLM Models hosted on AWS Bedrock?"
 
 response = bedrock_client.converse(
-    modelId=MODEL_ID,
+    modelId="us.meta.llama3-2-3b-instruct-v1:0",
     messages=[{"role": "user", "content": [{"text": PROMPT}]}],
     inferenceConfig={"temperature": 0.5, "maxTokens": 512, "topP": 0.9},
 )
 print("Response", response["output"]["message"]["content"][0]["text"])
 ```
+
+### Invoke Model API (Model-Specific Formats)
+
+The Invoke Model API uses model-specific request and response formats. Here are examples for different providers:
+
+<Tabs>
+    <Tab value="Anthropic Claude" title="Anthropic Claude">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Claude models use Anthropic's message format
+        request_body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 1000,
+            "temperature": 0.7,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Explain the benefits of LLM observability"
+                }
+            ]
+        }
+
+        response = bedrock_client.invoke_model(
+            modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        response_body = json.loads(response["body"].read())
+        print("Response:", response_body["content"][0]["text"])
+        ```
+    </Tab>
+    <Tab value="Amazon Nova" title="Amazon Nova">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Nova models use Amazon's nested content format
+        request_body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "text": "Explain the benefits of LLM observability"
+                        }
+                    ]
+                }
+            ],
+            "inferenceConfig": {
+                "max_new_tokens": 1000,
+                "temperature": 0.7
+            }
+        }
+
+        response = bedrock_client.invoke_model(
+            modelId="us.amazon.nova-pro-v1:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        response_body = json.loads(response["body"].read())
+        print("Response:", response_body["output"]["message"]["content"][0]["text"])
+        ```
+    </Tab>
+    <Tab value="Meta Llama" title="Meta Llama">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Llama models use prompt-based format with special tokens
+        request_body = {
+            "prompt": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\nExplain the benefits of LLM observability<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+            "max_gen_len": 1000,
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+
+        response = bedrock_client.invoke_model(
+            modelId="us.meta.llama3-1-8b-instruct-v1:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        response_body = json.loads(response["body"].read())
+        print("Response:", response_body["generation"])
+        ```
+    </Tab>
+    <Tab value="Mistral AI" title="Mistral AI">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Mistral models use OpenAI-like message format
+        request_body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Explain the benefits of LLM observability"
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+
+        response = bedrock_client.invoke_model(
+            modelId="us.mistral.pixtral-large-2502-v1:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        response_body = json.loads(response["body"].read())
+        print("Response:", response_body["choices"][0]["message"]["content"])
+        ```
+    </Tab>
+</Tabs>
 
 <Frame>
   <img src="/img/cookbook/bedrock_trace_cookbook.png" />
@@ -83,9 +272,24 @@ print("Response", response["output"]["message"]["content"][0]["text"])
 
 ## Streaming API
 
-Bedrock supports streaming responses, which is useful for real-time applications. Here's how to use streaming with Opik:
+Both Bedrock APIs support streaming responses, which is useful for real-time applications. Opik automatically tracks streaming calls for both APIs.
+
+### Converse Stream API
+
+The `converse_stream` method provides streaming with the unified interface:
 
 ```python
+import os
+import boto3
+from opik.integrations.bedrock import track_bedrock
+
+# Set project name via environment variable
+os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+# Initialize and track the Bedrock client
+bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+bedrock_client = track_bedrock(bedrock_client)
+
 def stream_conversation(
     bedrock_client,
     model_id,
@@ -94,7 +298,7 @@ def stream_conversation(
     inference_config,
 ):
     """
-    Sends messages to a model and streams the response.
+    Sends messages to a model and streams the response using Converse API.
     Args:
         bedrock_client: The Boto3 Bedrock runtime client.
         model_id (str): The model ID to use.
@@ -105,7 +309,6 @@ def stream_conversation(
     Returns:
         Nothing.
     """
-
     response = bedrock_client.converse_stream(
         modelId=model_id,
         messages=messages,
@@ -132,32 +335,196 @@ def stream_conversation(
                     print(f"Input tokens: {metadata['usage']['inputTokens']}")
                     print(f"Output tokens: {metadata['usage']['outputTokens']}")
                     print(f"Total tokens: {metadata['usage']['totalTokens']}")
-                if "metrics" in event["metadata"]:
-                    print(f"Latency: {metadata['metrics']['latencyMs']} milliseconds")
 
-# Example usage with system prompts
+# Example usage
 system_prompt = """You are an app that creates playlists for a radio station
   that plays rock and pop music. Only return song names and the artist."""
 
 input_text = "Create a list of 3 pop songs."
-
-message = {"role": "user", "content": [{"text": input_text}]}
-messages = [message]
-
-# System prompts.
+messages = [{"role": "user", "content": [{"text": input_text}]}]
 system_prompts = [{"text": system_prompt}]
-
-# inference parameters to use.
 inference_config = {"temperature": 0.5, "topP": 0.9}
 
 stream_conversation(
     bedrock_client,
-    MODEL_ID,
+    "us.meta.llama3-2-3b-instruct-v1:0",
     messages,
     system_prompts,
     inference_config,
 )
 ```
+
+### Invoke Model Stream API
+
+The `invoke_model_with_response_stream` method supports streaming with model-specific formats:
+
+<Tabs>
+    <Tab value="Anthropic Claude" title="Anthropic Claude">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Claude streaming with Anthropic message format
+        request_body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 1000,
+            "temperature": 0.7,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Tell me about the benefits of LLM observability"
+                }
+            ]
+        }
+
+        response = bedrock_client.invoke_model_with_response_stream(
+            modelId="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        # Simple streaming - just print the events
+        for event in response["body"]:
+            chunk = json.loads(event["chunk"]["bytes"])
+            print(chunk)
+        ```
+    </Tab>
+    <Tab value="Amazon Nova" title="Amazon Nova">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Nova streaming with Amazon's nested content format
+        request_body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "text": "Tell me about the benefits of LLM observability"
+                        }
+                    ]
+                }
+            ],
+            "inferenceConfig": {
+                "max_new_tokens": 1000,
+                "temperature": 0.7
+            }
+        }
+
+        response = bedrock_client.invoke_model_with_response_stream(
+            modelId="us.amazon.nova-pro-v1:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        # Simple streaming - just print the events
+        for event in response["body"]:
+            chunk = json.loads(event["chunk"]["bytes"])
+            print(chunk)
+        ```
+    </Tab>
+    <Tab value="Meta Llama" title="Meta Llama">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Llama streaming with prompt-based format and special tokens
+        request_body = {
+            "prompt": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\nTell me about the benefits of LLM observability<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+            "max_gen_len": 1000,
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+
+        response = bedrock_client.invoke_model_with_response_stream(
+            modelId="us.meta.llama3-1-8b-instruct-v1:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        # Simple streaming - just print the events
+        for event in response["body"]:
+            chunk = json.loads(event["chunk"]["bytes"])
+            print(chunk)
+        ```
+    </Tab>
+    <Tab value="Mistral AI" title="Mistral AI">
+        ```python
+        import json
+        import os
+        import boto3
+        from opik.integrations.bedrock import track_bedrock
+
+        # Set project name via environment variable
+        os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
+
+        # Initialize and track the Bedrock client
+        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        bedrock_client = track_bedrock(bedrock_client)
+
+        # Mistral streaming with OpenAI-like message format
+        request_body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Tell me about the benefits of LLM observability"
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+
+        response = bedrock_client.invoke_model_with_response_stream(
+            modelId="us.mistral.pixtral-large-2502-v1:0",
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        # Simple streaming - just print the events
+        for event in response["body"]:
+            chunk = json.loads(event["chunk"]["bytes"])
+            print(chunk)
+        ```
+    </Tab>
+</Tabs>
 
 <Frame>
   <img src="/img/cookbook/bedrock_trace_streaming_cookbook.png" />
@@ -170,16 +537,22 @@ stream_conversation(
 If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Bedrock is called within one of these steps, the LLM call will be associated with that corresponding step:
 
 ```python
+import boto3
 from opik import track
 from opik.integrations.bedrock import track_bedrock
 
-os.environ["OPIK_PROJECT_NAME"] = "bedrock-integration-demo"
-bedrock_client = track_bedrock(bedrock)
+# Initialize and track the Bedrock client
+bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+bedrock_client = track_bedrock(bedrock_client, project_name="bedrock-integration-demo")
+
+MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 @track
 def generate_story(prompt):
     res = bedrock_client.converse(
-        modelId=MODEL_ID, messages=[{"role": "user", "content": [{"text": prompt}]}]
+        modelId=MODEL_ID, 
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"temperature": 0.7, "maxTokens": 1000}
     )
     return res["output"]["message"]["content"][0]["text"]
 
@@ -187,7 +560,9 @@ def generate_story(prompt):
 def generate_topic():
     prompt = "Generate a topic for a story about Opik."
     res = bedrock_client.converse(
-        modelId=MODEL_ID, messages=[{"role": "user", "content": [{"text": prompt}]}]
+        modelId=MODEL_ID, 
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"temperature": 0.7, "maxTokens": 500}
     )
     return res["output"]["message"]["content"][0]["text"]
 
@@ -209,7 +584,11 @@ The trace can now be viewed in the UI with hierarchical spans showing the relati
 
 ## Cost Tracking
 
-The `track_bedrock` wrapper automatically tracks token usage and cost for all supported AWS Bedrock models.
+The `track_bedrock` wrapper automatically tracks token usage and cost for all supported AWS Bedrock models, regardless of whether you use the Converse API or the Invoke Model API.
+
+<Tip>
+  Despite the different input/output formats between the Converse API and Invoke Model API across various model providers (Anthropic, Amazon, Meta, Mistral), Opik automatically detects the response format and extracts unified cost and usage information for all models. So even if you can't use the unified Converse API, you can still have the main tracing benefits by using our integration.
+</Tip>
 
 Cost information is automatically captured and displayed in the Opik UI, including:
 
