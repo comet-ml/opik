@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, List, Optional, Union
 
 import opik
 import opik.config as opik_config
@@ -16,8 +16,6 @@ class BaseMetric(abc.ABC):
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when
             there is no parent span/trace to inherit project name from.
-        preprocessor: Optional callable to normalize text inputs before scoring. When provided,
-            `_preprocess` will run the hook before handing text to the metric implementation.
 
     Example:
         >>> from opik.evaluation.metrics import base_metric, score_result
@@ -41,11 +39,9 @@ class BaseMetric(abc.ABC):
         name: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
-        preprocessor: Optional[Callable[[str], str]] = None,
     ) -> None:
         self.name = name if name is not None else self.__class__.__name__
         self.track = track
-        self._preprocessor = preprocessor
 
         config = opik_config.OpikConfig()
 
@@ -73,8 +69,3 @@ class BaseMetric(abc.ABC):
         Async public method that can be called independently.
         """
         return self.score(*args, **kwargs)
-
-    def _preprocess(self, text: str) -> str:
-        if self._preprocessor is None:
-            return text
-        return self._preprocessor(text)
