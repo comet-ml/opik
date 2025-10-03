@@ -50,7 +50,7 @@ export const INTEGRATION_CONFIG = {
 - Avoid test files, config files, and type definition files
 - If there's a setup or initialization file, include it`,
     docsUrl: 'https://www.comet.com/docs/opik/quickstart',
-    defaultChanges: `• Installed opik package\n• Initialized Opik client\n• Set up environment variables (${OPIK_ENV_VARS.API_KEY}, ${OPIK_ENV_VARS.URL_OVERRIDE})`,
+    defaultChanges: `• Installed opik package\n• Set up environment variables (${OPIK_ENV_VARS.API_KEY}, ${OPIK_ENV_VARS.URL_OVERRIDE})`,
     nextSteps:
       '• Use client.trace() to create traces\n• For short-lived scripts: Add await client.flush() before exit\n• Check the documentation for tracing: https://www.comet.com/docs/opik/tracing/log_traces',
   },
