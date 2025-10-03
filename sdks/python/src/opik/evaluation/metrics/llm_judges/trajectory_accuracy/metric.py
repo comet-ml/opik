@@ -38,6 +38,8 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when
             there are no parent span/trace to inherit project name from.
+        seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
+        temperature: Optional temperature value for model generation. If provided, this temperature will be passed to the model. If not provided, the model's default temperature will be used.
 
     Example:
         >>> from opik.evaluation.metrics import TrajectoryAccuracy
@@ -61,17 +63,28 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
         name: str = "trajectory_accuracy_metric",
         track: bool = True,
         project_name: Optional[str] = None,
+        seed: Optional[int] = None,
+        temperature: Optional[float] = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
-        self._init_model(model)
+        self._seed = seed
+        self._init_model(model, temperature=temperature)
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]],
+        temperature: Optional[float],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            model_kwargs = {}
+            if temperature is not None:
+                model_kwargs["temperature"] = temperature
+            if self._seed is not None:
+                model_kwargs["seed"] = self._seed
+
+            self._model = models_factory.get(model_name=model, **model_kwargs)
 
     def score(
         self,
@@ -103,7 +116,8 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
             prompt = templates.create_evaluation_prompt(example)
 
             response = self._model.generate_string(
-                input=prompt, response_format=TrajectoryAccuracyResponseFormat
+                input=prompt,
+                response_format=TrajectoryAccuracyResponseFormat,
             )
 
             return parser.parse_evaluation_response(response, self.name)
@@ -144,7 +158,8 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
             prompt = templates.create_evaluation_prompt(example)
 
             response = await self._model.agenerate_string(
-                input=prompt, response_format=TrajectoryAccuracyResponseFormat
+                input=prompt,
+                response_format=TrajectoryAccuracyResponseFormat,
             )
 
             return parser.parse_evaluation_response(response, self.name)
