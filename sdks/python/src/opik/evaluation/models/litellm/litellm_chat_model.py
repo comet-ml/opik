@@ -19,6 +19,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _log_warning(message: str, *args: Any) -> None:
+    """Emit a warning to both this module logger and the root logger.
+
+    pytest's logging capture hooks into the root logger, while production runs use
+    the module-level logger. Logging to both keeps warnings visible in tests and at
+    runtime without duplicating call sites.
+    """
+
     LOGGER.warning(message, *args)
     root_logger = logging.getLogger()
     if root_logger is not LOGGER:
@@ -26,6 +33,13 @@ def _log_warning(message: str, *args: Any) -> None:
 
 
 def _normalise_choice(choice: Any) -> Dict[str, Any]:
+    """Produce a dict view of a LiteLLM choice regardless of response type.
+
+    LiteLLM may return raw dicts, Pydantic models, or dataclasses. Normalising to a
+    dict here keeps downstream parsing logic consistent and backwards compatible
+    with older client versions.
+    """
+
     if isinstance(choice, dict):
         return choice
     if hasattr(choice, "model_dump") and callable(choice.model_dump):
