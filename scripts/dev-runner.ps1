@@ -93,7 +93,6 @@ function Test-CommandExists {
         Write-LogError "Required command '$Command' not found. Please install it."
         exit 1
     }
-    return $exists
 }
 
 # Function to find JAR files in target directory
@@ -594,20 +593,32 @@ function Start-Frontend {
     }
 }
 
+# Helper function to stop a process and all its children (only first-level children)
+function Stop-ProcessAndChildren {
+    param(
+        [int]$ProcessId,
+        [switch]$Force
+    )
+
+    $childProcessIds = @(Get-Process | Where-Object {
+        $_.Parent.Id -eq $ProcessId
+    } | Select-Object -ExpandProperty Id)
+
+    # First stop child processes, to avoid zombies
+    Write-LogInfo "Stopping child processes (PIDs: $childProcessIds)..."
+    foreach ($childId in $childProcessIds) {
+        Stop-Process -Id $childId -Force:$Force -ErrorAction SilentlyContinue
+    }
+
+    # Then stop the parent process
+    Stop-Process -Id $ProcessId -Force:$Force -ErrorAction SilentlyContinue
+}
+
 # Function to stop backend
 function Stop-Backend {
     if (Test-Path $script:BACKEND_PID_FILE) {
         $backendPid = Get-Content $script:BACKEND_PID_FILE -ErrorAction SilentlyContinue
-        
-        # Check if PID is valid
-        if (-not $backendPid) {
-            Write-LogWarning "Backend PID file exists but is empty (cleaning up stale PID file)"
-            Remove-Item $script:BACKEND_PID_FILE -Force
-            return
-        }
-        
         $process = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
-        
         if ($process) {
             Write-LogInfo "Stopping backend (PID: $backendPid)..."
             
@@ -648,21 +659,12 @@ function Stop-Backend {
 function Stop-Frontend {
     if (Test-Path $script:FRONTEND_PID_FILE) {
         $frontendPid = Get-Content $script:FRONTEND_PID_FILE -ErrorAction SilentlyContinue
-        
-        # Check if PID is valid
-        if (-not $frontendPid) {
-            Write-LogWarning "Frontend PID file exists but is empty (cleaning up stale PID file)"
-            Remove-Item $script:FRONTEND_PID_FILE -Force
-            return
-        }
-        
         $process = Get-Process -Id $frontendPid -ErrorAction SilentlyContinue
-        
         if ($process) {
             Write-LogInfo "Stopping frontend (PID: $frontendPid)..."
             
-            # Try graceful shutdown first
-            Stop-Process -Id $frontendPid -ErrorAction SilentlyContinue
+            # Try graceful shutdown first, including children
+            Stop-ProcessAndChildren -ProcessId $frontendPid
             
             # Wait for graceful shutdown
             $timeout = 10
@@ -674,32 +676,11 @@ function Stop-Frontend {
                 Start-Sleep -Seconds 1
             }
             
-            # Force kill if still running
+            # Force kill if still running, including children
             $process = Get-Process -Id $frontendPid -ErrorAction SilentlyContinue
             if ($process) {
                 Write-LogWarning "Force killing frontend..."
-                
-                # Try to find and kill child processes first (best effort)
-                # Uses Windows WMI/CIM to enumerate child processes
-                try {
-                    $childProcesses = @(Get-CimInstance Win32_Process -ErrorAction Stop | 
-                        Where-Object { $_.ParentProcessId -eq $frontendPid })
-                    
-                    if ($childProcesses.Count -gt 0) {
-                        Write-LogWarning "Found $($childProcesses.Count) child process(es), killing them first..."
-                        foreach ($childProc in $childProcesses) {
-                            $childId = $childProc.ProcessId
-                            Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue
-                        }
-                    }
-                }
-                catch {
-                    # Silently ignore if WMI/CIM service is not available
-                    Write-LogDebug "Could not enumerate child processes (WMI/CIM service may not be running)"
-                }
-                
-                # Kill the main process with force
-                Stop-Process -Id $frontendPid -Force -ErrorAction SilentlyContinue
+                Stop-ProcessAndChildren -ProcessId $frontendPid -Force
             }
             
             Write-LogSuccess "Frontend stopped"
@@ -707,40 +688,33 @@ function Stop-Frontend {
         else {
             Write-LogWarning "Frontend PID file exists but process is not running (cleaning up stale PID file)"
         }
-        
         Remove-Item $script:FRONTEND_PID_FILE -Force -ErrorAction SilentlyContinue
     }
     else {
         Write-LogWarning "Frontend is not running"
     }
-    
-    # Clean up any remaining node/npm processes (brute force cleanup for development)
-    # This is a development tool, so it's safe to kill all node/npm/vite processes
-    Write-LogDebug "Checking for remaining node/npm/vite processes..."
-    
-    # Get all node/npm/vite processes
-    $nodeProcesses = Get-Process -Name node -ErrorAction SilentlyContinue
-    $npmProcesses = Get-Process -Name npm -ErrorAction SilentlyContinue
-    $viteProcesses = Get-Process -Name vite -ErrorAction SilentlyContinue
-    
-    $allProcesses = @()
-    if ($nodeProcesses) { $allProcesses += $nodeProcesses }
-    if ($npmProcesses) { $allProcesses += $npmProcesses }
-    if ($viteProcesses) { $allProcesses += $viteProcesses }
-    
-    # Filter out the frontend PID we already tried to kill
-    $orphanedProcesses = $allProcesses | Where-Object { $_.Id -ne $frontendPid }
-    
-    if ($orphanedProcesses) {
-        Write-LogWarning "Found $($orphanedProcesses.Count) remaining node/npm/vite process(es), cleaning up..."
-        foreach ($proc in $orphanedProcesses) {
-            try {
-                Write-LogDebug "Stopping process: PID $($proc.Id) - $($proc.Name)"
-                Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-            }
-            catch {
-                Write-LogDebug "Could not stop process $($proc.Id): $_"
-            }
+
+    # Clean up any orphaned processes by looking for processes with our frontend directory path
+    # This is safe and compatible across Windows and Unix systems in PowerShell
+    $orphanedPids = Get-Process | Where-Object {
+        $_.Path -and $_.Path -like "*$FRONTEND_DIR*"
+    } | Select-Object -ExpandProperty Id
+
+    if ($orphanedPids) {
+        foreach ($orphanPid in $orphanedPids) {
+                $process = Get-Process -Id $orphanPid -ErrorAction Stop
+                $processInfo = "$($process.ProcessName) $($process.Path)"
+
+                # Only kill if it's an npm/node/vite process AND contains our directory path
+                if ($process.ProcessName -match 'npm|node|vite' -and $process.Path -like "*$FRONTEND_DIR*") {
+                    Write-Warning "Cleaning up orphaned process: PID $orphanPid - $processInfo"
+                    Stop-Process -Id $orphanPid -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 1
+                    # Force kill if still running
+                    if (Get-Process -Id $orphanPid -ErrorAction SilentlyContinue) {
+                        Stop-Process -Id $orphanPid -Force -ErrorAction SilentlyContinue
+                    }
+                }
         }
     }
 }
