@@ -4,6 +4,7 @@ import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
@@ -14,15 +15,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+
+import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 /**
  * Scheduled job responsible for managing alert buckets and triggering webhooks.
@@ -42,50 +43,35 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AlertJob extends Job {
 
-    private static final String SCAN_LOCK_KEY = "alert_job:scan_lock";
-    private static final long LOCK_WAIT_TIME_SECONDS = 0; // Don't wait if lock is not available
-    private static final long LOCK_LEASE_TIME_SECONDS = 10; // Auto-release lock after 10 seconds
+    private static final Lock SCAN_LOCK_KEY = new Lock("alert_job:scan_lock");
 
     private final @NonNull AlertBucketService bucketService;
     private final @NonNull AlertService alertService;
     private final @NonNull WebhookPublisher webhookPublisher;
-    private final @NonNull WebhookConfig webhookConfig;
-    private final @NonNull RedissonClient redissonClient;
+    private final @NonNull @Config WebhookConfig webhookConfig;
+    private final @NonNull LockService lockService;
 
     @Override
     public void doJob(JobExecutionContext context) {
         log.info("Starting alert job - checking for buckets to process");
 
         // Use distributed lock to prevent overlapping scans in case of slow Redis SCAN operations
-        RLock lock = redissonClient.getLock(SCAN_LOCK_KEY);
-
-        try {
-            boolean lockAcquired = lock.tryLock(LOCK_WAIT_TIME_SECONDS, LOCK_LEASE_TIME_SECONDS, TimeUnit.SECONDS);
-
-            if (!lockAcquired) {
-                log.info("Another job instance is already scanning buckets, skipping this execution");
-                return;
-            }
-
-            try {
-                // Block until all buckets are processed to ensure job completion before next execution
-                bucketService.getBucketsReadyToProcess()
+        lockService.bestEffortLock(
+                SCAN_LOCK_KEY,
+                Mono.defer(() -> bucketService.getBucketsReadyToProcess()
                         .flatMap(this::processBucket)
-                        .onErrorContinue((throwable, bucketKey) -> {
-                            log.error("Failed to process bucket '{}': {}",
-                                    bucketKey, throwable.getMessage(), throwable);
-                        })
+                        .onErrorContinue((throwable, bucketKey) -> log.error("Failed to process bucket '{}': {}",
+                                bucketKey, throwable.getMessage(), throwable))
                         .doOnComplete(() -> log.info("Alert job finished processing all ready buckets"))
-                        .blockLast(); // Block to ensure job waits for completion
-            } finally {
-                lock.unlock();
-            }
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            log.error("Alert job interrupted while acquiring lock", exception);
-        } catch (Exception exception) {
-            log.error("Error occurred during alert job execution:", exception);
-        }
+                        .then()),
+                Mono.defer(() -> {
+                    log.info("Could not acquire lock for scanning buckets, another job instance is running");
+                    return Mono.empty();
+                }),
+                webhookConfig.getDebouncing().getAlertJobTimeout().toJavaDuration(),
+                webhookConfig.getDebouncing().getAlertJobLockWaitTimeout().toJavaDuration()).subscribe(
+                        __ -> log.info("Alert job execution completed"),
+                        error -> log.error("Alert job interrupted while acquiring lock", error));
     }
 
     /**

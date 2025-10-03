@@ -138,7 +138,7 @@ public class AlertBucketService {
                             .filter(tuple -> isReady(bucketKey, tuple, now))
                             .map(__ -> bucketKey)
                             .switchIfEmpty(Mono.empty());
-                }, webhookConfig.getDebouncing().getConcurrency()) // Process buckets in parallel based on config
+                })
                 .doOnComplete(() -> log.debug("Finished checking for buckets ready to process"))
                 .doOnError(error -> log.error("Failed to check for buckets: {}", error.getMessage(), error));
     }
