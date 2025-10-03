@@ -1,13 +1,10 @@
 """Simple Optuna-based optimizer for model parameter tuning."""
 
-from __future__ import annotations
-
 from collections.abc import Callable, Mapping
 from typing import Any
 
 import copy
 import logging
-import math
 from datetime import datetime
 
 import optuna
@@ -16,59 +13,15 @@ from optuna.trial import Trial, TrialState
 
 from opik import Dataset
 
-from .. import optimization_result
 from ..base_optimizer import BaseOptimizer
 from ..optimizable_agent import OptimizableAgent
 from ..optimization_config import chat_prompt
-from .search_space import ParameterSearchSpace, ParameterSpec, ParameterType
+from ..optimization_result import OptimizationResult
+from .parameter_search_space import ParameterSearchSpace
+from .search_space_types import ParameterType
+from .sensitivity_analysis import compute_sensitivity_from_trials
 
 logger = logging.getLogger(__name__)
-
-
-def _compute_sensitivity_from_trials(
-    trials: list[Trial], specs: list[ParameterSpec]
-) -> dict[str, float]:
-    sensitivities: dict[str, float] = {}
-
-    for spec in specs:
-        param_name = spec.name
-        values: list[float] = []
-        scores: list[float] = []
-
-        for trial in trials:
-            if trial.value is None:
-                continue
-
-            raw_value = trial.params.get(param_name)
-            if isinstance(raw_value, bool):
-                processed = float(int(raw_value))
-            elif isinstance(raw_value, (int, float)):
-                processed = float(raw_value)
-            else:
-                continue
-
-            values.append(processed)
-            scores.append(float(trial.value))
-
-        if len(values) < 2 or len(set(values)) == 1:
-            sensitivities[param_name] = 0.0
-            continue
-
-        mean_val = sum(values) / len(values)
-        mean_score = sum(scores) / len(scores)
-
-        cov = sum((v - mean_val) * (s - mean_score) for v, s in zip(values, scores))
-        var_val = sum((v - mean_val) ** 2 for v in values)
-        var_score = sum((s - mean_score) ** 2 for s in scores)
-
-        if var_val <= 0 or var_score <= 0:
-            sensitivities[param_name] = 0.0
-            continue
-
-        corr = abs(cov) / math.sqrt(var_val * var_score)
-        sensitivities[param_name] = min(max(corr, 0.0), 1.0)
-
-    return sensitivities
 
 
 class ParameterOptimizer(BaseOptimizer):
@@ -109,7 +62,7 @@ class ParameterOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         **kwargs: Any,
-    ) -> optimization_result.OptimizationResult:
+    ) -> OptimizationResult:
         raise NotImplementedError(
             "ParameterOptimizer.optimize_prompt is not supported. "
             "Use optimize_parameter(prompt, dataset, metric, parameter_space) instead, "
@@ -127,7 +80,7 @@ class ParameterOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         agent_class: type[OptimizableAgent] | None = None,
         **kwargs: Any,
-    ) -> optimization_result.OptimizationResult:
+    ) -> OptimizationResult:
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
 
@@ -223,7 +176,9 @@ class ParameterOptimizer(BaseOptimizer):
                 agent_class=tuned_agent_class,
             )
             trial.set_user_attr("parameters", sampled_values)
-            trial.set_user_attr("model_kwargs", copy.deepcopy(tuned_prompt.model_kwargs))
+            trial.set_user_attr(
+                "model_kwargs", copy.deepcopy(tuned_prompt.model_kwargs)
+            )
             trial.set_user_attr("model", tuned_prompt.model)
             trial.set_user_attr("stage", current_stage)
             return float(score)
@@ -381,7 +336,7 @@ class ParameterOptimizer(BaseOptimizer):
             importance = {}
 
         if not importance or all(value == 0 for value in importance.values()):
-            importance = _compute_sensitivity_from_trials(
+            importance = compute_sensitivity_from_trials(
                 completed_trials, parameter_space.parameters
             )
 
@@ -405,10 +360,12 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_precision": 6,
         }
 
-        return optimization_result.OptimizationResult(
+        return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=prompt.get_messages() if hasattr(prompt, "get_messages") else [],
-            initial_prompt=prompt.get_messages() if hasattr(prompt, "get_messages") else [],
+            initial_prompt=prompt.get_messages()
+            if hasattr(prompt, "get_messages")
+            else [],
             initial_score=baseline_score,
             score=best_score,
             metric_name=metric_name,
