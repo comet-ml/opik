@@ -613,13 +613,15 @@ function Stop-ProcessAndChildren {
     )
 
     $childProcessIds = @(Get-Process | Where-Object {
-        $_.Parent.Id -eq $ProcessId
+        $_.Parent -and $_.Parent.Id -eq $ProcessId
     } | Select-Object -ExpandProperty Id)
 
     # First stop child processes, to avoid zombies
-    Write-LogInfo "Stopping child processes (PIDs: $childProcessIds)..."
-    foreach ($childId in $childProcessIds) {
-        Stop-Process -Id $childId -Force:$Force -ErrorAction SilentlyContinue
+    if ($childProcessIds.Count -gt 0) {
+        Write-LogInfo "Stopping child processes (PIDs: $childProcessIds)..."
+        foreach ($childId in $childProcessIds) {
+            Stop-Process -Id $childId -Force:$Force -ErrorAction SilentlyContinue
+        }
     }
 
     # Then stop the parent process
