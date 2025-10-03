@@ -19,7 +19,6 @@ export default [
   {
     languageOptions: {
       globals: globals.browser,
-      parserOptions: { tsconfigRootDir: __dirname },
     },
   },
   pluginJs.configs.recommended,
