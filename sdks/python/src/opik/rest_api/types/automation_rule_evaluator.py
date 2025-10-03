@@ -8,6 +8,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .llm_as_judge_code import LlmAsJudgeCode
+from .trace_filter import TraceFilter
 from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
 from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefinedMetricPythonCode
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
@@ -20,6 +21,7 @@ class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None
+    filters: typing.Optional[typing.List[TraceFilter]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None

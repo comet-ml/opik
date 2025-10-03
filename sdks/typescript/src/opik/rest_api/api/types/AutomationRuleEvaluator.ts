@@ -36,6 +36,7 @@ export namespace AutomationRuleEvaluator {
         name: string;
         samplingRate?: number;
         enabled?: boolean;
+        filters?: OpikApi.TraceFilter[];
         createdAt?: Date;
         createdBy?: string;
         lastUpdatedAt?: Date;

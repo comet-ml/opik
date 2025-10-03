@@ -7,6 +7,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
+from .trace_filter_write import TraceFilterWrite
 from .trace_thread_llm_as_judge_code_write import TraceThreadLlmAsJudgeCodeWrite
 from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
@@ -17,6 +18,7 @@ class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None
+    filters: typing.Optional[typing.List[TraceFilterWrite]] = None
     action: typing.Literal["evaluator"] = "evaluator"
 
     if IS_PYDANTIC_V2:
