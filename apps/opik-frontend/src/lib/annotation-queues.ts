@@ -48,8 +48,6 @@ export const getFeedbackScoresByUser = (
         feedbackScore && feedbackDefinitionNames.includes(feedbackScore.name),
     )
     .map((feedbackScore): TraceFeedbackScore | undefined => {
-      if (!userName) return feedbackScore;
-
       if (hasValuesByAuthor(feedbackScore)) {
         const userValue = feedbackScore.value_by_author?.[userName];
         if (userValue) {

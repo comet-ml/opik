@@ -155,7 +155,9 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
           }
         });
 
-        baseData[reviewerName] = reviewerData;
+        if (!isEmpty(reviewerData)) {
+          baseData[reviewerName] = reviewerData;
+        }
       });
 
       return baseData;
@@ -206,9 +208,9 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
 
   const getData = useCallback(() => {
     if (annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE) {
-      return getTracesExportData() as unknown as Record<string, unknown>[];
+      return getTracesExportData();
     }
-    return getThreadsExportData() as unknown as Record<string, unknown>[];
+    return getThreadsExportData();
   }, [annotationQueue.scope, getTracesExportData, getThreadsExportData]);
 
   const generateFileName = useCallback(
