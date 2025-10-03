@@ -102,6 +102,10 @@ response = bedrock_client.converse(
 print("Response", response["output"]["message"]["content"][0]["text"])
 ```
 
+<Frame>
+  <img src="/img/tracing/bedrock/bedrock_single_trace.png" />
+</Frame>
+
 ### Invoke Model API (Model-Specific Formats)
 
 The Invoke Model API uses model-specific request and response formats. Here are examples for different providers:
@@ -265,10 +269,6 @@ The Invoke Model API uses model-specific request and response formats. Here are 
         ```
     </Tab>
 </Tabs>
-
-<Frame>
-  <img src="/img/cookbook/bedrock_trace_cookbook.png" />
-</Frame>
 
 ## Streaming API
 
@@ -527,7 +527,7 @@ The `invoke_model_with_response_stream` method supports streaming with model-spe
 </Tabs>
 
 <Frame>
-  <img src="/img/cookbook/bedrock_trace_streaming_cookbook.png" />
+  <img src="/img/tracing/bedrock/bedrock_single_stream_trace.png" />
 </Frame>
 
 ## Advanced Usage
@@ -579,7 +579,7 @@ generate_opik_story()
 The trace can now be viewed in the UI with hierarchical spans showing the relationship between different steps:
 
 <Frame>
-  <img src="/img/cookbook/bedrock_trace_decorator_cookbook.png" />
+  <img src="/img/tracing/bedrock/bedrock_nested_trace.png" />
 </Frame>
 
 ## Cost Tracking
@@ -587,7 +587,7 @@ The trace can now be viewed in the UI with hierarchical spans showing the relati
 The `track_bedrock` wrapper automatically tracks token usage and cost for all supported AWS Bedrock models, regardless of whether you use the Converse API or the Invoke Model API.
 
 <Tip>
-  Despite the different input/output formats between the Converse API and Invoke Model API across various model providers (Anthropic, Amazon, Meta, Mistral), Opik automatically detects the response format and extracts unified cost and usage information for all models. So even if you can't use the unified Converse API, you can still have the main tracing benefits by using our integration.
+  Despite the different input/output formats between the models accessed via the InvokeModel API (Anthropic, Amazon, Meta, Mistral), Opik automatically detects the response format and extracts unified cost and usage information for all models. So even if you can't use the unified Converse API, you can still have the main tracing benefits by using our integration.
 </Tip>
 
 Cost information is automatically captured and displayed in the Opik UI, including:
