@@ -4,12 +4,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.attachment.AttachmentInfo;
-import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.EntityType;
-import com.comet.opik.api.attachment.MultipartUploadPart;
-import com.comet.opik.api.attachment.StartMultipartUploadRequest;
-import com.comet.opik.api.attachment.StartMultipartUploadResponse;
 import com.comet.opik.api.events.AttachmentUploadRequested;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -33,13 +28,7 @@ import org.apache.tika.mime.MimeTypes;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -61,13 +50,13 @@ import java.util.regex.Pattern;
 @Slf4j
 public class AttachmentStripperService {
 
-    private final @NonNull AttachmentService attachmentService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull S3Config s3Config;
     private final @NonNull EventBus eventBus;
 
-    // OpenTelemetry metrics for monitoring attachment processing
+    // OpenTelemetry metrics for monitoring attachment detection and event posting
+    // Note: Actual upload success/failure metrics are tracked in AttachmentUploadListener
     private final LongCounter attachmentsProcessed;
     private final LongCounter attachmentsSkipped;
     private final LongCounter attachmentErrors;
@@ -83,12 +72,10 @@ public class AttachmentStripperService {
     private final int minBase64Size;
 
     @Inject
-    public AttachmentStripperService(@NonNull AttachmentService attachmentService,
-            @NonNull IdGenerator idGenerator,
+    public AttachmentStripperService(@NonNull IdGenerator idGenerator,
             @NonNull ObjectMapper objectMapper,
             @NonNull OpikConfiguration opikConfig,
             @NonNull EventBus eventBus) {
-        this.attachmentService = attachmentService;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.s3Config = opikConfig.getS3Config();
@@ -99,19 +86,20 @@ public class AttachmentStripperService {
 
         this.attachmentsProcessed = meter
                 .counterBuilder("opik.attachments.processed")
-                .setDescription("Number of attachments successfully processed and uploaded")
+                .setDescription("Number of attachment upload events posted to EventBus")
                 .build();
+
         this.attachmentsSkipped = meter
                 .counterBuilder("opik.attachments.skipped")
                 .setDescription("Number of base64 strings skipped (not valid attachments)")
                 .build();
         this.attachmentErrors = meter
                 .counterBuilder("opik.attachments.errors")
-                .setDescription("Number of errors during attachment processing")
+                .setDescription("Number of errors during attachment detection/processing")
                 .build();
         this.processingTimer = meter
                 .histogramBuilder("opik.attachments.processing.duration.ms")
-                .setDescription("Time spent processing attachments in milliseconds")
+                .setDescription("Time spent detecting and processing attachments in milliseconds")
                 .ofLongs()
                 .build();
 
@@ -129,7 +117,7 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<Trace> stripAttachmentsFromTrace(Trace trace, String workspaceId, String userName, String projectName) {
+    public Mono<Trace> stripAttachments(Trace trace, String workspaceId, String userName, String projectName) {
         return Mono.fromCallable(() -> {
             Trace.TraceBuilder builder = trace.toBuilder();
 
@@ -161,7 +149,7 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<TraceUpdate> stripAttachmentsFromTraceUpdate(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
+    public Mono<TraceUpdate> stripAttachments(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
             String userName, String projectName) {
         return Mono.fromCallable(() -> {
             TraceUpdate.TraceUpdateBuilder builder = traceUpdate.toBuilder();
@@ -194,7 +182,7 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<Span> stripAttachmentsFromSpan(Span span, String workspaceId, String userName, String projectName) {
+    public Mono<Span> stripAttachments(Span span, String workspaceId, String userName, String projectName) {
         return Mono.fromCallable(() -> {
             Span.SpanBuilder builder = span.toBuilder();
 
@@ -226,7 +214,7 @@ public class AttachmentStripperService {
      * TODO: This one and the similar ones below should be refactored to use the same method if
      * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<SpanUpdate> stripAttachmentsFromSpanUpdate(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
+    public Mono<SpanUpdate> stripAttachments(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
             String userName, String projectName) {
         return Mono.fromCallable(() -> {
             SpanUpdate.SpanUpdateBuilder builder = spanUpdate.toBuilder();
@@ -397,10 +385,11 @@ public class AttachmentStripperService {
             // Post event to EventBus for async processing
             eventBus.post(uploadEvent);
 
-            log.debug("Posted async upload event for attachment: {}", fileName);
+            log.debug("Posted async upload event for attachment: '{}'", fileName);
 
-            // Record successful attachment processing
+            // Record that we posted an upload event (compare with uploadSuccesses/uploadFailures in AttachmentUploadListener)
             attachmentsProcessed.add(1);
+
             return "[" + fileName + "]";
 
         } catch (IllegalArgumentException e) {
@@ -440,8 +429,6 @@ public class AttachmentStripperService {
             return extension.isEmpty() ? "bin" : extension;
 
         } catch (MimeTypeException e) {
-            log.debug("Unknown MIME type: {}, using fallback extension", mimeType);
-
             // Fallback: extract from MIME type (e.g., "image/png" -> "png")
             if (mimeType.contains("/")) {
                 String subtype = mimeType.substring(mimeType.indexOf("/") + 1);
@@ -469,93 +456,4 @@ public class AttachmentStripperService {
         }
     }
 
-    /**
-     * Upload attachment via multipart upload flow for S3.
-     *
-     * This method implements the complete S3 multipart upload flow:
-     * 1. Starts a multipart upload to get presigned URLs
-     * 2. Uploads the data to the presigned URL using HTTP PUT
-     * 3. Completes the multipart upload with the ETag from the upload response
-     */
-    private void uploadAttachmentViaMultipart(AttachmentInfo attachmentInfo, byte[] bytes,
-            String workspaceId, String userName) throws IOException, InterruptedException {
-        try {
-            // Step 1: Start multipart upload
-            StartMultipartUploadRequest startRequest = StartMultipartUploadRequest.builder()
-                    .fileName(attachmentInfo.fileName())
-                    .mimeType(attachmentInfo.mimeType())
-                    .entityType(attachmentInfo.entityType())
-                    .entityId(attachmentInfo.entityId())
-                    .projectName(attachmentInfo.projectName())
-                    .numOfFileParts(1) // Single part since we have all data in memory
-                    .path("placeholder") // irrelevant; S3 doesn't use it and for Minio we did in another flow
-                    .build();
-
-            StartMultipartUploadResponse startResponse = attachmentService.startMultiPartUpload(startRequest,
-                    workspaceId,
-                    userName);
-
-            // Step 2: Upload the data to the presigned URL and get the ETag
-            String uploadUrl = startResponse.preSignUrls().get(0); // First (and only) URL
-            String eTag = uploadDataToPresignedUrl(uploadUrl, bytes);
-
-            // Step 3: Complete multipart upload with the actual ETag
-            MultipartUploadPart part = MultipartUploadPart.builder()
-                    .partNumber(1)
-                    .eTag(eTag) // Use the actual ETag from the upload response
-                    .build();
-
-            CompleteMultipartUploadRequest completeRequest = CompleteMultipartUploadRequest.builder()
-                    .fileName(attachmentInfo.fileName())
-                    .projectName(attachmentInfo.projectName())
-                    .entityType(attachmentInfo.entityType())
-                    .entityId(attachmentInfo.entityId())
-                    .fileSize((long) bytes.length)
-                    .mimeType(attachmentInfo.mimeType())
-                    .uploadId(startResponse.uploadId())
-                    .uploadedFileParts(Collections.singletonList(part))
-                    .build();
-
-            attachmentService.completeMultiPartUpload(completeRequest, workspaceId, userName);
-
-        } catch (IOException | InterruptedException e) {
-            log.error("Failed to upload attachment '{}' via multipart upload: {}",
-                    attachmentInfo.fileName(), e.getMessage());
-            throw e; // Re-throw for caller to handle
-        } catch (Exception e) {
-            log.error("Unexpected error during multipart upload for attachment '{}': {}",
-                    attachmentInfo.fileName(), e.getMessage(), e);
-            // Wrap unexpected exceptions in IOException for consistent error handling
-            throw new IOException("Multipart upload failed: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Upload data to a presigned URL using HTTP PUT.
-     *
-     * Performs a synchronous HTTP PUT request to upload binary data to the provided presigned URL.
-     * The ETag from the response headers is required for completing the multipart upload.
-     */
-    private String uploadDataToPresignedUrl(String presignedUrl, byte[] data) throws IOException, InterruptedException {
-        HttpClient client = HttpClient.newHttpClient();
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(presignedUrl))
-                .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new IOException(
-                    "Failed to upload data to presigned URL: " + response.statusCode() + " " + response.body());
-        }
-
-        // Extract and return the ETag from response headers
-        String eTag = response.headers().firstValue("ETag").orElseThrow(
-                () -> new IOException("ETag not found in upload response headers"));
-
-        log.debug("Successfully uploaded data to presigned URL, ETag: {}", eTag);
-        return eTag;
-    }
 }

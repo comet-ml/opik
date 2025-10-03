@@ -19,7 +19,6 @@ import java.util.UUID;
 import static com.comet.opik.utils.AttachmentPayloadUtilsTest.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -28,9 +27,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AttachmentStripperServiceTest {
-
-    @Mock
-    private AttachmentService attachmentService;
 
     @Mock
     private IdGenerator idGenerator;
@@ -66,7 +62,7 @@ class AttachmentStripperServiceTest {
 
         // Use OpenTelemetry no-op implementation and EventBus mock for async uploads
         attachmentStripperService = new AttachmentStripperService(
-                attachmentService, idGenerator, objectMapper, opikConfiguration, eventBus);
+                idGenerator, objectMapper, opikConfiguration, eventBus);
     }
 
     @Test
@@ -78,7 +74,7 @@ class AttachmentStripperServiceTest {
 
         // Then
         assertThat(result).isNull();
-        verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
+        verify(eventBus, never()).post(any());
     }
 
     @Test
@@ -107,7 +103,7 @@ class AttachmentStripperServiceTest {
 
         // Then
         assertThat(result).isEqualTo(input); // Should be unchanged
-        verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
+        verify(eventBus, never()).post(any());
     }
 
     @Test

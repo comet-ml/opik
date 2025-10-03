@@ -97,8 +97,6 @@ public class AttachmentUploadListener {
      */
     @Subscribe
     public void processAttachmentUpload(AttachmentUploadRequested event) {
-        log.debug("Processing async attachment upload for file: '{}'", event.fileName());
-
         long startTime = System.currentTimeMillis();
         uploadAttempts.add(1);
 
@@ -119,8 +117,6 @@ public class AttachmentUploadListener {
             if (config.getS3Config().isMinIO()) {
                 // MinIO: Use direct upload
                 attachmentService.uploadAttachment(attachmentInfo, fileData, event.workspaceId(), event.userName());
-                log.debug("MinIO direct upload completed for file: '{}'", attachmentInfo.fileName());
-
             } else {
                 // S3: Use multipart upload with presigned URLs
                 uploadToS3(attachmentInfo, fileData, event.workspaceId(), event.userName());
@@ -132,8 +128,9 @@ public class AttachmentUploadListener {
             uploadSuccesses.add(1);
             uploadBytes.add(fileData.length);
 
-            log.debug("Successfully uploaded attachment: '{}' ({} bytes) to S3 in {}ms",
-                    event.fileName(), fileData.length, duration);
+            String destination = config.getS3Config().isMinIO() ? "MinIO" : "S3";
+            log.debug("Successfully uploaded attachment: '{}' ({} bytes) to {} in {}ms",
+                    event.fileName(), fileData.length, destination, duration);
 
         } catch (Exception e) {
             // Record failure metrics
@@ -151,7 +148,6 @@ public class AttachmentUploadListener {
                 log.error("Failed to process attachment upload for file: '{}' after {}ms, error: {}",
                         event.fileName(), duration, e.getMessage(), e);
             }
-            // TODO: Consider implementing retry logic or dead letter queue
         }
     }
 
@@ -212,9 +208,6 @@ public class AttachmentUploadListener {
                 .build();
 
         attachmentService.completeMultiPartUpload(completeRequest, workspaceId, userName);
-
-        log.debug("S3 multipart upload completed for file: '{}', uploadId: '{}'",
-                attachmentInfo.fileName(), startResponse.uploadId());
     }
 
 }

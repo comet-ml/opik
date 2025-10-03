@@ -195,8 +195,7 @@ class AttachmentUploadListenerTest {
 
         // Mock HTTP client to return error status
         HttpResponse<String> httpResponse = mock(HttpResponse.class);
-        when(httpResponse.statusCode()).thenReturn(403); // Forbidden
-        when(httpResponse.body()).thenReturn("Access Denied");
+        when(httpResponse.statusCode()).thenReturn(403); // Forbidden (non-retryable)
         when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                 .thenReturn(httpResponse);
 
@@ -204,6 +203,7 @@ class AttachmentUploadListenerTest {
         listener.processAttachmentUpload(event);
 
         // Then - Start should be called but complete should not be called due to HTTP failure
+        // Note: 403 is non-retryable, so httpClient.send() should be called only once (no retries)
         verify(attachmentService).startMultiPartUpload(any(), eq("workspace-id"), eq("user-name"));
         verify(httpClient).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
         verify(attachmentService, never()).completeMultiPartUpload(any(), any(), any());
