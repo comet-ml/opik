@@ -697,22 +697,25 @@ function Stop-Frontend {
     # Clean up any orphaned processes by looking for processes with our frontend directory path
     # This is safe and compatible across Windows and Unix systems in PowerShell
     $orphanedPids = Get-Process | Where-Object {
-        $_.Path -and $_.Path -like "*$FRONTEND_DIR*"
+        $_.Path -and $_.Path -like "*$script:FRONTEND_DIR*"
     } | Select-Object -ExpandProperty Id
 
     if ($orphanedPids) {
         foreach ($orphanPid in $orphanedPids) {
-                $process = Get-Process -Id $orphanPid -ErrorAction Stop
-                $processInfo = "$($process.ProcessName) $($process.Path)"
+                $process = Get-Process -Id $orphanPid -ErrorAction SilentlyContinue
+                if ($process) {
+                    # Get process info to verify it's actually our frontend process
+                    $processInfo = "$($process.ProcessName) $($process.Path)"
 
-                # Only kill if it's an npm/node/vite process AND contains our directory path
-                if ($process.ProcessName -match 'npm|node|vite' -and $process.Path -like "*$FRONTEND_DIR*") {
-                    Write-Warning "Cleaning up orphaned process: PID $orphanPid - $processInfo"
-                    Stop-Process -Id $orphanPid -ErrorAction SilentlyContinue
-                    Start-Sleep -Seconds 1
-                    # Force kill if still running
-                    if (Get-Process -Id $orphanPid -ErrorAction SilentlyContinue) {
-                        Stop-Process -Id $orphanPid -Force -ErrorAction SilentlyContinue
+                    # Only kill if it's an npm/node/vite process AND contains our directory path
+                    if ($process.ProcessName -match 'npm|node|vite' -and $process.Path -like "*$script:FRONTEND_DIR*") {
+                        Write-LogWarning "Cleaning up orphaned process: PID $orphanPid - $processInfo"
+                        Stop-Process -Id $orphanPid -ErrorAction SilentlyContinue
+                        Start-Sleep -Seconds 1
+                        # Force kill if still running
+                        if (Get-Process -Id $orphanPid -ErrorAction SilentlyContinue) {
+                            Stop-Process -Id $orphanPid -Force -ErrorAction SilentlyContinue
+                        }
                     }
                 }
         }
