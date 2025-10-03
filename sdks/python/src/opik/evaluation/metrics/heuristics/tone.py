@@ -105,7 +105,7 @@ class ToneGuard(BaseMetric):
             raise MetricComputationError("Unable to tokenize text for ToneGuard.")
 
         sentiment_score = self._compute_sentiment(tokens)
-        upper_ratio = self._uppercase_ratio(output)
+        upper_ratio = _uppercase_ratio(output)
         exclamation_count = output.count("!")
         forbidden_hit = any(phrase in output.lower() for phrase in self._forbidden)
 
@@ -146,10 +146,9 @@ class ToneGuard(BaseMetric):
             return 0.0
         return (pos_hits - neg_hits) / total
 
-    @staticmethod
-    def _uppercase_ratio(text: str) -> float:
-        letters = [char for char in text if char.isalpha()]
-        if not letters:
-            return 0.0
-        upper = sum(1 for char in letters if char.isupper())
-        return upper / len(letters)
+def _uppercase_ratio(text: str) -> float:
+    letters = [char for char in text if char.isalpha()]
+    if not letters:
+        return 0.0
+    upper = sum(1 for char in letters if char.isupper())
+    return upper / len(letters)
