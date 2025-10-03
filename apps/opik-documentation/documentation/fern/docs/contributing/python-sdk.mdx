@@ -11,17 +11,13 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
 
 <Steps>
   ### 1. Set up Opik Locally
-  To develop and test Python SDK features, you'll need a local Opik instance running. We recommend starting only the infrastructure services for faster SDK development:
+  To develop and test Python SDK features, you'll need a local Opik instance running:
 
   <Tabs>
     <Tab title="Linux/Mac">
     ```bash
     # From the root of the repository
-    # Recommended for SDK development - only starts infrastructure
-    ./opik.sh --infra --port-mapping
-
-    # Alternatively, start the full stack (slower)
-    # ./opik.sh
+    ./opik.sh --port-mapping
 
     # Configure the Python SDK to point to the local Opik deployment
     opik configure --use_local
@@ -30,11 +26,7 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
     <Tab title="Windows">
     ```powershell
     # From the root of the repository
-    # Recommended for SDK development - only starts infrastructure
-    .\opik.ps1 --infra --port-mapping
-
-    # Alternatively, start the full stack (slower)
-    # .\opik.ps1
+    .\opik.ps1 --port-mapping
 
     # Configure the Python SDK to point to the local Opik deployment
     opik configure --use_local
@@ -42,11 +34,7 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
     </Tab>
   </Tabs>
 
-  **Infrastructure-only mode** (`--infra --port-mapping`) is recommended for SDK development because:
-  - Faster startup and shutdown
-  - Less resource intensive
-  - No need to rebuild backend/frontend when only testing SDK changes
-  - Direct access to backend services (MySQL on 3306, ClickHouse on 8123, Redis on 6379)
+  **Note:** The `--port-mapping` flag exposes all service ports (including MySQL on 3306, ClickHouse on 8123, Redis on 6379) which is useful for debugging. The Python SDK routes traffic through the API gateway (nginx) in the frontend service.
 
   Your local Opik server will be accessible at `http://localhost:5173`.
 
