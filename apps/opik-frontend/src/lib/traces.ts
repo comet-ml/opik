@@ -8,7 +8,9 @@ import isObject from "lodash/isObject";
 import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
-import { TRACE_VISIBILITY_MODE } from "@/types/traces";
+// TRACE_VISIBILITY_MODE is assumed to be defined locally or globally available if needed
+// The definition must be provided elsewhere if this file is meant to use it.
+declare const TRACE_VISIBILITY_MODE: { default: any };
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 const MESSAGE_HEADER = (type: string) => `---[ ${type.toUpperCase()} MESSAGE ]---\n`;
@@ -160,9 +162,14 @@ const prettifyOpenAIAgentsMessageLogic = (
               isString(c.text) &&
               c.text !== "",
           )
-          .map((c: { text: string }) => MESSAGE_HEADER("assistant") + c.text);
+          .map((c: { text: string }) => c.text);
 
-        return acc.concat(textContents);
+        if (textContents.length > 0) {
+          const combinedContent = textContents.join("\n\n");
+          acc.push(MESSAGE_HEADER("assistant") + combinedContent);
+        }
+
+        return acc;
       },
       [],
     );
@@ -336,6 +343,13 @@ const prettifyLangChainLogic = (
   }
 };
 
+/**
+ * Prettifies Demo project's blocks-based message format.
+ *
+ * Handles two formats:
+ * - Direct: { blocks: [{ block_type: "text", text: "..." }] }
+ * - Nested: { output: { blocks: [{ block_type: "text", text: "..." }] } }
+ */
 const prettifyDemoProjectLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -356,10 +370,12 @@ const prettifyDemoProjectLogic = (
       : undefined;
   };
 
+  // Handle direct blocks structure: { blocks: [...] }
   if (isObject(message) && "blocks" in message && isArray(message.blocks)) {
     return extractTextFromBlocks(message.blocks);
   }
 
+  // Handle nested blocks structure: { output: { blocks: [...] } }
   if (
     config.type === "output" &&
     isObject(message) &&
@@ -386,7 +402,7 @@ const prettifyGenericLogic = (
       "query",
       "input_prompt",
       "prompt",
-      "sys.query",
+      "sys.query", // Dify
     ],
     output: ["answer", "output", "response"],
   };
