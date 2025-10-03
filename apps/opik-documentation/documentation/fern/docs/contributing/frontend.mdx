@@ -21,13 +21,26 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
 
     This mode runs the frontend as a local process with Vite's dev server, providing instant hot reload when you save files:
 
-    ```bash
-    # From repository root - restart everything
-    scripts/dev-runner.sh
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root - restart everything
+        scripts/dev-runner.sh
 
-    # Or just start (faster if already built)
-    scripts/dev-runner.sh --start
-    ```
+        # Or just start (faster if already built)
+        scripts/dev-runner.sh --start
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root - restart everything
+        scripts\dev-runner.ps1
+
+        # Or just start (faster if already built)
+        scripts\dev-runner.ps1 --start
+        ```
+      </Tab>
+    </Tabs>
 
     Access the UI at `http://localhost:5174` (Vite dev server with hot reload).
 
@@ -48,13 +61,26 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
 
     This mode runs everything in Docker containers:
 
-    ```bash
-    # From repository root
-    ./opik.sh --build
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root
+        ./opik.sh --build
 
-    # Or start without rebuilding
-    ./opik.sh
-    ```
+        # Or start without rebuilding
+        ./opik.sh
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root
+        .\opik.ps1 --build
+
+        # Or start without rebuilding
+        .\opik.ps1
+        ```
+      </Tab>
+    </Tabs>
 
     Access the UI at `http://localhost:5173`.
 
@@ -72,30 +98,60 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
 
     Set up each component manually:
 
-    1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
-       ```bash
-       ./opik.sh --backend --port-mapping
-       ```
-      Check that the backend is running: http://localhost:8080/is-alive/ping
+    <Tabs>
+      <Tab title="Linux/Mac">
+        1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
+           ```bash
+           ./opik.sh --backend --port-mapping
+           ```
+          Check that the backend is running: http://localhost:8080/is-alive/ping
 
-    2. **Configure environment variables:**
-       Update `apps/opik-frontend/.env.development`:
-       ```ini
-       VITE_BASE_URL=/
-       VITE_BASE_API_URL=http://localhost:8080
-       ```
-      This tells the frontend development server where to find the backend API.
+        2. **Configure environment variables:**
+           Update `apps/opik-frontend/.env.development`:
+           ```ini
+           VITE_BASE_URL=/
+           VITE_BASE_API_URL=http://localhost:8080
+           ```
+          This tells the frontend development server where to find the backend API.
 
-    3. **Install dependencies:**
-       ```bash
-       cd apps/opik-frontend
-       npm install
-       ```
+        3. **Install dependencies:**
+           ```bash
+           cd apps/opik-frontend
+           npm install
+           ```
 
-    4. **Start the frontend:**
-       ```bash
-       npm run start
-       ```
+        4. **Start the frontend:**
+           ```bash
+           npm run start
+           ```
+      </Tab>
+      <Tab title="Windows">
+        1. **Start backend services:** this enables `CORS: true` in the backend service for local frontend development.
+           ```powershell
+           .\opik.ps1 --backend --port-mapping
+           ```
+          Check that the backend is running: http://localhost:8080/is-alive/ping
+
+        2. **Configure environment variables:**
+           Update `apps\opik-frontend\.env.development`:
+           ```ini
+           VITE_BASE_URL=/
+           VITE_BASE_API_URL=http://localhost:8080
+           ```
+          This tells the frontend development server where to find the backend API.
+
+        3. **Install dependencies:**
+           ```powershell
+           cd apps\opik-frontend
+           npm install
+           ```
+
+        4. **Start the frontend:**
+           ```powershell
+           npm run start
+           ```
+      </Tab>
+    </Tabs>
 
     Access the UI at `http://localhost:5174`.
 
@@ -107,16 +163,48 @@ We provide multiple ways to develop the frontend. Choose the approach that best 
 
 For comprehensive documentation on all development modes, troubleshooting, and advanced workflows, see our [Local Development Guide](/contributing/local-development).
 
-### 8. Making Changes and Submitting a PR
+### 4. Code Quality Checks
 
-Now you can make your code changes in the `apps/opik-frontend` directory. Before submitting a Pull Request, please ensure your code passes the following checks:
+Before submitting a Pull Request, please ensure your code passes the following checks:
+
+#### Linting
+
+<Tabs>
+  <Tab value="Using dev-runner" title="Using dev-runner (Recommended)">
+    <Tabs>
+      <Tab title="Linux/Mac">
+        ```bash
+        # From repository root
+        scripts/dev-runner.sh --lint-fe
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        # From repository root
+        scripts\dev-runner.ps1 --lint-fe
+        ```
+      </Tab>
+    </Tabs>
+  </Tab>
+  <Tab value="Manual npm" title="Manual npm">
+    ```bash
+    cd apps/opik-frontend
+    npm run lint
+    ```
+  </Tab>
+</Tabs>
+
+#### Type Checking and E2E Tests
+
+Run these commands from the `apps/opik-frontend` directory:
 
 ```bash
 cd apps/opik-frontend
 
-npm run e2e       # End-to-end tests
-npm run lint      # Linter checks
 npm run typecheck # TypeScript type checking
+npm run e2e       # End-to-end tests
 ```
 
-Commit your changes and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
+### 5. Submitting a Pull Request
+
+After implementing your changes and ensuring all checks pass, commit your work and open a Pull Request against the `main` branch of the `comet-ml/opik` repository.
