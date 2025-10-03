@@ -22,6 +22,29 @@ The TypeScript SDK is located in the `sdks/typescript` directory. Here's an over
 ## Setup
 
 <Steps>
+  <Step title="Set up Opik Locally">
+    To develop and test TypeScript SDK features, you'll need a local Opik instance running:
+
+    <Tabs>
+      <Tab title="Linux/Mac">
+      ```bash
+      # From the root of the repository
+      ./opik.sh --port-mapping
+      ```
+      </Tab>
+      <Tab title="Windows">
+      ```powershell
+      # From the root of the repository
+      .\opik.ps1 --port-mapping
+      ```
+      </Tab>
+    </Tabs>
+
+    **Note:** The `--port-mapping` flag exposes all service ports (including MySQL on 3306, ClickHouse on 8123, Redis on 6379) which is useful for debugging. The TypeScript SDK routes traffic through the API gateway (nginx) in the frontend service.
+
+    Your local Opik server will be accessible at `http://localhost:5173`.
+  </Step>
+
   <Step title="Install dependencies">```bash cd sdks/typescript npm install ```</Step>
   <Step title="Build the SDK">```bash npm run build ```</Step>
   <Step title="Run tests">```bash npm test ```</Step>

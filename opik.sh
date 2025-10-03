@@ -454,6 +454,8 @@ fi
 
 if [[ "$*" == *"--backend"* ]]; then
   BACKEND=true
+  # Enable CORS for frontend development
+  export CORS=true
   # Remove the flag from arguments
   set -- ${@/--backend/}
 fi
