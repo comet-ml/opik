@@ -164,23 +164,6 @@ print(score.value, score.reason)
 
 Lower scores suggest the agent mis-handled tool results or skipped required invocations.
 
-### RevisEval Judge
-Runs a retrieval-augmented verification pass before scoring. The judge may suggest revisions based on the fetched evidence, making it handy when you need self-correction feedback alongside a score.
-
-```python title="RevisEval"
-from opik.evaluation.metrics import RevisEvalJudge
-
-metric = RevisEvalJudge()
-score = metric.score(
-    input="Document: ...",
-    output="Summary: ...",
-)
-print(score.value, score.reason)
-print(score.metadata.get("revision_suggestion"))
-```
-
-Because RevisEval performs retrieval internally, ensure you configure API credentials for the underlying search provider.
-
 ### Trajectory Accuracy
 Scores whether an agent’s trajectory (series of states or actions) matches the expected path. Use it to audit reinforcement-learning agents or scripted flows that should follow specific checkpoints.
 
