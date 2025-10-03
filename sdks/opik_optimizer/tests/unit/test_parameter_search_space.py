@@ -1,11 +1,11 @@
 import pytest
 
 from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
-from opik_optimizer.parameter_optimizer.search_space import (
+from opik_optimizer.parameter_optimizer.parameter_search_space import (
     ParameterSearchSpace,
-    ParameterSpec,
-    ParameterType,
 )
+from opik_optimizer.parameter_optimizer.parameter_spec import ParameterSpec
+from opik_optimizer.parameter_optimizer.search_space_types import ParameterType
 
 
 def test_parameter_space_from_dict() -> None:
@@ -48,7 +48,9 @@ def test_apply_updates_prompt_without_mutating_original() -> None:
 
     space = ParameterSearchSpace(
         parameters=[
-            ParameterSpec(name="temperature", type=ParameterType.FLOAT, low=0.0, high=1.0),
+            ParameterSpec(
+                name="temperature", type=ParameterType.FLOAT, low=0.0, high=1.0
+            ),
             ParameterSpec(
                 name="top_k",
                 type=ParameterType.INT,
@@ -82,7 +84,9 @@ def test_apply_updates_prompt_without_mutating_original() -> None:
 def test_values_to_model_kwargs_merges_base() -> None:
     space = ParameterSearchSpace(
         parameters=[
-            ParameterSpec(name="temperature", type=ParameterType.FLOAT, low=0.0, high=1.0),
+            ParameterSpec(
+                name="temperature", type=ParameterType.FLOAT, low=0.0, high=1.0
+            ),
             ParameterSpec(
                 name="presence",
                 type=ParameterType.FLOAT,

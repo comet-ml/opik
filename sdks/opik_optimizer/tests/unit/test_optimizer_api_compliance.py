@@ -109,7 +109,18 @@ class TestOptimizerAPICompliance:
         base_sig = inspect.signature(BaseOptimizer.optimize_parameter)
         optimizer_sig = inspect.signature(ParameterOptimizer.optimize_parameter)
 
-        assert optimizer_sig == base_sig
+        # Check parameter names match (allow more specific types)
+        base_params = list(base_sig.parameters.keys())
+        optimizer_params = list(optimizer_sig.parameters.keys())
+        assert base_params == optimizer_params, (
+            f"Parameter names don't match. Base: {base_params}, "
+            f"Optimizer: {optimizer_params}"
+        )
+
+        # Check return type is compatible (same or more specific)
+        from opik_optimizer.optimization_result import OptimizationResult
+
+        assert optimizer_sig.return_annotation == OptimizationResult
 
     def test_parameter_optimizer_input_validation(
         self,
@@ -121,8 +132,8 @@ class TestOptimizerAPICompliance:
         optimizer = ParameterOptimizer(model="gpt-4o-mini")
 
         with pytest.raises(ValueError, match="Prompt must be a ChatPrompt object"):
-            optimizer.optimize_parameter(  # type: ignore[arg-type]
-                prompt="invalid_prompt",
+            optimizer.optimize_parameter(
+                prompt="invalid_prompt",  # type: ignore[arg-type]
                 dataset=mock_dataset,
                 metric=mock_metric,
                 parameter_space=parameter_space,

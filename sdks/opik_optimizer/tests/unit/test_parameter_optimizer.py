@@ -4,10 +4,14 @@ import pytest
 
 from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
 from opik_optimizer.parameter_optimizer.parameter_optimizer import ParameterOptimizer
-from opik_optimizer.parameter_optimizer.search_space import ParameterSearchSpace
+from opik_optimizer.parameter_optimizer.parameter_search_space import (
+    ParameterSearchSpace,
+)
 
 
-def test_parameter_optimizer_selects_best_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parameter_optimizer_selects_best_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     optimizer = ParameterOptimizer(
         model="gpt-4o-mini",
         default_n_trials=2,
@@ -47,7 +51,9 @@ def test_parameter_optimizer_selects_best_parameters(monkeypatch: pytest.MonkeyP
         return float(prompt.model_kwargs.get("temperature", 0.0))
 
     monkeypatch.setattr(ParameterSearchSpace, "suggest", fake_suggest, raising=False)
-    monkeypatch.setattr(ParameterOptimizer, "evaluate_prompt", fake_evaluate, raising=False)
+    monkeypatch.setattr(
+        ParameterOptimizer, "evaluate_prompt", fake_evaluate, raising=False
+    )
     monkeypatch.setattr(
         ParameterOptimizer,
         "validate_optimization_inputs",
