@@ -23,7 +23,7 @@ const CONFIG_FILE_PATH_DEFAULT = "~/.opik.config";
 
 export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions">> = {
   apiKey: "",
-  apiUrl: "http://localhost:5173/api",
+  apiUrl: "https://www.comet.com/opik/api",
   projectName: "Default Project",
   workspaceName: "default",
   batchDelayMs: 300,
@@ -114,9 +114,7 @@ export function validateConfig(config: OpikConfig) {
     throw new Error("OPIK_API_KEY is not set");
   }
 
-  if (
-    isCloudHost && (!config.workspaceName)
-  ) {
+  if (isCloudHost && !config.workspaceName) {
     throw new Error("OPIK_WORKSPACE is not set");
   }
 

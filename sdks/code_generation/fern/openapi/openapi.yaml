@@ -162,6 +162,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/TraceCountResponse"
   /v1/private/alerts:
+    get:
+      tags:
+      - Alerts
+      summary: Find alerts
+      description: Find alerts
+      operationId: findAlerts
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertPage_Public"
     post:
       tags:
       - Alerts
@@ -4794,6 +4830,26 @@ components:
           items:
             type: string
             format: uuid
+    AlertPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert_Public"
+        sortable_by:
+          type: array
+          items:
+            type: string
     AlertTriggerConfig_Public:
       required:
       - type
@@ -5414,6 +5470,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter"
         created_at:
           type: string
           format: date-time
@@ -5571,6 +5631,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     TraceThreadLlmAsJudgeCode:
       required:
       - messages
@@ -5683,6 +5767,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Write"
         type:
           type: string
           enum:
@@ -5770,6 +5858,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceFilter_Write:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     TraceThreadLlmAsJudgeCode_Write:
       required:
       - messages
@@ -5847,6 +5959,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -6006,6 +6122,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     TraceThreadLlmAsJudgeCode_Public:
       required:
       - messages
@@ -6069,6 +6209,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -6161,6 +6305,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter"
         project_id:
           type: string
           format: uuid
@@ -9623,30 +9771,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThreadFilter_Public"
-    TraceFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     TraceThreadFilter_Public:
       type: object
       properties:
