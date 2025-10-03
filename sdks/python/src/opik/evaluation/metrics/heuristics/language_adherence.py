@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Callable, Optional, Tuple
 
+from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik.exceptions import MetricComputationError
 
 try:  # optional dependency
     import fasttext
 except ImportError:  # pragma: no cover
     fasttext = None  # type: ignore
+
+
+DetectorFn = Callable[[str], Tuple[str, float]]
 
 
 class LanguageAdherenceMetric(BaseMetric):
@@ -52,32 +55,38 @@ class LanguageAdherenceMetric(BaseMetric):
         name: str = "language_adherence_metric",
         track: bool = True,
         project_name: Optional[str] = None,
-        detector: Optional[Any] = None,
+        detector: Optional[DetectorFn] = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._expected_language = expected_language
+        self._detector_fn: DetectorFn
         self._model_path = model_path
 
+        self._fasttext_model: Optional[Any]
+
         if detector is not None:
-            self._detector = detector
-        else:
-            if fasttext is None:
-                raise ImportError(
-                    "Install fasttext via `pip install fasttext` and provide a fastText language"
-                    " model (e.g., lid.176.ftz) or supply a custom detector callable."
-                )
-            if model_path is None:
-                raise ValueError(
-                    "model_path is required when using the fastText-based detector."
-                )
-            self._detector = fasttext.load_model(model_path)
+            self._detector_fn = detector
+            self._fasttext_model = None
+            return
+
+        if fasttext is None:
+            raise ImportError(
+                "Install fasttext via `pip install fasttext` and provide a fastText language"
+                " model (e.g., lid.176.ftz) or supply a custom detector callable."
+            )
+        if model_path is None:
+            raise ValueError(
+                "model_path is required when using the fastText-based detector."
+            )
+        self._fasttext_model = fasttext.load_model(model_path)
+        self._detector_fn = self._predict_with_fasttext
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
-        processed = self._preprocess(output)
+        processed = output
         if not processed.strip():
             raise MetricComputationError("Text is empty for language adherence check.")
 
-        language, confidence = self._detect_language(processed)
+        language, confidence = self._detector_fn(processed)
         adherence = 1.0 if language == self._expected_language else 0.0
 
         metadata = {
@@ -96,11 +105,9 @@ class LanguageAdherenceMetric(BaseMetric):
             value=adherence, name=self.name, reason=reason, metadata=metadata
         )
 
-    def _detect_language(self, text: str) -> tuple[str, float]:
-        if callable(self._detector):
-            return self._detector(text)
-
-        prediction = self._detector.predict(text)
+    def _predict_with_fasttext(self, text: str) -> tuple[str, float]:
+        assert self._fasttext_model is not None
+        prediction = self._fasttext_model.predict(text)
         label = prediction[0][0] if prediction[0] else ""
         language = label.replace("__label__", "")
         confidence = float(prediction[1][0]) if prediction[1] else 0.0
