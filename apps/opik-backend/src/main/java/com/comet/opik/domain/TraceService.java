@@ -149,7 +149,7 @@ class TraceServiceImpl implements TraceService {
 
                     // Strip attachments from the trace with the generated ID and project ID
                     Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
-                    return attachmentStripperService.stripAttachmentsFromTrace(traceWithId, workspaceId,
+                    return attachmentStripperService.stripAttachments(traceWithId, workspaceId,
                             userName, projectName)
                             .flatMap(processedTrace -> lockService.executeWithLock(
                                     new LockService.Lock(id, TRACE_KEY),
@@ -194,7 +194,7 @@ class TraceServiceImpl implements TraceService {
                             .collectList()
                             .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
                             .flatMapMany(Flux::fromIterable)
-                            .flatMap(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId,
+                            .flatMap(trace -> attachmentStripperService.stripAttachments(trace, workspaceId,
                                     userName,
                                     trace.projectName()))
                             .collectList();
@@ -337,7 +337,7 @@ class TraceServiceImpl implements TraceService {
                     String projectName = project.name();
 
                     // Strip attachments from the new trace data before inserting
-                    return attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                    return attachmentStripperService.stripAttachments(
                             traceUpdate, id, workspaceId, userName, projectName)
                             .flatMap(processedUpdate -> template.nonTransaction(
                                     connection -> dao.partialInsert(project.id(), processedUpdate, id, connection)));
@@ -358,7 +358,7 @@ class TraceServiceImpl implements TraceService {
             return attachmentService.getAttachmentInfoByEntity(id, EntityType.TRACE, trace.projectId())
                     .flatMap(existingAttachments ->
             // Step 2: Strip attachments OUTSIDE the database transaction
-            attachmentStripperService.stripAttachmentsFromTraceUpdate(
+            attachmentStripperService.stripAttachments(
                     traceUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate ->
             // Step 3: Update in database transaction
