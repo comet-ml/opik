@@ -467,7 +467,6 @@ stop_frontend() {
     ORPHANED_PIDS=$(pgrep -f "$FRONTEND_DIR" 2>/dev/null || true)
     
     if [ -n "$ORPHANED_PIDS" ]; then
-        log_warning "Found potential orphaned processes related to $FRONTEND_DIR..."
         for PID in $ORPHANED_PIDS; do
             if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
                 # Get process info to verify it's actually our frontend process
