@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Set
+import functools
+from typing import Callable, List, Optional, Sequence, Set
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -93,17 +94,13 @@ class KnowledgeRetentionMetric(BaseMetric):
         project_name: Optional[str] = None,
         turns_to_consider: int = 5,
     ) -> None:
-        super().__init__(
-            name=name,
-            track=track,
-            project_name=project_name,
-            preprocessor=lambda text: normalize_text(
-                text,
-                keep_emoji=False,
-                remove_punctuation=True,
-            ),
-        )
+        super().__init__(name=name, track=track, project_name=project_name)
         self._turns_to_consider = turns_to_consider
+        self._normalizer: Callable[[str], str] = functools.partial(
+            normalize_text,
+            keep_emoji=False,
+            remove_punctuation=True,
+        )
 
     def score(
         self,
@@ -156,7 +153,7 @@ class KnowledgeRetentionMetric(BaseMetric):
     def _extract_terms(self, texts: Sequence[str]) -> Set[str]:
         tokens: Set[str] = set()
         for text in texts:
-            normalized = self._preprocess(text)
+            normalized = self._normalizer(text)
             for token in normalized.split():
                 token = token.strip()
                 if len(token) < _MIN_TOKEN_LENGTH or token in _STOPWORDS:
@@ -168,6 +165,6 @@ class KnowledgeRetentionMetric(BaseMetric):
         if "?" in text:
             return True
 
-        normalized = self._preprocess(text)
+        normalized = self._normalizer(text)
         tokens = set(normalized.split())
         return any(token in _REQUEST_KEYWORDS for token in tokens)

@@ -35,15 +35,15 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 
 | Metric | Description |
 | --- | --- |
-| BLEUC | Aggregates sentence-level BLEU across assistant turns (implemented by `BleuCMetric`). |
+| BLEUC | Aggregates sentence-level BLEU across assistant turns (implemented by `BleuConversationMetric`). |
 | DegenerationC | Detects repetition and low-entropy responses over a conversation (implemented by `ConversationDegenerationMetric`). |
 | Knowledge Retention | Checks whether the last assistant reply preserves user-provided facts from earlier turns. |
-| METEORC | Aggregates METEOR scores across assistant turns (implemented by `MeteorCMetric`). |
-| ROUGEC | Aggregates ROUGE scores across assistant turns (implemented by `RougeCMetric`). |
+| METEORC | Aggregates METEOR scores across assistant turns (implemented by `MeteorConversationMetric`). |
+| ROUGEC | Aggregates ROUGE scores across assistant turns (implemented by `RougeConversationMetric`). |
 
 > [!TIP]
 > Conversation heuristics accept full transcripts as input. Refer to the [Conversation metrics guide](/evaluation/metrics/conversation_threads_metrics) for detailed examples and configuration options.
-> The `*C` names map to classes such as `RougeCMetric`, `BleuCMetric`, and `MeteorCMetric`.
+> The `*C` names map to classes such as `RougeConversationMetric`, `BleuConversationMetric`, and `MeteorConversationMetric`.
 
 ## Score an LLM response
 

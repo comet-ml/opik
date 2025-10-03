@@ -41,11 +41,11 @@ Heuristic metrics are ideal when you need reproducible checks such as exact matc
 
 | Metric | Description | Documentation |
 | --- | --- | --- |
-| BLEUC | Aggregates sentence-level BLEU across assistant turns (via `BleuCMetric`) | [BLEUC](/evaluation/metrics/conversation_threads_metrics#bleucmetric) |
+| BLEUC | Aggregates sentence-level BLEU across assistant turns (via `BleuConversationMetric`) | [BLEUC](/evaluation/metrics/conversation_threads_metrics#bleu-conversation-metric) |
 | DegenerationC | Detects repetition and degeneration patterns over a conversation | [DegenerationC](/evaluation/metrics/conversation_threads_metrics#conversation-degeneration-metric) |
 | Knowledge Retention | Checks whether the last assistant reply preserves user facts from earlier turns | [Knowledge Retention](/evaluation/metrics/conversation_threads_metrics#knowledge-retention-metric) |
-| METEORC | Aggregates METEOR scores across assistant turns (via `MeteorCMetric`) | [METEORC](/evaluation/metrics/conversation_threads_metrics#meteorcmetric) |
-| ROUGEC | Aggregates ROUGE scores across assistant turns (via `RougeCMetric`) | [ROUGEC](/evaluation/metrics/conversation_threads_metrics#rougecmetric) |
+| METEORC | Aggregates METEOR scores across assistant turns (via `MeteorConversationMetric`) | [METEORC](/evaluation/metrics/conversation_threads_metrics#meteor-conversation-metric) |
+| ROUGEC | Aggregates ROUGE scores across assistant turns (via `RougeConversationMetric`) | [ROUGEC](/evaluation/metrics/conversation_threads_metrics#rouge-conversation-metric) |
 
 ### LLM as a Judge metrics
 
@@ -65,7 +65,6 @@ Heuristic metrics are ideal when you need reproducible checks such as exact matc
 | Prompt Perplexity Judge | Estimates how difficult a prompt is for models | [Prompt Diagnostics](/evaluation/metrics/prompt_diagnostics) |
 | Prompt Uncertainty Judge | Detects ambiguity in prompts that may confuse LLMs | [Prompt Diagnostics](/evaluation/metrics/prompt_diagnostics) |
 | QA Relevance Judge | Determines whether an answer directly addresses the user question | [QA Relevance](/evaluation/metrics/g_eval#qa-relevance-judge) |
-| RevisEval Judge | Uses retrieved evidence to revise and rescore an answer | [RevisEval](/evaluation/metrics/reviseval) |
 | Structured Output Compliance | Checks JSON or schema adherence for structured responses | [Structured Output](/evaluation/metrics/structure_output_compliance) |
 | Summarization Coherence Judge | Rates the structure and coherence of a summary | [Summarization Coherence](/evaluation/metrics/summarization_coherence) |
 | Summarization Consistency Judge | Checks if a summary stays faithful to the source | [Summarization Consistency](/evaluation/metrics/summarization_consistency) |

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ...heuristics.meteor import METEOR
+from ...heuristics import meteor as meteor_metric_module
 from ..reference_turn_metric import ConversationReferenceMetric
 
 
-class MeteorCMetric(ConversationReferenceMetric):
+class MeteorConversationMetric(ConversationReferenceMetric):
     """
     Aggregate per-turn METEOR scores into a single conversation-level value.
 
@@ -30,14 +30,14 @@ class MeteorCMetric(ConversationReferenceMetric):
             instantiating a new per-turn metric.
 
     Example:
-        >>> from opik.evaluation.metrics import MeteorCMetric
+        >>> from opik.evaluation.metrics import MeteorConversationMetric
         >>> convo = [
         ...     {"role": "assistant", "content": "The capital of France is Paris."},
         ... ]
         >>> reference = [
         ...     {"role": "assistant", "content": "Paris is the capital of France."},
         ... ]
-        >>> metric = MeteorCMetric()
+        >>> metric = MeteorConversationMetric()
         >>> result = metric.score(conversation=convo, reference_conversation=reference)
         >>> float(result.value)  # doctest: +SKIP
         0.99
@@ -45,15 +45,17 @@ class MeteorCMetric(ConversationReferenceMetric):
 
     def __init__(
         self,
-        meteor_metric: Optional[METEOR] = None,
+        meteor_metric: Optional[meteor_metric_module.METEOR] = None,
         target_role: str = "assistant",
         missing_turn_penalty: float = 0.0,
-        name: str = "meteor_c_metric",
+        name: str = "meteor_conversation_metric",
         track: bool = True,
         project_name: Optional[str] = None,
         **meteor_kwargs: Any,
     ) -> None:
-        turn_metric = meteor_metric or METEOR(track=False, **meteor_kwargs)
+        turn_metric = meteor_metric or meteor_metric_module.METEOR(
+            track=False, **meteor_kwargs
+        )
         super().__init__(
             turn_metric=turn_metric,
             target_role=target_role,

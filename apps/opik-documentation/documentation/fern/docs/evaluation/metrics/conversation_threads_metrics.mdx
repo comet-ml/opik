@@ -14,9 +14,9 @@ Opik provides two families of conversation metrics:
 | Metric | Description |
 | --- | --- |
 | KnowledgeRetentionMetric | Checks whether the final assistant replies retain earlier user-provided facts. |
-| RougeCMetric | Aggregates ROUGE scores across assistant turns in the thread. |
-| BleuCMetric | Aggregates BLEU scores across assistant turns. |
-| MeteorCMetric | Aggregates METEOR scores across assistant turns. |
+| RougeConversationMetric | Aggregates ROUGE scores across assistant turns in the thread. |
+| BleuConversationMetric | Aggregates BLEU scores across assistant turns. |
+| MeteorConversationMetric | Aggregates METEOR scores across assistant turns. |
 | ConversationDegenerationMetric | Detects repetition and degeneration patterns across the conversation. |
 
 ### Knowledge Retention Metric
@@ -31,36 +31,36 @@ score = metric.score(conversation=my_thread)
 print(score.value, score.reason)
 ```
 
-### RougeC Metric
+### Rouge Conversation Metric
 
-`RougeCMetric` computes ROUGE scores over every assistant message and averages them to provide a conversation-level quality signal. It relies on the same configuration options as the regular `ROUGE` metric (e.g. `rouge_type`, stemming, custom tokenizers).
+`RougeConversationMetric` computes ROUGE scores over every assistant message and averages them to provide a conversation-level quality signal. It relies on the same configuration options as the regular `ROUGE` metric (e.g. `rouge_type`, stemming, custom tokenizers).
 
 ```python
-from opik.evaluation.metrics import RougeCMetric
+from opik.evaluation.metrics import RougeConversationMetric
 
-metric = RougeCMetric(rouge_type="rougeL")
+metric = RougeConversationMetric(rouge_type="rougeL")
 score = metric.score(conversation=my_thread, references=my_reference_thread)
 ```
 
-### BleuC Metric
+### Bleu Conversation Metric
 
-`BleuCMetric` aggregates sentence-level BLEU scores for each assistant turn and reports the conversation average. It accepts the same parameters as `SentenceBLEU`, including n-gram weighting and smoothing methods.
+`BleuConversationMetric` aggregates sentence-level BLEU scores for each assistant turn and reports the conversation average. It accepts the same parameters as `SentenceBLEU`, including n-gram weighting and smoothing methods.
 
 ```python
-from opik.evaluation.metrics import BleuCMetric
+from opik.evaluation.metrics import BleuConversationMetric
 
-metric = BleuCMetric(n_grams=4)
+metric = BleuConversationMetric(n_grams=4)
 score = metric.score(conversation=my_thread, references=my_reference_thread)
 ```
 
-### MeteorC Metric
+### Meteor Conversation Metric
 
-`MeteorCMetric` extends the standard METEOR metric to conversations by scoring each assistant message and averaging the results. You can forward all arguments supported by `METEOR` (language, stemmer, smoothing, etc.).
+`MeteorConversationMetric` extends the standard METEOR metric to conversations by scoring each assistant message and averaging the results. You can forward all arguments supported by `METEOR` (language, stemmer, smoothing, etc.).
 
 ```python
-from opik.evaluation.metrics import MeteorCMetric
+from opik.evaluation.metrics import MeteorConversationMetric
 
-metric = MeteorCMetric()
+metric = MeteorConversationMetric()
 score = metric.score(conversation=my_thread, references=my_reference_thread)
 ```
 
