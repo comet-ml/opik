@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset
+from opik.evaluation.metrics.llm_judges.g_eval import metric as g_eval_metric
 from opik.evaluation.models import base_model
 
 
-class AgentToolCorrectnessJudge(GEvalPreset):
+class AgentToolCorrectnessJudge(g_eval_metric.GEvalPreset):
     """
     Judge whether an agent invoked and interpreted tools correctly.
 
@@ -42,7 +42,7 @@ class AgentToolCorrectnessJudge(GEvalPreset):
         )
 
 
-class AgentTaskCompletionJudge(GEvalPreset):
+class AgentTaskCompletionJudge(g_eval_metric.GEvalPreset):
     """
     Evaluate whether an agent successfully completed the original task.
 

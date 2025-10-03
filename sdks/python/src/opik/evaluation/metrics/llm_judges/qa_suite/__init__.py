@@ -1,4 +1,4 @@
-from .metric import (
+from ..g_eval_presets.qa_suite import (
     DialogueHelpfulnessJudge,
     QARelevanceJudge,
     SummarizationCoherenceJudge,

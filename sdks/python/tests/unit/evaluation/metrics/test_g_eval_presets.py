@@ -1,29 +1,21 @@
 import pytest
 
-from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset, GEVAL_PRESETS
-from opik.evaluation.metrics.llm_judges.qa_suite.metric import (
-    DialogueHelpfulnessJudge,
-    QARelevanceJudge,
-    SummarizationCoherenceJudge,
-    SummarizationConsistencyJudge,
-)
-from opik.evaluation.metrics.llm_judges.bias_classifier.metric import (
-    DemographicBiasJudge,
-    PoliticalBiasJudge,
-    GenderBiasJudge,
-    ReligiousBiasJudge,
-    RegionalBiasJudge,
-)
-from opik.evaluation.metrics.llm_judges.agent_assessment.metric import (
+from opik.evaluation.metrics.llm_judges.g_eval.metric import GEVAL_PRESETS, GEvalPreset
+from opik.evaluation.metrics.llm_judges.g_eval_presets import (
     AgentTaskCompletionJudge,
     AgentToolCorrectnessJudge,
-)
-from opik.evaluation.metrics.llm_judges.prompt_diagnostics.metric import (
+    ComplianceRiskJudge,
+    DemographicBiasJudge,
+    DialogueHelpfulnessJudge,
+    GenderBiasJudge,
+    PoliticalBiasJudge,
     PromptPerplexityJudge,
     PromptUncertaintyJudge,
-)
-from opik.evaluation.metrics.llm_judges.compliance_risk.metric import (
-    ComplianceRiskJudge,
+    QARelevanceJudge,
+    RegionalBiasJudge,
+    ReligiousBiasJudge,
+    SummarizationCoherenceJudge,
+    SummarizationConsistencyJudge,
 )
 
 

@@ -22,9 +22,15 @@ from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
 from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
 from opik.evaluation.metrics.heuristics.readability import ReadabilityGuard
 from opik.evaluation.metrics.heuristics.tone import ToneGuard
-from opik.evaluation.metrics.conversation.rouge_c.metric import RougeCMetric
-from opik.evaluation.metrics.conversation.bleu_c.metric import BleuCMetric
-from opik.evaluation.metrics.conversation.meteor_c.metric import MeteorCMetric
+from opik.evaluation.metrics.conversation.rouge_conversation.metric import (
+    RougeConversationMetric,
+)
+from opik.evaluation.metrics.conversation.bleu_conversation.metric import (
+    BleuConversationMetric,
+)
+from opik.evaluation.metrics.conversation.meteor_conversation.metric import (
+    MeteorConversationMetric,
+)
 
 
 class CustomTokenizer:
@@ -213,6 +219,7 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
 
 
 def test_js_divergence_identical_text():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDivergence(track=False)
     result = metric.score(
         output="The quick brown fox jumps over the lazy dog",
@@ -226,6 +233,7 @@ def test_js_divergence_identical_text():
 
 
 def test_js_divergence_different_text():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDivergence(track=False)
     result = metric.score(output="apple pear", reference="zebra quokka")
 
@@ -236,6 +244,7 @@ def test_js_divergence_different_text():
 
 
 def test_js_divergence_requires_non_empty():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDivergence(track=False)
 
     with pytest.raises(MetricComputationError):
@@ -246,6 +255,7 @@ def test_js_divergence_requires_non_empty():
 
 
 def test_js_distance_matches_metadata():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDistance(track=False)
     result = metric.score(output="token token", reference="token other")
     assert 0.0 <= result.value <= 1.0
@@ -407,9 +417,9 @@ class _StubRougeMetric:
         return ScoreResult(name="rouge", value=self._scores[idx])
 
 
-def test_rouge_c_metric_average_and_penalty():
+def test_rouge_conversation_metric_average_and_penalty():
     rouge_stub = _StubRougeMetric(scores=[0.8, 0.6])
-    metric = RougeCMetric(
+    metric = RougeConversationMetric(
         rouge_metric=rouge_stub, missing_turn_penalty=0.1, track=False
     )
 
@@ -435,8 +445,10 @@ def test_rouge_c_metric_average_and_penalty():
     assert result.metadata["missing_turns"] == 0
 
 
-def test_rouge_c_requires_target_turns():
-    metric = RougeCMetric(rouge_metric=_StubRougeMetric(scores=[0.5]), track=False)
+def test_rouge_conversation_metric_requires_target_turns():
+    metric = RougeConversationMetric(
+        rouge_metric=_StubRougeMetric(scores=[0.5]), track=False
+    )
 
     with pytest.raises(MetricComputationError):
         metric.score(
@@ -462,9 +474,9 @@ class _StubTurnMetric:
         return ScoreResult(name="stub", value=self._scores[idx])
 
 
-def test_bleu_c_metric_with_stub():
+def test_bleu_conversation_metric_with_stub():
     stub = _StubTurnMetric([0.4, 0.6])
-    metric = BleuCMetric(bleu_metric=stub, track=False)
+    metric = BleuConversationMetric(bleu_metric=stub, track=False)
 
     convo = [
         {"role": "assistant", "content": "one"},
@@ -480,9 +492,9 @@ def test_bleu_c_metric_with_stub():
     assert stub.calls == [("one", "uno"), ("two", "dos")]
 
 
-def test_meteor_c_metric_with_stub():
+def test_meteor_conversation_metric_with_stub():
     stub = _StubTurnMetric([0.3])
-    metric = MeteorCMetric(meteor_metric=stub, track=False)
+    metric = MeteorConversationMetric(meteor_metric=stub, track=False)
 
     convo = [{"role": "assistant", "content": "hi"}]
     ref = [{"role": "assistant", "content": "hello"}]

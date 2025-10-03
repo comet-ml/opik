@@ -41,38 +41,31 @@ from .heuristics.rouge import ROUGE
 from .heuristics.sentiment import Sentiment
 from .heuristics.vader_sentiment import VADERSentiment
 from .llm_judges.answer_relevance.metric import AnswerRelevance
-from .llm_judges.agent_assessment.metric import (
+from .llm_judges.g_eval_presets import (
     AgentTaskCompletionJudge,
     AgentToolCorrectnessJudge,
-)
-from .llm_judges.bias_classifier.metric import (
+    ComplianceRiskJudge,
     DemographicBiasJudge,
-    PoliticalBiasJudge,
+    DialogueHelpfulnessJudge,
     GenderBiasJudge,
-    ReligiousBiasJudge,
+    PoliticalBiasJudge,
+    PromptPerplexityJudge,
+    PromptUncertaintyJudge,
+    QARelevanceJudge,
     RegionalBiasJudge,
+    ReligiousBiasJudge,
+    SummarizationCoherenceJudge,
+    SummarizationConsistencyJudge,
 )
 from .llm_judges.context_precision.metric import ContextPrecision
 from .llm_judges.context_recall.metric import ContextRecall
 from .llm_judges.g_eval.metric import GEval, GEvalPreset
 from .llm_judges.hallucination.metric import Hallucination
 from .llm_judges.moderation.metric import Moderation
-from .llm_judges.prompt_diagnostics.metric import (
-    PromptPerplexityJudge,
-    PromptUncertaintyJudge,
-)
-from .llm_judges.compliance_risk.metric import ComplianceRiskJudge
-from .llm_judges.reviseval.metric import RevisEvalJudge
 from .llm_judges.llm_juries.metric import LLMJuriesJudge
 from .llm_judges.trajectory_accuracy import TrajectoryAccuracy
 from .llm_judges.usefulness.metric import Usefulness
 from .llm_judges.structure_output_compliance.metric import StructuredOutputCompliance
-from .llm_judges.qa_suite import (
-    DialogueHelpfulnessJudge,
-    QARelevanceJudge,
-    SummarizationCoherenceJudge,
-    SummarizationConsistencyJudge,
-)
 from .base_metric import BaseMetric
 from .ragas_metric import RagasMetricWrapper
 from opik.exceptions import MetricComputationError

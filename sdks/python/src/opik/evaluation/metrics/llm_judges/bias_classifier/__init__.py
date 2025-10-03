@@ -1,15 +1,15 @@
-from .metric import (
+from ..g_eval_presets.bias_classifier import (
     DemographicBiasJudge,
-    PoliticalBiasJudge,
     GenderBiasJudge,
-    ReligiousBiasJudge,
+    PoliticalBiasJudge,
     RegionalBiasJudge,
+    ReligiousBiasJudge,
 )
 
 __all__ = [
     "DemographicBiasJudge",
-    "PoliticalBiasJudge",
     "GenderBiasJudge",
+    "PoliticalBiasJudge",
     "ReligiousBiasJudge",
     "RegionalBiasJudge",
 ]

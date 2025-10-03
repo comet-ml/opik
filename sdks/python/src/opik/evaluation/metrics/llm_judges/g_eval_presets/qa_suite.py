@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset
+from opik.evaluation.metrics.llm_judges.g_eval import metric as g_eval_metric
 from opik.evaluation.models import base_model
 
 
-class SummarizationConsistencyJudge(GEvalPreset):
+class SummarizationConsistencyJudge(g_eval_metric.GEvalPreset):
     """
     Score how faithful a summary is to its source content.
 
@@ -41,7 +41,7 @@ class SummarizationConsistencyJudge(GEvalPreset):
         )
 
 
-class SummarizationCoherenceJudge(GEvalPreset):
+class SummarizationCoherenceJudge(g_eval_metric.GEvalPreset):
     """
     Evaluate the coherence and structure of generated summaries.
 
@@ -76,7 +76,7 @@ class SummarizationCoherenceJudge(GEvalPreset):
         )
 
 
-class DialogueHelpfulnessJudge(GEvalPreset):
+class DialogueHelpfulnessJudge(g_eval_metric.GEvalPreset):
     """
     Judge how helpful an assistant reply is within a dialogue.
 
@@ -111,7 +111,7 @@ class DialogueHelpfulnessJudge(GEvalPreset):
         )
 
 
-class QARelevanceJudge(GEvalPreset):
+class QARelevanceJudge(g_eval_metric.GEvalPreset):
     """
     Check whether an answer directly addresses the user question.
 

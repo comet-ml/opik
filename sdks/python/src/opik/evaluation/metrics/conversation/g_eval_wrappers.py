@@ -6,18 +6,12 @@ from typing import Any, Optional
 
 import opik.exceptions as exceptions
 
-from ..base_metric import BaseMetric
+from .. import base_metric, score_result
 from ..score_result import ScoreResult
-from ..llm_judges.qa_suite import (
-    DialogueHelpfulnessJudge,
-    QARelevanceJudge,
-    SummarizationCoherenceJudge,
-    SummarizationConsistencyJudge,
-)
-from ..llm_judges.compliance_risk.metric import ComplianceRiskJudge
-from ..llm_judges.prompt_diagnostics.metric import (
-    PromptPerplexityJudge,
-    PromptUncertaintyJudge,
+from ..llm_judges.g_eval_presets import (
+    compliance_risk as compliance_presets,
+    prompt_diagnostics as prompt_presets,
+    qa_suite as qa_presets,
 )
 from . import conversation_thread_metric, types as conversation_types
 
@@ -41,7 +35,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
         >>> from opik.evaluation.metrics.conversation.g_eval_wrappers import (
         ...     GEvalConversationMetric,
         ... )
-        >>> from opik.evaluation.metrics.llm_judges.qa_suite import DialogueHelpfulnessJudge
+        >>> from opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite import DialogueHelpfulnessJudge
         >>> conversation = [
         ...     {"role": "user", "content": "Summarise these notes."},
         ...     {"role": "assistant", "content": "Here is a concise summary..."},
@@ -54,7 +48,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
 
     def __init__(
         self,
-        judge: BaseMetric,
+        judge: base_metric.BaseMetric,
         name: Optional[str] = None,
     ) -> None:
         super().__init__(
@@ -64,8 +58,8 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
         )
         self._judge = judge
 
-    def _normalize_result(self, raw_result: Any) -> ScoreResult:
-        if isinstance(raw_result, ScoreResult):
+    def _normalize_result(self, raw_result: Any) -> score_result.ScoreResult:
+        if isinstance(raw_result, score_result.ScoreResult):
             return raw_result
         if isinstance(raw_result, list):
             if not raw_result:
@@ -73,7 +67,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
                     "Judge returned an empty list of results."
                 )
             first = raw_result[0]
-            if isinstance(first, ScoreResult):
+            if isinstance(first, score_result.ScoreResult):
                 return first
         raise exceptions.MetricComputationError(
             f"Judge {self._judge.name} returned unsupported result type {type(raw_result)!r}"
@@ -83,7 +77,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
         self,
         conversation: conversation_types.Conversation,
         **_: Any,
-    ) -> ScoreResult:
+    ) -> score_result.ScoreResult:
         last_assistant = next(
             (
                 turn.get("content", "")
@@ -110,7 +104,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
             )
         else:
             judge_result = self._normalize_result(raw_result)
-            return ScoreResult(
+            return score_result.ScoreResult(
                 name=self.name,
                 value=judge_result.value,
                 reason=judge_result.reason,
@@ -131,7 +125,7 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
     Evaluate the latest assistant response for compliance and risk exposure.
 
     This metric forwards the final assistant turn to
-    :class:`~opik.evaluation.metrics.llm_judges.compliance_risk.metric.ComplianceRiskJudge`
+    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.compliance_risk.ComplianceRiskJudge`
     and returns its assessment as a conversation-level ``ScoreResult``.
 
     Args:
@@ -160,7 +154,7 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
-            judge=ComplianceRiskJudge(
+            judge=compliance_presets.ComplianceRiskJudge(
                 model=model,
                 track=track,
                 project_name=project_name,
@@ -174,7 +168,8 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
     """
     Score how helpful the closing assistant message is within the dialogue.
 
-    The metric uses :class:`~opik.evaluation.metrics.llm_judges.qa_suite.DialogueHelpfulnessJudge`
+    The metric uses
+    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.DialogueHelpfulnessJudge`
     to evaluate usefulness and responsiveness of the final assistant turn.
 
     Args:
@@ -203,7 +198,7 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
-            judge=DialogueHelpfulnessJudge(
+            judge=qa_presets.DialogueHelpfulnessJudge(
                 model=model,
                 track=track,
                 project_name=project_name,
@@ -217,7 +212,8 @@ class ConversationQARelevanceMetric(GEvalConversationMetric):
     """
     Quantify how relevant the assistant's final answer is to the preceding query.
 
-    This metric wraps :class:`~opik.evaluation.metrics.llm_judges.qa_suite.QARelevanceJudge`
+    This metric wraps
+    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.QARelevanceJudge`
     and is useful when the conversation emulates a Q&A exchange.
 
     Args:
@@ -246,7 +242,7 @@ class ConversationQARelevanceMetric(GEvalConversationMetric):
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
-            judge=QARelevanceJudge(
+            judge=qa_presets.QARelevanceJudge(
                 model=model,
                 track=track,
                 project_name=project_name,
@@ -260,7 +256,8 @@ class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
     """
     Assess the coherence of a summary-style assistant response.
 
-    The metric invokes :class:`~opik.evaluation.metrics.llm_judges.qa_suite.SummarizationCoherenceJudge`
+    The metric invokes
+    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.SummarizationCoherenceJudge`
     to rate whether the summary flows naturally and captures the conversation
     structure.
 
@@ -290,7 +287,7 @@ class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
-            judge=SummarizationCoherenceJudge(
+            judge=qa_presets.SummarizationCoherenceJudge(
                 model=model,
                 track=track,
                 project_name=project_name,
@@ -305,7 +302,7 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
     Check whether a dialogue summary stays faithful to the source turns.
 
     It delegates scoring to
-    :class:`~opik.evaluation.metrics.llm_judges.qa_suite.SummarizationConsistencyJudge`
+    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.SummarizationConsistencyJudge`
     and reports the result at the conversation level.
 
     Args:
@@ -334,7 +331,7 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
-            judge=SummarizationConsistencyJudge(
+            judge=qa_presets.SummarizationConsistencyJudge(
                 model=model,
                 track=track,
                 project_name=project_name,
@@ -349,7 +346,7 @@ class ConversationPromptPerplexityMetric(GEvalConversationMetric):
     Estimate the perplexity of the prompt implied by the full conversation.
 
     This wrapper forwards the final assistant response to
-    :class:`~opik.evaluation.metrics.llm_judges.prompt_diagnostics.metric.PromptPerplexityJudge`
+    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.prompt_diagnostics.PromptPerplexityJudge`
     so you can flag confusing or unstable prompts.
 
     Args:
@@ -378,7 +375,7 @@ class ConversationPromptPerplexityMetric(GEvalConversationMetric):
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
-            judge=PromptPerplexityJudge(
+            judge=prompt_presets.PromptPerplexityJudge(
                 model=model,
                 track=track,
                 project_name=project_name,
@@ -393,7 +390,7 @@ class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
     Measure how uncertain the assistant appears about executing the prompt.
 
     The metric pipes the latest assistant reply into
-    :class:`~opik.evaluation.metrics.llm_judges.prompt_diagnostics.metric.PromptUncertaintyJudge`
+    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.prompt_diagnostics.PromptUncertaintyJudge`
     and returns the judge's score in a conversation-friendly format.
 
     Args:
@@ -422,7 +419,7 @@ class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
-            judge=PromptUncertaintyJudge(
+            judge=prompt_presets.PromptUncertaintyJudge(
                 model=model,
                 track=track,
                 project_name=project_name,

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset
+from opik.evaluation.metrics.llm_judges.g_eval import metric as g_eval_metric
 from opik.evaluation.models import base_model
 
 
-class DemographicBiasJudge(GEvalPreset):
+class DemographicBiasJudge(g_eval_metric.GEvalPreset):
     """
     Score demographic stereotyping or bias in a response.
 
@@ -41,7 +41,7 @@ class DemographicBiasJudge(GEvalPreset):
         )
 
 
-class PoliticalBiasJudge(GEvalPreset):
+class PoliticalBiasJudge(g_eval_metric.GEvalPreset):
     """
     Detect partisan or ideological bias in a response.
 
@@ -76,7 +76,7 @@ class PoliticalBiasJudge(GEvalPreset):
         )
 
 
-class GenderBiasJudge(GEvalPreset):
+class GenderBiasJudge(g_eval_metric.GEvalPreset):
     """
     Detect gender stereotyping or exclusion in generated text.
 
@@ -111,7 +111,7 @@ class GenderBiasJudge(GEvalPreset):
         )
 
 
-class ReligiousBiasJudge(GEvalPreset):
+class ReligiousBiasJudge(g_eval_metric.GEvalPreset):
     """
     Evaluate responses for religious bias or disrespectful language.
 
@@ -146,7 +146,7 @@ class ReligiousBiasJudge(GEvalPreset):
         )
 
 
-class RegionalBiasJudge(GEvalPreset):
+class RegionalBiasJudge(g_eval_metric.GEvalPreset):
     """
     Assess geographic or cultural bias in responses.
 

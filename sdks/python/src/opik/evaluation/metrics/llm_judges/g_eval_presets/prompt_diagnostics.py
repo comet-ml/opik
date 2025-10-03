@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset
+from opik.evaluation.metrics.llm_judges.g_eval import metric as g_eval_metric
 from opik.evaluation.models import base_model
 
 
-class PromptPerplexityJudge(GEvalPreset):
+class PromptPerplexityJudge(g_eval_metric.GEvalPreset):
     """
     Rate how difficult a prompt is for an LLM to interpret.
 
@@ -41,7 +41,7 @@ class PromptPerplexityJudge(GEvalPreset):
         )
 
 
-class PromptUncertaintyJudge(GEvalPreset):
+class PromptUncertaintyJudge(g_eval_metric.GEvalPreset):
     """
     Rate how ambiguous or underspecified a prompt feels to the model.
 

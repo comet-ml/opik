@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from opik.evaluation.metrics.llm_judges.g_eval.metric import GEvalPreset
+from opik.evaluation.metrics.llm_judges.g_eval import metric as g_eval_metric
 from opik.evaluation.models import base_model
 
 
-class ComplianceRiskJudge(GEvalPreset):
+class ComplianceRiskJudge(g_eval_metric.GEvalPreset):
     """
     Evaluate responses for non-compliant or misleading claims in regulated sectors.
 
