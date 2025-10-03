@@ -301,7 +301,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         if last_exception is not None:
             raise last_exception
-        raise RuntimeError(
+        raise exceptions.BaseLLMError(
             "LLM completion failed without executing any attempts; "
             "check retry configuration."
         )
