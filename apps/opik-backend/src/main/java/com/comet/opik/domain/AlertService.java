@@ -46,6 +46,8 @@ public interface AlertService {
 
     Alert getById(UUID id);
 
+    Alert getByIdAndWorkspace(UUID id, String workspaceId);
+
     void deleteBatch(Set<UUID> ids);
 }
 
@@ -140,7 +142,11 @@ class AlertServiceImpl implements AlertService {
     @Override
     public Alert getById(UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        return getByIdAndWorkspace(id, workspaceId);
+    }
 
+    @Override
+    public Alert getByIdAndWorkspace(UUID id, String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 

@@ -16,8 +16,9 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
 
 /**
- * Reactive Redis subscriber that processes webhook events from a Redis stream
- * and sends them to external HTTP endpoints with retry capabilities.
+ * Service responsible for sending webhook events to external HTTP endpoints.
+ * This service ONLY sends webhooks and does not handle aggregation or debouncing.
+ * Event aggregation and debouncing is handled by WebhookEventAggregationService.
  */
 @EagerSingleton
 @Slf4j
@@ -60,7 +61,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                         .put(RequestContext.USER_NAME, event.getUserName()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(unused -> {
-                    log.info("Successfully processed webhook event: id='{}', type='{}', url='{}'",
+                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
                             event.getId(), event.getEventType(), event.getUrl());
 
                     // Record success metrics
@@ -69,42 +70,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                             .build()
                             .add(1, attributes.toBuilder().put("status", "success").build());
                 })
-                .doOnError(throwable -> {
-                    log.error("Failed to process webhook event: id='{}', type='{}', url='{}', error='{}'",
-                            event.getId(), event.getEventType(), event.getUrl(), throwable.getMessage(), throwable);
-
-                    // Record failure metrics
-                    meter.counterBuilder("opik_webhook_events_processed_total")
-                            .setDescription("Total number of webhook events processed")
-                            .build()
-                            .add(1, attributes.toBuilder().put("status", "failure").build());
-                })
-                .onErrorResume(throwable -> {
-                    // Handle permanent failures - could implement dead letter queue here
-                    return handlePermanentFailure(event, throwable);
-                });
-    }
-
-    private Mono<Void> validateEvent(@NonNull WebhookEvent<?> event) {
-        return Mono.fromRunnable(() -> {
-            if (event.getUrl() == null || event.getUrl().trim().isEmpty()) {
-                throw new IllegalArgumentException("Webhook URL cannot be null or empty");
-            }
-
-            if (event.getId() == null || event.getId().trim().isEmpty()) {
-                throw new IllegalArgumentException("Webhook event ID cannot be null or empty");
-            }
-
-            if (event.getEventType() == null) {
-                throw new IllegalArgumentException("Webhook event type cannot be null");
-            }
-
-            if (!event.getUrl().startsWith("http://") && !event.getUrl().startsWith("https://")) {
-                throw new IllegalArgumentException("Webhook URL must start with http:// or https://");
-            }
-
-            log.debug("Webhook event validation passed for event: '{}'", event.getId());
-        });
+                .onErrorResume(throwable -> handlePermanentFailure(event, throwable));
     }
 
     private Mono<Void> handlePermanentFailure(@NonNull WebhookEvent<?> event, @NonNull Throwable throwable) {
@@ -129,6 +95,28 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                 .add(1, attributes);
 
         return Mono.empty();
+    }
+
+    private Mono<Void> validateEvent(@NonNull WebhookEvent<?> event) {
+        return Mono.fromRunnable(() -> {
+            if (event.getUrl() == null || event.getUrl().trim().isEmpty()) {
+                throw new IllegalArgumentException("Webhook URL cannot be null or empty");
+            }
+
+            if (event.getId() == null || event.getId().trim().isEmpty()) {
+                throw new IllegalArgumentException("Webhook event ID cannot be null or empty");
+            }
+
+            if (event.getEventType() == null) {
+                throw new IllegalArgumentException("Webhook event type cannot be null");
+            }
+
+            if (!event.getUrl().startsWith("http://") && !event.getUrl().startsWith("https://")) {
+                throw new IllegalArgumentException("Webhook URL must start with http:// or https://");
+            }
+
+            log.debug("Webhook event validation passed for event: '{}'", event.getId());
+        });
     }
 
     @Override
