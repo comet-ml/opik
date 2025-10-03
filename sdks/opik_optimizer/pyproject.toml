@@ -23,7 +23,6 @@ dependencies = [
     "pandas",
     "pydantic",
     "pyrate-limiter",
-    "scikit-learn",
     "tqdm",
     "rich",
 ]
@@ -35,6 +34,7 @@ dev = [
     # "google-adk",
     "langgraph",
     "pre-commit",
+    "scikit-learn",
 ]
 
 [tool.setuptools.packages.find]
