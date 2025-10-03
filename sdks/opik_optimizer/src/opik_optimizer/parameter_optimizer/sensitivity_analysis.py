@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 def compute_sensitivity_from_trials(
-    trials: list["Trial"], specs: list["ParameterSpec"]
+    trials: list[Trial], specs: list[ParameterSpec]
 ) -> dict[str, float]:
     """
     Compute parameter sensitivity from completed trials.

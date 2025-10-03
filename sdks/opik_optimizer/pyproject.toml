@@ -23,6 +23,7 @@ dependencies = [
     "pandas",
     "pydantic",
     "pyrate-limiter",
+    "scikit-learn",
     "tqdm",
     "rich",
 ]

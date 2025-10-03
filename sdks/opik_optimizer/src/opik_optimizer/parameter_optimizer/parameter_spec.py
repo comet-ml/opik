@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal
+from collections.abc import Mapping, Sequence
 
 from optuna.trial import Trial
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
@@ -46,10 +47,12 @@ class ParameterSpec(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _validate(self) -> "ParameterSpec":
+    def _validate(self) -> ParameterSpec:
         if self.distribution in {ParameterType.FLOAT, ParameterType.INT}:
             if self.low is None or self.high is None:
-                raise ValueError("'min' and 'max' must be provided for range parameters")
+                raise ValueError(
+                    "'min' and 'max' must be provided for range parameters"
+                )
             if self.low >= self.high:
                 raise ValueError("'min' must be less than 'max'")
             if self.scale not in {"linear", "log"}:
@@ -85,6 +88,7 @@ class ParameterSpec(BaseModel):
     def suggest(self, trial: Trial) -> Any:
         """Return a sampled value for this parameter from Optuna."""
         if self.distribution == ParameterType.FLOAT:
+            assert self.low is not None and self.high is not None  # validated earlier
             return trial.suggest_float(
                 self.name,
                 float(self.low),
@@ -93,6 +97,7 @@ class ParameterSpec(BaseModel):
                 log=self.scale == "log",
             )
         if self.distribution == ParameterType.INT:
+            assert self.low is not None and self.high is not None  # validated earlier
             return trial.suggest_int(
                 self.name,
                 int(self.low),
@@ -106,7 +111,9 @@ class ParameterSpec(BaseModel):
         raise RuntimeError(f"Unsupported distribution type: {self.distribution}")
 
     def apply_to_prompt(
-        self, prompt: "opik_optimizer.optimization_config.chat_prompt.ChatPrompt", value: Any
+        self,
+        prompt: Any,
+        value: Any,  # ChatPrompt type
     ) -> None:
         """Apply a sampled value to the provided prompt instance."""
         resolved = self.target_path
@@ -128,7 +135,7 @@ class ParameterSpec(BaseModel):
             return
         self._assign_nested(model_kwargs, resolved.path, value)
 
-    def narrow(self, center: Any, scale: float) -> "ParameterSpec":
+    def narrow(self, center: Any, scale: float) -> ParameterSpec:
         """Return a narrowed version of the spec around the provided center."""
 
         if center is None or scale <= 0:
@@ -204,4 +211,4 @@ class ParameterSpec(BaseModel):
             root = "model_kwargs"
             path = tokens
 
-        return ResolvedTarget(root, tuple(path))
+        return ResolvedTarget(root, tuple(path))  # type: ignore[arg-type]

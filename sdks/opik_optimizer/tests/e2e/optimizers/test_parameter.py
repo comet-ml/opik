@@ -162,9 +162,7 @@ def test_parameter_optimizer() -> None:
     )
 
     # Validate search stages
-    assert "search_stages" in results.details, (
-        "Details should contain 'search_stages'"
-    )
+    assert "search_stages" in results.details, "Details should contain 'search_stages'"
     assert isinstance(results.details["search_stages"], list), (
         "search_stages should be a list"
     )
@@ -195,9 +193,15 @@ def test_parameter_optimizer() -> None:
 
     # Test convenience methods
     optimized_kwargs = results.get_optimized_model_kwargs()
-    assert isinstance(optimized_kwargs, dict), "get_optimized_model_kwargs should return dict"
-    assert "temperature" in optimized_kwargs, "Optimized kwargs should contain temperature"
-    assert "max_tokens" in optimized_kwargs, "Optimized kwargs should contain max_tokens"
+    assert isinstance(optimized_kwargs, dict), (
+        "get_optimized_model_kwargs should return dict"
+    )
+    assert "temperature" in optimized_kwargs, (
+        "Optimized kwargs should contain temperature"
+    )
+    assert "max_tokens" in optimized_kwargs, (
+        "Optimized kwargs should contain max_tokens"
+    )
 
     optimized_model = results.get_optimized_model()
     assert optimized_model == "openai/gpt-4o", (
@@ -205,13 +209,21 @@ def test_parameter_optimizer() -> None:
     )
 
     optimized_params = results.get_optimized_parameters()
-    assert isinstance(optimized_params, dict), "get_optimized_parameters should return dict"
-    assert "temperature" in optimized_params, "Optimized params should contain temperature"
+    assert isinstance(optimized_params, dict), (
+        "get_optimized_parameters should return dict"
+    )
+    assert "temperature" in optimized_params, (
+        "Optimized params should contain temperature"
+    )
 
     # Test apply_to_prompt
     new_prompt = results.apply_to_prompt(prompt)
-    assert new_prompt.model == "openai/gpt-4o", "Applied prompt should have optimized model"
-    assert new_prompt.model_kwargs is not None, "Applied prompt should have model_kwargs"
+    assert new_prompt.model == "openai/gpt-4o", (
+        "Applied prompt should have optimized model"
+    )
+    assert new_prompt.model_kwargs is not None, (
+        "Applied prompt should have model_kwargs"
+    )
 
     # Test result methods work correctly
     result_str = str(results)

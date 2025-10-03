@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
+from opik import Dataset
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.rest_api.core import ApiError
@@ -18,10 +19,10 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-def load_dataset() -> "opik.Dataset":  # type: ignore[name-defined]
+def load_dataset() -> Dataset:
     try:
         return hotpot_300(test_mode=True)
-    except ApiError as exc:
+    except ApiError:
         print(
             "Failed to load HotpotQA dataset from Opik.\n"
             "Ensure an Opik server is running and OPIK_API_KEY is set, then try again.",

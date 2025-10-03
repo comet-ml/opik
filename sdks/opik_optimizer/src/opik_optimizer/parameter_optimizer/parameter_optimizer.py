@@ -84,6 +84,9 @@ class ParameterOptimizer(BaseOptimizer):
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
 
+        # After validation, parameter_space is guaranteed to be ParameterSearchSpace
+        assert isinstance(parameter_space, ParameterSearchSpace)  # for mypy
+
         sampler = kwargs.pop("sampler", None)
         callbacks = kwargs.pop("callbacks", None)
         timeout = kwargs.pop("timeout", None)
@@ -332,7 +335,10 @@ class ParameterOptimizer(BaseOptimizer):
 
         try:
             importance = optuna_importance.get_param_importances(study)
-        except (ValueError, RuntimeError):
+        except (ValueError, RuntimeError, ImportError):
+            # Falls back to custom sensitivity analysis if:
+            # - Study has insufficient data (ValueError/RuntimeError)
+            # - scikit-learn not installed (ImportError)
             importance = {}
 
         if not importance or all(value == 0 for value in importance.values()):

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Mapping, Sequence
+from typing import Any
+from collections.abc import Mapping, Sequence
 
 from optuna.trial import Trial
 from pydantic import BaseModel, Field, model_validator
@@ -46,7 +47,7 @@ class ParameterSearchSpace(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _validate(self) -> "ParameterSearchSpace":
+    def _validate(self) -> ParameterSearchSpace:
         names = [spec.name for spec in self.parameters]
         if len(names) != len(set(names)):
             duplicates = {name for name in names if names.count(name) > 1}
@@ -63,11 +64,11 @@ class ParameterSearchSpace(BaseModel):
 
     def apply(
         self,
-        prompt: "opik_optimizer.optimization_config.chat_prompt.ChatPrompt",
+        prompt: Any,  # ChatPrompt type
         values: Mapping[str, Any],
         *,
         base_model_kwargs: dict[str, Any] | None = None,
-    ) -> "opik_optimizer.optimization_config.chat_prompt.ChatPrompt":
+    ) -> Any:  # Returns ChatPrompt
         """Return a prompt copy with sampled values applied."""
         prompt_copy = prompt.copy()
         if base_model_kwargs is not None:
@@ -96,7 +97,7 @@ class ParameterSearchSpace(BaseModel):
 
     def narrow_around(
         self, values: Mapping[str, Any], scale: float
-    ) -> "ParameterSearchSpace":
+    ) -> ParameterSearchSpace:
         """Return a new search space narrowed around provided parameter values."""
 
         narrowed: list[ParameterSpec] = []
