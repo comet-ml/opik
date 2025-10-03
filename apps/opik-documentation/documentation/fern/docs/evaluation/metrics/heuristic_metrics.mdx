@@ -25,7 +25,7 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 | LevenshteinRatio | Computes the normalised Levenshtein similarity between output and reference. |
 | ReadabilityGuard | Deterministic readability guard using Flesch–Kincaid bounds. |
 | RegexMatch | Validates the output against a regular expression pattern. |
-| ROUGE | Calculates ROUGE variants (rouge1, rouge2, rougeL, rougeLsum, rougeW). |
+| ROUGE | Calculates ROUGE variants (rouge1, rouge2, rougeL, rougeLsum). |
 | SentenceBLEU | Calculates a single-sentence BLEU score against one or more references. |
 | Sentiment | Scores sentiment using NLTK's VADER lexicon (compound, pos/neu/neg). |
 | SpearmanRanking | Spearman's rank correlation for two equal-length rankings. |
@@ -204,7 +204,7 @@ print(score.value, score.reason)
 
 ### ROUGE
 
-`ROUGE` supports multiple variants out of the box: `rouge1`, `rouge2`, `rougeL`, `rougeLsum`, and `rougeW`. You can switch variants via the `rouge_type` argument and optionally enable stemming or sentence splitting.
+`ROUGE` supports multiple variants out of the box: `rouge1`, `rouge2`, `rougeL`, and `rougeLsum`. You can switch variants via the `rouge_type` argument and optionally enable stemming or sentence splitting.
 
 ```python
 from opik.evaluation.metrics import ROUGE

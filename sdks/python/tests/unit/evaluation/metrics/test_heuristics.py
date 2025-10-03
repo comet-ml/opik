@@ -537,12 +537,6 @@ def test_rouge_score_for_empty_inputs(candidate, reference):
     assert "empty" in str(exc_info.value).lower()
 
 
-def test_rouge_w_score_computation():
-    metric = rouge.ROUGE(rouge_type="rougeW", track=False)
-    result = metric.score(output="a b c", reference="a b d")
-    assert 0.0 <= result.value <= 1.0
-
-
 def test_rouge_lsum_available():
     metric = rouge.ROUGE(rouge_type="rougeLsum", track=False)
     result = metric.score(output="foo\nbar", reference="foo\nqux")

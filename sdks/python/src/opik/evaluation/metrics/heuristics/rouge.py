@@ -54,7 +54,7 @@ class ROUGE(base_metric.BaseMetric):
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
-        valid_rouge_types = {"rouge1", "rouge2", "rougeL", "rougeLsum", "rougeW"}
+        valid_rouge_types = {"rouge1", "rouge2", "rougeL", "rougeLsum"}
         if rouge_type not in valid_rouge_types:
             raise MetricComputationError(
                 f"Invalid rouge_type '{rouge_type}'. Must be one of {valid_rouge_types}."
@@ -115,43 +115,15 @@ class ROUGE(base_metric.BaseMetric):
                     raise MetricComputationError("Encountered empty reference.")
 
         rouge_score_type = self._rouge_type
-        if rouge_score_type == "rougeW":
-            rouge_f1_value = max(
-                _compute_rouge_w(output, ref) for ref in reference
-            )
-        else:
-            assert self._rouge is not None
-            results = self._rouge.score_multi(reference, output)
-            rouge_f1_value = results[rouge_score_type].fmeasure
+        assert self._rouge is not None
+        results = self._rouge.score_multi(reference, output)
+        rouge_f1_value = results[rouge_score_type].fmeasure
 
         return score_result.ScoreResult(
             value=rouge_f1_value,
             name=self.name,
             reason=f"{rouge_score_type} score: {rouge_f1_value:.4f}",
         )
-
-
-def _weighted_lcs(tokens_a: List[str], tokens_b: List[str]) -> float:
-    """Compute the weighted longest common subsequence used by ROUGE-W.
-
-    Args:
-        tokens_a: Token sequence for the candidate text.
-        tokens_b: Token sequence for the reference text.
-
-    Returns:
-        Weighted LCS score as defined in the ROUGE-W paper.
-    """
-    len_a, len_b = len(tokens_a), len(tokens_b)
-    dp = [[0] * (len_b + 1) for _ in range(len_a + 1)]
-    score = 0.0
-    for i in range(1, len_a + 1):
-        for j in range(1, len_b + 1):
-            if tokens_a[i - 1] == tokens_b[j - 1]:
-                dp[i][j] = dp[i - 1][j - 1] + 1
-                score += dp[i][j]
-            else:
-                dp[i][j] = 0
-    return score
 
 
 def _build_rouge_backend(
@@ -161,9 +133,6 @@ def _build_rouge_backend(
     split_summaries: bool,
     tokenizer: Optional[Any],
 ) -> Optional[Any]:
-    if rouge_type == "rougeW":
-        return None
-
     if rouge_scorer is None:
         raise ImportError(
             "`rouge-score` libraries are required for ROUGE score calculation. "
@@ -176,23 +145,3 @@ def _build_rouge_backend(
         split_summaries=split_summaries,
         tokenizer=tokenizer,
     )
-
-
-def _compute_rouge_w(output: str, reference: str) -> float:
-    candidate_tokens = output.split()
-    reference_tokens = reference.split()
-
-    if not candidate_tokens or not reference_tokens:
-        raise MetricComputationError("Empty tokens encountered for ROUGE-W computation.")
-
-    wlcs = _weighted_lcs(candidate_tokens, reference_tokens)
-    cand_norm = _weighted_lcs(candidate_tokens, candidate_tokens)
-    ref_norm = _weighted_lcs(reference_tokens, reference_tokens)
-
-    precision = wlcs / cand_norm if cand_norm > 0 else 0.0
-    recall = wlcs / ref_norm if ref_norm > 0 else 0.0
-    beta = 1.2
-    denom = recall + beta**2 * precision
-    if denom == 0:
-        return 0.0
-    return (1 + beta**2) * precision * recall / denom
