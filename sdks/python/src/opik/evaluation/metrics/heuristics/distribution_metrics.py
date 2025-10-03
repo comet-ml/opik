@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from typing import Any, Callable, Dict, Iterable, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
 TokenizeFn = Callable[[str], Iterable[str]]
+
+
+def _load_jensen_shannon_distance() -> Callable[[Sequence[float], Sequence[float], float], float]:
+    try:
+        from scipy.spatial.distance import jensenshannon
+    except ImportError as error:  # pragma: no cover - optional dependency
+        raise ImportError(
+            "Install scipy via `pip install scipy` to use Jensen-Shannon metrics."
+        ) from error
+
+    return jensenshannon
 
 
 def _default_tokenizer(text: str) -> Iterable[str]:
@@ -73,6 +84,9 @@ class JSDivergence(_DistributionMetricBase):
         track: Whether to automatically track metric results.
         project_name: Optional tracking project name.
 
+    Note:
+        Requires :mod:`scipy` to be installed.
+
     Example:
         >>> from opik.evaluation.metrics import JSDivergence
         >>> metric = JSDivergence()
@@ -103,7 +117,7 @@ class JSDivergence(_DistributionMetricBase):
             normalize=normalize,
         )
         self._base = base
-        self._log_base = math.log(base)
+        self._js_distance_fn = _load_jensen_shannon_distance()
 
     def score(
         self,
@@ -135,6 +149,7 @@ class JSDivergence(_DistributionMetricBase):
             ),
             metadata={
                 "divergence": divergence,
+                "distance": math.sqrt(divergence),
                 "base": self._base,
             },
         )
@@ -144,29 +159,26 @@ class JSDivergence(_DistributionMetricBase):
         p_dist: Dict[str, float],
         q_dist: Dict[str, float],
     ) -> float:
-        vocabulary = set(p_dist.keys()) | set(q_dist.keys())
-        mixture = {}
-        for token in vocabulary:
-            p_val = p_dist.get(token, 0.0)
-            q_val = q_dist.get(token, 0.0)
-            mixture[token] = 0.5 * (p_val + q_val)
+        vocabulary = sorted(set(p_dist) | set(q_dist))
+        if not vocabulary:
+            return 0.0
 
-        return 0.5 * (
-            self._kl_divergence(p_dist, mixture) + self._kl_divergence(q_dist, mixture)
-        )
+        p_vector = [p_dist.get(token, 0.0) for token in vocabulary]
+        q_vector = [q_dist.get(token, 0.0) for token in vocabulary]
 
-    def _kl_divergence(
-        self, dist: Dict[str, float], mixture: Dict[str, float]
-    ) -> float:
-        divergence = 0.0
-        for token, value in dist.items():
-            if value == 0.0:
-                continue
-            mix_val = mixture.get(token, 0.0)
-            if mix_val == 0.0:
-                continue
-            divergence += value * (math.log(value / mix_val) / self._log_base)
-        return divergence
+        p_probs = self._ensure_probability_vector(p_vector)
+        q_probs = self._ensure_probability_vector(q_vector)
+
+        distance = float(self._js_distance_fn(p_probs, q_probs, base=self._base))
+        return distance**2
+
+    def _ensure_probability_vector(self, values: Sequence[float]) -> List[float]:
+        total = sum(values)
+        if total <= 0.0:
+            raise MetricComputationError(
+                "Distribution is empty after tokenisation (Jensen-Shannon metric)."
+            )
+        return [value / total for value in values]
 
 
 class JSDistance(JSDivergence):
@@ -214,11 +226,17 @@ class JSDistance(JSDivergence):
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         similarity = super().score(output=output, reference=reference)
-        divergence = similarity.metadata["divergence"] if similarity.metadata else 0.0
+        metadata = similarity.metadata or {}
+        divergence = float(metadata.get("divergence", 0.0))
+        distance = float(metadata.get("distance", math.sqrt(divergence)))
         return score_result.ScoreResult(
             value=divergence,
             name=self.name,
             reason=f"Jensen-Shannon divergence (base={self._base:g}): {divergence:.4f}",
+            metadata={
+                "distance": distance,
+                "base": metadata.get("base", self._base),
+            },
         )
 
 
