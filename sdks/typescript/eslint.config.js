@@ -11,10 +11,17 @@ export default [
       "src/opik/rest_api/**",
       "src/opik/integrations/opik-langchain/**",
       "src/opik/integrations/opik-openai/**",
+      "src/opik/integrations/opik-gemini/**",
+      "src/opik/configure/**",
     ],
   },
   { files: ["src/**/*.{js,mjs,cjs,ts}", "tests/**/*.{js,mjs,cjs,ts}"] },
-  { languageOptions: { globals: globals.browser } },
+  {
+    languageOptions: {
+      globals: globals.browser,
+      parserOptions: { tsconfigRootDir: __dirname },
+    },
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
 ];
