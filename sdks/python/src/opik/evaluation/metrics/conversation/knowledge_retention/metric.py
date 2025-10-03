@@ -5,9 +5,11 @@ from __future__ import annotations
 import functools
 from typing import Callable, List, Optional, Sequence, Set
 
-from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.metrics.conversation import (
+    conversation_thread_metric,
+    types as conversation_types,
+)
 from opik.evaluation.preprocessing import normalize_text
 
 _MIN_TOKEN_LENGTH = 4
@@ -51,7 +53,7 @@ _REQUEST_KEYWORDS = {
 }
 
 
-class KnowledgeRetentionMetric(BaseMetric):
+class KnowledgeRetentionMetric(conversation_thread_metric.ConversationThreadMetric):
     """
     Measure how many user-provided facts resurface in the closing assistant reply.
 

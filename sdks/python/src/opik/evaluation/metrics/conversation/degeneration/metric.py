@@ -5,9 +5,11 @@ import re
 from collections import Counter
 from typing import Dict, List, Optional
 
-from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.metrics.conversation import (
+    conversation_thread_metric,
+    types as conversation_types,
+)
 from opik.exceptions import MetricComputationError
 from .phrases import DEFAULT_FALLBACK_PHRASES
 
@@ -22,7 +24,9 @@ def _ngram_counts(tokens: List[str], n: int) -> Counter:
     return Counter(tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1))
 
 
-class ConversationDegenerationMetric(BaseMetric):
+class ConversationDegenerationMetric(
+    conversation_thread_metric.ConversationThreadMetric
+):
     """
     Score how strongly an assistant conversation shows degeneration or repetition.
 

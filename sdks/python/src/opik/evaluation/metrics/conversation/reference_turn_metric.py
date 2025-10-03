@@ -3,8 +3,11 @@ from __future__ import annotations
 from typing import Optional, Protocol, Sequence, Union
 
 import opik.exceptions as exceptions
-from opik.evaluation.metrics import base_metric, score_result
-from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import (
+    conversation_thread_metric,
+    types as conversation_types,
+)
 
 
 class ReferenceTurnMetric(Protocol):
@@ -20,7 +23,9 @@ class ReferenceTurnMetric(Protocol):
         """Score a single candidate/reference pair."""
 
 
-class ConversationReferenceMetric(base_metric.BaseMetric):
+class ConversationReferenceMetric(
+    conversation_thread_metric.ConversationThreadMetric
+):
     """
     Base helper that lifts turn-level reference metrics to conversation scope.
 
