@@ -42,7 +42,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @SqlQuery("""
-            SELECT rule.id, rule.project_id, p.name AS project_name, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, evaluator.type, evaluator.code,
+            SELECT rule.id, rule.project_id, p.name AS project_name, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters, evaluator.type, evaluator.code,
                    evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator

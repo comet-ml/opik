@@ -1,6 +1,6 @@
 [project]
 name = "opik_optimizer"
-version = "1.1.0"
+version = "2.0.1"
 description = "Agent optimization with Opik"
 authors = [
     {name = "Comet ML", email = "support@comet.com"}
@@ -13,6 +13,7 @@ dependencies = [
     "deap>=1.4.3",
     "diskcache",
     "dspy<3",
+    "gepa>=0.0.7",
     "ujson",
     "hf_xet",
     "litellm",
@@ -32,7 +33,7 @@ dev = [
     "pytest-cov",
     # "google-adk",
     "langgraph",
-    "gepa>=0.0.7",
+    "pre-commit",
 ]
 
 [tool.setuptools.packages.find]

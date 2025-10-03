@@ -40,9 +40,7 @@ metric.score(
 
 Asynchronous scoring is also supported with the `ascore` method.
 
-<Tip>
-  The `StructuredOutputCompliance` score is `1` if the output is compliant, and `0` if it is not.
-</Tip>
+<Tip>The `StructuredOutputCompliance` score is `1` if the output is compliant, and `0` if it is not.</Tip>
 
 ## Prompt Template
 
@@ -50,11 +48,10 @@ Opik uses an LLM as a Judge to evaluate the structural compliance. The default m
 
 The prompt used by the LLM looks like this:
 
-````markdown
+```markdown
 You are an expert in structured data validation. Your task is to determine whether the given OUTPUT complies with the expected STRUCTURE. The structure may be described as a JSON schema, a Pydantic model, or simply implied to be valid JSON.
 
 Guidelines:
-
 
 1. OUTPUT must be a valid JSON object (not just a string).
 2. If a schema is provided, the OUTPUT must match the schema exactly in field names, types, and structure.
@@ -76,5 +73,4 @@ Respond in the following JSON format:
     "score": true or false,  // true if output fully complies, false otherwise
     "reason": ["list of reasons for failure or confirmation"]
 }}
-````
-
+```

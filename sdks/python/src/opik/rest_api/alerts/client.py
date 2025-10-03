@@ -123,6 +123,53 @@ class AlertsClient:
         _response = self._raw_client.get_alert_by_id(id, request_options=request_options)
         return _response.data
 
+    def update_alert(
+        self,
+        id_: str,
+        *,
+        name: str,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update alert
+
+        Parameters
+        ----------
+        id_ : str
+
+        name : str
+
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import WebhookWrite
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+        """
+        _response = self._raw_client.update_alert(
+            id_, name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
+        )
+        return _response.data
+
 
 class AsyncAlertsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -241,4 +288,54 @@ class AsyncAlertsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_alert_by_id(id, request_options=request_options)
+        return _response.data
+
+    async def update_alert(
+        self,
+        id_: str,
+        *,
+        name: str,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update alert
+
+        Parameters
+        ----------
+        id_ : str
+
+        name : str
+
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import WebhookWrite
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_alert(
+            id_, name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
+        )
         return _response.data

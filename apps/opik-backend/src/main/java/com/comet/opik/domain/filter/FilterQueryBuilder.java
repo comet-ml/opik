@@ -1,5 +1,6 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.AlertField;
 import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.DatasetItemField;
@@ -85,6 +86,8 @@ public class FilterQueryBuilder {
     private static final String TRACE_ID_DB = "trace_id";
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
+    private static final String WEBHOOK_URL_DB = "webhook_url";
+    private static final String WEBHOOK_SECRET_TOKEN_DB = "webhook_secret_token";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -198,6 +201,8 @@ public class FilterQueryBuilder {
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceField.CREATED_AT, CREATED_AT_DB)
+                    .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -301,6 +306,18 @@ public class FilterQueryBuilder {
                     .put(AnnotationQueueField.CREATED_BY, CREATED_BY_DB)
                     .put(AnnotationQueueField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(AnnotationQueueField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
+    private static final Map<AlertField, String> ALERT_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<AlertField, String>builder()
+                    .put(AlertField.ID, ID_DB)
+                    .put(AlertField.NAME, NAME_DB)
+                    .put(AlertField.WEBHOOK_URL, WEBHOOK_URL_DB)
+                    .put(AlertField.WEBHOOK_SECRET_TOKEN, WEBHOOK_SECRET_TOKEN_DB)
+                    .put(AlertField.CREATED_AT, CREATED_AT_DB)
+                    .put(AlertField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(AlertField.CREATED_BY, CREATED_BY_DB)
+                    .put(AlertField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -437,6 +454,16 @@ public class FilterQueryBuilder {
                 DatasetItemField.CREATED_BY,
                 DatasetItemField.LAST_UPDATED_BY));
 
+        map.put(FilterStrategy.ALERT, Set.of(
+                AlertField.ID,
+                AlertField.NAME,
+                AlertField.WEBHOOK_URL,
+                AlertField.WEBHOOK_SECRET_TOKEN,
+                AlertField.CREATED_AT,
+                AlertField.LAST_UPDATED_AT,
+                AlertField.CREATED_BY,
+                AlertField.LAST_UPDATED_BY));
+
         return map;
     }
 
@@ -528,6 +555,7 @@ public class FilterQueryBuilder {
             case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
             case DatasetItemField datasetItemField -> DATASET_ITEM_FIELDS_MAP.get(datasetItemField);
             case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
+            case AlertField alertField -> ALERT_FIELDS_MAP.get(alertField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {
