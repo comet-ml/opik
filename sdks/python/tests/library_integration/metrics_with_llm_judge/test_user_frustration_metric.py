@@ -57,6 +57,7 @@ def test_user_frustration_metric(real_model_conversation):
     assert_helpers.assert_score_result(result)
     # We don't assert specific values since the real model's output may vary
     assert result.name == "user_frustration_score"
+    assert result.value is not None
 
 
 @pytest.mark.asyncio
