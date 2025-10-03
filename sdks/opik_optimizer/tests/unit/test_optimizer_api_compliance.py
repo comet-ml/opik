@@ -14,7 +14,7 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
 import inspect
 from typing import Any
 
@@ -44,21 +44,17 @@ class TestOptimizerAPICompliance:
         return prompt
 
     @pytest.fixture
-    def mock_dataset(self) -> Mock:
+    def mock_dataset(self) -> MagicMock:
         """Create a mock Dataset for testing."""
-        dataset = Mock(spec=Dataset)
-        dataset.__len__ = Mock(return_value=2)
-        dataset.__iter__ = Mock(
-            return_value=iter(
-                [
-                    Mock(
-                        input={"query": "test1"}, expected_output={"answer": "answer1"}
-                    ),
-                    Mock(
-                        input={"query": "test2"}, expected_output={"answer": "answer2"}
-                    ),
-                ]
-            )
+        # Create a mock that passes isinstance checks
+        dataset = MagicMock(spec_set=Dataset)
+        # Configure magic methods directly on the instance
+        type(dataset).__len__ = lambda self: 2
+        type(dataset).__iter__ = lambda self: iter(
+            [
+                Mock(input={"query": "test1"}, expected_output={"answer": "answer1"}),
+                Mock(input={"query": "test2"}, expected_output={"answer": "answer2"}),
+            ]
         )
         return dataset
 
