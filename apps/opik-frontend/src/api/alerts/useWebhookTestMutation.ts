@@ -5,7 +5,9 @@ import api, { ALERTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, WebhookTestResult } from "@/types/alerts";
 
-const testWebhook = async (alert: Alert): Promise<WebhookTestResult> => {
+const testWebhook = async (
+  alert: Partial<Alert>,
+): Promise<WebhookTestResult> => {
   const { data } = await api.post<WebhookTestResult>(
     `${ALERTS_REST_ENDPOINT}/webhook/test`,
     alert,

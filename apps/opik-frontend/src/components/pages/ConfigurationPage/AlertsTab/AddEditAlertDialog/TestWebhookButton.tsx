@@ -42,7 +42,7 @@ const TestWebhookButton: React.FunctionComponent<TestWebhookButtonProps> = ({
       return;
     }
 
-    mutate(alert as Alert, {
+    mutate(alert, {
       onSuccess: (result: WebhookTestResult) => {
         if (result.status === "success") {
           toast({

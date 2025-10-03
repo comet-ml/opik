@@ -48,7 +48,8 @@ export const AlertFormSchema = z
         eventTriggers.feedbackScoreNewTrace ||
         eventTriggers.feedbackScoreNewThread ||
         eventTriggers.promptLibraryNewPrompt ||
-        eventTriggers.promptLibraryNewCommit
+        eventTriggers.promptLibraryNewCommit ||
+        eventTriggers.promptLibraryDeleted
       );
     },
     {

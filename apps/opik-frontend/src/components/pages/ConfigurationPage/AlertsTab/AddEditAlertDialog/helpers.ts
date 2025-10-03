@@ -33,7 +33,11 @@ const getProjectScopeFromTriggerConfigs = (
   );
 
   if (projectConfig) {
-    return projectConfig.config_value?.project_ids?.split(",") || [];
+    const projectIds = projectConfig.config_value?.project_ids;
+    if (!projectIds || projectIds.trim() === "") {
+      return [];
+    }
+    return projectIds.split(",");
   }
 
   return [];
