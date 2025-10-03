@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AlertBucketServiceTest {
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private static final String BUCKET_KEY_PREFIX = "opik:alert_bucket:";
 
     private RedissonReactiveClient redissonClient;
     private AlertBucketService alertBucketService;
@@ -80,7 +81,7 @@ class AlertBucketServiceTest {
                 .verifyComplete();
 
         // Then - verify bucket structure
-        String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+        String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
         var bucket = redissonClient.getMap(bucketKey);
 
         StepVerifier.create(bucket.get("windowSize"))
@@ -122,7 +123,7 @@ class AlertBucketServiceTest {
         StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId1))
                 .verifyComplete();
 
-        String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+        String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
         var bucket = redissonClient.getMap(bucketKey);
 
         // Store original values
@@ -172,7 +173,7 @@ class AlertBucketServiceTest {
         StepVerifier.create(alertBucketService.addEventToBucket(alert1Id, workspaceId1, eventType, event1Id))
                 .verifyComplete();
 
-        String bucket1Key = "alert_bucket:" + alert1Id + ":" + eventType.getValue();
+        String bucket1Key = BUCKET_KEY_PREFIX + alert1Id + ":" + eventType.getValue();
         var bucket1 = redissonClient.getMap(bucket1Key);
 
         // Verify first bucket has 1-second window
@@ -202,7 +203,7 @@ class AlertBucketServiceTest {
         StepVerifier.create(updatedAlertBucketService.addEventToBucket(alert2Id, workspaceId2, eventType, event2Id))
                 .verifyComplete();
 
-        String bucket2Key = "alert_bucket:" + alert2Id + ":" + eventType.getValue();
+        String bucket2Key = BUCKET_KEY_PREFIX + alert2Id + ":" + eventType.getValue();
         var bucket2 = redissonClient.getMap(bucket2Key);
 
         // Then - verify second bucket has 2-second window
@@ -266,7 +267,7 @@ class AlertBucketServiceTest {
                 .assertNext(bucketKey -> {
                     assertThat(bucketKey)
                             .as("First bucket should be ready after 500ms")
-                            .isEqualTo("alert_bucket:" + alert1Id + ":" + eventType.getValue());
+                            .isEqualTo(BUCKET_KEY_PREFIX + alert1Id + ":" + eventType.getValue());
                 })
                 .verifyComplete();
 
@@ -277,7 +278,7 @@ class AlertBucketServiceTest {
                 .consumeRecordedWith(keys -> {
                     assertThat(keys)
                             .as("Second bucket should not be ready yet")
-                            .doesNotContain("alert_bucket:" + alert2Id + ":" + eventType.getValue());
+                            .doesNotContain(BUCKET_KEY_PREFIX + alert2Id + ":" + eventType.getValue());
                 })
                 .verifyComplete();
     }
@@ -307,7 +308,7 @@ class AlertBucketServiceTest {
                 .verifyComplete();
 
         // Then - bucket should still have original 1-second window
-        String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+        String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
         var bucket = redissonClient.getMap(bucketKey);
 
         StepVerifier.create(bucket.get("windowSize"))
@@ -335,7 +336,7 @@ class AlertBucketServiceTest {
                         .then(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2)))
                 .verifyComplete();
 
-        String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+        String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
 
         // Then - verify both events are in bucket
         StepVerifier.create(alertBucketService.getBucketData(bucketKey))
@@ -360,7 +361,7 @@ class AlertBucketServiceTest {
         StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId))
                 .verifyComplete();
 
-        String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+        String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
 
         // Verify bucket exists
         StepVerifier.create(redissonClient.getMap(bucketKey).isExists())
@@ -392,7 +393,7 @@ class AlertBucketServiceTest {
                 .verifyComplete();
 
         // Then - verify TTL is set
-        String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+        String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
         var bucket = redissonClient.getMap(bucketKey);
 
         StepVerifier.create(bucket.remainTimeToLive())
@@ -418,7 +419,7 @@ class AlertBucketServiceTest {
         StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1"))
                 .verifyComplete();
 
-        String bucketKey = "alert_bucket:" + alertId + ":" + eventType.getValue();
+        String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
         var bucket = redissonClient.getMap(bucketKey);
 
         // Get initial TTL using StepVerifier to avoid blocking

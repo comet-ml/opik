@@ -86,7 +86,7 @@ public class AlertBucketService {
                                     long firstSeenMillis = Instant.now().toEpochMilli();
                                     String timestamp = String.valueOf(firstSeenMillis);
                                     String windowSize = String.valueOf(currentWindowSizeMillis);
-                                    
+
                                     // Calculate when this bucket will be ready to process
                                     double readyTimestamp = firstSeenMillis + currentWindowSizeMillis;
 
@@ -120,7 +120,7 @@ public class AlertBucketService {
      * Adds a bucket key to the index with its ready timestamp as the score.
      * This allows efficient retrieval of buckets ready to be processed.
      * Also sets/renews the TTL on the index to 2x the bucket TTL duration.
-     * 
+     *
      * Note: If the index doesn't exist yet (first bucket or after expiration),
      * the add() operation will automatically create it, and expire() will set its TTL.
      *
@@ -131,7 +131,7 @@ public class AlertBucketService {
     private Mono<Void> addBucketToIndex(String bucketKey, double readyTimestamp) {
         var index = redissonClient.getScoredSortedSet(BUCKET_INDEX_KEY);
         long indexTtlMillis = webhookConfig.getDebouncing().getBucketTtl().toMilliseconds() * 2;
-        
+
         return index.add(readyTimestamp, bucketKey)
                 .flatMap(added -> {
                     if (added) {
@@ -143,7 +143,7 @@ public class AlertBucketService {
                     // This works whether the index was just created or already existed
                     return index.expire(java.time.Duration.ofMillis(indexTtlMillis));
                 })
-                .doOnError(error -> log.error("Failed to add bucket '{}' to index: {}", 
+                .doOnError(error -> log.error("Failed to add bucket '{}' to index: {}",
                         bucketKey, error.getMessage(), error))
                 .then();
     }
@@ -158,7 +158,7 @@ public class AlertBucketService {
     private Mono<Void> removeBucketFromIndex(String bucketKey) {
         var index = redissonClient.getScoredSortedSet(BUCKET_INDEX_KEY);
         long indexTtlMillis = webhookConfig.getDebouncing().getBucketTtl().toMilliseconds() * 2;
-        
+
         return index.remove(bucketKey)
                 .flatMap(removed -> {
                     if (removed) {
@@ -169,7 +169,7 @@ public class AlertBucketService {
                     // Renew TTL on the index to keep it alive as long as there's activity
                     return index.expire(java.time.Duration.ofMillis(indexTtlMillis));
                 })
-                .doOnError(error -> log.error("Failed to remove bucket '{}' from index: {}", 
+                .doOnError(error -> log.error("Failed to remove bucket '{}' from index: {}",
                         bucketKey, error.getMessage(), error))
                 .then();
     }
@@ -177,14 +177,14 @@ public class AlertBucketService {
     /**
      * Retrieves all bucket keys that are ready to be processed using an indexed lookup.
      * Uses a Redis Sorted Set (ZSET) to efficiently query buckets by their ready timestamp.
-     * This is O(log(N) + M) where N is total buckets and M is ready buckets, 
+     * This is O(log(N) + M) where N is total buckets and M is ready buckets,
      * much better than the previous O(N) full keyspace scan.
-     * 
+     *
      * A bucket is ready if its stored ready timestamp (firstSeen + windowSize) <= now.
      * This ensures that configuration changes do not affect existing buckets:
      * - Old buckets continue to use their original window size
      * - New buckets created after config change use the new window size
-     * 
+     *
      * The index itself has a TTL (2x bucket TTL) that's renewed on each add/remove operation.
      * If there's no activity, the entire index expires automatically.
      *
@@ -202,7 +202,8 @@ public class AlertBucketService {
                 .flatMapMany(collection -> Flux.fromIterable(collection)
                         .map(Object::toString))
                 .doOnComplete(() -> log.debug("Finished checking for buckets ready to process"))
-                .doOnError(error -> log.error("Failed to check for buckets using index: {}", error.getMessage(), error));
+                .doOnError(
+                        error -> log.error("Failed to check for buckets using index: {}", error.getMessage(), error));
     }
 
     /**
