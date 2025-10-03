@@ -110,6 +110,8 @@ public interface TraceService {
     Mono<Long> countTraces(Set<UUID> projectIds);
 
     Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria);
+
+    Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
 }
 
 @Slf4j
@@ -598,6 +600,12 @@ class TraceServiceImpl implements TraceService {
     public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.threadsSearch(limit, it));
+    }
+
+    @Override
+    public Mono<List<TraceThread>> getMinimalThreadInfoByIds(@NonNull UUID projectId, @NonNull Set<String> threadId) {
+        return dao.getMinimalThreadInfoByIds(projectId, threadId)
+                .switchIfEmpty(Mono.just(List.of()));
     }
 
 }

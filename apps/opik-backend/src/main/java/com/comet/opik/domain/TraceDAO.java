@@ -122,6 +122,8 @@ interface TraceDAO {
     Mono<Long> countTraces(Set<UUID> projectIds);
 
     Flux<TraceThread> threadsSearch(int limit, TraceSearchCriteria criteria);
+
+    Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
 }
 
 @Slf4j
@@ -2328,6 +2330,43 @@ class TraceDAOImpl implements TraceDAO {
             AND project_id IN :project_ids
             """;
 
+    private static final String SELECT_MINIMAL_THREAD_INFO_BY_IDS = """
+            SELECT
+                t.id as id,
+                if(LENGTH(CAST(tt.id AS Nullable(String))) > 0, tt.id, '') as thread_model_id,
+                t.workspace_id as workspace_id,
+                t.project_id as project_id,
+                t.created_by as created_by,
+                t.created_at as created_at,
+                tt.status as status
+            FROM (
+                SELECT
+                    inner_t.thread_id as id,
+                    inner_t.project_id as project_id,
+                    inner_t.workspace_id as workspace_id,
+                    argMin(inner_t.created_by, inner_t.created_at)  as created_by,
+                    min(inner_t.created_at) as created_at
+                FROM (
+                    SELECT
+                        thread_id,
+                        workspace_id,
+                        project_id,
+                        created_by,
+                        created_at
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND thread_id IN :thread_ids
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) inner_t
+                GROUP BY inner_t.workspace_id, inner_t.project_id, inner_t.thread_id
+            ) t
+            LEFT JOIN trace_threads tt ON t.workspace_id = tt.workspace_id
+              AND t.project_id = tt.project_id
+              AND t.id = tt.thread_id
+            """;
+
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -3193,6 +3232,39 @@ class TraceDAOImpl implements TraceDAO {
                 .concatWith(Mono.just(List.of()))
                 .filter(CollectionUtils::isNotEmpty)
                 .flatMap(Flux::fromIterable);
+    }
+
+    @Override
+    public Mono<List<TraceThread>> getMinimalThreadInfoByIds(@NonNull UUID projectId, @NonNull Set<String> threadId) {
+        if (threadId.isEmpty()) {
+            return Mono.just(List.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_MINIMAL_THREAD_INFO_BY_IDS)
+                    .bind("project_id", projectId)
+                    .bind("thread_ids", threadId.toArray(String[]::new));
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(this::mapMinimalThreadToDto)
+                    .collectList();
+        });
+
+    }
+
+    private Publisher<TraceThread> mapMinimalThreadToDto(Result result) {
+        return result.map((row, rowMetadata) -> TraceThread.builder()
+                .id(row.get("id", String.class))
+                .projectId(row.get("project_id", UUID.class))
+                .threadModelId(Optional.ofNullable(row.get("thread_model_id", String.class))
+                        .filter(StringUtils::isNotBlank)
+                        .map(UUID::fromString)
+                        .orElse(null))
+                .workspaceId(row.get("workspace_id", String.class))
+                .status(TraceThreadStatus.fromValue(row.get("status", String.class)).orElse(TraceThreadStatus.ACTIVE))
+                .createdBy(row.get("created_by", String.class))
+                .createdAt(row.get("created_at", Instant.class))
+                .build());
     }
 
     private Publisher<TraceThread> mapThreadToDto(Result result) {
