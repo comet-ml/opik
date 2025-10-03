@@ -11,7 +11,7 @@ from .bias_classifier import (
     ReligiousBiasJudge,
 )
 from .compliance_risk import ComplianceRiskJudge
-from .prompt_diagnostics import (PromptPerplexityJudge, PromptUncertaintyJudge)
+from .prompt_diagnostics import PromptPerplexityJudge, PromptUncertaintyJudge
 from .qa_suite import (
     DialogueHelpfulnessJudge,
     QARelevanceJudge,

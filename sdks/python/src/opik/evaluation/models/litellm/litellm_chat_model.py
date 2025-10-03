@@ -317,4 +317,6 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                     model=self.model_name, messages=messages, **all_kwargs
                 )
 
-        raise exceptions.BaseLLMError("Async LLM completion failed without raising an exception")  # pragma: no cover
+        raise exceptions.BaseLLMError(
+            "Async LLM completion failed without raising an exception"
+        )  # pragma: no cover

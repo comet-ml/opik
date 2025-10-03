@@ -23,9 +23,7 @@ class ReferenceTurnMetric(Protocol):
         """Score a single candidate/reference pair."""
 
 
-class ConversationReferenceMetric(
-    conversation_thread_metric.ConversationThreadMetric
-):
+class ConversationReferenceMetric(conversation_thread_metric.ConversationThreadMetric):
     """
     Base helper that lifts turn-level reference metrics to conversation scope.
 

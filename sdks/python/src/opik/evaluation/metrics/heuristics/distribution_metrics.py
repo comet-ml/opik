@@ -10,7 +10,9 @@ from opik.evaluation.metrics import base_metric, score_result
 TokenizeFn = Callable[[str], Iterable[str]]
 
 
-def _load_jensen_shannon_distance() -> Callable[[Sequence[float], Sequence[float], float], float]:
+def _load_jensen_shannon_distance() -> (
+    Callable[[Sequence[float], Sequence[float], float], float]
+):
     try:
         from scipy.spatial.distance import jensenshannon
     except ImportError as error:  # pragma: no cover - optional dependency

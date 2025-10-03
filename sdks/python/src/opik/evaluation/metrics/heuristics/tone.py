@@ -146,6 +146,7 @@ class ToneGuard(BaseMetric):
             return 0.0
         return (pos_hits - neg_hits) / total
 
+
 def _uppercase_ratio(text: str) -> float:
     letters = [char for char in text if char.isalpha()]
     if not letters:
