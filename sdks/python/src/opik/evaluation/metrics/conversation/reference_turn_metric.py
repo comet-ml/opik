@@ -29,11 +29,21 @@ class ConversationReferenceMetric(
     """
     Base helper that lifts turn-level reference metrics to conversation scope.
 
-    Subclasses supply a turn metric (for example ROUGE, BLEU, METEOR) and the role
-    to evaluate. ``ConversationReferenceMetric`` then aligns turns between the
-    candidate and reference conversations, averages the per-turn scores, and applies
-    an optional penalty when one side has extra turns so gaps are reflected in the
-    final score.
+    Subclasses supply a **turn metric**—a scorer that compares a single output string
+    to a reference string (e.g. Sentence BLEU, ROUGE, METEOR)—and the conversation
+    role to evaluate. ``ConversationReferenceMetric`` then:
+
+    #. extracts the relevant turns from the candidate and reference conversations
+       (assistant by default),
+    #. calls the provided turn metric for each aligned pair and normalises the
+       results so the per-turn outputs are always ``ScoreResult`` objects,
+    #. averages the turn-level scores and applies a configurable penalty for
+       missing turns to keep mismatched transcripts from reporting inflated scores,
+    #. returns a single ``ScoreResult`` that contains the aggregate value plus rich
+       per-turn diagnostics in ``metadata``.
+
+    This approach keeps the aggregation logic in one place while letting concrete
+    metrics focus on configuring the sentence-level scorer they want to reuse.
 
     Args:
         turn_metric: The underlying metric used to evaluate individual turn pairs.
