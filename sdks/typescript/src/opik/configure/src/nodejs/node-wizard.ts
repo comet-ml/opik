@@ -16,11 +16,7 @@ import { OPIK_ENV_VARS } from '../lib/env-constants';
 import { debug } from '../utils/debug';
 import type { WizardOptions } from '../utils/types';
 import { getOutroMessage } from '../lib/messages';
-import {
-  addOrUpdateEnvironmentVariablesStep,
-  runPrettierStep,
-  createOpikClientStep,
-} from '../steps';
+import { addOrUpdateEnvironmentVariablesStep, runPrettierStep } from '../steps';
 import { uploadEnvironmentVariablesStep } from '../steps/upload-environment-variables';
 import { buildOpikApiUrl } from '../utils/urls';
 import { analytics } from '../utils/analytics';
@@ -79,19 +75,6 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
     `Project data obtained: deploymentType=${deploymentType}, workspace=${workspaceName}, project=${projectName}`,
   );
 
-  // Create opik-client file with basic setup and examples
-  debug('Creating opik-client file');
-  const opikClientFile = await createOpikClientStep({
-    installDir: options.installDir,
-    isTypeScript: typeScriptDetected,
-  });
-  debug('Opik-client file created successfully');
-
-  analytics.capture('opik client file created', {
-    fileName: opikClientFile,
-    isTypeScript: typeScriptDetected,
-  });
-
   // TODO: AI-powered LLM setup (commented out - backend endpoint not ready)
   // This will be enabled once the backend endpoint for LLM analysis is available
   /*
@@ -113,7 +96,7 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
 
     if (!aiConsent) {
       clack.log.info(
-        'Skipping automatic LLM setup. You can set it up manually using the examples in opik-client file',
+        'Skipping automatic LLM setup. You can set it up manually using the Opik documentation',
       );
     } else {
       const relevantFiles = await getRelevantFilesForIntegration({
