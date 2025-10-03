@@ -136,6 +136,35 @@ All optimizers inherit from `BaseOptimizer` and support these common parameters:
 - **Reflection Model**: Use stronger models (gpt-4, claude-3) for better reflection
 - **Minibatch Size**: Larger batches (5-10) for efficiency, smaller (2-3) for thorough reflection
 
+### ParameterOptimizer
+
+**Purpose**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization without changing the prompt.
+
+**Specific Parameters:**
+- **`default_n_trials`** (int, default: 20): Default number of optimization trials
+- **`n_threads`** (int, default: 4): Number of parallel evaluation threads
+- **`local_search_ratio`** (float, default: 0.3): Ratio of trials dedicated to local search around best parameters
+- **`local_search_scale`** (float, default: 0.2): Scale factor for local search range
+
+**Optimization Parameters (via optimize_parameter kwargs):**
+- **`parameter_space`** (ParameterSearchSpace | dict): Defines parameters to optimize and their ranges
+- **`n_trials`** (int, optional): Number of optimization trials (overrides default_n_trials)
+- **`sampler`** (optuna.samplers.BaseSampler, optional): Custom Optuna sampler
+- **`callbacks`** (list, optional): Optuna callbacks for custom logging/monitoring
+- **`timeout`** (float, optional): Maximum optimization time in seconds
+
+**Use Cases:**
+- Fine-tuning model behavior without changing the prompt
+- Optimizing temperature, top_p, frequency_penalty, and other sampling parameters
+- Finding optimal model parameters for specific tasks
+- A/B testing different parameter configurations
+
+**Parameter Tuning:**
+- **N-Trials**: More trials (50-100) for thorough optimization, fewer (10-30) for quick tuning
+- **Local Search Ratio**: Higher ratios (0.4-0.5) for refinement, lower (0.1-0.2) for exploration
+- **Local Search Scale**: Larger scale (0.3-0.5) for wider local search, smaller (0.1-0.2) for fine-tuning
+- **N-Threads**: Increase for faster evaluation (limited by API rate limits)
+
 ## Parameter Selection Guidelines
 
 ### Task Complexity Assessment
@@ -144,6 +173,11 @@ All optimizers inherit from `BaseOptimizer` and support these common parameters:
 - Use `FewShotBayesianOptimizer` or `MetaPromptOptimizer`
 - Lower parameter values (fewer iterations, smaller populations)
 - Focus on prompt clarity and example selection
+
+**Parameter Tuning** (optimize model behavior without changing prompts):
+- Use `ParameterOptimizer` to tune temperature, top_p, and other sampling parameters
+- Quick optimization with focused parameter space
+- Best when prompt is already good but model behavior needs adjustment
 
 **Complex Tasks** (multi-step, tool usage, agent workflows):
 - Use `MiproOptimizer` or `EvolutionaryOptimizer`

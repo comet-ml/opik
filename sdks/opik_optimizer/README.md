@@ -12,6 +12,7 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 * **MetaPromptOptimizer** - Employs meta-prompting techniques for optimization
 * **MiproOptimizer** - Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 * **GepaOptimizer** - Leverages GEPA (Genetic-Pareto) optimization approach
+* **ParameterOptimizer** - Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 
 ## 🎯 Key Features
 

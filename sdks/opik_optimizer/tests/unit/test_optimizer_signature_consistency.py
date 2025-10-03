@@ -20,6 +20,9 @@ from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (
 )
 from opik_optimizer.gepa_optimizer.gepa_optimizer import GepaOptimizer
 from opik_optimizer.mipro_optimizer.mipro_optimizer import MiproOptimizer
+from opik_optimizer.parameter_optimizer.parameter_optimizer import (
+    ParameterOptimizer,
+)
 
 
 class TestOptimizerSignatureConsistency:
@@ -35,6 +38,7 @@ class TestOptimizerSignatureConsistency:
             ("MetaPromptOptimizer", MetaPromptOptimizer),
             ("GepaOptimizer", GepaOptimizer),
             ("MiproOptimizer", MiproOptimizer),
+            ("ParameterOptimizer", ParameterOptimizer),
         ]
 
     def test_optimize_prompt_return_types_consistency(
@@ -65,6 +69,22 @@ class TestOptimizerSignatureConsistency:
 
                 assert return_annotation == OptimizationResult, (
                     f"{name}.optimize_mcp returns {return_annotation}, "
+                    f"expected {OptimizationResult}"
+                )
+
+    def test_optimize_parameter_return_types_consistency(
+        self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
+    ) -> None:
+        """Test that all optimize_parameter methods return the same type."""
+        from opik_optimizer.optimization_result import OptimizationResult
+
+        for name, optimizer_class in all_optimizers:
+            if hasattr(optimizer_class, "optimize_parameter"):
+                sig = inspect.signature(optimizer_class.optimize_parameter)
+                return_annotation = sig.return_annotation
+
+                assert return_annotation == OptimizationResult, (
+                    f"{name}.optimize_parameter returns {return_annotation}, "
                     f"expected {OptimizationResult}"
                 )
 
@@ -140,6 +160,29 @@ class TestOptimizerSignatureConsistency:
                         f"Found parameters: {params}"
                     )
 
+    def test_optimize_parameter_core_parameters_consistency(
+        self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
+    ) -> None:
+        """Test that all optimize_parameter methods have the same core parameters."""
+        expected_core_params = [
+            "prompt",
+            "dataset",
+            "metric",
+            "parameter_space",
+            "experiment_config",
+        ]
+
+        for name, optimizer_class in all_optimizers:
+            if hasattr(optimizer_class, "optimize_parameter"):
+                sig = inspect.signature(optimizer_class.optimize_parameter)
+                params = list(sig.parameters.keys())
+
+                for expected_param in expected_core_params:
+                    assert expected_param in params, (
+                        f"{name}.optimize_parameter missing required parameter: {expected_param}. "
+                        f"Found parameters: {params}"
+                    )
+
     def test_optimize_mcp_parameter_order_consistency(
         self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
     ) -> None:
@@ -170,6 +213,32 @@ class TestOptimizerSignatureConsistency:
                             f"expected '{expected_param}'. Full params: {params}"
                         )
 
+    def test_optimize_parameter_parameter_order_consistency(
+        self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
+    ) -> None:
+        """Test that all optimize_parameter methods have consistent parameter order."""
+        expected_order = [
+            "prompt",
+            "dataset",
+            "metric",
+            "parameter_space",
+            "experiment_config",
+        ]
+
+        for name, optimizer_class in all_optimizers:
+            if hasattr(optimizer_class, "optimize_parameter"):
+                sig = inspect.signature(optimizer_class.optimize_parameter)
+                params = list(sig.parameters.keys())
+
+                core_params = [p for p in params if p not in ["self", "kwargs"]]
+
+                for i, expected_param in enumerate(expected_order):
+                    if i < len(core_params):
+                        assert core_params[i] == expected_param, (
+                            f"{name}.optimize_parameter parameter {i} is '{core_params[i]}', "
+                            f"expected '{expected_param}'. Full params: {params}"
+                        )
+
     def test_optimize_prompt_optional_parameters_consistency(
         self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
     ) -> None:
@@ -190,6 +259,24 @@ class TestOptimizerSignatureConsistency:
                         f"{name}.optimize_prompt parameter '{expected_param}' should be optional "
                         f"(have a default value)"
                     )
+
+    def test_optimize_parameter_optional_parameters_consistency(
+        self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
+    ) -> None:
+        """Test that all optimize_parameter methods have consistent optional parameters."""
+        expected_optional_params = ["n_trials", "n_samples", "agent_class"]
+
+        for name, optimizer_class in all_optimizers:
+            if hasattr(optimizer_class, "optimize_parameter"):
+                sig = inspect.signature(optimizer_class.optimize_parameter)
+                params = list(sig.parameters.keys())
+
+                for expected_param in expected_optional_params:
+                    if expected_param in params:
+                        param = sig.parameters[expected_param]
+                        assert param.default != inspect.Parameter.empty, (
+                            f"{name}.optimize_parameter parameter '{expected_param}' should be optional (have a default)."
+                        )
 
     def test_signature_inconsistencies_detected(
         self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
@@ -241,6 +328,28 @@ class TestOptimizerSignatureConsistency:
                             }
                         )
 
+        if hasattr(BaseOptimizer, "optimize_parameter"):
+            base_param_sig = inspect.signature(BaseOptimizer.optimize_parameter)
+            base_param_params = list(base_param_sig.parameters.keys())
+
+            for name, optimizer_class in all_optimizers:
+                if optimizer_class == BaseOptimizer:
+                    continue
+
+                if hasattr(optimizer_class, "optimize_parameter"):
+                    sig = inspect.signature(optimizer_class.optimize_parameter)
+                    params = list(sig.parameters.keys())
+
+                    if params != base_param_params:
+                        inconsistencies.append(
+                            {
+                                "method": "optimize_parameter",
+                                "optimizer": name,
+                                "expected": base_param_params,
+                                "actual": params,
+                            }
+                        )
+
         # Report inconsistencies
         if inconsistencies:
             error_msg = "Signature inconsistencies detected:\n"
@@ -260,4 +369,13 @@ class TestOptimizerSignatureConsistency:
         for name, optimizer_class in all_optimizers:
             assert hasattr(optimizer_class, "optimize_mcp"), (
                 f"{name} is missing the optimize_mcp method"
+            )
+
+    def test_all_optimizers_have_optimize_parameter(
+        self, all_optimizers: list[tuple[str, type[BaseOptimizer]]]
+    ) -> None:
+        """Test that all optimizers expose the optimize_parameter method."""
+        for name, optimizer_class in all_optimizers:
+            assert hasattr(optimizer_class, "optimize_parameter"), (
+                f"{name} is missing the optimize_parameter method"
             )

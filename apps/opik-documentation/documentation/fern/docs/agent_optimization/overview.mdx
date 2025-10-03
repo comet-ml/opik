@@ -167,6 +167,7 @@ The following algorithms have been implemented:
 | [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.     |
 | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
 | [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)                   | Wraps the external GEPA package to optimize a single system prompt for single-turn tasks using a reflection model. Requires `pip install gepa`.                                         |
+| [Parameter Optimization](/agent_optimization/algorithms/parameter_optimizer)                   | Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization. Uses Optuna for efficient parameter search with global and local search phases. Best for tuning model behavior without changing the prompt.                                         |
 
 <Tip>
   If you would like us to implement another optimization algorithm, reach out to us on

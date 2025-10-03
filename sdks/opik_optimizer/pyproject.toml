@@ -1,6 +1,6 @@
 [project]
 name = "opik_optimizer"
-version = "2.0.1"
+version = "2.1.0"
 description = "Agent optimization with Opik"
 authors = [
     {name = "Comet ML", email = "support@comet.com"}
@@ -34,6 +34,7 @@ dev = [
     # "google-adk",
     "langgraph",
     "pre-commit",
+    "scikit-learn",
 ]
 
 [tool.setuptools.packages.find]
