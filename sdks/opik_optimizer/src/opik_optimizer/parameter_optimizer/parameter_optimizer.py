@@ -112,7 +112,8 @@ class ParameterOptimizer(BaseOptimizer):
     ) -> optimization_result.OptimizationResult:
         raise NotImplementedError(
             "ParameterOptimizer.optimize_prompt is not supported. "
-            "Call optimize_parameter with a ParameterSearchSpace instead."
+            "Use optimize_parameter(prompt, dataset, metric, parameter_space) instead, "
+            "where parameter_space is a ParameterSearchSpace or dict defining the parameters to optimize."
         )
 
     def optimize_parameter(

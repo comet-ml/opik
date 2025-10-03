@@ -8,6 +8,13 @@ import rich
 from .reporting_utils import get_console, get_link_text, get_optimization_run_url_by_id
 
 
+def _format_float(value: Any, digits: int = 6) -> str:
+    """Format float values with specified precision."""
+    if isinstance(value, float):
+        return f"{value:.{digits}f}"
+    return str(value)
+
+
 class OptimizationResult(pydantic.BaseModel):
     """Result oan optimization run."""
 
@@ -120,20 +127,15 @@ class OptimizationResult(pydantic.BaseModel):
         search_ranges = self.details.get("search_ranges") or {}
         precision = self.details.get("parameter_precision", 6)
 
-        def _format_float(value: Any, digits: int = precision) -> str:
-            if isinstance(value, float):
-                return f"{value:.{digits}f}"
-            return str(value)
-
         if optimized_params:
             def _format_range(desc: dict[str, Any]) -> str:
                 if "min" in desc and "max" in desc:
                     step_str = (
-                        f", step={_format_float(desc['step'])}"
+                        f", step={_format_float(desc['step'], precision)}"
                         if desc.get("step") is not None
                         else ""
                     )
-                    return f"[{_format_float(desc['min'])}, {_format_float(desc['max'])}{step_str}]"
+                    return f"[{_format_float(desc['min'], precision)}, {_format_float(desc['max'], precision)}{step_str}]"
                 if desc.get("choices"):
                     return f"choices={desc['choices']}"
                 return str(desc)
@@ -182,7 +184,7 @@ class OptimizationResult(pydantic.BaseModel):
                     else:
                         total_improvement = self.score
                 for row in rows:
-                    value_str = _format_float(row["value"])
+                    value_str = _format_float(row["value"], precision)
                     contrib_val = row["contribution"]
                     if contrib_val is not None:
                         contrib_percent = contrib_val * 100
@@ -251,11 +253,6 @@ class OptimizationResult(pydantic.BaseModel):
         search_ranges = self.details.get("search_ranges") or {}
         precision = self.details.get("parameter_precision", 6)
 
-        def _format_float(value: Any, digits: int = precision) -> str:
-            if isinstance(value, float):
-                return f"{value:.{digits}f}"
-            return str(value)
-
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
@@ -310,11 +307,11 @@ class OptimizationResult(pydantic.BaseModel):
             def _format_range(desc: dict[str, Any]) -> str:
                 if "min" in desc and "max" in desc:
                     step_str = (
-                        f", step={_format_float(desc['step'])}"
+                        f", step={_format_float(desc['step'], precision)}"
                         if desc.get("step") is not None
                         else ""
                     )
-                    return f"[{_format_float(desc['min'])}, {_format_float(desc['max'])}{step_str}]"
+                    return f"[{_format_float(desc['min'], precision)}, {_format_float(desc['max'], precision)}{step_str}]"
                 if desc.get("choices"):
                     return ",".join(map(str, desc["choices"]))
                 return str(desc)
@@ -331,7 +328,7 @@ class OptimizationResult(pydantic.BaseModel):
                     total_improvement = self.score
 
             for name in sorted(optimized_params):
-                value_str = _format_float(optimized_params[name])
+                value_str = _format_float(optimized_params[name], precision)
                 contrib_val = parameter_importance.get(name)
                 if contrib_val is not None:
                     contrib_str = f"{contrib_val:.1%}"

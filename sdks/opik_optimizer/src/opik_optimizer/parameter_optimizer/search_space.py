@@ -13,11 +13,6 @@ import copy
 from optuna.trial import Trial
 from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # pragma: no cover
-    from ..optimization_config.chat_prompt import ChatPrompt
-
 
 class ParameterType(str, Enum):
     """Supported parameter distribution types."""
@@ -128,7 +123,9 @@ class ParameterSpec(BaseModel):
             return trial.suggest_categorical(self.name, list(self.choices))
         raise RuntimeError(f"Unsupported distribution type: {self.distribution}")
 
-    def apply_to_prompt(self, prompt: "ChatPrompt", value: Any) -> None:
+    def apply_to_prompt(
+        self, prompt: "opik_optimizer.optimization_config.chat_prompt.ChatPrompt", value: Any
+    ) -> None:
         """Apply a sampled value to the provided prompt instance."""
         resolved = self.target_path
         if resolved.root == "model":
@@ -280,11 +277,11 @@ class ParameterSearchSpace(BaseModel):
 
     def apply(
         self,
-        prompt: "ChatPrompt",
+        prompt: "opik_optimizer.optimization_config.chat_prompt.ChatPrompt",
         values: Mapping[str, Any],
         *,
         base_model_kwargs: dict[str, Any] | None = None,
-    ) -> "ChatPrompt":
+    ) -> "opik_optimizer.optimization_config.chat_prompt.ChatPrompt":
         """Return a prompt copy with sampled values applied."""
         prompt_copy = prompt.copy()
         if base_model_kwargs is not None:
