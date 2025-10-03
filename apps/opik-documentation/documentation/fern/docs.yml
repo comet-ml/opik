@@ -278,6 +278,10 @@ navigation:
             path: docs/contributing/overview.mdx
             slug: overview
             icon: fa-regular fa-compass
+          - page: Local Development Setup
+            path: docs/contributing/local-development.mdx
+            slug: local-development
+            icon: fa-regular fa-laptop-code
           - section: Specific Contribution Guides
             slug: /guides
             contents:
