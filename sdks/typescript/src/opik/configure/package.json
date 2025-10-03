@@ -51,7 +51,8 @@
     "semver": "^7.5.3",
     "uuid": "^11.1.0",
     "yargs": "^16.2.0",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@babel/types": "~7.21.4",
@@ -90,7 +91,8 @@
     "fix": "pnpm fix:eslint && pnpm fix:prettier",
     "fix:prettier": "prettier --write \"src/**/*.ts\"",
     "fix:eslint": "eslint '**/*.{ts,tsx}' --fix",
-    "try": "tsx bin.ts"
+    "try": "tsx bin.ts",
+    "typecheck": "tsc --noEmit"
   },
   "author": "Opik",
   "license": "Apache-2.0",

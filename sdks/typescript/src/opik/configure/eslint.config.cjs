@@ -13,7 +13,15 @@ module.exports = [
     ],
   },
   { files: ['src/**/*.{js,mjs,cjs,ts,d.ts}', 'bin.ts'] },
-  { languageOptions: { globals: globals.node } },
+  {
+    languageOptions: {
+      globals: globals.node,
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: './tsconfig.json',
+      },
+    },
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
 ];
