@@ -1,14 +1,26 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Protocol, Sequence, Union
 
 import opik.exceptions as exceptions
-from opik.evaluation.metrics.base_metric import BaseMetric
-from opik.evaluation.metrics.score_result import ScoreResult
+from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation.metrics.conversation import types as conversation_types
 
 
-class ConversationReferenceMetric(BaseMetric):
+class ReferenceTurnMetric(Protocol):
+    """Protocol for turn-level metrics that compare output/reference pairs."""
+
+    def score(
+        self,
+        *,
+        output: str,
+        reference: str,
+        **kwargs: object,
+    ) -> Union[score_result.ScoreResult, Sequence[score_result.ScoreResult]]:
+        """Score a single candidate/reference pair."""
+
+
+class ConversationReferenceMetric(base_metric.BaseMetric):
     """
     Base helper that lifts turn-level reference metrics to conversation scope.
 
@@ -49,7 +61,7 @@ class ConversationReferenceMetric(BaseMetric):
 
     def __init__(
         self,
-        turn_metric: BaseMetric,
+        turn_metric: ReferenceTurnMetric,
         target_role: str = "assistant",
         missing_turn_penalty: float = 0.0,
         name: str = "conversation_reference_metric",
@@ -60,7 +72,7 @@ class ConversationReferenceMetric(BaseMetric):
             raise ValueError("missing_turn_penalty must be within [0, 1]")
 
         super().__init__(name=name, track=track, project_name=project_name)
-        self._turn_metric = turn_metric
+        self._turn_metric: ReferenceTurnMetric = turn_metric
         self._target_role = target_role
         self._missing_turn_penalty = missing_turn_penalty
 
@@ -69,7 +81,7 @@ class ConversationReferenceMetric(BaseMetric):
         conversation: conversation_types.Conversation,
         reference_conversation: conversation_types.Conversation,
         **kwargs: object,
-    ) -> ScoreResult:
+    ) -> score_result.ScoreResult:
         candidate_turns = self._extract_role_turns(conversation)
         reference_turns = self._extract_role_turns(reference_conversation)
 
@@ -88,24 +100,12 @@ class ConversationReferenceMetric(BaseMetric):
                 "No overlapping turns between conversation and reference."
             )
 
-        per_turn_scores = []
+        per_turn_scores: list[float] = []
         for idx in range(overlap):
             raw_result = self._turn_metric.score(
                 output=candidate_turns[idx], reference=reference_turns[idx]
             )
-            if isinstance(raw_result, list):
-                if not raw_result:
-                    raise exceptions.MetricComputationError(
-                        "Turn metric returned an empty result list."
-                    )
-                result = raw_result[0]
-            else:
-                result = raw_result
-
-            if not isinstance(result, ScoreResult):
-                raise exceptions.MetricComputationError(
-                    "Turn metric returned an unexpected result type."
-                )
+            result = self._normalize_turn_result(raw_result)
             per_turn_scores.append(result.value)
 
         average_score = sum(per_turn_scores) / overlap
@@ -120,7 +120,7 @@ class ConversationReferenceMetric(BaseMetric):
             "evaluated_turns": overlap,
             "missing_turns": missing_turns,
         }
-        return ScoreResult(
+        return score_result.ScoreResult(
             value=adjusted_score,
             name=self.name,
             reason=(
@@ -144,3 +144,28 @@ class ConversationReferenceMetric(BaseMetric):
                     )
                 turns.append(content)
         return turns
+
+    def _normalize_turn_result(
+        self,
+        raw_result: Union[
+            score_result.ScoreResult,
+            Sequence[score_result.ScoreResult],
+        ],
+    ) -> score_result.ScoreResult:
+        """Ensure the turn metric output is a ScoreResult instance."""
+
+        if isinstance(raw_result, score_result.ScoreResult):
+            return raw_result
+
+        if isinstance(raw_result, Sequence):
+            if not raw_result:
+                raise exceptions.MetricComputationError(
+                    "Turn metric returned an empty result sequence."
+                )
+            first = raw_result[0]
+            if isinstance(first, score_result.ScoreResult):
+                return first
+
+        raise exceptions.MetricComputationError(
+            "Turn metric returned an unexpected result type; expected ScoreResult."
+        )
