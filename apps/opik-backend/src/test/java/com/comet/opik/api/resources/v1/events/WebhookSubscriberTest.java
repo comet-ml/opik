@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
-import com.comet.opik.api.events.webhooks.WebhookEventTypes;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
@@ -185,7 +185,7 @@ class WebhookSubscriberTest {
     private WebhookEvent<?> createWebhookEvent(String url) {
         return WebhookEvent.builder()
                 .id("webhook-" + System.currentTimeMillis())
-                .eventType(WebhookEventTypes.TRACE_CREATED)
+                .eventType(AlertEventType.PROMPT_CREATED)
                 .alertId(UUID.randomUUID())
                 .workspaceId(WORKSPACE_ID)
                 .userName(USER_NAME)

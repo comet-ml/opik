@@ -17,8 +17,6 @@ export * from "./prompts/types";
 export * as spans from "./spans";
 export * from "./spans/types";
 export * as traces from "./traces";
-export * as alerts from "./alerts";
-export * from "./alerts/client/requests";
 export * as annotationQueues from "./annotationQueues";
 export * from "./annotationQueues/client/requests";
 export * from "./attachments/client/requests";
