@@ -1,6 +1,8 @@
 """
 Bedrock invoke_model_with_response_stream chunk aggregator.
 
+DISCLAIMER: This package was generated with AI assistance.
+
 This package provides a modular, extensible architecture for aggregating
 streaming chunks from different Bedrock model formats (Claude, Nova, etc.).
 
@@ -69,45 +71,8 @@ To add support for a new model format:
 The new format will be automatically detected and used.
 """
 
-from typing import Any, Dict, List
-
-from . import format_detector
-from .. import response_types
+from .api import aggregate_chunks_to_dataclass
 
 __all__ = [
     "aggregate_chunks_to_dataclass",
 ]
-
-
-def aggregate_chunks_to_dataclass(
-    items: List[Dict[str, Any]],
-) -> response_types.BedrockAggregatedResponse:
-    """
-    Aggregate chunks directly to structured dataclass (used by stream wrapper).
-
-    This function is called by the stream wrapper and returns a structured
-    dataclass that the decorator can handle directly.
-
-    Args:
-        items: List of chunk items from the event stream
-
-    Returns:
-        BedrockAggregatedResponse with structured data
-    """
-    # Detect format and get appropriate aggregator
-    format_name = format_detector.detect_format(items)
-    aggregator = format_detector.get_aggregator(format_name)
-
-    # Get aggregated data
-    aggregated_data = aggregator.aggregate(items)
-
-    # Extract components directly
-    usage = aggregated_data.get("usage", {})
-    native_response = {
-        key: value for key, value in aggregated_data.items() if key != "usage"
-    }
-
-    # Create dataclass directly (response_metadata will be set by stream wrapper)
-    return response_types.BedrockAggregatedResponse(
-        native_response=native_response, usage=usage, response_metadata={}
-    )
