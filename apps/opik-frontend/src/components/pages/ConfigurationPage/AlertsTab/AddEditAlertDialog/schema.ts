@@ -21,6 +21,7 @@ const EventTriggersObjectSchema = z.object({
 
   promptLibraryNewPrompt: z.boolean().default(false),
   promptLibraryNewCommit: z.boolean().default(false),
+  promptLibraryDeleted: z.boolean().default(false),
 });
 
 export const AlertFormSchema = z
