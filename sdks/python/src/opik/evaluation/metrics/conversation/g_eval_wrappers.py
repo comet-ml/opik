@@ -7,7 +7,6 @@ from typing import Any, Optional
 import opik.exceptions as exceptions
 
 from .. import base_metric, score_result
-from ..score_result import ScoreResult
 from ..llm_judges.g_eval_presets import (
     compliance_risk as compliance_presets,
     prompt_diagnostics as prompt_presets,
@@ -87,7 +86,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
             "",
         )
         if not last_assistant.strip():
-            return ScoreResult(
+            return score_result.ScoreResult(
                 name=self.name,
                 value=0.0,
                 reason="Conversation contains no assistant messages to evaluate.",
@@ -112,7 +111,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
                 scoring_failed=judge_result.scoring_failed,
             )
 
-        return ScoreResult(
+        return score_result.ScoreResult(
             name=self.name,
             value=0.0,
             reason=reason,
