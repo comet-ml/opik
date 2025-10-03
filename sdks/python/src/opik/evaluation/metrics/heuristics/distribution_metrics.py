@@ -213,12 +213,12 @@ class JSDistance(JSDivergence):
         project_name: Optional[str] = None,
     ) -> None:
         super().__init__(
-            tokenizer=tokenizer,
-            base=base,
-            normalize=normalize,
-            name=name,
-            track=track,
-            project_name=project_name,
+            tokenizer,
+            base,
+            normalize,
+            name,
+            track,
+            project_name,
         )
 
     def score(

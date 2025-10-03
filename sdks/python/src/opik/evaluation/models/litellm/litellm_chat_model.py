@@ -237,6 +237,45 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             **all_kwargs,
         )
 
+    def generate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Simplified interface to generate a string output from the model.
+        You can find all possible completion_kwargs parameters here: https://docs.litellm.ai/docs/completion/input
+
+        Args:
+            input: The input string based on which the model will generate the output.
+            response_format: pydantic model specifying the expected output string format.
+            kwargs: Additional arguments that may be used by the model for string generation.
+
+        Returns:
+            str: The generated string output.
+        """
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+
+        valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
+
+        request = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
+
+        with base_model.get_provider_response(
+            model_provider=self,
+            messages=request,
+            **valid_litellm_params,
+        ) as response:
+            choice = _first_choice(response)
+            content = _extract_message_content(choice)
+            return base_model.check_model_output_string(content)
+
     async def agenerate_string(
         self,
         input: str,

@@ -92,9 +92,14 @@ class ConversationReferenceMetric(conversation_thread_metric.ConversationThreadM
     def score(
         self,
         conversation: conversation_types.Conversation,
-        reference_conversation: conversation_types.Conversation,
+        reference_conversation: Optional[conversation_types.Conversation] = None,
         **kwargs: object,
     ) -> score_result.ScoreResult:
+        if reference_conversation is None:
+            raise exceptions.MetricComputationError(
+                "Reference conversation must be provided."
+            )
+
         candidate_turns = self._extract_role_turns(conversation)
         reference_turns = self._extract_role_turns(reference_conversation)
 
