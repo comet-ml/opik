@@ -25,6 +25,13 @@ class METEOR(base_metric.BaseMetric):
     This implementation wraps ``nltk.translate.meteor_score.meteor_score`` while
     allowing a custom scoring function to be injected (useful for testing).
 
+    References:
+      - Banerjee & Lavie, "METEOR: An Automatic Metric for MT Evaluation with Improved
+        Correlation with Human Judgments" (ACL Workshop 2005)
+        https://aclanthology.org/W05-0909/
+      - Hugging Face Evaluate: METEOR metric overview
+        https://huggingface.co/spaces/evaluate-metric/meteor
+
     Args:
         meteor_fn: Optional callable with the same interface as
             ``nltk.translate.meteor_score.meteor_score``. When omitted the

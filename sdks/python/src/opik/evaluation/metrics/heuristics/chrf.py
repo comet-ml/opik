@@ -24,6 +24,14 @@ class ChrF(BaseMetric):
     supports both chrF (character n-gram overlap) and chrF++ (when ``word_order``
     is non-zero). Scores range from `0.0` (no overlap) to `1.0` (perfect match).
 
+    References:
+      - Popović, "chrF: character n-gram F-score for automatic MT evaluation" (WMT 2015)
+        https://aclanthology.org/W15-3049/
+      - NLTK chrf_score module documentation
+        https://www.nltk.org/api/nltk.translate.chrf_score.html
+      - Hugging Face Evaluate: chrF metric overview
+        https://huggingface.co/spaces/evaluate-metric/chrf
+
     Args:
         name: Display name for the metric result. Defaults to ``"chrf_metric"``.
         track: Whether to automatically track metric results. Defaults to ``True``.

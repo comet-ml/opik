@@ -16,6 +16,11 @@ class GLEU(base_metric.BaseMetric):
     """
     Sentence-level GLEU metric powered by ``nltk.translate.gleu_score``.
 
+    References:
+      - NLTK Reference Documentation on GLEU
+        https://www.nltk.org/api/nltk.translate.gleu_score.html
+      - OECD Catalogue of Tools & Metrics for Trustworthy AI
+
     Args:
         gleu_fn: Optional custom scoring callable compatible with
             ``nltk.translate.gleu_score.sentence_gleu``. Useful for testing.

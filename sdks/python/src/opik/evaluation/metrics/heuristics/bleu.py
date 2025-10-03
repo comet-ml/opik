@@ -17,8 +17,12 @@ class BaseBLEU(base_metric.BaseMetric):
     and weights initialization. This class is not intended to be used directly.
 
     References:
-      - NLTK BLEU smoothing:
-        https://www.nltk.org/api/nltk.translate.bleu_score.html#nltk.translate.bleu_score.SmoothingFunction
+      - BLEU: Papineni et al., "BLEU: a Method for Automatic Evaluation of Machine Translation" (ACL 2002)
+        https://aclanthology.org/P02-1040/
+      - NLTK BLEU documentation
+        https://www.nltk.org/api/nltk.translate.bleu_score.html
+      - Hugging Face Evaluate: BLEU metric overview
+        https://huggingface.co/spaces/evaluate-metric/bleu
 
     Args:
         name: The name of the metric (e.g. "sentence_bleu_metric" or "corpus_bleu_metric").

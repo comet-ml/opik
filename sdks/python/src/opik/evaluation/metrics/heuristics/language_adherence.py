@@ -27,6 +27,12 @@ class LanguageAdherenceMetric(BaseMetric):
     language matches and ``0.0`` otherwise, along with the detected label and
     confidence score in ``metadata``.
 
+    References:
+      - fastText language identification models
+        https://fasttext.cc/docs/en/language-identification.html
+      - Joulin et al., "Bag of Tricks for Efficient Text Classification" (EACL 2017)
+        https://aclanthology.org/E17-2068/
+
     Args:
         expected_language: Language code the text should conform to, e.g. ``"en"``.
         model_path: Path to a fastText language identification model. Required unless

@@ -45,6 +45,9 @@ class ReadabilityGuard(BaseMetric):
     lightweight syllable counter. If the calculated grade lies within
     ``[min_grade, max_grade]`` the score is ``1.0``; otherwise ``0.0``.
 
+    References:
+      - Flesch–Kincaid readability tests (Wikipedia overview)
+        https://en.wikipedia.org/wiki/Flesch%E2%80%93Kincaid_readability_tests
     Args:
         name: Display name for the metric result. Defaults to ``"readability_guard"``.
         track: Whether to automatically track metric results. Defaults to ``True``.

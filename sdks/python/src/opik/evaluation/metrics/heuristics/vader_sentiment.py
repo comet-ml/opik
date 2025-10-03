@@ -18,6 +18,13 @@ class VADERSentiment(BaseMetric):
     """
     Compute the VADER compound sentiment for a piece of text.
 
+    References:
+      - Hutto & Gilbert, "VADER: A Parsimonious Rule-based Model for Sentiment Analysis of
+        Social Media Text" (ICWSM 2014)
+        https://ojs.aaai.org/index.php/ICWSM/article/view/14550
+      - VADER Sentiment GitHub repository (official implementation)
+        https://github.com/cjhutto/vaderSentiment
+
     Args:
         name: Display name for the metric result. Defaults to
             ``"vader_sentiment_metric"``.

@@ -16,6 +16,12 @@ class SpearmanRanking(BaseMetric):
     Scores are normalised to ``[0.0, 1.0]`` where `1.0` indicates perfect rank
     agreement and `0.0` indicates complete disagreement (``rho = -1``).
 
+    References:
+      - Spearman's rank correlation coefficient (Wikipedia overview)
+        https://en.wikipedia.org/wiki/Spearman%27s_rank_correlation_coefficient
+      - SciPy documentation: ``scipy.stats.spearmanr``
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.spearmanr.html
+
     Args:
         name: Display name for the metric result. Defaults to
             ``"spearman_ranking_metric"``.
