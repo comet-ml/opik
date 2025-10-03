@@ -100,7 +100,7 @@ def wrap_invoke_model_with_response_stream_response(
             yield item
     except Exception as exception:
         LOGGER.debug(
-            "Exception raised from botocore.eventstream.EventStream.",
+            "Exception raised from botocore.eventstream.EventStream: %s",
             str(exception),
             exc_info=True,
         )

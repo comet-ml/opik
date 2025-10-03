@@ -45,7 +45,7 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         ), "Expected kwargs to be not None in BedrockRuntime.Client.invoke_model(**kwargs)"
 
         name = track_options.name if track_options.name is not None else func.__name__
-        body_dict = json.loads(kwargs["body"])
+        body_dict = json.loads(kwargs.get("body", "{}"))
 
         kwargs_copy = kwargs.copy()
         kwargs_copy["body"] = body_dict
