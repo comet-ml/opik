@@ -286,9 +286,9 @@ navigation:
                 slug: documentation
                 icon: fa-regular fa-book
               - page: Local Development Setup
-              - path: docs/contributing/local-development.mdx
-              - slug: local-development
-              - icon: fa-regular fa-laptop-code
+                path: docs/contributing/local-development.mdx
+                slug: local-development
+                icon: fa-regular fa-laptop-code
               - page: Python SDK
                 path: docs/contributing/python-sdk.mdx
                 slug: python-sdk
