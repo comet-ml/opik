@@ -524,7 +524,7 @@ if ($options -contains '--infra') {
 
 if ($options -contains '--backend') {
     $BACKEND = $true
-    # Enable CORS for backend development
+    # Enable CORS for frontend development
     $env:CORS = "true"
     $options = $options | Where-Object { $_ -ne '--backend' }
 }
