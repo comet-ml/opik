@@ -763,7 +763,7 @@ function Show-AccessInformation {
         Write-Host "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
         Write-Host ""
         Write-Host "Edit the configuration file:" -ForegroundColor Blue
-        Write-Host "  # Open the configuration file, by default: `$HOME\.opik.config"
+        Write-Host "  # Open the configuration file, by default: $env:USERPROFILE\.opik.config"
         Write-Host ""
         Write-Host "  # Change this line:"
         Write-Host "  url_override = http://localhost:8080/api/"
@@ -788,7 +788,7 @@ function Show-AccessInformation {
     Write-Host "  `$env:OPIK_WORKSPACE = 'default'"
     Write-Host ""
     Write-Host "Important Notes:" -ForegroundColor Yellow
-    Write-Host "  • The configuration file is located at `$HOME\.opik.config by default"
+    Write-Host "  • The configuration file is located at $env:USERPROFILE\.opik.config by default"
     
     if ($ShowManualEdit) {
         Write-Host "  • You MUST remove '/api' from the URL for local development"
