@@ -5,9 +5,11 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -45,6 +47,9 @@ public interface DatasetItemService {
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
+
+    Mono<ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters);
 }
 
 @Singleton
@@ -227,5 +232,16 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return dao.getItems(datasetItemSearchCriteria, page, size)
                 .defaultIfEmpty(DatasetItemPage.empty(page));
+    }
+
+    public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
+            @NonNull Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters) {
+        log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
+                experimentIds, filters);
+        return dao.getExperimentItemsStats(datasetId, experimentIds, filters)
+                .switchIfEmpty(Mono.just(ProjectStats.empty()))
+                .doOnSuccess(stats -> log.info("Found experiment items stats for dataset '{}', count '{}'", datasetId,
+                        stats.stats().size()));
     }
 }
