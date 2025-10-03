@@ -1,12 +1,12 @@
 package com.comet.opik.domain.attachment;
 
-import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.eventbus.EventBus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,6 +41,9 @@ class AttachmentStripperServiceTest {
     @Mock
     private OpikConfiguration opikConfiguration;
 
+    @Mock
+    private EventBus eventBus;
+
     private ObjectMapper objectMapper;
     private AttachmentStripperService attachmentStripperService;
 
@@ -61,13 +64,9 @@ class AttachmentStripperServiceTest {
         // Mock OpikConfiguration to return the S3Config
         when(opikConfiguration.getS3Config()).thenReturn(s3Config);
 
-        // Mock direct upload for MinIO mode
-        lenient().doNothing().when(attachmentService).uploadAttachment(any(AttachmentInfo.class), any(byte[].class),
-                anyString(), anyString());
-
-        // Use OpenTelemetry no-op implementation - no mocking needed!
+        // Use OpenTelemetry no-op implementation and EventBus mock for async uploads
         attachmentStripperService = new AttachmentStripperService(
-                attachmentService, idGenerator, objectMapper, opikConfiguration);
+                attachmentService, idGenerator, objectMapper, opikConfiguration, eventBus);
     }
 
     @Test
@@ -128,8 +127,8 @@ class AttachmentStripperServiceTest {
         String replacedValue = result.get("data").asText();
         assertThat(replacedValue).matches("\\[metadata-attachment-1-\\d+\\.png\\]");
 
-        verify(attachmentService, times(1)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Verify EventBus.post() was called with AttachmentUploadRequested event (async upload)
+        verify(eventBus, times(1)).post(any());
     }
 
     @Test
@@ -162,9 +161,8 @@ class AttachmentStripperServiceTest {
         String secondAttachment = result.get("second_attachment").asText();
         assertThat(secondAttachment).matches("\\[output-attachment-2-\\d+\\.pdf\\]");
 
-        // Should have called upload service twice
-        verify(attachmentService, times(2)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Should have posted 2 async upload events to EventBus
+        verify(eventBus, times(2)).post(any());
     }
 
     @Test
@@ -210,8 +208,8 @@ class AttachmentStripperServiceTest {
         assertThat(result.at("/messages/0/content/0/text").asText()).isEqualTo("What's in this image?");
         assertThat(result.at("/messages/0/content/1/inline_data/mime_type").asText()).isEqualTo("image/png");
 
-        verify(attachmentService, times(1)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Verify EventBus.post() was called once for async upload
+        verify(eventBus, times(1)).post(any());
     }
 
     @Test
@@ -232,7 +230,8 @@ class AttachmentStripperServiceTest {
         // Then
         // Should be unchanged since Tika will detect this as text/plain
         assertThat(result).isEqualTo(output);
-        verify(attachmentService, never()).uploadAttachment(any(), any(), anyString(), anyString());
+        // No async upload events should be posted for text content
+        verify(eventBus, never()).post(any());
     }
 
     @Test
@@ -259,8 +258,7 @@ class AttachmentStripperServiceTest {
         assertThat(outputResult.get("image").asText()).matches("\\[output-attachment-1-\\d+\\.gif\\]");
         assertThat(metadataResult.get("image").asText()).matches("\\[metadata-attachment-1-\\d+\\.gif\\]");
 
-        // Should have called upload service three times (once for each context)
-        verify(attachmentService, times(3)).uploadAttachment(any(AttachmentInfo.class), any(byte[].class), anyString(),
-                anyString());
+        // Should have posted 3 async upload events to EventBus
+        verify(eventBus, times(3)).post(any());
     }
 }

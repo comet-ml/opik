@@ -37,7 +37,6 @@ import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.filter.TraceThreadFilter;
-import com.comet.opik.api.resources.utils.AWSUtils;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;

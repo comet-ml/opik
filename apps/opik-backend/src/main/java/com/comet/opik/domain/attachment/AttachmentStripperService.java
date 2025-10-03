@@ -4,7 +4,12 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.attachment.AttachmentInfo;
+import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.EntityType;
+import com.comet.opik.api.attachment.MultipartUploadPart;
+import com.comet.opik.api.attachment.StartMultipartUploadRequest;
+import com.comet.opik.api.attachment.StartMultipartUploadResponse;
 import com.comet.opik.api.events.AttachmentUploadRequested;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -28,7 +33,13 @@ import org.apache.tika.mime.MimeTypes;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -82,27 +93,6 @@ public class AttachmentStripperService {
         this.objectMapper = objectMapper;
         this.s3Config = opikConfig.getS3Config();
         this.eventBus = eventBus;
-
-        // Initialize OpenTelemetry metrics using global instance
-        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
-
-        this.attachmentsProcessed = meter
-                .counterBuilder("opik.attachments.processed")
-                .setDescription("Number of attachments successfully processed and uploaded")
-                .build();
-        this.attachmentsSkipped = meter
-                .counterBuilder("opik.attachments.skipped")
-                .setDescription("Number of base64 strings skipped (not valid attachments)")
-                .build();
-        this.attachmentErrors = meter
-                .counterBuilder("opik.attachments.errors")
-                .setDescription("Number of errors during attachment processing")
-                .build();
-        this.processingTimer = meter
-                .histogramBuilder("opik.attachments.processing.duration.ms")
-                .setDescription("Time spent processing attachments in milliseconds")
-                .ofLongs()
-                .build();
 
         // Initialize OpenTelemetry metrics using global instance
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
@@ -423,47 +413,6 @@ public class AttachmentStripperService {
                     attachmentNumber, context, e.getMessage(), e);
             attachmentErrors.add(1);
             return null; // Graceful degradation - continue without this attachment
-        }
-    }
-
-    /**
-     * Converts MIME type to appropriate file extension.
-     *
-     * @param mimeType the MIME type (e.g., "image/png", "application/pdf")
-     * @return the file extension (e.g., "png", "pdf")
-     */
-    private String getFileExtension(String mimeType) {
-        if (mimeType == null || mimeType.isEmpty()) {
-            return "bin";
-        }
-
-        try {
-            // Use Apache Tika's built-in MIME type to extension mapping
-            MimeTypes allTypes = MimeTypes.getDefaultMimeTypes();
-            String extension = allTypes.forName(mimeType).getExtension();
-
-            // Remove the leading dot if present (Tika returns ".png", we want "png")
-            if (extension.startsWith(".")) {
-                extension = extension.substring(1);
-            }
-
-            return extension.isEmpty() ? "bin" : extension;
-
-        } catch (MimeTypeException e) {
-            log.debug("Unknown MIME type: {}, using fallback extension", mimeType);
-
-            // Fallback: extract from MIME type (e.g., "image/png" -> "png")
-            if (mimeType.contains("/")) {
-                String subtype = mimeType.substring(mimeType.indexOf("/") + 1);
-                // Handle special cases like "svg+xml" -> "svg"
-                if (subtype.contains("+")) {
-                    subtype = subtype.substring(0, subtype.indexOf("+"));
-                }
-                // Remove any parameters (e.g., "jpeg; charset=utf-8" -> "jpeg")
-                return subtype.split(";")[0].trim();
-            }
-
-            return "bin";
         }
     }
 

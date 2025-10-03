@@ -24,7 +24,6 @@ import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
-import com.comet.opik.api.resources.utils.AWSUtils;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
