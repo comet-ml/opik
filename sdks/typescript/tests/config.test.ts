@@ -19,7 +19,8 @@ describe("Opik client config", () => {
 
   it("should throw an error if the host is cloud and the API key is not set", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-    
+    process.env.OPIK_API_KEY = "";
+
     expect(() => {
       new Opik();
     }).toThrow("OPIK_API_KEY is not set");
@@ -46,8 +47,9 @@ describe("Opik client config", () => {
   it("should load the config from the file", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
-      "./examples/valid-opik-config.ini",
+      "./examples/valid-opik-config.ini"
     );
+    process.env.OPIK_API_KEY = undefined;
 
     const opik = new Opik();
 
@@ -60,7 +62,7 @@ describe("Opik client config", () => {
   it("should being able to override config values from the environment variables + explicit config", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
-      "./examples/partial-opik-config.ini",
+      "./examples/partial-opik-config.ini"
     );
     process.env.OPIK_API_KEY = "api-key-override";
 
@@ -81,8 +83,9 @@ describe("Opik client config", () => {
   it("should throw an error if the config is not valid from the file (only API url, missing API key)", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
-      "./examples/invalid-opik-config.ini",
+      "./examples/invalid-opik-config.ini"
     );
+    process.env.OPIK_API_KEY = undefined;
 
     expect(() => {
       new Opik();
