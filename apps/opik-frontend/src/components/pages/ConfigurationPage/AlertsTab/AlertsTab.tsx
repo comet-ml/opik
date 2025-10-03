@@ -74,7 +74,7 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     id: "created_by",
     label: "Created by",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.webhook?.created_by || "-",
+    accessorFn: (row) => row.created_by || "-",
   },
   {
     id: "status",
