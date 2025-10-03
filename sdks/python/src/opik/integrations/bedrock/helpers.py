@@ -12,3 +12,8 @@ class ConverseStreamOutput(TypedDict):
 class InvokeModelOutput(TypedDict):
     body: botocore.response.StreamingBody
     ResponseMetadata: Dict[str, Any]
+
+
+class InvokeModelWithResponseStreamOutput(TypedDict):
+    body: eventstream.EventStream
+    ResponseMetadata: Dict[str, Any]

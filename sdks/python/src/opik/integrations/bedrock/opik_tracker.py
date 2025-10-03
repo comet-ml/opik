@@ -5,6 +5,7 @@ from .converse import chunks_aggregator as converse_chunks_aggregator
 from .converse import converse_decorator
 
 from .invoke_model import invoke_model_decorator
+from .invoke_model import chunks_aggregator as invoke_model_chunks_aggregator
 
 
 if TYPE_CHECKING:
@@ -72,7 +73,6 @@ def track_bedrock(
             type="llm",
             name="bedrock_invoke_model",
             project_name=project_name,
-            generations_aggregator=converse_chunks_aggregator.aggregate_converse_stream_chunks,
         )
         tracked_invoke_model = wrapper(client.invoke_model)
         client.invoke_model = tracked_invoke_model
@@ -84,7 +84,7 @@ def track_bedrock(
             type="llm",
             name="bedrock_invoke_model_stream",
             project_name=project_name,
-            generations_aggregator=converse_chunks_aggregator.aggregate_converse_stream_chunks,
+            generations_aggregator=invoke_model_chunks_aggregator.aggregate_invoke_model_with_response_stream_chunks,
         )
         tracked_invoke_model_stream = stream_wrapper(
             client.invoke_model_with_response_stream

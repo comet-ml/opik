@@ -12,6 +12,7 @@ from .. import helpers
 from . import stream_wrappers, usage_extraction
 
 import botocore.response
+import botocore.eventstream
 
 LOGGER = logging.getLogger(__name__)
 
@@ -105,15 +106,6 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         helpers.InvokeModelOutput,
         None,
     ]:
-        DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
-            generations_aggregator is None
-        )
-
-        if DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR:
-            return None
-
-        assert generations_aggregator is not None
-
         # Despite the name, StreamingBody is not a stream in traditional LLM provider sense (response chunks).
         # It's an interface to a stream of bytes representing the response body.
         streaming_body_detected = (
@@ -130,6 +122,41 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
                 trace_to_end=trace_to_end,
                 finally_callback=self._after_call,
             )
+
+        DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
+            generations_aggregator is None
+        )
+
+        if DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR:
+            return None
+
+        generations_aggregator = cast(
+            Callable[[List[Any]], Any], generations_aggregator
+        )
+
+        event_streaming_body_detected = (
+            isinstance(output, dict)
+            and "body" in output
+            and isinstance(output["body"], botocore.eventstream.EventStream)
+        )
+
+        if event_streaming_body_detected:
+            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+
+            wrapped_stream = (
+                stream_wrappers.wrap_invoke_model_with_response_stream_response(
+                    stream=output["body"],
+                    capture_output=capture_output,
+                    span_to_end=span_to_end,
+                    trace_to_end=trace_to_end,
+                    generations_aggregator=generations_aggregator,
+                    response_metadata=output["ResponseMetadata"],
+                    finally_callback=self._after_call,
+                )
+            )
+
+            output["body"] = wrapped_stream
+            return cast(helpers.InvokeModelWithResponseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
 
