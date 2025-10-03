@@ -37,7 +37,7 @@ def wrap_invoke_model_response(
             return result
         except Exception as exception:
             LOGGER.debug(
-                "Exception raised from botocore.response.StreamingBody.",
+                "Exception raised from botocore.response.StreamingBody: %s",
                 str(exception),
                 exc_info=True,
             )
