@@ -376,7 +376,7 @@ class ParameterOptimizer(BaseOptimizer):
 
         try:
             importance = optuna_importance.get_param_importances(study)
-        except Exception:
+        except (ValueError, RuntimeError):
             importance = {}
 
         if not importance or all(value == 0 for value in importance.values()):
