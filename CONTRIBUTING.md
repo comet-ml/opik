@@ -170,6 +170,20 @@ scripts/dev-runner.sh --lint-fe
 scripts/dev-runner.sh --restart --debug
 ```
 
+### Getting Help
+
+For a complete list of available commands and options, use the `--help` flag:
+
+```bash
+# Linux/Mac
+./opik.sh --help
+scripts/dev-runner.sh --help
+
+# Windows
+.\opik.ps1 --help
+scripts\dev-runner.ps1 --help
+```
+
 For comprehensive documentation on local development, including troubleshooting, advanced usage, and workflow examples, see our [Local Development Guide](apps/opik-documentation/documentation/fern/docs/contributing/local-development.mdx).
 
 ### Contributing to the documentation
