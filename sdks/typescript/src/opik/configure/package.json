@@ -36,6 +36,7 @@
   "dependencies": {
     "@clack/core": "^0.3.4",
     "@clack/prompts": "0.7.0",
+    "@langchain/core": "^0.3.78",
     "axios": "1.7.4",
     "chalk": "^2.4.1",
     "fast-glob": "^3.3.3",
@@ -57,7 +58,6 @@
   "devDependencies": {
     "@babel/types": "~7.21.4",
     "@eslint/js": "^9.20.0",
-    "@langchain/core": "^0.3.78",
     "@types/glob": "^7.2.0",
     "@types/inquirer": "^0.0.43",
     "@types/lodash": "^4.17.15",
