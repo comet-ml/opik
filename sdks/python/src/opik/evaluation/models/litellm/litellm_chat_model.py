@@ -269,7 +269,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             wait=tenacity.wait_exponential(multiplier=0.5, min=0.5, max=8.0),
         )
 
-        return retrying.call(
+        return retrying(
             self._engine.completion,
             model=self.model_name,
             messages=messages,

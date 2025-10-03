@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Sequence
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -10,9 +10,18 @@ from opik.evaluation.metrics import base_metric, score_result
 TokenizeFn = Callable[[str], Iterable[str]]
 
 
-def _load_jensen_shannon_distance() -> (
-    Callable[[Sequence[float], Sequence[float], float], float]
-):
+class _JSDistanceFn(Protocol):
+    def __call__(
+        self,
+        p: Sequence[float],
+        q: Sequence[float],
+        base: Optional[
+            float
+        ] = ...,  # matches scipy signature allowing positional or keyword use
+    ) -> float: ...
+
+
+def _load_jensen_shannon_distance() -> _JSDistanceFn:
     try:
         from scipy.spatial.distance import jensenshannon
     except ImportError as error:  # pragma: no cover - optional dependency
