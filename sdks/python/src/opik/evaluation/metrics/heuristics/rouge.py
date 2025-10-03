@@ -61,7 +61,7 @@ class ROUGE(base_metric.BaseMetric):
             )
 
         self._rouge_type = rouge_type
-        self._rouge = self._build_rouge_backend(
+        self._rouge = _build_rouge_backend(
             rouge_type=rouge_type,
             use_stemmer=use_stemmer,
             split_summaries=split_summaries,
@@ -117,7 +117,7 @@ class ROUGE(base_metric.BaseMetric):
         rouge_score_type = self._rouge_type
         if rouge_score_type == "rougeW":
             rouge_f1_value = max(
-                self._compute_rouge_w(output, ref) for ref in reference
+                _compute_rouge_w(output, ref) for ref in reference
             )
         else:
             assert self._rouge is not None
@@ -129,51 +129,6 @@ class ROUGE(base_metric.BaseMetric):
             name=self.name,
             reason=f"{rouge_score_type} score: {rouge_f1_value:.4f}",
         )
-
-    @staticmethod
-    def _build_rouge_backend(
-        *,
-        rouge_type: str,
-        use_stemmer: bool,
-        split_summaries: bool,
-        tokenizer: Optional[Any],
-    ) -> Optional[Any]:
-        if rouge_type == "rougeW":
-            return None
-
-        if rouge_scorer is None:
-            raise ImportError(
-                "`rouge-score` libraries are required for ROUGE score calculation. "
-                "Install via `pip install rouge-score`."
-            )
-
-        return rouge_scorer.RougeScorer(
-            [rouge_type],
-            use_stemmer=use_stemmer,
-            split_summaries=split_summaries,
-            tokenizer=tokenizer,
-        )
-
-    def _compute_rouge_w(self, output: str, reference: str) -> float:
-        candidate_tokens = output.split()
-        reference_tokens = reference.split()
-
-        if not candidate_tokens or not reference_tokens:
-            raise MetricComputationError(
-                "Empty tokens encountered for ROUGE-W computation."
-            )
-
-        wlcs = _weighted_lcs(candidate_tokens, reference_tokens)
-        cand_norm = _weighted_lcs(candidate_tokens, candidate_tokens)
-        ref_norm = _weighted_lcs(reference_tokens, reference_tokens)
-
-        precision = wlcs / cand_norm if cand_norm > 0 else 0.0
-        recall = wlcs / ref_norm if ref_norm > 0 else 0.0
-        beta = 1.2
-        denom = recall + beta**2 * precision
-        if denom == 0:
-            return 0.0
-        return (1 + beta**2) * precision * recall / denom
 
 
 def _weighted_lcs(tokens_a: List[str], tokens_b: List[str]) -> float:
@@ -197,3 +152,47 @@ def _weighted_lcs(tokens_a: List[str], tokens_b: List[str]) -> float:
             else:
                 dp[i][j] = 0
     return score
+
+
+def _build_rouge_backend(
+    *,
+    rouge_type: str,
+    use_stemmer: bool,
+    split_summaries: bool,
+    tokenizer: Optional[Any],
+) -> Optional[Any]:
+    if rouge_type == "rougeW":
+        return None
+
+    if rouge_scorer is None:
+        raise ImportError(
+            "`rouge-score` libraries are required for ROUGE score calculation. "
+            "Install via `pip install rouge-score`."
+        )
+
+    return rouge_scorer.RougeScorer(
+        [rouge_type],
+        use_stemmer=use_stemmer,
+        split_summaries=split_summaries,
+        tokenizer=tokenizer,
+    )
+
+
+def _compute_rouge_w(output: str, reference: str) -> float:
+    candidate_tokens = output.split()
+    reference_tokens = reference.split()
+
+    if not candidate_tokens or not reference_tokens:
+        raise MetricComputationError("Empty tokens encountered for ROUGE-W computation.")
+
+    wlcs = _weighted_lcs(candidate_tokens, reference_tokens)
+    cand_norm = _weighted_lcs(candidate_tokens, candidate_tokens)
+    ref_norm = _weighted_lcs(reference_tokens, reference_tokens)
+
+    precision = wlcs / cand_norm if cand_norm > 0 else 0.0
+    recall = wlcs / ref_norm if ref_norm > 0 else 0.0
+    beta = 1.2
+    denom = recall + beta**2 * precision
+    if denom == 0:
+        return 0.0
+    return (1 + beta**2) * precision * recall / denom
