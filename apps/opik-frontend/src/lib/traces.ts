@@ -8,9 +8,10 @@ import isObject from "lodash/isObject";
 import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
-// TRACE_VISIBILITY_MODE is assumed to be defined locally or globally available if needed
-// The definition must be provided elsewhere if this file is meant to use it.
-declare const TRACE_VISIBILITY_MODE: { default: any };
+
+const TRACE_VISIBILITY_MODE = {
+  default: "default_visibility",
+};
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 const MESSAGE_HEADER = (type: string) => `---[ ${type.toUpperCase()} MESSAGE ]---\n`;
@@ -268,9 +269,10 @@ const prettifyLangGraphLogic = (
           );
 
           if (textItems.length > 0) {
+            // FIX 2: Standardized the join separator to "\n\n" for consistency.
             const content = textItems
               .map((item: { text: string }) => item.text)
-              .join(" ");
+              .join("\n\n");
             aiMessages.push(MESSAGE_HEADER(m.type) + content);
           }
         }
