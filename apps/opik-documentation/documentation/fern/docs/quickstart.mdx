@@ -115,6 +115,30 @@ popular integrations:
     </Steps>
 
   </Tab>
+  <Tab title="Opik Configure (TS)" value="opik-configure-ts">
+    The Opik Configure is an interactive CLI tool that helps you quickly add Opik SDK to your Node.js/TypeScript project with guided setup:
+
+    <Steps>
+      <Step>
+        Run the configure tool in your project directory:
+
+        ```bash
+        npx opik-configure
+        ```
+
+        The tool will:
+        - Detect your project setup (package manager, TypeScript config)
+        - Install the Opik SDK and required dependencies
+        - Help you configure environment variables
+        - Set up Opik client for your LLM integrations (OpenAI, LangChain, etc.)
+      </Step>
+    </Steps>
+
+    <Tip>
+      The tool supports custom options like `--debug` for verbose logging, `--force-install` to skip peer dependency checks, and `--install-dir` to specify a custom directory. Run `npx opik-configure --help` to see all available options.
+    </Tip>
+
+  </Tab>
   <Tab title="OpenAI (Python)" value="openai-python-sdk">
     If you are using the OpenAI Python SDK, you can integrate by:
 
@@ -287,6 +311,7 @@ popular integrations:
 
     Once the integration is complete, simply run your application and you will start seeing traces
     in your Opik dashboard.
+
   </Tab>
   <Tab title="Other" value="other">
     Opik has more than 30 integrations with the most popular frameworks and libraries, you can find
