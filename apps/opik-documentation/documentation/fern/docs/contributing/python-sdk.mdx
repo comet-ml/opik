@@ -11,13 +11,17 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
 
 <Steps>
   ### 1. Set up Opik Locally
-  To develop and test Python SDK features, you'll need a local Opik instance running. You can set this up by using the helper scripts provided in the root of the repository (`./opik.sh` for Linux/Mac, `.\opik.ps1` for Windows) or for advanced usage by following the instructions in the [Docker Compose README](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md):
+  To develop and test Python SDK features, you'll need a local Opik instance running. We recommend starting only the infrastructure services for faster SDK development:
 
   <Tabs>
     <Tab title="Linux/Mac">
     ```bash
     # From the root of the repository
-    ./opik.sh
+    # Recommended for SDK development - only starts infrastructure
+    ./opik.sh --infra --port-mapping
+
+    # Alternatively, start the full stack (slower)
+    # ./opik.sh
 
     # Configure the Python SDK to point to the local Opik deployment
     opik configure --use_local
@@ -26,14 +30,24 @@ The Opik Python SDK is a key component of our platform, allowing developers to i
     <Tab title="Windows">
     ```powershell
     # From the root of the repository
-    powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+    # Recommended for SDK development - only starts infrastructure
+    .\opik.ps1 --infra --port-mapping
+
+    # Alternatively, start the full stack (slower)
+    # .\opik.ps1
 
     # Configure the Python SDK to point to the local Opik deployment
     opik configure --use_local
     ```
     </Tab>
-
   </Tabs>
+
+  **Infrastructure-only mode** (`--infra --port-mapping`) is recommended for SDK development because:
+  - Faster startup and shutdown
+  - Less resource intensive
+  - No need to rebuild backend/frontend when only testing SDK changes
+  - Direct access to backend services (MySQL on 3306, ClickHouse on 8123, Redis on 6379)
+
   Your local Opik server will be accessible at `http://localhost:5173`.
 
   <Tip title="Windows Users">

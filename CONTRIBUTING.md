@@ -77,11 +77,100 @@ In addition, Opik relies on:
 2. MySQL: Used to store metadata associated with projects, datasets, experiments, etc.
 3. Redis: Used for caching
 
-#### Setting up the environment
+## Local Development Setup
 
-The local development environment is based on `docker compose` with convenient scripts. 
-Use `./opik.sh` (Linux/Mac) or `.\opik.ps1` (Windows) for the best development experience.
-Please see instructions in [Docker Compose README](deployment/docker-compose/README.md) for advanced usage.
+We provide multiple development modes optimized for different workflows:
+
+### Quick Start Guide
+
+| Mode | Use Case | Command | Speed |
+|------|----------|---------|-------|
+| **Docker Mode** | Full stack testing, closest to production | `./opik.sh --build` | Slow |
+| **Local Process** | Fast BE + FE development with hot reload | `scripts/dev-runner.sh` | Fast |
+| **BE-Only** | Backend development only | `scripts/dev-runner.sh --be-only-restart` | Fast |
+| **Infrastructure** | SDK/Integration development | `./opik.sh --infra --port-mapping` | Medium |
+
+### Docker Mode (Full Stack)
+
+Best for testing the complete system or when you need an environment closest to production.
+
+```bash
+# Build and start all services (first time setup)
+./opik.sh --build
+
+# On Windows
+.\opik.ps1 --build
+
+# Start without rebuilding (faster for subsequent runs)
+./opik.sh
+
+# Check service health
+./opik.sh --verify
+
+# Stop all services
+./opik.sh --stop
+```
+
+Access the UI at http://localhost:5173
+
+### Local Process Mode (Recommended for Development)
+
+Best for rapid development with instant code reloading. Runs backend and frontend as local processes.
+
+```bash
+# Full restart (stop, build, start) - use this for first time or after major changes
+scripts/dev-runner.sh
+
+# On Windows
+scripts\dev-runner.ps1
+
+# Start without rebuilding (faster when no dependency changes)
+scripts/dev-runner.sh --start
+
+# Check status
+scripts/dev-runner.sh --verify
+
+# View logs
+scripts/dev-runner.sh --logs
+```
+
+Access the UI at http://localhost:5174 (Vite dev server with hot reload)
+
+### BE-Only Mode (Backend Development)
+
+Best for backend-focused work. Frontend runs in Docker, backend as a local process.
+
+```bash
+# Start BE-only mode
+scripts/dev-runner.sh --be-only-restart
+
+# On Windows
+scripts\dev-runner.ps1 --be-only-restart
+```
+
+Access the UI at http://localhost:5173
+
+### Additional Commands
+
+```bash
+# Build backend only
+scripts/dev-runner.sh --build-be
+
+# Build frontend only
+scripts/dev-runner.sh --build-fe
+
+# Run database migrations
+scripts/dev-runner.sh --migrate
+
+# Lint code
+scripts/dev-runner.sh --lint-be
+scripts/dev-runner.sh --lint-fe
+
+# Enable debug logging
+scripts/dev-runner.sh --restart --debug
+```
+
+For comprehensive documentation on local development, including troubleshooting, advanced usage, and workflow examples, see our [Local Development Guide](apps/opik-documentation/documentation/fern/docs/contributing/local-development.mdx).
 
 ### Contributing to the documentation
 

@@ -13,40 +13,98 @@ The Opik backend is a Java application (source in `apps/opik-backend`) that form
 
 ## Setting Up Your Development Environment
 
-<Steps>
-  ### 1. Run External Dependencies
-  The backend relies on Clickhouse, MySQL, and Redis etc. You can start these by using the provided script from the repository root:
-  
-  ```bash
-  # From the root of the repository
-  
-  # Start only infrastructure services for backend development
-  ./opik.sh --infra --port-mapping
-  ```
+We provide multiple ways to develop the backend. Choose the approach that best fits your workflow:
 
-### 2. Install Prerequisites for Backend Development
+<Tabs>
+  <Tab value="Local Process Mode" title="Local Process Mode (Recommended)">
+    **Best for rapid development**
 
-Ensure you have the following installed:
+    This mode runs the backend as a local process while infrastructure and other services run in Docker:
 
-- Java Development Kit (JDK) - Version specified in `pom.xml` (e.g., JDK 17 or newer)
-- Apache Maven - For building the project
+    ```bash
+    # From repository root - restart everything
+    scripts/dev-runner.sh --be-only-restart
 
-### 3. Build and Run the Backend Locally
+    # Or just start (faster if already built)
+    scripts/dev-runner.sh --be-only-start
+    ```
 
-Navigate to the backend project directory and use Maven commands:
+    The backend API will be accessible at `http://localhost:8080`.
 
-```bash
-cd apps/opik-backend
+    **Benefits:**
+    - Fast rebuilds and restarts
+    - Easy debugging
+    - Faster code changes without Docker container rebuilds
 
-# Build the Opik application (compiles, runs tests, packages)
-mvn clean install
+    **Prerequisites:**
+    - Java Development Kit (JDK) 21
+    - Apache Maven 3.8+
+  </Tab>
 
-# Start the Opik application server
-java -jar target/opik-backend-{project.pom.version}.jar server config.yml
-```
+  <Tab value="Docker Mode" title="Docker Mode">
+    **Best for testing the complete system end to end**
 
-Replace `{project.pom.version}` with the actual version number found in the `pom.xml` file (e.g., `0.1.0-SNAPSHOT`).
-Once started, the Opik API should be accessible at `http://localhost:8080`.
+    This mode runs everything in Docker containers:
+
+    ```bash
+    # From repository root
+    ./opik.sh --build
+
+    # Or start without rebuilding
+    ./opik.sh
+    ```
+
+    The backend API will be accessible at `http://localhost:8080`.
+
+    **Benefits:**
+    - Closest to production environment
+    - No local Java/Maven installation needed
+    - Consistent environment across team
+
+    **Prerequisites:**
+    - Docker and Docker Compose
+  </Tab>
+
+  <Tab value="Manual Setup" title="Manual Setup">
+    **Best for understanding the build process**
+
+    Set up each component manually:
+
+    1. **Start infrastructure services:** The backend relies on Clickhouse, MySQL, and Redis etc.
+       ```bash
+       ./opik.sh --infra --port-mapping
+       ```
+
+    2. **Build the backend:**
+       ```bash
+       cd apps/opik-backend
+       mvn clean install
+       ```
+
+    3. **Run database migrations:**
+       ```bash
+       # MySQL migrations
+       java -jar target/opik-backend-*.jar db migrate config.yml
+
+       # ClickHouse migrations
+       java -jar target/opik-backend-*.jar dbAnalytics migrate config.yml
+       ```
+
+    4. **Start the backend:**
+       ```bash
+       java -jar target/opik-backend-*.jar server config.yml
+       ```
+
+    The backend API will be accessible at `http://localhost:8080`.
+
+    **Prerequisites:**
+    - Java Development Kit (JDK) 21
+    - Apache Maven 3.8+
+    - Docker and Docker Compose (for infrastructure)
+  </Tab>
+</Tabs>
+
+For comprehensive documentation on all development modes, troubleshooting, and advanced workflows, see our [Local Development Guide](/contributing/local-development).
 
 ### 4. Code Formatting
 
