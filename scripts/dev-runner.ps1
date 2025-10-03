@@ -85,6 +85,18 @@ function Write-LogDebug {
     }
 }
 
+# Helper function to get home directory path (cross-platform)
+function Get-HomeDirectory {
+    # Use $HOME automatic variable as final fallback (always set by PowerShell)
+    if ($env:USERPROFILE) { 
+        return $env:USERPROFILE 
+    } elseif ($env:HOME) { 
+        return $env:HOME 
+    } else { 
+        return $HOME  # PowerShell automatic variable (not environment variable)
+    }
+}
+
 function Test-CommandExists {
     param([string]$Command)
     
@@ -696,7 +708,7 @@ function Stop-Frontend {
 
     # Clean up any orphaned processes by looking for processes with our frontend directory path
     # This is safe and compatible across Windows and Unix systems in PowerShell
-    $orphanedPids = Get-Process | Where-Object {
+    $orphanedPids = Get-Process -ErrorAction SilentlyContinue | Where-Object {
         $_.Path -and $_.Path -like "*$script:FRONTEND_DIR*"
     } | Select-Object -ExpandProperty Id
 
@@ -745,6 +757,8 @@ function Show-AccessInformation {
         [string]$UiUrl,
         [bool]$ShowManualEdit = $true
     )
+
+    $homeDir = Get-HomeDirectory
     
     Write-Host ""
     Write-Host "🚀 Opik Development Environment is Ready!" -ForegroundColor Green
@@ -766,7 +780,7 @@ function Show-AccessInformation {
         Write-Host "After running 'opik configure', you MUST manually edit the configuration file to remove '/api' from the URL."
         Write-Host ""
         Write-Host "Edit the configuration file:" -ForegroundColor Blue
-        Write-Host "  # Open the configuration file, by default: $env:USERPROFILE\.opik.config"
+        Write-Host "  # Open the configuration file, by default: $homeDir\.opik.config"
         Write-Host ""
         Write-Host "  # Change this line:"
         Write-Host "  url_override = http://localhost:8080/api/"
@@ -791,7 +805,7 @@ function Show-AccessInformation {
     Write-Host "  `$env:OPIK_WORKSPACE = 'default'"
     Write-Host ""
     Write-Host "Important Notes:" -ForegroundColor Yellow
-    Write-Host "  • The configuration file is located at $env:USERPROFILE\.opik.config by default"
+    Write-Host "  • The configuration file is located at $homeDir\.opik.config by default"
     
     if ($ShowManualEdit) {
         Write-Host "  • You MUST remove '/api' from the URL for local development"
