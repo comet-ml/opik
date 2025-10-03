@@ -1,6 +1,6 @@
 {
   "name": "opik-configure",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "homepage": "https://github.com/comet-ml/opik",
   "repository": "https://github.com/comet-ml/opik",
   "description": "The Opik configure tool helps you to configure your Node.js project with Opik SDK",
