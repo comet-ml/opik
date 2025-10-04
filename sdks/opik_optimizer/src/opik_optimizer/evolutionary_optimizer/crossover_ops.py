@@ -110,8 +110,8 @@ class CrossoverOps:
             "      Recombining prompts using an LLM.", verbose=self.verbose
         )
 
-        parent1_messages: list[dict[str, str]] = ind1
-        parent2_messages: list[dict[str, str]] = ind2
+        parent1_messages: list[dict[str, MessageContent]] = ind1
+        parent2_messages: list[dict[str, MessageContent]] = ind2
         current_output_style_guidance = self.output_style_guidance
 
         user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
