@@ -58,6 +58,9 @@ class PopulationOps:
             task_desc_for_llm = self._get_task_description_for_llm(prompt)
             current_output_style_guidance = self.output_style_guidance
 
+            # Detect if we're working with multimodal prompts
+            is_multimodal = evo_prompts._is_multimodal_prompt(prompt.get_messages())
+
             # Fresh starts
             if num_fresh_starts > 0:
                 init_pop_report.start_fresh_prompts(num_fresh_starts)
@@ -70,7 +73,7 @@ class PopulationOps:
                             {
                                 "role": "system",
                                 "content": evo_prompts.fresh_start_system_prompt(
-                                    current_output_style_guidance
+                                    current_output_style_guidance, is_multimodal=is_multimodal
                                 ),
                             },
                             {"role": "user", "content": fresh_start_user_prompt},
@@ -132,7 +135,7 @@ class PopulationOps:
                             {
                                 "role": "system",
                                 "content": evo_prompts.variation_system_prompt(
-                                    current_output_style_guidance
+                                    current_output_style_guidance, is_multimodal=is_multimodal
                                 ),
                             },
                             {"role": "user", "content": user_prompt_for_variation},
@@ -142,7 +145,7 @@ class PopulationOps:
                     logger.debug(
                         f"Raw response for population variations: {response_content_variations}"
                     )
-                    json_response_variations = json.loads(response_content_variations)
+                    json_response_variations = utils.json_to_dict(response_content_variations)
                     generated_prompts_variations = [
                         p["prompt"]
                         for p in json_response_variations.get("prompts", [])
