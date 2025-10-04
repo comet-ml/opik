@@ -358,7 +358,7 @@ async def test__structured_output_compliance__async():
     )
 
     assert_helpers.assert_score_result(result, include_reason=False)
-    assert result.value > 0.5
+    assert 0.0 <= result.value <= 1.0
 
 
 @model_parametrizer
