@@ -192,8 +192,8 @@ class CrossoverOps:
             "      Recombining prompts using an LLM.", verbose=self.verbose
         )
 
-        parent1_messages: list[dict[str, str]] = ind1
-        parent2_messages: list[dict[str, str]] = ind2
+        parent1_messages: list[dict[str, MessageContent]] = ind1
+        parent2_messages: list[dict[str, MessageContent]] = ind2
         current_output_style_guidance = self.output_style_guidance
         # Detect if we're working with multimodal prompts (check both parents)
         is_multimodal = evo_prompts._is_multimodal_prompt(parent1_messages) or evo_prompts._is_multimodal_prompt(parent2_messages)
