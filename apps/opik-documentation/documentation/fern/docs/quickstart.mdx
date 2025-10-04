@@ -5,12 +5,146 @@ this guide is to help you log your first LLM calls and chains to the Opik platfo
   <img src="/img/home/traces_page_for_quickstart.png" />
 </Frame>
 
+## Prerequisites
+
+Before you begin, you'll need to choose how you want to use Opik:
+
+- **Opik Cloud**: Create a free account at [comet.com/opik](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=quickstart&utm_campaign=opik)
+- **Self-hosting**: Follow the [self-hosting guide](/self-host/overview) to deploy Opik locally or on Kubernetes
+
 ## Logging your first LLM calls
 
 Opik makes it easy to integrate with your existing LLM application, here are some of our most
 popular integrations:
 
 <Tabs>
+  <Tab title="Python SDK" value="python-function-decorator">
+    If you are using the Python function decorator, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik Python SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik Python SDK:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Wrap your function with the `@track` decorator:
+
+        ```python
+        from opik import track
+
+        @track
+        def my_function(input: str) -> str:
+            return input
+        ```
+
+        All calls to the `my_function` will now be logged to Opik. This works well for any function
+        even nested ones and is also supported by most integrations (just wrap any parent function
+        with the `@track` decorator).
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="TypeScript SDK" value="typescript-sdk">
+    If you want to use the TypeScript SDK to log traces directly:
+
+    <Steps>
+      <Step>
+        Install the Opik TypeScript SDK:
+
+        ```bash
+        npm install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik TypeScript SDK by running the interactive CLI tool:
+
+        ```bash
+        npx opik-configure
+        ```
+
+        This will detect your project setup, install required dependencies, and help you configure environment variables.
+      </Step>
+      <Step>
+        Log a trace using the Opik client:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        const trace = client.trace({
+          name: "My LLM Application",
+          input: { prompt: "What is the capital of France?" },
+          output: { response: "The capital of France is Paris." },
+        });
+
+        trace.end();
+        await client.flush();
+        ```
+
+        All traces will now be logged to Opik. You can also log spans within traces for more detailed observability.
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="OpenAI (Python)" value="openai-python-sdk">
+    If you are using the OpenAI Python SDK, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik Python SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
+        Cloud or your Opik server address if you are self-hosting:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Wrap your OpenAI client with the `track_openai` function:
+
+        ```python
+        from opik.integrations.openai import track_openai
+        from openai import OpenAI
+
+        # Wrap your OpenAI client
+        client = OpenAI()
+        client = track_openai(client)
+
+        # Use the client as normal
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "user", "content": "Hello, how are you?",
+                },
+            ],
+        )
+        print(completion.choices[0].message.content)
+        ```
+
+        All OpenAI calls made using the `client` will now be logged to Opik. You can combine
+        this with the `@track` decorator to log the traces for each step of your agent.
+
+      </Step>
+    </Steps>
+
+  </Tab>
   <Tab title="OpenAI (TS)" value="openai-ts-sdk">
     If you are using the OpenAI TypeScript SDK, you can integrate by:
 
@@ -23,13 +157,13 @@ popular integrations:
         ```
       </Step>
       <Step>
-        Configure the Opik TypeScript SDK using environment variables:
+        Configure the Opik TypeScript SDK by running the interactive CLI tool:
 
         ```bash
-        export OPIK_API_KEY="<your-api-key>" # Only required if you are using the Opik Cloud version
-        export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api" # Cloud version
-        # export OPIK_URL_OVERRIDE="http://localhost:5173/api" # Self-hosting
+        npx opik-configure
         ```
+
+        This will detect your project setup, install required dependencies, and help you configure environment variables.
       </Step>
       <Step>
         Wrap your OpenAI client with the `trackOpenAI` function:
@@ -75,13 +209,13 @@ popular integrations:
         ```
       </Step>
       <Step>
-        Configure the Opik AI Vercel SDK using environment variables and set your Opik API key:
+        Configure the Opik AI Vercel SDK by running the interactive CLI tool:
 
         ```bash
-        export OPIK_API_KEY="<your-api-key>"
-        export OPIK_URL_OVERRIDE="https://www.comet.com/opik/api" # Cloud version
-        # export OPIK_URL_OVERRIDE="http://localhost:5173/api" # Self-hosting
+        npx opik-configure
         ```
+
+        This will detect your project setup, install required dependencies, and help you configure environment variables.
       </Step>
       <Step>
         Initialize the OpikExporter with your AI SDK:
@@ -115,32 +249,8 @@ popular integrations:
     </Steps>
 
   </Tab>
-  <Tab title="Opik Configure (TS)" value="opik-configure-ts">
-    The Opik Configure is an interactive CLI tool that helps you quickly add Opik SDK to your Node.js/TypeScript project with guided setup:
-
-    <Steps>
-      <Step>
-        Run the configure tool in your project directory:
-
-        ```bash
-        npx opik-configure
-        ```
-
-        The tool will:
-        - Detect your project setup (package manager, TypeScript config)
-        - Install the Opik SDK and required dependencies
-        - Help you configure environment variables
-        - Set up Opik client for your LLM integrations (OpenAI, LangChain, etc.)
-      </Step>
-    </Steps>
-
-    <Tip>
-      The tool supports custom options like `--debug` for verbose logging, `--force-install` to skip peer dependency checks, and `--install-dir` to specify a custom directory. Run `npx opik-configure --help` to see all available options.
-    </Tip>
-
-  </Tab>
-  <Tab title="OpenAI (Python)" value="openai-python-sdk">
-    If you are using the OpenAI Python SDK, you can integrate by:
+  <Tab title="Ollama" value="ollama-python">
+    If you are using Ollama with Python, you can integrate by:
 
     <Steps>
       <Step>
@@ -151,27 +261,88 @@ popular integrations:
         ```
       </Step>
       <Step>
-        Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
-        Cloud or your Opik server address if you are self-hosting:
+        Configure the Opik Python SDK:
 
         ```bash
         opik configure
         ```
       </Step>
       <Step>
-        Wrap your OpenAI client with the `track_openai` function:
+        Integrate Opik with your Ollama calls:
 
-        ```python
-        from opik.integrations.openai import track_openai
-        from openai import OpenAI
+        <Tabs>
+          <Tab title="Ollama Python Package">
+            Wrap your Ollama calls with the `@track` decorator:
 
-        # Wrap your OpenAI client
-        openai_client = OpenAI()
-        openai_client = track_openai(openai_client)
-        ```
+            ```python
+            import ollama
+            from opik import track
 
-        All OpenAI calls made using the `openai_client` will now be logged to Opik.
+            @track
+            def ollama_call(user_message: str):
+                response = ollama.chat(
+                    model='llama3.1',
+                    messages=[{'role': 'user', 'content': user_message}]
+                )
+                return response['message']
 
+            # Call your function
+            result = ollama_call("Say this is a test")
+            print(result)
+            ```
+          </Tab>
+          <Tab title="OpenAI SDK">
+            Use Opik's OpenAI integration with Ollama's OpenAI-compatible API:
+
+            ```python
+            from openai import OpenAI
+            from opik.integrations.openai import track_openai
+
+            # Create an OpenAI client pointing to Ollama
+            client = OpenAI(
+                base_url='http://localhost:11434/v1/',
+                api_key='ollama'  # required but ignored
+            )
+
+            # Wrap the client with Opik tracking
+            client = track_openai(client)
+
+            # Call the local Ollama model
+            response = client.chat.completions.create(
+                model='llama3.1',
+                messages=[{'role': 'user', 'content': 'Say this is a test'}]
+            )
+            print(response.choices[0].message.content)
+            ```
+          </Tab>
+          <Tab title="LangChain">
+            Use Opik's LangChain integration with Ollama:
+
+            ```python
+            from langchain_ollama import ChatOllama
+            from opik.integrations.langchain import OpikTracer
+
+            # Create the Opik tracer
+            opik_tracer = OpikTracer()
+
+            # Create the Ollama model with Opik tracing
+            llm = ChatOllama(
+                model="llama3.1",
+                temperature=0,
+            ).with_config({"callbacks": [opik_tracer]})
+
+            # Call the Ollama model
+            messages = [
+                ("system", "You are a helpful assistant."),
+                ("human", "Say this is a test")
+            ]
+            response = llm.invoke(messages)
+            print(response)
+            ```
+          </Tab>
+        </Tabs>
+
+        All Ollama calls will now be logged to Opik. See the [full Ollama guide](/integrations/ollama) for more advanced usage.
       </Step>
     </Steps>
 
@@ -184,7 +355,7 @@ popular integrations:
         Install the Opik SDK:
 
         ```bash
-        pip install opik
+        pip install opik google-adk
         ```
       </Step>
       <Step>
@@ -195,16 +366,21 @@ popular integrations:
         ```
       </Step>
       <Step>
-        Wrap your ADK agent with the `OpikTracer` decorator:
+        Wrap your ADK agent with the `OpikTracer`:
 
         ```python
+        from google.adk.agents import Agent
         from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 
-        opik_tracer = OpikTracer()
-
-        # Define your ADK agent
+        # Create your ADK agent
+        agent = Agent(
+            name="helpful_assistant",
+            model="gemini-2.0-flash",
+            instruction="You are a helpful assistant that answers user questions."
+        )
 
         # Wrap your ADK agent with the OpikTracer
+        opik_tracer = OpikTracer()
         track_adk_agent_recursive(agent, opik_tracer)
         ```
 
@@ -254,42 +430,6 @@ popular integrations:
     </Steps>
 
   </Tab>
-  <Tab title="Function Decorators" value="python-function-decorator">
-    If you are using the Python function decorator, you can integrate by:
-
-    <Steps>
-      <Step>
-        Install the Opik Python SDK:
-
-        ```bash
-        pip install opik
-        ```
-      </Step>
-      <Step>
-        Configure the Opik Python SDK:
-
-        ```bash
-        opik configure
-        ```
-      </Step>
-      <Step>
-        Wrap your function with the `@track` decorator:
-
-        ```python
-        from opik import track
-
-        @track
-        def my_function(input: str) -> str:
-            return input
-        ```
-
-        All calls to the `my_function` will now be logged to Opik. This works well for any function
-        even nested ones and is also supported by most integrations (just wrap any parent function
-        with the `@track` decorator).
-      </Step>
-    </Steps>
-
-  </Tab>
   <Tab title="AI Wizard" value="ai-installation">
     <div style={{"display": "flex", "flexDirection": "row", "gap": "1rem", "alignItems": "center", "justifyContent": "space-between"}}>
       <span style={{"& p": {"margin": "0rem"}}}>
@@ -313,33 +453,38 @@ popular integrations:
     in your Opik dashboard.
 
   </Tab>
-  <Tab title="Other" value="other">
-    Opik has more than 30 integrations with the most popular frameworks and libraries, you can find
-    a full list of integrations [here](/integrations/overview). For example:
+  <Tab title="All integrations" value="all_integrations">
+    Opik has **30+ integrations** with popular frameworks and model providers:
 
-    - [Dify](/integrations/dify)
-    - [Agno](/integrations/agno)
-    - [Ollama](/integrations/ollama)
+    <CardGroup cols={3}>
+      <Card title="LangChain" href="/integrations/langchain" icon={<img src="/img/tracing/langchain.svg" />} iconPosition="left"/>
+      <Card title="LlamaIndex" href="/integrations/llama_index" icon={<img src="/img/tracing/llamaindex.svg" />} iconPosition="left"/>
+      <Card title="Anthropic" href="/integrations/anthropic" icon={<img src="/img/tracing/anthropic.svg" />} iconPosition="left"/>
+      <Card title="AWS Bedrock" href="/integrations/bedrock" icon={<img src="/img/tracing/bedrock.svg" />} iconPosition="left"/>
+      <Card title="Google Gemini" href="/integrations/gemini" icon={<img src="/img/tracing/gemini.svg" />} iconPosition="left"/>
+      <Card title="CrewAI" href="/integrations/crewai" icon={<img src="/img/tracing/crewai.svg" />} iconPosition="left"/>
+    </CardGroup>
 
-    If you are using a framework or library that is not listed, you can still log your traces
-    using either the function decorator or the Opik client, check out the
-    [Log Traces](/tracing/log_traces) guide for more information.
-
+    **[View all 30+ integrations →](/integrations/overview)**
   </Tab>
 </Tabs>
 
-<Tip>
-Opik has over 30 integrations with the most popular frameworks and libraries and we couldn't list
-them all here, you can find [a full list of integrations here](/integrations/overview).
+## Analyze your traces
 
-You can also instrument your code using our [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/),
-[Typescript SDK](/reference/typescript-sdk/overview) or [Rest API](/reference/rest-api/overview).
+After running your application, you will start seeing your traces in your Opik dashboard:
 
-Opik also has a playground which is perfect if you want to experiment with prompts and models but
-don't want to write any code, you can find more information about the playground
-[here](/prompt_engineering/playground).
+<video
+    src="/img/tracing/quickstart.mp4"
+    width="854"
+    height="480"
+    autoPlay
+    muted
+    loop
+    playsInline
+    preload="auto"
+/>
 
-</Tip>
+If you don't see traces appearing, reach out to us on [Slack](https://chat.comet.com) or raise an issue on [GitHub](https://github.com/comet-ml/opik/issues) and we'll help you troubleshoot.
 
 ## Next steps
 
@@ -347,8 +492,8 @@ Now that you have logged your first LLM calls and chains to Opik, why not check 
 
 1. [In depth guide on agent observability](/tracing/log_traces): Learn how to customize the data
    that is logged to Opik and how to log conversations.
-2. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation
+2. [Opik Experiments](/evaluation/concepts): Opik allows you to automated the evaluation process of
+   your LLM application so that you no longer need to manually review every LLM response.
+3. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation
    metrics (Hallucination, Answer Relevance, Context Recall, etc.) that you can use to score your
    LLM responses.
-3. [Opik Experiments](/evaluation/concepts): Opik allows you to automated the evaluation process of
-   your LLM application so that you no longer need to manually review every LLM response.
