@@ -10,6 +10,7 @@ import { generatePromptFilters, processFilters } from "@/lib/filters";
 const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 
 export type UseExperimentsListParams = {
+  datasetId?: string;
   workspaceName?: string;
   promptId?: string;
   optimizationId?: string;
