@@ -64,9 +64,7 @@ class TestContainsMetric:
         Tests the core rule: an empty string set in __init__ is a valid reference
         and is always contained in any output string (score 1.0).
         """
-        expected_score = 1.0
-        
-        # Test 1: Reference set in __init__ (Should succeed)
+        expected_score = 1.0        
         metric = Contains(reference="", case_sensitive=case_sensitive)
         result = metric.score(output=output)
         assert result.value == expected_score
@@ -79,8 +77,6 @@ class TestContainsMetric:
         "" is treated as a 'missing' signal/fallback trigger.
         """
         metric = Contains()
-        output = "some output"
-        
-        # Passing "" to score() triggers fallback to self._reference (None), which raises ValueError.
+        output = "some output"        
         with pytest.raises(ValueError, match="Reference string must be provided"):
              metric.score(output=output, reference="")

@@ -1,6 +1,4 @@
 from typing import Any, Optional
-
-# Assuming base_metric and score_result are available in your environment
 from .. import base_metric, score_result 
 
 
