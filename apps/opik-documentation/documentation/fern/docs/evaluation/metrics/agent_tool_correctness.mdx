@@ -9,14 +9,14 @@ description: Evaluate whether an agent invoked and interpreted tools correctly
 ```python title="Inspect tool usage"
 from opik.evaluation.metrics import AgentToolCorrectnessJudge
 
-run_report = (
-    "TOOL weather_api(city='Paris') -> 12°C and raining. Agent responded 'Sunny and warm'."
-)
+payload = """TOOL weather_api(city='Paris') -> 12°C and raining.
+AGENT: Responded "Sunny and warm".
+"""
 
 metric = AgentToolCorrectnessJudge()
-score = metric.score(output=run_report)
+score = metric.score(output=payload)
 
-print(score.value)
+print(score.value)   # 0.0–1.0 after normalisation
 print(score.reason)
 ```
 
@@ -24,8 +24,7 @@ print(score.reason)
 
 | Argument | Type | Required | Description |
 | --- | --- | --- | --- |
-| `output` | `str` | **Yes** | Narrative or structured log describing tool invocations. |
-| `input` | `str` | Optional | Original user task or instructions. |
+| `output` | `str` | **Yes** | Payload describing the task, tool calls, and observed behaviour. |
 
 ## Configuration
 
@@ -36,4 +35,4 @@ print(score.reason)
 | `track` | `True` | Controls Opik tracking. |
 | `project_name` | `None` | Override logging destination. |
 
-The judge’s metadata lists incorrect calls, missing validations, and misinterpreted outputs so you can pinpoint where guardrails or schema validation should be tightened.
+The judge emits an integer between 0 and 10 (scaled to 0–1 by Opik); read `score.reason` to pinpoint incorrect calls, missing validations, or misinterpreted outputs.

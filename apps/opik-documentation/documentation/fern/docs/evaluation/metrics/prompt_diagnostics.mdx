@@ -39,4 +39,4 @@ Both judges accept a single string via the `input` keyword. You can optionally p
 | `track` | `True` | Disable to skip logging evaluations. |
 | `project_name` | `None` | Override the project when logging results. |
 
-The metadata returned by each judge contains rationale text and per-criterion scores. You can feed these into dashboards or trigger follow-up automations when scores cross a threshold.
+Each evaluator emits an integer between 0 and 10 (normalised to 0–1 by Opik). Inspect the `reason` text for rationale and per-criterion feedback, and trigger follow-up automations when scores cross a threshold.

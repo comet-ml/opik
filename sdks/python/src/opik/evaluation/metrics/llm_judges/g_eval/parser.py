@@ -19,15 +19,20 @@ def parse_model_output_string(
     try:
         dict_content = parsing_helpers.extract_json_content_or_raise(content)
 
-        score = float(dict_content["score"])
-        if not 0 <= score <= 10:
-            raise ValueError(f"LLM returned score outside of [0, 10] range: {score}")
+        score_raw = float(dict_content["score"])
+
+        if not 0 <= score_raw <= 10:
+            raise ValueError(
+                f"LLM returned score outside of [0, 10] range: {score_raw}"
+            )
+
+        normalised_score = score_raw / 10
 
         reason = str(dict_content["reason"])
 
         return score_result.ScoreResult(
             name=metric_name,
-            value=score / 10,
+            value=normalised_score,
             reason=reason,
         )
     except Exception as exception:
