@@ -44,17 +44,37 @@ class LlmSupport:
 
         def increment_llm_counter(self) -> None: ...
 
+    def _has_images_in_messages(self, messages: list[dict[str, Any]]) -> bool:
+        """Check if messages contain image content."""
+        for msg in messages:
+            content = msg.get("content", "")
+            # Check for structured content with images
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        return True
+        return False
+
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         is_reasoning: bool = False,
         optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response string."""
         # For reasoning calls (prompt generation), use higher max_tokens to avoid truncation
         # For evaluation calls (task output), use user-configurable max_tokens
-        default_max_tokens = 8000 if is_reasoning else 1000
+        # IMPORTANT: For multimodal calls with images, reduce max_tokens to leave room
+        # in context window (images can use 15-35k tokens each)
+        has_images = self._has_images_in_messages(messages)
+
+        if has_images:
+            # Conservative defaults for multimodal: images take up significant context
+            default_max_tokens = 4000 if is_reasoning else 500
+        else:
+            # Text-only: more generous token allocation
+            default_max_tokens = 8000 if is_reasoning else 1000
 
         # Build base call params
         llm_config_params: dict[str, Any] = {
