@@ -1,20 +1,20 @@
 import pytest
-# Assuming Contains and score_result are correctly imported
-from opik.evaluation.metrics import Contains
-from opik.evaluation.metrics import score_result 
+
+from opik.evaluation.metrics import Contains,score_result
+
 
 
 class TestContainsMetric:
-    
+
     @pytest.mark.parametrize(
         "init_reference, score_reference, should_raise",
         [
-            (None, None, True),          # Case 1: None in __init__ and None in score -> Raise
-            ("ref", None, False),        # Case 2: Init set, score is None -> Use Init reference (Pass)
-            (None, "ref", False),        # Case 3: Init None, score set -> Use score reference (Pass)
-            ("", "ref", False),          # Case 4: Init empty, score set -> Use score reference (Pass)
-            ("ref", "", False),          # Case 5: Init set, score is "" -> Falls back to Init reference (Pass)
-            ("", "", False),             # Case 6: Init empty, score is "" -> Falls back to Init reference (Pass)
+            (None, None, True),   # 1: None in both -> Raise
+            ("ref", None, False), # 2: Init set, score None -> Use init
+            (None, "ref", False), # 3: Init None, score set -> Use score ref
+            ("", "ref", False),   # 4: Init empty, score set -> Use score ref
+            ("ref", "", True),    # 5: Init set, score empty -> Raise ValueError
+            ("", "", True),       # 6: Init empty, score empty -> Raise ValueError
         ],
         ids=[
             "None_None",
@@ -25,58 +25,68 @@ class TestContainsMetric:
             "InitEmpty_ScoreEmpty",
         ]
     )
-    def test_reference_is_none_or_empty_fallback(self, init_reference, score_reference, should_raise):
+    def test_reference_none_and_empty_behavior(self, init_reference, score_reference, should_raise):
         """
-        Tests that both None and "" in the score method trigger fallback to the 
-        initialization reference, and only strictly unresolvable references raise ValueError.
+        Tests correct ValueError handling for None and empty string references.
         """
         metric = Contains(reference=init_reference)
         output = "some output string"
 
         if should_raise:
-            with pytest.raises(ValueError, match="Reference string must be provided"):
+            with pytest.raises(ValueError, match="Reference string"):
                 metric.score(output=output, reference=score_reference)
         else:
-            # Should not raise, just ensure it runs
-            try:
-                result = metric.score(output=output, reference=score_reference)
-                assert isinstance(result, score_result.ScoreResult)
-            except ValueError as e:
-                pytest.fail(f"Unexpected ValueError: {e}")
+            result = metric.score(output=output, reference=score_reference)
+            assert isinstance(result, score_result.ScoreResult)
 
-    # --- Tests for Empty String as a Successful Reference ---
+
 
     @pytest.mark.parametrize(
-        "output, case_sensitive", 
+        "output, reference, case_sensitive, expected",
         [
-            ("hello world", False),
-            ("hello world", True),
-            ("", False),
+            ("Hello, World!", "world", False, 1.0),  # insensitive match
+            ("Hello, World!", "world", True, 0.0),   # sensitive mismatch
+            ("Hello World", "Hello", True, 1.0),     # sensitive match
+            ("Hello World", "HI", False, 0.0),      # Not found
         ],
         ids=[
-            "EmptyRef_InInit_InOutput_CI", 
-            "EmptyRef_InInit_InOutput_CS",
-            "EmptyRef_InInit_EmptyOutput",
-        ]
+            "CaseInsensitive_Match",
+            "CaseSensitive_Mismatch",
+            "CaseSensitive_Match",
+            "NoMatch",
+        ],
     )
-    def test_empty_reference_is_always_contained_via_init(self, output, case_sensitive):
+    def test_case_sensitivity_and_matching(self, output, reference, case_sensitive, expected):
         """
-        Tests the core rule: an empty string set in __init__ is a valid reference
-        and is always contained in any output string (score 1.0).
+        Tests that case sensitivity flag correctly affects matching.
         """
-        expected_score = 1.0        
-        metric = Contains(reference="", case_sensitive=case_sensitive)
-        result = metric.score(output=output)
-        assert result.value == expected_score
+        metric = Contains(case_sensitive=case_sensitive)
+        result = metric.score(output=output, reference=reference)
+        assert result.value == expected
 
 
-    def test_empty_reference_as_score_arg_raises_error_without_default(self):
+    def test_empty_reference_in_init_raises(self):
         """
-        Tests the requirement that providing an empty string to score() 
-        without an __init__ default results in a ValueError, confirming that 
-        "" is treated as a 'missing' signal/fallback trigger.
+        Tests that initializing metric with empty reference raises ValueError.
+        """
+        metric = Contains(reference="")
+        output = "some text"
+        with pytest.raises(ValueError, match="Reference string cannot be empty"):
+            metric.score(output=output)
+
+    def test_empty_reference_in_score_raises(self):
+        """
+        Tests that passing empty string to score() raises ValueError.
         """
         metric = Contains()
-        output = "some output"        
+        output = "test"
+        with pytest.raises(ValueError, match="Reference string cannot be empty"):
+            metric.score(output=output, reference="")
+
+    def test_none_reference_in_both_places_raises(self):
+        """
+        Tests that None reference in both init and score raises ValueError.
+        """
+        metric = Contains()
         with pytest.raises(ValueError, match="Reference string must be provided"):
-             metric.score(output=output, reference="")
+            metric.score(output="something")
