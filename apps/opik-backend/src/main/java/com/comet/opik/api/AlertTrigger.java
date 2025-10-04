@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -27,7 +28,7 @@ public record AlertTrigger(
                 Alert.View.Write.class}) @NotNull AlertEventType eventType,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) @Nullable List<AlertTriggerConfig> triggerConfigs,
+                Alert.View.Write.class}) @Nullable List<@Valid AlertTriggerConfig> triggerConfigs,
 
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
