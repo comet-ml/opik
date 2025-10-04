@@ -34,9 +34,10 @@ import useAlertUpdateMutation from "@/api/alerts/useAlertUpdateMutation";
 import { AlertFormType, AlertFormSchema } from "./schema";
 import WebhookSettings from "./WebhookSettings";
 import EventTriggers from "./EventTriggers";
+import TestWebhookButton from "./TestWebhookButton";
 import {
-  alertEventsToEventTriggersObject,
-  eventTriggersObjectToAlertEvents,
+  alertTriggersToEventTriggersObject,
+  eventTriggersObjectToAlertTriggers,
 } from "./helpers";
 
 type AddEditAlertDialogProps = {
@@ -62,36 +63,44 @@ const AddEditAlertDialog: React.FunctionComponent<AddEditAlertDialogProps> = ({
     defaultValues: {
       name: alert?.name || "",
       enabled: alert?.enabled ?? true,
-      url: alert?.url || "",
-      secretToken: alert?.secret_token || "",
-      headers: alert?.headers
-        ? Object.entries(alert.headers).map(([key, value]) => ({ key, value }))
+      url: alert?.webhook?.url || "",
+      secretToken: alert?.webhook?.secret_token || "",
+      headers: alert?.webhook?.headers
+        ? Object.entries(alert.webhook.headers).map(([key, value]) => ({
+            key,
+            value,
+          }))
         : [],
-      eventTriggers: alertEventsToEventTriggersObject(alert?.events),
+      eventTriggers: alertTriggersToEventTriggersObject(alert?.triggers),
     },
   });
 
-  const onSubmit = useCallback(() => {
+  const getAlert = useCallback(() => {
     const formData = form.getValues();
 
-    const alertData = {
+    return {
       name: formData.name.trim(),
       enabled: formData.enabled,
-      url: formData.url.trim(),
-      secret_token: formData.secretToken || undefined,
-      headers:
-        formData.headers.length > 0
-          ? formData.headers.reduce(
-              (acc, header) => ({
-                ...acc,
-                [header.key]: header.value,
-              }),
-              {} as Record<string, string>,
-            )
-          : undefined,
-      events: eventTriggersObjectToAlertEvents(formData.eventTriggers),
+      webhook: {
+        url: formData.url.trim(),
+        secret_token: formData.secretToken || undefined,
+        headers:
+          formData.headers.length > 0
+            ? formData.headers.reduce(
+                (acc, header) => ({
+                  ...acc,
+                  [header.key]: header.value,
+                }),
+                {} as Record<string, string>,
+              )
+            : undefined,
+      },
+      triggers: eventTriggersObjectToAlertTriggers(formData.eventTriggers),
     };
+  }, [form]);
 
+  const onSubmit = useCallback(() => {
+    const alertData = getAlert();
     if (isEdit && alert) {
       alertUpdateMutation.mutate({
         alert: {
@@ -108,12 +117,14 @@ const AddEditAlertDialog: React.FunctionComponent<AddEditAlertDialogProps> = ({
       });
     }
     setOpen(false);
-  }, [form, isEdit, alert, alertCreateMutation, alertUpdateMutation, setOpen]);
-
-  const handleTestWebhook = useCallback(() => {
-    // TODO [ANDRII] - Implement webhook testing functionality
-    console.log("Test webhook functionality not implemented yet");
-  }, []);
+  }, [
+    getAlert,
+    isEdit,
+    alert,
+    setOpen,
+    alertUpdateMutation,
+    alertCreateMutation,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -127,7 +138,6 @@ const AddEditAlertDialog: React.FunctionComponent<AddEditAlertDialogProps> = ({
               className="flex flex-col gap-6 pb-4"
               onSubmit={form.handleSubmit(onSubmit)}
             >
-              {/* Basic Information */}
               <div className="flex flex-col gap-4">
                 <FormField
                   control={form.control}
@@ -189,14 +199,10 @@ const AddEditAlertDialog: React.FunctionComponent<AddEditAlertDialogProps> = ({
           </Form>
         </DialogAutoScrollBody>
         <DialogFooter className="gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleTestWebhook}
+          <TestWebhookButton
+            getAlert={getAlert}
             disabled={form.formState.isSubmitting}
-          >
-            Test webhook
-          </Button>
+          />
           <div className="flex-auto"></div>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
