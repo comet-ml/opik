@@ -9,6 +9,28 @@ from opik.evaluation.metrics.heuristics import (
 )
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics.heuristics.bleu import SentenceBLEU, CorpusBLEU
+from opik.evaluation.metrics.heuristics.distribution_metrics import (
+    JSDivergence,
+    JSDistance,
+    KLDivergence,
+)
+from opik.evaluation.metrics.heuristics.meteor import METEOR
+from opik.evaluation.metrics.heuristics.gleu import GLEU
+from opik.evaluation.metrics.heuristics.bertscore import BERTScore
+from opik.evaluation.metrics.heuristics.chrf import ChrF
+from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
+from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
+from opik.evaluation.metrics.heuristics.readability import ReadabilityGuard
+from opik.evaluation.metrics.heuristics.tone import ToneGuard
+from opik.evaluation.metrics.conversation.rouge_conversation.metric import (
+    RougeConversationMetric,
+)
+from opik.evaluation.metrics.conversation.bleu_conversation.metric import (
+    BleuConversationMetric,
+)
+from opik.evaluation.metrics.conversation.meteor_conversation.metric import (
+    MeteorConversationMetric,
+)
 
 
 class CustomTokenizer:
@@ -196,6 +218,291 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
     assert "empty" in str(exc_info.value).lower()
 
 
+def test_js_divergence_identical_text():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
+    metric = JSDivergence(track=False)
+    result = metric.score(
+        output="The quick brown fox jumps over the lazy dog",
+        reference="The quick brown fox jumps over the lazy dog",
+    )
+
+    assert isinstance(result, ScoreResult)
+    assert result.value == pytest.approx(1.0, abs=1e-6)
+    assert result.metadata is not None
+    assert result.metadata["divergence"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_js_divergence_different_text():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
+    metric = JSDivergence(track=False)
+    result = metric.score(output="apple pear", reference="zebra quokka")
+
+    assert isinstance(result, ScoreResult)
+    # Divergence in log base 2 should be close to 1 for disjoint vocab
+    assert 0.0 <= result.value < 0.1
+    assert 0.9 < result.metadata["divergence"] <= 1.0
+
+
+def test_js_divergence_requires_non_empty():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
+    metric = JSDivergence(track=False)
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="", reference="non empty")
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="non empty", reference="   ")
+
+
+def test_js_distance_matches_metadata():
+    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
+    metric = JSDistance(track=False)
+    result = metric.score(output="token token", reference="token other")
+    assert 0.0 <= result.value <= 1.0
+
+
+def test_kl_divergence_avg_direction():
+    metric = KLDivergence(direction="avg", smoothing=1e-6, track=False)
+    result = metric.score(output="cat cat", reference="cat dog")
+    assert result.value >= 0.0
+
+
+def test_meteor_metric_with_custom_fn():
+    captured = []
+
+    def meteor_fn(references, hypothesis):
+        captured.append((tuple(references), hypothesis))
+        return 0.88
+
+    metric = METEOR(meteor_fn=meteor_fn, track=False)
+    res = metric.score(output="hello world", reference="hello world")
+
+    assert res.value == pytest.approx(0.88)
+    assert captured == [(("hello world",), "hello world")]
+
+
+def test_meteor_rejects_empty_inputs():
+    metric = METEOR(meteor_fn=lambda refs, hyp: 1.0, track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output="", reference="ref")
+    with pytest.raises(MetricComputationError):
+        metric.score(output="hyp", reference="   ")
+
+
+def test_gleu_metric_with_custom_fn():
+    def gleu_fn(references, hypothesis):
+        return 0.5
+
+    metric = GLEU(gleu_fn=gleu_fn, track=False)
+    res = metric.score(output="a b", reference="a b")
+    assert res.value == pytest.approx(0.5)
+
+
+def test_gleu_rejects_empty_inputs():
+    metric = GLEU(gleu_fn=lambda refs, hyp: 0.0, track=False)
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="", reference="text")
+
+    with pytest.raises(MetricComputationError):
+        metric.score(output="summary", reference=[""])
+
+
+class _Scalar:
+    def __init__(self, value: float) -> None:
+        self._value = value
+
+    def item(self) -> float:
+        return self._value
+
+
+def test_bertscore_with_stubbed_fn():
+    def scorer(cands, refs):
+        assert cands == ["hello"]
+        assert refs == ["hello"]
+        return ([_Scalar(0.8)], [_Scalar(0.75)], [_Scalar(0.77)])
+
+    metric = BERTScore(scorer_fn=scorer, track=False)
+    result = metric.score(output="hello", reference="hello")
+
+    assert result.value == pytest.approx(0.77)
+    assert result.metadata is not None
+    assert result.metadata["precision"] == pytest.approx(0.8)
+    assert result.metadata["recall"] == pytest.approx(0.75)
+
+
+def test_bertscore_rejects_empty_candidate():
+    metric = BERTScore(scorer_fn=lambda c, r: ([0.0], [0.0], [0.0]), track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output="   ", reference="ref")
+
+
+def test_chrf_metric_uses_custom_fn():
+    def chrf_fn(candidate, references):
+        assert candidate == "hello world"
+        assert references == ["hello world"]
+        return 0.72
+
+    metric = ChrF(chrf_fn=chrf_fn, track=False)
+    result = metric.score(output="hello world", reference="hello world")
+
+    assert result.value == pytest.approx(0.72)
+
+
+def test_spearman_ranking_metric():
+    metric = SpearmanRanking(track=False)
+    result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])
+
+    assert result.metadata["rho"] == pytest.approx(0.5)
+    assert result.value == pytest.approx((0.5 + 1) / 2)
+
+
+def test_vader_sentiment_metric_uses_custom_analyzer():
+    class StubAnalyzer:
+        def polarity_scores(self, text: str) -> dict:
+            assert text == "hello"
+            return {"compound": -0.4, "pos": 0.2}
+
+    metric = VADERSentiment(analyzer=StubAnalyzer(), track=False)
+    result = metric.score(output="hello")
+
+    assert result.value == pytest.approx((-0.4 + 1) / 2)
+    assert result.metadata["vader"]["compound"] == -0.4
+
+
+def test_readability_guard_pass_and_fail():
+    baseline_guard = ReadabilityGuard(track=False)
+    easy_text = (
+        "We processed your insurance claim and scheduled an adjuster visit for tomorrow "
+        "morning."
+    )
+    hard_text = (
+        "Pursuant to the aforementioned clause, fiduciary responsibilities"
+        " shall be irrevocably devolved."
+    )
+
+    easy_result = baseline_guard.score(output=easy_text)
+    hard_result = baseline_guard.score(output=hard_text)
+
+    threshold = easy_result.metadata["flesch_kincaid_grade"] + 1.0
+    guard = ReadabilityGuard(min_grade=None, max_grade=threshold, track=False)
+    strict_guard = ReadabilityGuard(min_grade=threshold, max_grade=None, track=False)
+
+    assert (
+        hard_result.metadata["flesch_kincaid_grade"]
+        > easy_result.metadata["flesch_kincaid_grade"]
+    )
+    assert guard.score(output=easy_text).value == 1.0
+    assert strict_guard.score(output=easy_text).value == 0.0
+
+
+def test_tone_guard_detects_shouting_and_negativity():
+    guard = ToneGuard(track=False, max_exclamations=1, max_upper_ratio=0.2)
+
+    polite = "Thanks for your patience. I'm happy to help you resolve this."
+    rude = "THIS IS TERRIBLE!!! YOU ARE USELESS!!!"
+
+    assert guard.score(output=polite).value == 1.0
+    assert guard.score(output=rude).value == 0.0
+
+
+class _StubRougeMetric:
+    def __init__(self, scores):
+        self._scores = scores
+        self.calls = []
+
+    def score(self, *, output, reference):
+        self.calls.append((output, reference))
+        idx = len(self.calls) - 1
+        return ScoreResult(name="rouge", value=self._scores[idx])
+
+
+def test_rouge_conversation_metric_average_and_penalty():
+    rouge_stub = _StubRougeMetric(scores=[0.8, 0.6])
+    metric = RougeConversationMetric(
+        rouge_metric=rouge_stub, missing_turn_penalty=0.1, track=False
+    )
+
+    conversation = [
+        {"role": "user", "content": "Hi"},
+        {"role": "assistant", "content": "Hello there"},
+        {"role": "assistant", "content": "How can I help?"},
+    ]
+    reference = [
+        {"role": "user", "content": "Hi"},
+        {"role": "assistant", "content": "Greetings"},
+        {"role": "assistant", "content": "What can I do for you?"},
+    ]
+
+    result = metric.score(conversation=conversation, reference_conversation=reference)
+
+    assert result.value == pytest.approx((0.8 + 0.6) / 2)
+    assert rouge_stub.calls == [
+        ("Hello there", "Greetings"),
+        ("How can I help?", "What can I do for you?"),
+    ]
+    assert result.metadata["evaluated_turns"] == 2
+    assert result.metadata["missing_turns"] == 0
+
+
+def test_rouge_conversation_metric_requires_target_turns():
+    metric = RougeConversationMetric(
+        rouge_metric=_StubRougeMetric(scores=[0.5]), track=False
+    )
+
+    with pytest.raises(MetricComputationError):
+        metric.score(
+            conversation=[{"role": "user", "content": "hi"}],
+            reference_conversation=[{"role": "assistant", "content": "hello"}],
+        )
+
+    with pytest.raises(MetricComputationError):
+        metric.score(
+            conversation=[{"role": "assistant", "content": "hi"}],
+            reference_conversation=[{"role": "user", "content": "hello"}],
+        )
+
+
+class _StubTurnMetric:
+    def __init__(self, scores):
+        self._scores = scores
+        self.calls = []
+
+    def score(self, *, output, reference):
+        self.calls.append((output, reference))
+        idx = len(self.calls) - 1
+        return ScoreResult(name="stub", value=self._scores[idx])
+
+
+def test_bleu_conversation_metric_with_stub():
+    stub = _StubTurnMetric([0.4, 0.6])
+    metric = BleuConversationMetric(bleu_metric=stub, track=False)
+
+    convo = [
+        {"role": "assistant", "content": "one"},
+        {"role": "assistant", "content": "two"},
+    ]
+    ref = [
+        {"role": "assistant", "content": "uno"},
+        {"role": "assistant", "content": "dos"},
+    ]
+
+    result = metric.score(conversation=convo, reference_conversation=ref)
+    assert result.value == pytest.approx(0.5)
+    assert stub.calls == [("one", "uno"), ("two", "dos")]
+
+
+def test_meteor_conversation_metric_with_stub():
+    stub = _StubTurnMetric([0.3])
+    metric = MeteorConversationMetric(meteor_metric=stub, track=False)
+
+    convo = [{"role": "assistant", "content": "hi"}]
+    ref = [{"role": "assistant", "content": "hello"}]
+
+    result = metric.score(conversation=convo, reference_conversation=ref)
+    assert result.value == pytest.approx(0.3)
+
+
 # ROUGE score tests
 
 
@@ -228,6 +535,12 @@ def test_rouge_score_for_empty_inputs(candidate, reference):
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
     assert "empty" in str(exc_info.value).lower()
+
+
+def test_rouge_lsum_available():
+    metric = rouge.ROUGE(rouge_type="rougeLsum", track=False)
+    result = metric.score(output="foo\nbar", reference="foo\nqux")
+    assert 0.0 <= result.value <= 1.0
 
 
 @pytest.mark.parametrize(
