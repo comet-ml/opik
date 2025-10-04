@@ -34,7 +34,7 @@ class OpikConfigurator:
         self_hosted_comet: bool = False,
         automatic_approvals: bool = False,
     ):
-        self.api_key = "zejCygV8Vsj8ZnsDG6Fc8TuBf" #api_key
+        self.api_key = api_key
         self.workspace = workspace
         self.use_local = use_local
         self.force = force
