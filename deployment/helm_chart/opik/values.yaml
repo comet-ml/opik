@@ -381,7 +381,7 @@ clickhouse:
   enabled: true
   shardsCount: 1
   replicasCount: 1
-  image: altinity/clickhouse-server:24.3.5.47.altinitystable
+  image: altinity/clickhouse-server:25.3.6.56.altinitystable
   storage: 50Gi
   logsLevel: information
   # deprecated: use templates instead
