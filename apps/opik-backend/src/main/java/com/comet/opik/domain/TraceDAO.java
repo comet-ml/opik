@@ -3129,6 +3129,13 @@ class TraceDAOImpl implements TraceDAO {
 
                     template.add("project_stats", true);
 
+                    // Set up empty template attributes to prevent compilation errors
+                    // These are required by the Mustache template even when no filters are applied
+                    template.add("filters", null);
+                    template.add("feedback_scores_filters", null);
+                    template.add("feedback_scores_empty_filters", null);
+                    template.add("trace_aggregation_filters", null);
+
                     Statement statement = connection.createStatement(template.render())
                             .bind("project_ids", projectIds)
                             .bind("workspace_id", workspaceId);
