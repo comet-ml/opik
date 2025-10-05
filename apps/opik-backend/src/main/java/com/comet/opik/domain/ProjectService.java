@@ -318,14 +318,11 @@ class ProjectServiceImpl implements ProjectService {
         List<UUID> allProjectIds = allProjects.stream().map(Project::id).toList();
         Map<UUID, Map<String, Object>> allProjectStats = getProjectStats(allProjectIds, workspaceId);
 
-        // Handle null case for allProjectStats
-        final Map<UUID, Map<String, Object>> finalProjectStats = allProjectStats != null ? allProjectStats : Map.of();
-
         // Step 3: Convert to list and sort by metrics
         // Include ALL projects, even those without traces (they'll have empty stats)
         List<ProjectStatsSummaryItem> allItems = allProjects.stream()
                 .map(project -> {
-                    Map<String, Object> projectStats = finalProjectStats.get(project.id());
+                    Map<String, Object> projectStats = allProjectStats.get(project.id());
                     // Use empty map if no stats available for this project
                     if (projectStats == null) {
                         projectStats = Map.of();
@@ -658,7 +655,7 @@ class ProjectServiceImpl implements ProjectService {
 
         if (projectIds.size() <= BATCH_SIZE) {
             // Small list - process directly
-            return traceDAO.getStatsByProjectIds(projectIds, workspaceId)
+            Map<UUID, Map<String, Object>> result = traceDAO.getStatsByProjectIds(projectIds, workspaceId)
                     .map(stats -> stats.entrySet().stream()
                             .map(entry -> {
                                 Map<String, Object> statsMap = entry.getValue().stats()
@@ -669,6 +666,9 @@ class ProjectServiceImpl implements ProjectService {
                             })
                             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
                     .block();
+
+            // Return empty map if no stats found
+            return result != null ? result : Map.of();
         }
 
         // Large list - batch and merge results
@@ -753,12 +753,34 @@ class ProjectServiceImpl implements ProjectService {
             return repository.findByIds(new HashSet<>(finalIds), workspaceId);
         }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
 
-        // compose the final projects list by the correct order and add last trace to it
+        // Get project stats from ClickHouse
+        Map<UUID, Map<String, Object>> projectStatsMap = getProjectStats(finalIds, workspaceId);
+
+        // compose the final projects list by the correct order and add last trace and stats to it
         List<Project> projects = finalIds.stream()
                 .map(projectsById::get)
-                .map(project -> project.toBuilder()
-                        .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
-                        .build())
+                .map(project -> {
+                    Map<String, Object> projectStats = projectStatsMap.get(project.id());
+
+                    // Build project with stats
+                    return project.toBuilder()
+                            .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
+                            .feedbackScores(
+                                    projectStats != null ? StatsMapper.getStatsFeedbackScores(projectStats) : null)
+                            .duration(projectStats != null ? StatsMapper.getStatsDuration(projectStats) : null)
+                            .totalEstimatedCost(
+                                    projectStats != null ? StatsMapper.getStatsTotalEstimatedCost(projectStats) : null)
+                            .totalEstimatedCostSum(projectStats != null
+                                    ? StatsMapper.getStatsTotalEstimatedCostSum(projectStats)
+                                    : null)
+                            .usage(projectStats != null ? StatsMapper.getStatsUsage(projectStats) : null)
+                            .traceCount(projectStats != null ? StatsMapper.getStatsTraceCount(projectStats) : null)
+                            .guardrailsFailedCount(projectStats != null
+                                    ? StatsMapper.getStatsGuardrailsFailedCount(projectStats)
+                                    : null)
+                            .errorCount(projectStats != null ? StatsMapper.getStatsErrorCount(projectStats) : null)
+                            .build();
+                })
                 .toList();
 
         return new ProjectPage(page, projects.size(), allProjectIdsLastUpdated.size(), projects,
