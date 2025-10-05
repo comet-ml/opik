@@ -1,6 +1,9 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import { DateRangeValue } from "@/components/shared/DateRangeSelect";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+
+dayjs.extend(utc);
 
 export const serializeDateForURL = (date: Date): string => {
   return dayjs(date).format("YYYY-MM-DD");
@@ -62,24 +65,27 @@ export const calculateIntervalType = (
 
 export const calculateIntervalStartAndEnd = (
   dateRange: DateRangeValue,
+  // Optional currentTime makes this function deterministic and testable across timezones
+  currentTime: Date = new Date(),
 ): { intervalStart: string; intervalEnd: string } => {
   // Calculate the number of days in the original range
   const daysDiff = dayjs(dateRange.to).diff(dayjs(dateRange.from), "days");
   const startOf = daysDiff <= 1 ? "hour" : "day";
 
-  // Check if the end date is today
-  const isEndDateToday = dayjs(dateRange.to).isSame(dayjs(), "day");
+  // Check if the end date is today (relative to provided currentTime)
+  // Use UTC comparison to ensure deterministic behavior across system timezones
+  const isEndDateToday = dayjs(dateRange.to).utc().isSame(dayjs(currentTime).utc(), "day");
 
   let endTime: dayjs.Dayjs;
   let startTime: dayjs.Dayjs;
 
   if (isEndDateToday) {
-    // If end date is today, use current moment in UTC
-    endTime = dayjs().utc();
+    // If end date is today, use provided currentTime in UTC
+    endTime = dayjs(currentTime).utc();
     // Start time = current time minus the number of days in the original range
     startTime = endTime.subtract(daysDiff || 1, "days").startOf(startOf);
   } else {
-    // If end date is not today, use the selected date range as-is
+    // If end date is not today, use the selected date range as-is (in UTC)
     endTime = dayjs(dateRange.to).utc().endOf("day");
     startTime = dayjs(dateRange.from).utc().startOf(startOf);
   }
