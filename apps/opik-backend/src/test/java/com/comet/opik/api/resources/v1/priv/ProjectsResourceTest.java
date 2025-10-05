@@ -1232,7 +1232,7 @@ class ProjectsResourceTest {
                     .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy")
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectStats);
         }
 
@@ -1249,6 +1249,19 @@ class ProjectsResourceTest {
 
             List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName,
                     comparator);
+
+            // Wait for ClickHouse to process all the data
+            Awaitility.await().untilAsserted(() -> {
+                var testResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                        .path("/stats")
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, apiKey)
+                        .header(WORKSPACE_HEADER, workspaceName)
+                        .get();
+                var testEntity = testResponse.readEntity(ProjectStatsSummary.class);
+                assertThat(testEntity.content()).hasSameSizeAs(expectedProjectStats);
+                assertThat(testEntity.content()).allMatch(project -> project.duration() != null);
+            });
 
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.LAST_UPDATED_TRACE_AT)
@@ -1275,7 +1288,7 @@ class ProjectsResourceTest {
                     .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy")
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectStats);
         }
 
@@ -1360,7 +1373,7 @@ class ProjectsResourceTest {
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy")
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectStats);
         }
 
@@ -2259,7 +2272,7 @@ class ProjectsResourceTest {
             assertThat(actualProjectsSummary.content())
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::closeToEpsilonComparator, BigDecimal.class)
-                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy")
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectsSummary);
         }
     }
