@@ -443,7 +443,11 @@ class ProjectServiceImpl implements ProjectService {
 
     private Double getMetricValue(ProjectStatsSummaryItem item, String fieldName) {
         return switch (fieldName) {
-            case "total_estimated_cost_sum" -> item.totalEstimatedCostSum();
+            case "total_estimated_cost_sum" -> {
+                Double cost = item.totalEstimatedCostSum();
+                // Treat 0.0 as null for sorting purposes (same as usage tokens behavior)
+                yield (cost != null && cost == 0.0) ? null : cost;
+            }
             case "duration.p50" -> item.duration() != null && item.duration().p50() != null
                     ? item.duration().p50().doubleValue()
                     : null;

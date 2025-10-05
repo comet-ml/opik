@@ -56,7 +56,7 @@ export const secondsToMilliseconds = (seconds: number) => {
 
 export const formatDuration = (value?: number | null, onlySeconds = true) => {
   if (isUndefined(value) || isNull(value) || isNaN(value)) {
-    return "NA";
+    return "-";
   }
 
   const totalSeconds = millisecondsToSeconds(value);
