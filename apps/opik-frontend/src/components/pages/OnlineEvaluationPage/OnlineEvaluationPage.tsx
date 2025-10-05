@@ -1,10 +1,16 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { NumberParam, StringParam, useQueryParam } from "use-query-params";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
   ColumnDef,
   ColumnPinningState,
+  ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
 
@@ -27,6 +33,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -57,7 +64,7 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     cell: IdCell as never,
   },
   {
-    id: "project",
+    id: "project_id",
     label: "Project",
     type: COLUMN_TYPE.string,
     cell: ResourceCell as never,
@@ -91,7 +98,7 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.number,
   },
   {
-    id: "scope",
+    id: "type",
     label: "Scope",
     type: COLUMN_TYPE.string,
     accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
@@ -115,13 +122,14 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "sampling_rate",
   "enabled",
-  "project",
-  "scope",
+  "project_id",
+  "type",
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";
 const COLUMNS_WIDTH_KEY = "workspace-rules-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-rules-columns-order";
+const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
@@ -130,6 +138,19 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
+  });
+
+  const [filters = [], setFilters] = useQueryParam(`filters`, JsonParam, {
+    updateType: "replaceIn",
+  });
+
+  const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
+    ColumnSort[]
+  >({
+    localStorageKey: COLUMNS_SORT_KEY,
+    queryKey: `sorting`,
+    defaultValue: [],
+    queryParamConfig: JsonParam,
   });
 
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
@@ -153,13 +174,19 @@ export const OnlineEvaluationPage: React.FC = () => {
       page: page as number,
       size: size as number,
       search: search as string,
+      filters,
+      sorting: sortedColumns,
     },
     {
       placeholderData: keepPreviousData,
     },
   );
 
-  const noData = !search;
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
+  );
+  const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no rules yet` : "No search results";
 
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
@@ -195,12 +222,14 @@ export const OnlineEvaluationPage: React.FC = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
+        sortable: sortableBy.includes("name"),
       }),
       ...convertColumnDataToColumn<EvaluatorsRule, EvaluatorsRule>(
         DEFAULT_COLUMNS,
         {
           columnsOrder,
           selectedColumns,
+          sortableColumns: sortableBy,
         },
       ),
       {
@@ -216,7 +245,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         cell: RuleRowActionsCell,
       }),
     ];
-  }, [columnsOrder, selectedColumns]);
+  }, [columnsOrder, selectedColumns, sortableBy]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -225,6 +254,16 @@ export const OnlineEvaluationPage: React.FC = () => {
       onColumnResize: setColumnsWidth,
     }),
     [columnsWidth, setColumnsWidth],
+  );
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      enabledMultiSorting: false,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [sortedColumns, setSortedColumns],
   );
 
   const handleNewRuleClick = useCallback(() => {
@@ -265,10 +304,15 @@ export const OnlineEvaluationPage: React.FC = () => {
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
-            placeholder="Search by ID"
+            placeholder="Search by name"
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
+          <FiltersButton
+            columns={DEFAULT_COLUMNS}
+            filters={filters}
+            onChange={setFilters}
+          ></FiltersButton>
         </div>
         <div className="flex items-center gap-2">
           <RulesActionsPanel rules={selectedRows} />
@@ -288,6 +332,7 @@ export const OnlineEvaluationPage: React.FC = () => {
       <DataTable
         columns={columns}
         data={rows}
+        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
