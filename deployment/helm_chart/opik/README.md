@@ -135,7 +135,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.56.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
