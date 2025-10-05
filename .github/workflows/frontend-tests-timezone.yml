@@ -1,0 +1,42 @@
+name: Frontend Tests (Timezone Matrix)
+run-name: "Frontend Tests ${{ github.ref_name }} by @${{ github.actor }}"
+
+on:
+  pull_request:
+    paths:
+      - "apps/opik-frontend/**"
+  push:
+    branches:
+      - 'main'
+    paths:
+      - "apps/opik-frontend/**"
+  workflow_dispatch:
+
+jobs:
+  frontend-tests-tz:
+    name: Frontend tests (timezone matrix)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [UTC, America/Los_Angeles]
+    defaults:
+      run:
+        working-directory: apps/opik-frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tests (TZ=${{ matrix.tz }})
+        env:
+          TZ: ${{ matrix.tz }}
+        run: |
+          npx vitest run

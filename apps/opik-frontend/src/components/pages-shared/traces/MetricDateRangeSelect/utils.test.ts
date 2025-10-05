@@ -27,7 +27,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: today, // Same day
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use current time as end
       expect(result.intervalEnd).toBe(dayjs(mockCurrentDate).utc().format());
@@ -48,7 +48,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: today,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use current time as end
       expect(result.intervalEnd).toBe(dayjs(mockCurrentDate).utc().format());
@@ -69,7 +69,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: today,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use current time as end
       expect(result.intervalEnd).toBe(dayjs(mockCurrentDate).utc().format());
@@ -90,7 +90,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: today,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use current time as end
       expect(result.intervalEnd).toBe(dayjs(mockCurrentDate).utc().format());
@@ -112,7 +112,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: pastDate, // Same day
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use end of the selected date
       const expectedEnd = dayjs(pastDate).utc().endOf("day");
@@ -131,7 +131,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: pastDate,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use end of the selected to date
       const expectedEnd = dayjs(pastDate).utc().endOf("day");
@@ -150,7 +150,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: pastDate,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use end of the selected to date
       const expectedEnd = dayjs(pastDate).utc().endOf("day");
@@ -169,7 +169,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: futureDate,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use end of the selected to date
       const expectedEnd = dayjs(futureDate).utc().endOf("day");
@@ -190,7 +190,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: today,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use current time as end
       expect(result.intervalEnd).toBe(dayjs(mockCurrentDate).utc().format());
@@ -211,7 +211,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: pastDate,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use end of the selected to date
       const expectedEnd = dayjs(pastDate).utc().endOf("day");
@@ -229,7 +229,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: date,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Since it's not today, should use end of selected date
       const expectedEnd = dayjs(date).utc().endOf("day");
@@ -248,7 +248,7 @@ describe("calculateIntervalStartAndEnd", () => {
         to: today,
       };
 
-      const result = calculateIntervalStartAndEnd(dateRange);
+  const result = calculateIntervalStartAndEnd(dateRange, new Date(mockCurrentDate));
 
       // Should use current time as end (since it's today)
       expect(result.intervalEnd).toBe(dayjs(mockCurrentDate).utc().format());
