@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.3 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
