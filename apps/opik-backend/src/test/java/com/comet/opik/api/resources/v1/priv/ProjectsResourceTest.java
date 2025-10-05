@@ -13,6 +13,7 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
@@ -1034,7 +1035,6 @@ class ProjectsResourceTest {
 
         Stream<Arguments> getProjects__whenSortingProjectsByNonSortableField__thenReturnAnError() {
             return Stream.of(
-                    Arguments.of(Named.of("non-sortable field", "created_by")),
                     Arguments.of(Named.of("non-sortable field", "last_updated_by")),
                     Arguments.of(Named.of("non-existing field", "imaginary")));
         }
@@ -1232,6 +1232,7 @@ class ProjectsResourceTest {
                     .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectStats);
         }
 
@@ -1248,6 +1249,19 @@ class ProjectsResourceTest {
 
             List<ProjectStatsSummaryItem> expectedProjectStats = getProjectStatsSummaryItems(apiKey, workspaceName,
                     comparator);
+
+            // Wait for ClickHouse to process all the data
+            Awaitility.await().untilAsserted(() -> {
+                var testResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                        .path("/stats")
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, apiKey)
+                        .header(WORKSPACE_HEADER, workspaceName)
+                        .get();
+                var testEntity = testResponse.readEntity(ProjectStatsSummary.class);
+                assertThat(testEntity.content()).hasSameSizeAs(expectedProjectStats);
+                assertThat(testEntity.content()).allMatch(project -> project.duration() != null);
+            });
 
             var sorting = List.of(SortingField.builder()
                     .field(SortableFields.LAST_UPDATED_TRACE_AT)
@@ -1274,6 +1288,7 @@ class ProjectsResourceTest {
                     .ignoringCollectionOrder()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectStats);
         }
 
@@ -1320,12 +1335,23 @@ class ProjectsResourceTest {
 
             List<ProjectStatsSummaryItem> expectedProjectStats = projects.parallelStream()
                     .map(project -> ProjectStatsSummaryItem.builder()
+                            .projectId(project.id())
+                            .name(project.name())
+                            .visibility(project.visibility())
+                            .description(project.description())
+                            .createdAt(project.createdAt())
+                            .createdBy(project.createdBy())
+                            .lastUpdatedAt(project.lastUpdatedAt())
+                            .lastUpdatedBy(project.lastUpdatedBy())
+                            .lastUpdatedTraceAt(null)
+                            .feedbackScores(null)
                             .duration(null)
                             .totalEstimatedCost(null)
                             .totalEstimatedCostSum(null)
                             .usage(null)
-                            .feedbackScores(null)
-                            .projectId(project.id())
+                            .traceCount(null)
+                            .guardrailsFailedCount(null)
+                            .errorCount(null)
                             .build())
                     .sorted(Comparator.comparing(ProjectStatsSummaryItem::projectId).reversed())
                     .toList();
@@ -1347,6 +1373,7 @@ class ProjectsResourceTest {
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectStats);
         }
 
@@ -1592,7 +1619,7 @@ class ProjectsResourceTest {
 
         long errorCount = recentErrorCount + pastPeriodErrorCount;
         Long deviationPercentage = pastPeriodErrorCount > 0
-                ? Long.valueOf(Math.round(((errorCount - pastPeriodErrorCount) / pastPeriodErrorCount) * 100))
+                ? Long.valueOf(Math.round(((double) (errorCount - pastPeriodErrorCount) / pastPeriodErrorCount) * 100))
                 : null;
 
         return ErrorCountWithDeviation.builder()
@@ -1718,6 +1745,380 @@ class ProjectsResourceTest {
         traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
         return traces;
+    }
+
+    // Helper methods for new sorting tests
+
+    private void createTracesForProject(String projectName, int traceCount, String apiKey, String workspaceName) {
+        List<Trace> traces = new ArrayList<>(traceCount);
+        for (int i = 0; i < traceCount; i++) {
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .errorInfo(null)
+                    .build();
+            traces.add(trace);
+        }
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+    }
+
+    private void createErrorTracesForProject(String projectName, int errorCount, String apiKey, String workspaceName) {
+        List<Trace> traces = new ArrayList<>();
+        for (int i = 0; i < errorCount; i++) {
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .errorInfo(ErrorInfo.builder()
+                            .exceptionType("TestException")
+                            .message("Test error message")
+                            .build())
+                    .build();
+            traces.add(trace);
+        }
+        // Also create one normal trace to ensure project exists
+        Trace normalTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .errorInfo(null)
+                .build();
+        traces.add(normalTrace);
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+    }
+
+    private void createTracesWithUsageForProject(String projectName, int promptTokens, int completionTokens,
+            String apiKey, String workspaceName) {
+        // Create trace
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+        // Create span with usage (usage comes from spans, not traces)
+        Map<String, Integer> spanUsage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", completionTokens,
+                "total_tokens", promptTokens + completionTokens);
+
+        Span span = factory.manufacturePojo(Span.class).toBuilder()
+                .projectName(projectName)
+                .traceId(trace.id())
+                .usage(spanUsage)
+                .build();
+
+        spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+    }
+
+    private void createTracesWithFeedbackScoresForProject(String projectName, double avgScore, String apiKey,
+            String workspaceName) {
+        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+
+        List<Trace> traces = List.of(trace);
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        // Add feedback score
+        List<FeedbackScoreBatchItem> feedbackScores = List.of(
+                FeedbackScoreBatchItem.builder()
+                        .id(trace.id())
+                        .name("test-score")
+                        .value(BigDecimal.valueOf(avgScore))
+                        .source(ScoreSource.SDK)
+                        .build());
+
+        traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+    }
+
+    @Test
+    @DisplayName("when projects with traces sorted by trace count, then return project aggregations sorted by trace count")
+    void getProjects__whenProjectsSortedByTraceCount__thenReturnProjectAggregationsSortedByTraceCount() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different numbers of traces for sorting validation
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create different numbers of traces per project
+        createTracesForProject(project1.name(), 1, apiKey, workspaceName); // 1 trace
+        createTracesForProject(project2.name(), 3, apiKey, workspaceName); // 3 traces
+        createTracesForProject(project3.name(), 2, apiKey, workspaceName); // 2 traces
+
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.TRACE_COUNT)
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by trace count (DESC): 3, 2, 1
+        assertThat(actualEntity.content().get(0).traceCount()).isEqualTo(3L);
+        assertThat(actualEntity.content().get(1).traceCount()).isEqualTo(2L);
+        assertThat(actualEntity.content().get(2).traceCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("when projects with error traces sorted by error count, then return project aggregations sorted by error count")
+    void getProjects__whenProjectsSortedByErrorCount__thenReturnProjectAggregationsSortedByErrorCount() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different numbers of error traces
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different error counts per project
+        createErrorTracesForProject(project1.name(), 0, apiKey, workspaceName); // 0 errors
+        createErrorTracesForProject(project2.name(), 2, apiKey, workspaceName); // 2 errors
+        createErrorTracesForProject(project3.name(), 1, apiKey, workspaceName); // 1 error
+
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.ERROR_COUNT)
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by error count (DESC): 2, 1, 0
+        assertThat(actualEntity.content().get(0).errorCount().count()).isEqualTo(2L);
+        assertThat(actualEntity.content().get(1).errorCount().count()).isEqualTo(1L);
+        assertThat(actualEntity.content().get(2).errorCount().count()).isEqualTo(0L);
+    }
+
+    @Test
+    @DisplayName("when projects with token usage sorted by total tokens, then return project aggregations sorted by total tokens")
+    void getProjects__whenProjectsSortedByTotalTokens__thenReturnProjectAggregationsSortedByTotalTokens() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different token usage
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different token usage per project
+        createTracesWithUsageForProject(project1.name(), 100, 50, apiKey, workspaceName); // 150 total
+        createTracesWithUsageForProject(project2.name(), 200, 100, apiKey, workspaceName); // 300 total
+        createTracesWithUsageForProject(project3.name(), 150, 75, apiKey, workspaceName); // 225 total
+
+        var sorting = List.of(SortingField.builder()
+                .field("usage.total_tokens")
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by total tokens (DESC): 300, 225, 150
+        assertThat(actualEntity.content().get(0).usage().get("total_tokens")).isEqualTo(300.0);
+        assertThat(actualEntity.content().get(1).usage().get("total_tokens")).isEqualTo(225.0);
+        assertThat(actualEntity.content().get(2).usage().get("total_tokens")).isEqualTo(150.0);
+    }
+
+    @Test
+    @DisplayName("when projects with feedback scores sorted by feedback scores, then return project aggregations sorted by feedback scores")
+    void getProjects__whenProjectsSortedByFeedbackScores__thenReturnProjectAggregationsSortedByFeedbackScores() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different feedback scores
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different feedback scores per project
+        createTracesWithFeedbackScoresForProject(project1.name(), 3.0, apiKey, workspaceName); // 3.0 avg
+        createTracesWithFeedbackScoresForProject(project2.name(), 5.0, apiKey, workspaceName); // 5.0 avg
+        createTracesWithFeedbackScoresForProject(project3.name(), 4.0, apiKey, workspaceName); // 4.0 avg
+
+        var sorting = List.of(SortingField.builder()
+                .field(SortableFields.FEEDBACK_SCORES_AVG)
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+        // Verify sorting order by feedback scores (DESC): 5.0, 4.0, 3.0
+        // Note: Result includes Default Project (without feedback scores), so we filter projects with scores
+        var projectsWithScores = actualEntity.content().stream()
+                .filter(p -> p.feedbackScores() != null && !p.feedbackScores().isEmpty())
+                .toList();
+        assertThat(projectsWithScores).hasSize(3);
+        assertThat(projectsWithScores.get(0).feedbackScores().getFirst().value())
+                .isEqualTo(BigDecimal.valueOf(5.0));
+        assertThat(projectsWithScores.get(1).feedbackScores().getFirst().value())
+                .isEqualTo(BigDecimal.valueOf(4.0));
+        assertThat(projectsWithScores.get(2).feedbackScores().getFirst().value())
+                .isEqualTo(BigDecimal.valueOf(3.0));
+    }
+
+    @Test
+    @DisplayName("when projects with token usage sorted by input tokens, then return project aggregations sorted by input tokens")
+    void getProjects__whenProjectsSortedByInputTokens__thenReturnProjectAggregationsSortedByInputTokens() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different input token usage
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different input token usage per project
+        createTracesWithUsageForProject(project1.name(), 100, 50, apiKey, workspaceName); // 100 input
+        createTracesWithUsageForProject(project2.name(), 200, 100, apiKey, workspaceName); // 200 input
+        createTracesWithUsageForProject(project3.name(), 150, 75, apiKey, workspaceName); // 150 input
+
+        var sorting = List.of(SortingField.builder()
+                .field("usage.prompt_tokens")
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by input tokens (DESC): 200, 150, 100
+        assertThat(actualEntity.content().get(0).usage().get("prompt_tokens")).isEqualTo(200.0);
+        assertThat(actualEntity.content().get(1).usage().get("prompt_tokens")).isEqualTo(150.0);
+        assertThat(actualEntity.content().get(2).usage().get("prompt_tokens")).isEqualTo(100.0);
+    }
+
+    @Test
+    @DisplayName("when projects with token usage sorted by output tokens, then return project aggregations sorted by output tokens")
+    void getProjects__whenProjectsSortedByOutputTokens__thenReturnProjectAggregationsSortedByOutputTokens() {
+        String workspaceName = UUID.randomUUID().toString();
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // Create projects with different output token usage
+        var project1 = factory.manufacturePojo(Project.class);
+        var project2 = factory.manufacturePojo(Project.class);
+        var project3 = factory.manufacturePojo(Project.class);
+
+        var id1 = createProject(project1, apiKey, workspaceName);
+        var id2 = createProject(project2, apiKey, workspaceName);
+        var id3 = createProject(project3, apiKey, workspaceName);
+
+        // Create traces with different output token usage per project
+        createTracesWithUsageForProject(project1.name(), 100, 50, apiKey, workspaceName); // 50 output
+        createTracesWithUsageForProject(project2.name(), 200, 100, apiKey, workspaceName); // 100 output
+        createTracesWithUsageForProject(project3.name(), 150, 75, apiKey, workspaceName); // 75 output
+
+        var sorting = List.of(SortingField.builder()
+                .field("usage.completion_tokens")
+                .direction(Direction.DESC)
+                .build());
+
+        var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                .queryParam("sorting", URLEncoder.encode(JsonUtils.writeValueAsString(sorting),
+                        StandardCharsets.UTF_8))
+                .path("/stats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        var actualEntity = actualResponse.readEntity(ProjectStatsSummary.class);
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(actualEntity.content()).hasSize(3);
+
+        // Verify sorting order by output tokens (DESC): 100, 75, 50
+        assertThat(actualEntity.content().get(0).usage().get("completion_tokens")).isEqualTo(100.0);
+        assertThat(actualEntity.content().get(1).usage().get("completion_tokens")).isEqualTo(75.0);
+        assertThat(actualEntity.content().get(2).usage().get("completion_tokens")).isEqualTo(50.0);
     }
 
     @Nested
@@ -1871,6 +2272,7 @@ class ProjectsResourceTest {
             assertThat(actualProjectsSummary.content())
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::closeToEpsilonComparator, BigDecimal.class)
+                    .ignoringFields("createdAt", "createdBy", "lastUpdatedAt", "lastUpdatedBy", "lastUpdatedTraceAt")
                     .isEqualTo(expectedProjectsSummary);
         }
     }
