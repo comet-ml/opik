@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.3 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
@@ -136,6 +136,12 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
 | clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.livenessProbe.failureThreshold | int | `10` |  |
+| clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.livenessProbe.initialDelaySeconds | int | `60` |  |
+| clickhouse.livenessProbe.periodSeconds | int | `30` |  |
+| clickhouse.livenessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
@@ -159,6 +165,12 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
+| clickhouse.readinessProbe.failureThreshold | int | `30` |  |
+| clickhouse.readinessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.readinessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.readinessProbe.initialDelaySeconds | int | `30` |  |
+| clickhouse.readinessProbe.periodSeconds | int | `10` |  |
+| clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
