@@ -141,8 +141,18 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
   );
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleDismiss()}>
-      <DialogContent className="sm:max-w-[600px]" onPointerDownOutside={(e) => e.preventDefault()}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          handleDismiss();
+        }
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-[600px]"
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Welcome to Opik 🚀</DialogTitle>
           <DialogDescription>
