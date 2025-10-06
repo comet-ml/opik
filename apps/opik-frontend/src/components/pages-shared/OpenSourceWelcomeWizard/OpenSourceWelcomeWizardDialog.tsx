@@ -22,7 +22,6 @@ import { z } from "zod";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -42,11 +41,7 @@ const formSchema = z.object({
   role: z.string().optional(),
   integrations: z.array(z.string()).optional(),
   customIntegration: z.string().optional(),
-  email: z
-    .string()
-    .email("Invalid email address")
-    .optional()
-    .or(z.literal("")),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
   joinBetaProgram: z.boolean().optional(),
 });
 
@@ -156,7 +151,7 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>Welcome to Opik 🚀</DialogTitle>
           <DialogDescription>
-            We're moving fast! Tell us who you are so we can share the most
+            We&apos;re moving fast! Tell us who you are so we can share the most
             relevant guides and updates with you.
           </DialogDescription>
         </DialogHeader>
@@ -199,9 +194,7 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
               render={() => (
                 <FormItem>
                   <div className="mb-4">
-                    <FormLabel>
-                      Integrations you use
-                    </FormLabel>
+                    <FormLabel>Integrations you use</FormLabel>
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     {INTEGRATIONS.map((item) => (
@@ -232,7 +225,9 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
                                   }}
                                 />
                               </FormControl>
-                              <FormLabel className="font-normal">{item}</FormLabel>
+                              <FormLabel className="font-normal">
+                                {item}
+                              </FormLabel>
                             </FormItem>
                           );
                         }}
@@ -267,10 +262,16 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
                 <FormItem>
                   <FormLabel>
                     Email{" "}
-                    <span className="text-xs text-muted-foreground">(optional)</span>
+                    <span className="text-xs text-muted-foreground">
+                      (optional)
+                    </span>
                   </FormLabel>
                   <FormControl>
-                    <Input placeholder="your@email.com" {...field} type="email" />
+                    <Input
+                      placeholder="your@email.com"
+                      {...field}
+                      type="email"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -298,7 +299,7 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
             />
 
             <Button type="submit" disabled={isPending}>
-              {isPending && <Loader className="mr-2 h-4 w-4 animate-spin" />}
+              {isPending && <Loader className="mr-2 size-4 animate-spin" />}
               Submit
             </Button>
           </form>

@@ -41,11 +41,7 @@ const PageLayout = () => {
 
       return () => clearTimeout(timer);
     }
-  }, [
-    openSourceWelcomeWizardEnabled,
-    wizardStatus,
-    showWelcomeWizard,
-  ]);
+  }, [openSourceWelcomeWizardEnabled, wizardStatus, showWelcomeWizard]);
 
   const handleCloseWelcomeWizard = useCallback(() => {
     setShowWelcomeWizard(false);
@@ -77,11 +73,11 @@ const PageLayout = () => {
         </section>
       </main>
 
-            {/* Open Source Welcome Wizard Dialog */}
-            <OpenSourceWelcomeWizardDialog
-              open={showWelcomeWizard}
-              onClose={handleCloseWelcomeWizard}
-            />
+      {/* Open Source Welcome Wizard Dialog */}
+      <OpenSourceWelcomeWizardDialog
+        open={showWelcomeWizard}
+        onClose={handleCloseWelcomeWizard}
+      />
     </section>
   );
 };
