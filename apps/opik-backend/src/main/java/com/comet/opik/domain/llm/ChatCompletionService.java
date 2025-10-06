@@ -46,13 +46,17 @@ public class ChatCompletionService {
     }
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+        request = MessageContentNormalizer.normalizeRequest(request);
+
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
         llmProviderClient.validateRequest(request);
 
         ChatCompletionResponse chatCompletionResponse;
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-            chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
+            ChatCompletionRequest finalRequest = request;
+            chatCompletionResponse = retryPolicy.withRetry(
+                    () -> llmProviderClient.generate(finalRequest, workspaceId));
         } catch (RuntimeException runtimeException) {
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
@@ -71,7 +75,10 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest request,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
+        request = MessageContentNormalizer.normalizeRequest(request);
+
+        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
+                request.model());
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
 

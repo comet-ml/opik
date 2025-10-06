@@ -12,10 +12,16 @@ import {
   LLM_MESSAGE_ROLE,
   LLM_SCHEMA_TYPE,
   LLMMessage,
+  LLMMessageContentItem,
   ProviderMessageType,
 } from "@/types/llm";
-import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
+import { generateRandomString } from "@/lib/utils";
+import {
+  getMessageContentTextSegments,
+  isMessageContentEmpty,
+  tryDeserializeMessageContent,
+} from "@/lib/llm";
 
 const RuleNameSchema = z
   .string({
@@ -32,6 +38,29 @@ const ProjectIdSchema = z
 const SamplingRateSchema = z.number();
 
 const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
+
+const TextMessageContentSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+
+const ImageMessageContentSchema = z.object({
+  type: z.literal("image_url"),
+  image_url: z.object({
+    url: z.string().min(1, { message: "Image URL is required" }),
+    detail: z.string().optional(),
+  }),
+});
+
+const StructuredMessageContentSchema = z.array(
+  z.union([TextMessageContentSchema, ImageMessageContentSchema]),
+);
+
+const MessageContentSchema = z
+  .union([z.string(), StructuredMessageContentSchema])
+  .refine((value) => !isMessageContentEmpty(value as never), {
+    message: "Message is required",
+  });
 
 export const FilterSchema = z.object({
   id: z.string(),
@@ -115,7 +144,7 @@ const LLMJudgeBaseSchema = z.object({
   messages: z.array(
     z.object({
       id: z.string(),
-      content: z.string().min(1, { message: "Message is required" }),
+      content: MessageContentSchema,
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
@@ -162,9 +191,10 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) =>
-    m.content.includes("{{context}}"),
-  ).length;
+  const contextCount = data.messages.filter((m) => {
+    const segments = getMessageContentTextSegments(m.content);
+    return segments.some((segment) => segment.includes("{{context}}"));
+  }).length;
 
   if (contextCount < 1) {
     ctx.addIssue({
@@ -183,8 +213,13 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   }
 
   data.messages.forEach((message, index) => {
-    const matches = message.content.match(/{{([^}]+)}}/g);
-    if (matches) {
+    const segments = getMessageContentTextSegments(message.content);
+    segments.forEach((segment) => {
+      const matches = segment.match(/{{([^}]+)}}/g);
+      if (!matches) {
+        return;
+      }
+
       matches.forEach((match) => {
         if (match !== "{{context}}") {
           ctx.addIssue({
@@ -194,7 +229,7 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
           });
         }
       });
-    }
+    });
   });
 });
 
@@ -275,13 +310,36 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
-  messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
+  messages.map(
+    (m) =>
+      ({
+        content: m.content,
+        role: m.role.toUpperCase(),
+      }) as ProviderMessageType,
+  );
+
+/**
+ * Normalize serialized message content into the structured shape expected by the form.
+ * Supports JSON arrays as well as legacy `<<<image>>>URL<<</image>>>` placeholder formats.
+ */
+const deserializeMessageContent = (
+  content: string | LLMMessageContentItem[],
+): string | LLMMessageContentItem[] => {
+  if (typeof content !== "string") {
+    return content;
+  }
+
+  return tryDeserializeMessageContent(content) as
+    | string
+    | LLMMessageContentItem[];
+};
 
 const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
   messages.map(
     (m) =>
       ({
         ...m,
+        content: deserializeMessageContent(m.content),
         role: m.role.toLowerCase(),
         id: generateRandomString(),
       }) as LLMMessage,
@@ -315,10 +373,16 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.seed = seed;
   }
 
+  const sanitizedSchema = data.schema.map((item) => {
+    const { unsaved: _ignoredUnsaved, ...rest } = item;
+    void _ignoredUnsaved;
+    return rest;
+  });
+
   return {
     model,
     messages: convertLLMToProviderMessages(data.messages),
     variables: data.variables,
-    schema: data.schema,
+    schema: sanitizedSchema as LLMJudgeObject["schema"],
   };
 };
