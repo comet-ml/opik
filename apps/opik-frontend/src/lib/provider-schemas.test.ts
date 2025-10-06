@@ -102,6 +102,192 @@ describe("provider-schemas", () => {
           },
         });
       });
+
+      it("should extract content from last user message in multi-turn conversations", () => {
+        const input = {
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: "Hi there!" },
+            { role: "user", content: "How are you?" },
+            { role: "assistant", content: "I'm doing well, thanks!" },
+            { role: "user", content: "What's the weather like?" },
+          ],
+          model: "gpt-4",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          input,
+          "input",
+        );
+
+        expect(result).toEqual({
+          content: "What's the weather like?",
+          metadata: {
+            model: "gpt-4",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal content with only non-text parts", () => {
+        const input = {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image_url",
+                  image_url: { url: "data:image/jpeg;base64,..." },
+                },
+                {
+                  type: "audio",
+                  audio: { url: "data:audio/wav;base64,..." },
+                },
+              ],
+            },
+          ],
+          model: "gpt-4-vision",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          input,
+          "input",
+        );
+
+        expect(result).toEqual({
+          content: "[image_url]",
+          metadata: {
+            model: "gpt-4-vision",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal content with mixed text and non-text parts", () => {
+        const input = {
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Analyze this image" },
+                {
+                  type: "image_url",
+                  image_url: { url: "data:image/jpeg;base64,..." },
+                },
+              ],
+            },
+          ],
+          model: "gpt-4-vision",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          input,
+          "input",
+        );
+
+        // Should prefer text content when available
+        expect(result).toEqual({
+          content: "Analyze this image",
+          metadata: {
+            model: "gpt-4-vision",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal output with only non-text parts", () => {
+        const output = {
+          choices: [
+            {
+              message: {
+                content: [
+                  {
+                    type: "image_url",
+                    image_url: { url: "data:image/png;base64,..." },
+                  },
+                ],
+              },
+              finish_reason: "stop",
+            },
+          ],
+          model: "gpt-4-vision",
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+          },
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          output,
+          "output",
+        );
+
+        expect(result).toEqual({
+          content: "[image_url]",
+          metadata: {
+            model: "gpt-4-vision",
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+            },
+            finish_reason: "stop",
+          },
+        });
+      });
+
+      it("should handle multimodal output with mixed text and non-text parts", () => {
+        const output = {
+          choices: [
+            {
+              message: {
+                content: [
+                  { type: "text", text: "Here's the analysis:" },
+                  {
+                    type: "image_url",
+                    image_url: { url: "data:image/png;base64,..." },
+                  },
+                ],
+              },
+              finish_reason: "stop",
+            },
+          ],
+          model: "gpt-4-vision",
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+          },
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          output,
+          "output",
+        );
+
+        // Should prefer text content when available
+        expect(result).toEqual({
+          content: "Here's the analysis:",
+          metadata: {
+            model: "gpt-4-vision",
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+            },
+            finish_reason: "stop",
+          },
+        });
+      });
     });
 
     describe("Anthropic formatting", () => {
@@ -156,6 +342,140 @@ describe("provider-schemas", () => {
               prompt_tokens: 5,
               completion_tokens: 15,
               total_tokens: 20,
+            },
+            stop_reason: "end_turn",
+          },
+        });
+      });
+
+      it("should extract content from last user message in multi-turn conversations", () => {
+        const input = {
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: "Hi there!" },
+            { role: "user", content: "How are you?" },
+            { role: "assistant", content: "I'm doing well, thanks!" },
+            { role: "user", content: "What's the weather like?" },
+          ],
+          model: "claude-3-sonnet",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.ANTHROPIC,
+          input,
+          "input",
+        );
+
+        expect(result).toEqual({
+          content: "What's the weather like?",
+          metadata: {
+            model: "claude-3-sonnet",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal content with only non-text parts", () => {
+        const input = {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/jpeg", data: "..." },
+                },
+                {
+                  type: "audio",
+                  source: { type: "base64", media_type: "audio/wav", data: "..." },
+                },
+              ],
+            },
+          ],
+          model: "claude-3-vision",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.ANTHROPIC,
+          input,
+          "input",
+        );
+
+        expect(result).toEqual({
+          content: "[image]",
+          metadata: {
+            model: "claude-3-vision",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal content with mixed text and non-text parts", () => {
+        const input = {
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Analyze this image" },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/jpeg", data: "..." },
+                },
+              ],
+            },
+          ],
+          model: "claude-3-vision",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.ANTHROPIC,
+          input,
+          "input",
+        );
+
+        // Should prefer text content when available
+        expect(result).toEqual({
+          content: "Analyze this image",
+          metadata: {
+            model: "claude-3-vision",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal output with only non-text parts", () => {
+        const output = {
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/png", data: "..." },
+            },
+          ],
+          model: "claude-3-vision",
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+          },
+          stop_reason: "end_turn",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.ANTHROPIC,
+          output,
+          "output",
+        );
+
+        expect(result).toEqual({
+          content: "[image]",
+          metadata: {
+            model: "claude-3-vision",
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
             },
             stop_reason: "end_turn",
           },

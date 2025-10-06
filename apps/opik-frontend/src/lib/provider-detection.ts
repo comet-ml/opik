@@ -54,13 +54,16 @@ const detectProviderFromModel = (model: string): PROVIDER_TYPE | null => {
     return PROVIDER_TYPE.ANTHROPIC;
   }
 
-  // Google models
-  if (modelLower.startsWith("gemini-")) {
+  // Google Gemini models (check before Vertex AI to avoid conflicts)
+  if (
+    modelLower.startsWith("gemini-") ||
+    modelLower.startsWith("google/gemini")
+  ) {
     return PROVIDER_TYPE.GEMINI;
   }
 
-  // Vertex AI models
-  if (modelLower.includes("vertex") || modelLower.includes("google")) {
+  // Vertex AI models (more specific detection)
+  if (modelLower.startsWith("vertex_ai/") || modelLower.includes("vertex-ai")) {
     return PROVIDER_TYPE.VERTEX_AI;
   }
 
