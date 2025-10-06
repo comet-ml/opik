@@ -7,6 +7,29 @@ import isNumber from "lodash/isNumber";
 import last from "lodash/last";
 
 /**
+ * Helper function to determine content type from object properties
+ */
+function getContentTypeFromObject(obj: any): string | null {
+  // Check for common multimodal content properties
+  if (obj.image_url) return "image_url";
+  if (obj.audio) return "audio";
+  if (obj.video) return "video";
+  if (obj.document) return "document";
+  if (obj.file) return "file";
+  if (obj.attachment) return "attachment";
+
+  // Check for data URLs or base64 content
+  if (obj.url && typeof obj.url === "string") {
+    if (obj.url.startsWith("data:image/")) return "image";
+    if (obj.url.startsWith("data:audio/")) return "audio";
+    if (obj.url.startsWith("data:video/")) return "video";
+    return "media";
+  }
+
+  return null;
+}
+
+/**
  * Provider-specific response interfaces
  */
 
@@ -279,14 +302,29 @@ const openAIFormatter: ProviderFormatter = {
           (item: unknown) => {
             if (!isObject(item)) return false;
             const obj = item as any;
-            return obj.type && obj.type !== "text";
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
           },
         );
 
         if (nonTextContent && isObject(nonTextContent)) {
           // Create a description of the non-text content
           const obj = nonTextContent as any;
-          content = `[${obj.type || "content"}]`;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
         }
       }
     }
@@ -346,14 +384,29 @@ const openAIFormatter: ProviderFormatter = {
           (item: unknown) => {
             if (!isObject(item)) return false;
             const obj = item as any;
-            return obj.type && obj.type !== "text";
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
           },
         );
 
         if (nonTextContent && isObject(nonTextContent)) {
           // Create a description of the non-text content
           const obj = nonTextContent as any;
-          content = `[${obj.type || "content"}]`;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
         }
       }
     }
@@ -417,14 +470,29 @@ const anthropicFormatter: ProviderFormatter = {
           (item: unknown) => {
             if (!isObject(item)) return false;
             const obj = item as any;
-            return obj.type && obj.type !== "text";
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
           },
         );
 
         if (nonTextContent && isObject(nonTextContent)) {
           // Create a description of the non-text content
           const obj = nonTextContent as any;
-          content = `[${obj.type || "content"}]`;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
         }
       }
     }
@@ -470,14 +538,29 @@ const anthropicFormatter: ProviderFormatter = {
           (item: unknown) => {
             if (!isObject(item)) return false;
             const obj = item as any;
-            return obj.type && obj.type !== "text";
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
           },
         );
 
         if (nonTextContent && isObject(nonTextContent)) {
           // Create a description of the non-text content
           const obj = nonTextContent as any;
-          content = `[${obj.type || "content"}]`;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
         }
       }
     }

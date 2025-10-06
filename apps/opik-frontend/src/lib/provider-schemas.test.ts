@@ -201,6 +201,106 @@ describe("provider-schemas", () => {
         });
       });
 
+      it("should handle multimodal content with falsy type values", () => {
+        const input = {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "", // Empty string - falsy
+                  image_url: { url: "data:image/jpeg;base64,..." },
+                },
+              ],
+            },
+          ],
+          model: "gpt-4-vision",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          input,
+          "input",
+        );
+
+        // Should use the helper function to determine content type
+        expect(result).toEqual({
+          content: "[image_url]",
+          metadata: {
+            model: "gpt-4-vision",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal content with null type values", () => {
+        const input = {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: null, // Null - falsy
+                  audio: { url: "data:audio/wav;base64,..." },
+                },
+              ],
+            },
+          ],
+          model: "gpt-4-vision",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          input,
+          "input",
+        );
+
+        // Should use the helper function to determine content type
+        expect(result).toEqual({
+          content: "[audio]",
+          metadata: {
+            model: "gpt-4-vision",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
+      it("should handle multimodal content with completely unknown structure", () => {
+        const input = {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: undefined, // Undefined - falsy
+                  // No recognizable properties
+                  someUnknownProperty: "value",
+                },
+              ],
+            },
+          ],
+          model: "gpt-4-vision",
+        };
+
+        const result = formatProviderData(
+          PROVIDER_TYPE.OPEN_AI,
+          input,
+          "input",
+        );
+
+        // Should fall back to "unknown content"
+        expect(result).toEqual({
+          content: "[unknown content]",
+          metadata: {
+            model: "gpt-4-vision",
+            temperature: undefined,
+            max_tokens: undefined,
+          },
+        });
+      });
+
       it("should handle multimodal output with only non-text parts", () => {
         const output = {
           choices: [
