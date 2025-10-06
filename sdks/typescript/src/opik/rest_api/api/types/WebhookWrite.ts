@@ -6,6 +6,6 @@ export interface WebhookWrite {
     id?: string;
     name?: string;
     url: string;
-    secretToken: string;
+    secretToken?: string;
     headers?: Record<string, string>;
 }
