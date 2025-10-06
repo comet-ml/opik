@@ -15,4 +15,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
     @NotNull boolean opikAIEnabled;
+    @JsonProperty
+    @NotNull boolean openSourceWelcomeWizardEnabled;
 }

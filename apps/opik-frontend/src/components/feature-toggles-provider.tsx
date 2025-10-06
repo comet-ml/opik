@@ -19,6 +19,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_ALERTS_ENABLED]: false,
+  [FeatureToggleKeys.OPEN_SOURCE_WELCOME_WIZARD_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
@@ -55,6 +56,17 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
     </FeatureTogglesProviderContext.Provider>
   );
 }
+
+export const useFeatureToggles = () => {
+  const context = useContext(FeatureTogglesProviderContext);
+
+  if (context === undefined)
+    throw new Error(
+      "useFeatureToggles must be used within a FeatureTogglesProvider",
+    );
+
+  return context.features;
+};
 
 export const useIsFeatureEnabled = (feature: FeatureToggleKeys) => {
   const context = useContext(FeatureTogglesProviderContext);
