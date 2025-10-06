@@ -12,16 +12,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Instant;
-import java.util.Optional;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(OpenSourceWelcomeWizardTrackingService.Impl.class)
 public interface OpenSourceWelcomeWizardTrackingService {
 
-    Optional<OpenSourceWelcomeWizardTracking> getTrackingStatus(String workspaceId);
+    OpenSourceWelcomeWizardTracking getTrackingStatus(String workspaceId);
 
-    OpenSourceWelcomeWizardTracking submitWizard(String workspaceId, String userName,
-            OpenSourceWelcomeWizardSubmission submission);
+    void submitWizard(String workspaceId, OpenSourceWelcomeWizardSubmission submission);
 
     @Slf4j
     @Singleton
@@ -32,52 +31,34 @@ public interface OpenSourceWelcomeWizardTrackingService {
         private final @NonNull EventBus eventBus;
 
         @Override
-        public Optional<OpenSourceWelcomeWizardTracking> getTrackingStatus(String workspaceId) {
-            return transactionTemplate.inTransaction(handle -> {
+        public OpenSourceWelcomeWizardTracking getTrackingStatus(String workspaceId) {
+            boolean completed = transactionTemplate.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(OpenSourceWelcomeWizardTrackingDAO.class);
-                return dao.findByWorkspaceId(workspaceId);
+                return dao.isCompleted(OpenSourceWelcomeWizardTrackingDAO.EVENT_TYPE_PREFIX, workspaceId);
             });
+
+            return OpenSourceWelcomeWizardTracking.builder()
+                    .completed(completed)
+                    .build();
         }
 
         @Override
-        public OpenSourceWelcomeWizardTracking submitWizard(String workspaceId, String userName,
-                OpenSourceWelcomeWizardSubmission submission) {
+        public void submitWizard(String workspaceId, OpenSourceWelcomeWizardSubmission submission) {
             log.info("Submitting OSS welcome wizard for workspace: '{}'", workspaceId);
 
-            var result = transactionTemplate.inTransaction(handle -> {
+            // Mark as completed in database
+            transactionTemplate.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(OpenSourceWelcomeWizardTrackingDAO.class);
-                var existingTracking = dao.findByWorkspaceId(workspaceId);
 
-                var now = Instant.now();
-                var tracking = OpenSourceWelcomeWizardTracking.builder()
-                        .workspaceId(workspaceId)
-                        .completed(true)
-                        .email(submission.email())
-                        .role(submission.role())
-                        .integrations(submission.integrations())
-                        .joinBetaProgram(submission.joinBetaProgram())
-                        .submittedAt(now)
-                        .createdBy(userName)
-                        .lastUpdatedBy(userName);
-
-                if (existingTracking.isPresent()) {
-                    tracking = tracking
-                            .createdAt(existingTracking.get().createdAt())
-                            .createdBy(existingTracking.get().createdBy());
-                    var updated = tracking.build();
-                    dao.update(updated);
-                    log.info("Updated OSS welcome wizard tracking for workspace: '{}'", workspaceId);
-                    return updated;
-                } else {
-                    tracking = tracking.createdAt(now);
-                    var created = tracking.build();
-                    dao.save(created);
-                    log.info("Created OSS welcome wizard tracking for workspace: '{}'", workspaceId);
-                    return created;
+                // Only insert if not already completed (INSERT will fail on duplicate, which is fine)
+                if (!dao.isCompleted(OpenSourceWelcomeWizardTrackingDAO.EVENT_TYPE_PREFIX, workspaceId)) {
+                    dao.markCompleted(OpenSourceWelcomeWizardTrackingDAO.EVENT_TYPE_PREFIX, workspaceId);
+                    log.info("Marked OSS welcome wizard as completed for workspace: '{}'", workspaceId);
                 }
+                return null;
             });
 
-            // Publish event for BI tracking
+            // Publish event for BI tracking (still send full data to BI)
             var event = OpenSourceWelcomeWizardSubmitted.builder()
                     .workspaceId(workspaceId)
                     .email(submission.email())
@@ -88,8 +69,6 @@ public interface OpenSourceWelcomeWizardTrackingService {
 
             eventBus.post(event);
             log.info("OSS welcome wizard submitted event published for workspace: '{}'", workspaceId);
-
-            return result;
         }
     }
 }

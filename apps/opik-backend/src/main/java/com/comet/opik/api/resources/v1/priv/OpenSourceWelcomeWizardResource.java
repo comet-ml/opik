@@ -50,34 +50,27 @@ public class OpenSourceWelcomeWizardResource {
 
         var tracking = service.getTrackingStatus(workspaceId);
 
-        // Return default object with completed=false if no tracking entry exists
-        var response = tracking.orElseGet(() -> OpenSourceWelcomeWizardTracking.builder()
-                .workspaceId(workspaceId)
-                .completed(false)
-                .build());
-
         log.info("OSS welcome wizard status for workspace_id '{}': completed={}", workspaceId,
-                response.completed());
+                tracking.completed());
 
-        return Response.ok().entity(response).build();
+        return Response.ok().entity(tracking).build();
     }
 
     @POST
     @Operation(operationId = "submitOpenSourceWelcomeWizard", summary = "Submit OSS welcome wizard", description = "Submit open source welcome wizard with user information", responses = {
-            @ApiResponse(responseCode = "200", description = "OSS welcome wizard submitted successfully", content = @Content(schema = @Schema(implementation = OpenSourceWelcomeWizardTracking.class)))})
+            @ApiResponse(responseCode = "204", description = "OSS welcome wizard submitted successfully")})
     @RateLimited
     public Response submitWizard(
             @RequestBody(content = @Content(schema = @Schema(implementation = OpenSourceWelcomeWizardSubmission.class))) @Valid OpenSourceWelcomeWizardSubmission submission) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
 
         log.info("Submitting OSS welcome wizard for workspace_id '{}'", workspaceId);
 
-        var tracking = service.submitWizard(workspaceId, userName, submission);
+        service.submitWizard(workspaceId, submission);
 
         log.info("OSS welcome wizard submitted for workspace_id '{}'", workspaceId);
 
-        return Response.ok().entity(tracking).build();
+        return Response.noContent().build();
     }
 }
