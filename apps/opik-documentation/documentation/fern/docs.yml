@@ -328,9 +328,6 @@ navigation:
           - section: Frameworks
             skip-slug: true
             contents:
-              - page: Agno
-                path: docs/tracing/integrations/agno.mdx
-                slug: agno
               - page: BeeAI
                 path: docs/tracing/integrations/beeai.mdx
                 slug: beeai
@@ -368,6 +365,9 @@ navigation:
               - page: AG2
                 path: docs/tracing/integrations/ag2.mdx
                 slug: ag2
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
               - page: Autogen
                 path: docs/tracing/integrations/autogen.mdx
                 slug: autogen
