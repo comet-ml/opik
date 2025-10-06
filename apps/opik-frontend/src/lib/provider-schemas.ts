@@ -125,49 +125,109 @@ const normalizeUsageData = (
   if (!isObject(usage)) return undefined;
 
   const normalized: NonNullable<PrettyViewData["metadata"]>["usage"] = {};
+  let hasValidData = false;
+
+  // Helper function to safely extract and validate numbers
+  const extractNumber = (value: unknown): number | undefined => {
+    if (isNumber(value) && !isNaN(value) && value >= 0) {
+      return value;
+    }
+    return undefined;
+  };
 
   // OpenAI format: prompt_tokens, completion_tokens, total_tokens
-  if ("prompt_tokens" in usage && isNumber(usage.prompt_tokens)) {
-    normalized.prompt_tokens = usage.prompt_tokens;
+  const openAIUsage = usage as OpenAIUsage;
+  if (openAIUsage.prompt_tokens !== undefined) {
+    const value = extractNumber(openAIUsage.prompt_tokens);
+    if (value !== undefined) {
+      normalized.prompt_tokens = value;
+      hasValidData = true;
+    }
   }
-  if ("completion_tokens" in usage && isNumber(usage.completion_tokens)) {
-    normalized.completion_tokens = usage.completion_tokens;
+  if (openAIUsage.completion_tokens !== undefined) {
+    const value = extractNumber(openAIUsage.completion_tokens);
+    if (value !== undefined) {
+      normalized.completion_tokens = value;
+      hasValidData = true;
+    }
   }
-  if ("total_tokens" in usage && isNumber(usage.total_tokens)) {
-    normalized.total_tokens = usage.total_tokens;
-  }
-
-  // Anthropic format: input_tokens, output_tokens
-  if ("input_tokens" in usage && isNumber(usage.input_tokens)) {
-    normalized.prompt_tokens = usage.input_tokens;
-  }
-  if ("output_tokens" in usage && isNumber(usage.output_tokens)) {
-    normalized.completion_tokens = usage.output_tokens;
-  }
-
-  // Gemini format: promptTokenCount, candidatesTokenCount, totalTokenCount
-  if ("promptTokenCount" in usage && isNumber(usage.promptTokenCount)) {
-    normalized.prompt_tokens = usage.promptTokenCount;
-  }
-  if ("candidatesTokenCount" in usage && isNumber(usage.candidatesTokenCount)) {
-    normalized.completion_tokens = usage.candidatesTokenCount;
-  }
-  if ("totalTokenCount" in usage && isNumber(usage.totalTokenCount)) {
-    normalized.total_tokens = usage.totalTokenCount;
+  if (openAIUsage.total_tokens !== undefined) {
+    const value = extractNumber(openAIUsage.total_tokens);
+    if (value !== undefined) {
+      normalized.total_tokens = value;
+      hasValidData = true;
+    }
   }
 
-  // Calculate total if not provided
+  // Anthropic format: input_tokens, output_tokens (only if not already set)
+  const anthropicUsage = usage as AnthropicUsage;
   if (
-    !normalized.total_tokens &&
-    normalized.prompt_tokens &&
-    normalized.completion_tokens
+    anthropicUsage.input_tokens !== undefined &&
+    normalized.prompt_tokens === undefined
+  ) {
+    const value = extractNumber(anthropicUsage.input_tokens);
+    if (value !== undefined) {
+      normalized.prompt_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (
+    anthropicUsage.output_tokens !== undefined &&
+    normalized.completion_tokens === undefined
+  ) {
+    const value = extractNumber(anthropicUsage.output_tokens);
+    if (value !== undefined) {
+      normalized.completion_tokens = value;
+      hasValidData = true;
+    }
+  }
+
+  // Gemini format: promptTokenCount, candidatesTokenCount, totalTokenCount (only if not already set)
+  const geminiUsage = usage as GeminiUsage;
+  if (
+    geminiUsage.promptTokenCount !== undefined &&
+    normalized.prompt_tokens === undefined
+  ) {
+    const value = extractNumber(geminiUsage.promptTokenCount);
+    if (value !== undefined) {
+      normalized.prompt_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (
+    geminiUsage.candidatesTokenCount !== undefined &&
+    normalized.completion_tokens === undefined
+  ) {
+    const value = extractNumber(geminiUsage.candidatesTokenCount);
+    if (value !== undefined) {
+      normalized.completion_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (
+    geminiUsage.totalTokenCount !== undefined &&
+    normalized.total_tokens === undefined
+  ) {
+    const value = extractNumber(geminiUsage.totalTokenCount);
+    if (value !== undefined) {
+      normalized.total_tokens = value;
+      hasValidData = true;
+    }
+  }
+
+  // Calculate total if not provided and we have both prompt and completion tokens
+  if (
+    normalized.total_tokens === undefined &&
+    normalized.prompt_tokens !== undefined &&
+    normalized.completion_tokens !== undefined
   ) {
     normalized.total_tokens =
       normalized.prompt_tokens + normalized.completion_tokens;
+    hasValidData = true;
   }
 
-  // Return undefined if no usage data was found
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
+  // Return undefined if no valid usage data was found
+  return hasValidData ? normalized : undefined;
 };
 
 export interface ProviderFormatter {

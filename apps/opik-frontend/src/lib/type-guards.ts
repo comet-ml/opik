@@ -16,8 +16,8 @@ export const isTrace = (data: unknown): data is Trace => {
   const hasRequiredFields =
     isString((data as any).id) &&
     isString((data as any).name) &&
-    isObject((data as any).input) &&
-    isObject((data as any).output) &&
+    (data as any).input !== undefined &&
+    (data as any).output !== undefined &&
     isString((data as any).start_time) &&
     isString((data as any).end_time) &&
     isNumber((data as any).duration) &&
@@ -89,8 +89,8 @@ export const isSpan = (data: unknown): data is Span => {
   const hasRequiredFields =
     isString((data as any).id) &&
     isString((data as any).name) &&
-    isObject((data as any).input) &&
-    isObject((data as any).output) &&
+    (data as any).input !== undefined &&
+    (data as any).output !== undefined &&
     isString((data as any).start_time) &&
     isString((data as any).end_time) &&
     isNumber((data as any).duration) &&
