@@ -71,6 +71,10 @@ def main():
         conversation_span.set_attribute("conversation.id", "conv_12345")
         conversation_span.set_attribute("conversation.type", "weather_inquiry")
 
+        # Add thread ID as an attribute to the parent span to group related spans into
+        # a single conversational thread
+        conversation_span.set_attribute("thread_id", "user_12345")
+
         # Process the user request
 
         # Simulate initial processing
@@ -121,3 +125,6 @@ if __name__ == "__main__":
     print("\nSpans have been sent to OpenTelemetry collector.")
     print("If you configured Comet.com, you can view the traces in your Comet project.")
 ```
+
+Using `thread_id` as a span attribute allows you to group related spans into a single conversational thread.
+Created threads can be used to evaluate multi-turn conversations as described in the [Multi-turn conversations](/evaluation/evaluate_threads) guide.

@@ -42,6 +42,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -388,6 +389,67 @@ class OpenTelemetryResourceTest {
             assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
 
             assertThat(span.output().get("tool_responses").isArray()).isEqualTo(Boolean.TRUE);
+        }
+
+        @Test
+        @DisplayName("test thread_id support in OpenTelemetry")
+        void testThreadIdSupport() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+            String threadId = "test-thread-123";
+
+            // Create a root span with thread_id attribute
+            var rootSpan = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("thread_id")
+                            .setValue(AnyValue.newBuilder().setStringValue(threadId))
+                            .build())
+                    .build();
+
+            // Create a child span
+            var childSpan = Span.newBuilder()
+                    .setName("child span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            var otelSpans = List.of(rootSpan, childSpan);
+
+            // Calculate expected Opik trace ID
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            // Send the spans
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            // Verify the trace was created with the correct thread_id
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+            assertThat(trace.threadId()).isEqualTo(threadId);
+
+            // Verify the spans were created
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            // Verify the root span has thread_id in metadata
+            var rootSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(rootSpanFromDb.metadata().get("thread_id").asText()).isEqualTo(threadId);
         }
 
     }

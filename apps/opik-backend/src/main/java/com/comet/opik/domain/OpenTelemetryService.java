@@ -14,6 +14,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -119,7 +120,13 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         // check if there spans without parentId: we will use them as a Trace too
         return Flux.fromStream(opikSpans.stream().filter(span -> span.parentSpanId() == null))
                 .flatMap(rootSpan -> {
-                    var trace = Trace.builder()
+                    // Extract thread_id from root span metadata if present
+                    String threadId = null;
+                    if (rootSpan.metadata() != null && rootSpan.metadata().has("thread_id")) {
+                        threadId = rootSpan.metadata().get("thread_id").asText();
+                    }
+
+                    var traceBuilder = Trace.builder()
                             .id(rootSpan.traceId())
                             .name(rootSpan.name())
                             .projectName(rootSpan.projectName())
@@ -128,10 +135,13 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .duration(rootSpan.duration())
                             .input(rootSpan.input())
                             .output(rootSpan.output())
-                            .metadata(rootSpan.metadata())
-                            .build();
+                            .metadata(rootSpan.metadata());
 
-                    return traceService.create(trace);
+                    if (StringUtils.isNotBlank(threadId)) {
+                        traceBuilder.threadId(threadId);
+                    }
+
+                    return traceService.create(traceBuilder.build());
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
                 .then(Mono.defer(() -> {

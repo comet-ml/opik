@@ -52,6 +52,8 @@ public enum OpenTelemetryMappingRule {
 
     USAGE("usage", false, "Logfire", Outcome.USAGE, SpanType.llm),
 
+    THREAD_ID("thread_id", false, "General", Outcome.METADATA),
+
     SMOLAGENTS("smolagents.", true, "Smolagents", Outcome.METADATA);
 
     private final String rule;
