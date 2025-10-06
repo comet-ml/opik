@@ -13,6 +13,7 @@ import { prettifyMessage } from "@/lib/traces";
 import { cn, toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import isFunction from "lodash/isFunction";
+import { PrettyViewContainer } from "@/components/shared/PrettyView";
 
 type TraceMessageProps = {
   trace: Trace;
@@ -33,44 +34,12 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.feedback_scores]);
 
   const input = useMemo(() => {
-    const message = prettifyMessage(trace.input).message;
-
-    if (isObject(message)) {
-      return (
-        <JsonView
-          src={message}
-          {...jsonViewTheme}
-          className="comet-code"
-          collapseStringsAfterLength={10000}
-          enableClipboard={false}
-        />
-      );
-    } else if (isUndefined(message)) {
-      return <span>-</span>;
-    } else {
-      return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
-    }
-  }, [trace.input, jsonViewTheme]);
+    return <PrettyViewContainer data={trace} type="input" />;
+  }, [trace]);
 
   const output = useMemo(() => {
-    const message = prettifyMessage(trace.output, { type: "output" }).message;
-
-    if (isObject(message)) {
-      return (
-        <JsonView
-          src={message}
-          className="comet-code"
-          {...jsonViewTheme}
-          collapseStringsAfterLength={10000}
-          enableClipboard={false}
-        />
-      );
-    } else if (isUndefined(message)) {
-      return "-";
-    } else {
-      return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
-    }
-  }, [trace.output, jsonViewTheme]);
+    return <PrettyViewContainer data={trace} type="output" />;
+  }, [trace]);
 
   return (
     <div
