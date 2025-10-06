@@ -384,11 +384,19 @@ describe("provider-schemas", () => {
               content: [
                 {
                   type: "image",
-                  source: { type: "base64", media_type: "image/jpeg", data: "..." },
+                  source: {
+                    type: "base64",
+                    media_type: "image/jpeg",
+                    data: "...",
+                  },
                 },
                 {
                   type: "audio",
-                  source: { type: "base64", media_type: "audio/wav", data: "..." },
+                  source: {
+                    type: "base64",
+                    media_type: "audio/wav",
+                    data: "...",
+                  },
                 },
               ],
             },
@@ -421,7 +429,11 @@ describe("provider-schemas", () => {
                 { type: "text", text: "Analyze this image" },
                 {
                   type: "image",
-                  source: { type: "base64", media_type: "image/jpeg", data: "..." },
+                  source: {
+                    type: "base64",
+                    media_type: "image/jpeg",
+                    data: "...",
+                  },
                 },
               ],
             },
