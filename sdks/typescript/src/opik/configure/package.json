@@ -24,7 +24,6 @@
   "files": [
     "dist/bin.*",
     "dist/src",
-    "dist/templates",
     "package.json",
     "README.md"
   ],
@@ -84,7 +83,7 @@
     "prebuild": "pnpm clean",
     "build:watch": "pnpm tsc -w",
     "build": "pnpm tsc",
-    "postbuild": "chmod +x ./dist/bin.js && cp -r src/utils/rules dist/src/utils && cp -r templates dist/",
+    "postbuild": "chmod +x ./dist/bin.js && cp -r src/utils/rules dist/src/utils",
     "lint": "pnpm lint:prettier && pnpm lint:eslint",
     "lint:prettier": "prettier --check \"src/**/*.ts\"",
     "lint:eslint": "eslint '**/*.{ts,tsx}'",

@@ -37,7 +37,6 @@ export const INTEGRATION_CONFIG = {
     generateFilesRules: `
 - Use \`new Opik({ apiKey, environment })\` for client initialization, NOT a provider pattern
 - Import from 'opik', not 'opik-js/react' or similar
-- Use \`@track()\` decorator for automatic tracing
 - Use \`client.trace()\` for manual trace creation
 - Always include \`await client.flush()\` for short-lived scripts
 - For integrations, use \`trackOpenAI()\`, \`OpikTracer\`, etc.
@@ -50,11 +49,10 @@ export const INTEGRATION_CONFIG = {
 - Look for service/utility files with AI logic
 - Avoid test files, config files, and type definition files
 - If there's a setup or initialization file, include it`,
-    docsUrl:
-      'https://www.comet.com/docs/opik/reference/typescript-sdk/overview',
-    defaultChanges: `• Installed opik package\n• Initialized Opik client\n• Set up environment variables (${OPIK_ENV_VARS.API_KEY}, ${OPIK_ENV_VARS.URL_OVERRIDE})`,
+    docsUrl: 'https://www.comet.com/docs/opik/quickstart',
+    defaultChanges: `• Installed opik package\n• Set up environment variables (${OPIK_ENV_VARS.API_KEY}, ${OPIK_ENV_VARS.URL_OVERRIDE})`,
     nextSteps:
-      '• Use @track() decorator to automatically trace functions\n• Use client.trace() for manual trace creation\n• For short-lived scripts: Add await client.flush() before exit\n• Integrate with LLM libraries using trackOpenAI() or OpikTracer\n• Check the documentation for advanced usage: https://www.comet.com/docs/opik/reference/typescript-sdk/overview',
+      '• Use client.trace() to create traces\n• For short-lived scripts: Add await client.flush() before exit\n• Check the documentation for tracing: https://www.comet.com/docs/opik/tracing/log_traces',
   },
 } as const satisfies Record<Integration, IntegrationConfig>;
 
