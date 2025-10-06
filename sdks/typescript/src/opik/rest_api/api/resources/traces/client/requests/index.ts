@@ -1,6 +1,7 @@
 export { type TraceThreadBatchIdentifier } from "./TraceThreadBatchIdentifier";
 export { type GetTracesByProjectRequest } from "./GetTracesByProjectRequest";
 export { type TraceBatchWrite } from "./TraceBatchWrite";
+export { type GetTraceByIdRequest } from "./GetTraceByIdRequest";
 export { type TraceUpdate } from "./TraceUpdate";
 export { type DeleteThreadFeedbackScores } from "./DeleteThreadFeedbackScores";
 export { type DeleteTraceThreads } from "./DeleteTraceThreads";
