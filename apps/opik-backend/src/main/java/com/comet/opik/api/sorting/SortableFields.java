@@ -44,6 +44,8 @@ public class SortableFields {
     public static final String PROJECT_NAME = "project_name";
     public static final String INSTRUCTIONS = "instructions";
     public static final String WEBHOOK_URL = "webhook_url";
+    public static final String DATA = "data.*";
+    public static final String COMMENTS = "comments";
     public static final String ENABLED = "enabled";
     public static final String SAMPLING_RATE = "sampling_rate";
 }

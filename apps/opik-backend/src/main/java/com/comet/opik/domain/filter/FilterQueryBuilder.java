@@ -351,6 +351,14 @@ public class FilterQueryBuilder {
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
+                    .put(ExperimentsComparisonValidKnownField.ID, ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.SOURCE, SOURCE_DB)
+                    .put(ExperimentsComparisonValidKnownField.TRACE_ID, TRACE_ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.SPAN_ID, SPAN_ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.CREATED_AT, CREATED_AT_DB)
+                    .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(ExperimentsComparisonValidKnownField.CREATED_BY, CREATED_BY_DB)
+                    .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .build());
@@ -481,7 +489,16 @@ public class FilterQueryBuilder {
                 DatasetItemField.CREATED_AT,
                 DatasetItemField.LAST_UPDATED_AT,
                 DatasetItemField.CREATED_BY,
-                DatasetItemField.LAST_UPDATED_BY));
+                DatasetItemField.LAST_UPDATED_BY,
+                // Also include ExperimentsComparisonValidKnownField variants for experiment items
+                ExperimentsComparisonValidKnownField.ID,
+                ExperimentsComparisonValidKnownField.SOURCE,
+                ExperimentsComparisonValidKnownField.TRACE_ID,
+                ExperimentsComparisonValidKnownField.SPAN_ID,
+                ExperimentsComparisonValidKnownField.CREATED_AT,
+                ExperimentsComparisonValidKnownField.LAST_UPDATED_AT,
+                ExperimentsComparisonValidKnownField.CREATED_BY,
+                ExperimentsComparisonValidKnownField.LAST_UPDATED_BY));
 
         map.put(FilterStrategy.ALERT, Set.of(
                 AlertField.ID,

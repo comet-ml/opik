@@ -5715,6 +5715,279 @@ class DatasetsResourceTest {
         }
     }
 
+    @DisplayName("Find dataset items with experiment items sorting test")
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindDatasetItemsWithExperimentItemsSortingTest {
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when sorting dataset items with experiment items, then return items sorted by valid fields")
+        void findDatasetItemsWithExperimentItems__whenSorting__thenReturnItemsSortedByValidFields(
+                SortingField sorting) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create project and traces
+            String projectName = GENERATOR.generate().toString();
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traces.forEach(trace -> createAndAssert(trace, workspaceName, apiKey));
+
+            // Create dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(traces.stream()
+                            .map(trace -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                                    .datasetId(datasetId)
+                                    .traceId(trace.id())
+                                    .spanId(null)
+                                    .source(DatasetItemSource.TRACE)
+                                    .build())
+                            .toList())
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create experiment
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Create experiment items
+            var experimentItems = IntStream.range(0, traces.size())
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experiment.id())
+                            .datasetItemId(datasetItemBatch.items().get(i).id())
+                            .traceId(traces.get(i).id())
+                            .build())
+                    .collect(Collectors.toSet());
+
+            createAndAssert(new ExperimentItemsBatch(experimentItems), apiKey, workspaceName);
+
+            // Fetch dataset items with sorting (first call)
+            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(sorting)),
+                    StandardCharsets.UTF_8);
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            List<UUID> firstFetchIds;
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+                assertThat(actualPage.content()).hasSize(5);
+
+                firstFetchIds = actualPage.content().stream().map(DatasetItem::id).toList();
+            }
+
+            // Fetch again to verify deterministic ordering (second call)
+            List<UUID> secondFetchIds;
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+
+                secondFetchIds = actualPage.content().stream().map(DatasetItem::id).toList();
+            }
+
+            // Verify sorting is deterministic - both fetches should return the same order
+            assertThat(firstFetchIds).containsExactlyElementsOf(secondFetchIds);
+        }
+
+        private Stream<Arguments> findDatasetItemsWithExperimentItems__whenSorting__thenReturnItemsSortedByValidFields() {
+            return Stream.of(
+                    // ID field sorting
+                    Arguments.of(SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+
+                    // CREATED_AT field sorting
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_AT field sorting
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                            .build()),
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                            .build()),
+
+                    // CREATED_BY field sorting
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_BY field sorting
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                            .build()),
+                    Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
+                            .build()));
+        }
+
+        @Test
+        @DisplayName("when sorting with invalid field, then return bad request")
+        void findDatasetItemsWithExperimentItems__whenSortingWithInvalidField__thenReturnBadRequest() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Use invalid sorting field
+            var invalidSorting = SortingField.builder()
+                    .field("invalid_field")
+                    .direction(Direction.ASC)
+                    .build();
+            var sortingParam = URLEncoder.encode(JsonUtils.writeValueAsString(List.of(invalidSorting)),
+                    StandardCharsets.UTF_8);
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sortingParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var errorMessage = actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorMessage.getMessage()).contains("Invalid sorting fields");
+                assertThat(errorMessage.getMessage()).contains("invalid_field");
+            }
+        }
+
+        @Test
+        @DisplayName("when sorting without sorting parameter, then return unsorted items")
+        void findDatasetItemsWithExperimentItems__whenNoSortingParameter__thenReturnUnsortedItems() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .traceId(trace.id())
+                    .spanId(null)
+                    .source(DatasetItemSource.TRACE)
+                    .build();
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Fetch without sorting parameter
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+            }
+        }
+    }
+
     @DisplayName("Get experiment items output columns test")
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
