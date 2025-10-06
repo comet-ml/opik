@@ -14,6 +14,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -136,7 +137,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .output(rootSpan.output())
                             .metadata(rootSpan.metadata());
 
-                    if (threadId != null && !threadId.isEmpty()) {
+                    if (StringUtils.isNotBlank(threadId)) {
                         traceBuilder.threadId(threadId);
                     }
 
