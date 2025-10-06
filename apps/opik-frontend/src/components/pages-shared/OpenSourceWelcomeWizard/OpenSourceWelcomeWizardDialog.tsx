@@ -298,10 +298,20 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
               )}
             />
 
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader className="mr-2 size-4 animate-spin" />}
-              Submit
-            </Button>
+            <div className="space-y-2">
+              <Button type="submit" disabled={isPending} className="w-full">
+                {isPending && <Loader className="mr-2 size-4 animate-spin" />}
+                Submit
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                onClick={handleDismiss}
+                className="w-full text-sm text-muted-foreground"
+              >
+                Skip and go to Opik
+              </Button>
+            </div>
           </form>
         </Form>
       </DialogContent>
