@@ -15,6 +15,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import {
   ColumnDef,
   ColumnPinningState,
+  ColumnSort,
   createColumnHelper,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -60,6 +61,7 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
+  isColumnSortable,
   mapColumnDataFields,
 } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
@@ -101,6 +103,7 @@ const COLUMNS_SCORES_ORDER_KEY = "compare-experiments-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
 const PAGINATION_SIZE_KEY = "compare-experiments-pagination-size";
 const ROW_HEIGHT_KEY = "compare-experiments-row-height";
+const SORTING_KEY = "compare-experiments-sorting";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -229,6 +232,15 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     defaultValue: [],
   });
 
+  const [sorting, setSorting] = useQueryParamAndLocalStorageState<ColumnSort[]>(
+    {
+      localStorageKey: SORTING_KEY,
+      queryKey: "sorting",
+      defaultValue: [],
+      queryParamConfig: JsonParam,
+    },
+  );
+
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const { data, isPending } = useCompareExperimentsList(
@@ -237,6 +249,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       datasetId,
       experimentsIds,
       filters,
+      sorting,
       truncate: true,
       page: page as number,
       size: size as number,
@@ -245,6 +258,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       placeholderData: keepPreviousData,
       refetchInterval: REFETCH_INTERVAL,
     },
+  );
+
+  const sortableColumns = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
   );
 
   const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
@@ -444,6 +462,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           asId: true,
         },
         size: 180,
+        sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
       }),
     ];
@@ -511,6 +530,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           >(outputColumnsData, {
             selectedColumns,
             columnsOrder: outputColumnsOrder,
+            sortableColumns,
           }),
         }),
       );
@@ -530,6 +550,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           >(scoresColumnsData, {
             selectedColumns,
             columnsOrder: scoresColumnsOrder,
+            sortableColumns,
           }),
         }),
       );
@@ -548,6 +569,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     experimentsIds,
     outputColumnsOrder,
     scoresColumnsOrder,
+    sortableColumns,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -715,6 +737,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         selectionConfig={{
           rowSelection,
           setRowSelection,
+        }}
+        sortConfig={{
+          enabled: true,
+          sorting,
+          setSorting,
         }}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
