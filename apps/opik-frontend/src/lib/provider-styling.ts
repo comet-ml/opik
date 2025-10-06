@@ -19,8 +19,34 @@ export const getProviderColor = (provider: PROVIDER_TYPE): string => {
 
 export const getProviderBadgeVariant = (
   provider: PROVIDER_TYPE,
-): "default" | "primary" | "gray" | "purple" | "burgundy" | "pink" | "red" | "orange" | "yellow" | "green" | "turquoise" | "blue" => {
-  const variants: Record<PROVIDER_TYPE, "default" | "primary" | "gray" | "purple" | "burgundy" | "pink" | "red" | "orange" | "yellow" | "green" | "turquoise" | "blue"> = {
+):
+  | "default"
+  | "primary"
+  | "gray"
+  | "purple"
+  | "burgundy"
+  | "pink"
+  | "red"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "turquoise"
+  | "blue" => {
+  const variants: Record<
+    PROVIDER_TYPE,
+    | "default"
+    | "primary"
+    | "gray"
+    | "purple"
+    | "burgundy"
+    | "pink"
+    | "red"
+    | "orange"
+    | "yellow"
+    | "green"
+    | "turquoise"
+    | "blue"
+  > = {
     [PROVIDER_TYPE.OPEN_AI]: "green",
     [PROVIDER_TYPE.ANTHROPIC]: "orange",
     [PROVIDER_TYPE.GEMINI]: "blue",
