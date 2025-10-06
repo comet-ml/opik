@@ -29,6 +29,7 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   protected async getEntity(id: string) {
     return (await this.api.spans.getSpanById(
       id,
+      {},
       this.api.requestOptions
     )) as SavedSpan;
   }
