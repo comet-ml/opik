@@ -1,17 +1,11 @@
 import React, { useMemo } from "react";
-import JsonView from "react18-json-view";
-import isObject from "lodash/isObject";
-import isUndefined from "lodash/isUndefined";
 
 import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
-import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import LikeFeedback from "@/components/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
-import { prettifyMessage } from "@/lib/traces";
-import { cn, toString } from "@/lib/utils";
-import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
+import { cn } from "@/lib/utils";
 import isFunction from "lodash/isFunction";
 import { PrettyViewContainer } from "@/components/shared/PrettyView";
 
@@ -24,7 +18,6 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   trace,
   handleOpenTrace,
 }) => {
-  const jsonViewTheme = useJsonViewTheme();
   const withActions = isFunction(handleOpenTrace);
 
   const userFeedback = useMemo(() => {

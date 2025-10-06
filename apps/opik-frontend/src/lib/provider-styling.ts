@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export const getProviderColor = (provider: PROVIDER_TYPE): string => {
   const colors: Record<PROVIDER_TYPE, string> = {
     [PROVIDER_TYPE.OPEN_AI]: "text-green-600",
-    [PROVIDER_TYPE.ANTHROPIC]: "text-orange-600", 
+    [PROVIDER_TYPE.ANTHROPIC]: "text-orange-600",
     [PROVIDER_TYPE.GEMINI]: "text-blue-600",
     [PROVIDER_TYPE.VERTEX_AI]: "text-purple-600",
     [PROVIDER_TYPE.OPEN_ROUTER]: "text-indigo-600",
@@ -17,7 +17,9 @@ export const getProviderColor = (provider: PROVIDER_TYPE): string => {
   return colors[provider] || "text-gray-600";
 };
 
-export const getProviderBadgeVariant = (provider: PROVIDER_TYPE): "default" | "secondary" | "outline" => {
+export const getProviderBadgeVariant = (
+  provider: PROVIDER_TYPE,
+): "default" | "secondary" | "outline" => {
   const variants: Record<PROVIDER_TYPE, "default" | "secondary" | "outline"> = {
     [PROVIDER_TYPE.OPEN_AI]: "default",
     [PROVIDER_TYPE.ANTHROPIC]: "secondary",
@@ -43,10 +45,9 @@ export const getProviderIcon = (provider: PROVIDER_TYPE): string => {
   return icons[provider] || "❓";
 };
 
-export const getProviderClassName = (provider: PROVIDER_TYPE, baseClassName?: string): string => {
-  return cn(
-    baseClassName,
-    getProviderColor(provider),
-    "font-medium"
-  );
+export const getProviderClassName = (
+  provider: PROVIDER_TYPE,
+  baseClassName?: string,
+): string => {
+  return cn(baseClassName, getProviderColor(provider), "font-medium");
 };

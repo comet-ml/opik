@@ -2,6 +2,7 @@ import { PROVIDER_TYPE } from "@/types/providers";
 import isString from "lodash/isString";
 import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
+import isNumber from "lodash/isNumber";
 import last from "lodash/last";
 
 export interface PrettyViewData {
@@ -19,17 +20,75 @@ export interface PrettyViewData {
   };
 }
 
+/**
+ * Normalizes usage data from different providers to a standard format
+ */
+const normalizeUsageData = (
+  usage: unknown,
+): PrettyViewData["metadata"]["usage"] | undefined => {
+  if (!isObject(usage)) return undefined;
+
+  const normalized: PrettyViewData["metadata"]["usage"] = {};
+
+  // OpenAI format: prompt_tokens, completion_tokens, total_tokens
+  if (isNumber(usage.prompt_tokens)) {
+    normalized.prompt_tokens = usage.prompt_tokens;
+  }
+  if (isNumber(usage.completion_tokens)) {
+    normalized.completion_tokens = usage.completion_tokens;
+  }
+  if (isNumber(usage.total_tokens)) {
+    normalized.total_tokens = usage.total_tokens;
+  }
+
+  // Anthropic format: input_tokens, output_tokens
+  if (isNumber(usage.input_tokens)) {
+    normalized.prompt_tokens = usage.input_tokens;
+  }
+  if (isNumber(usage.output_tokens)) {
+    normalized.completion_tokens = usage.output_tokens;
+  }
+
+  // Gemini format: promptTokenCount, candidatesTokenCount, totalTokenCount
+  if (isNumber(usage.promptTokenCount)) {
+    normalized.prompt_tokens = usage.promptTokenCount;
+  }
+  if (isNumber(usage.candidatesTokenCount)) {
+    normalized.completion_tokens = usage.candidatesTokenCount;
+  }
+  if (isNumber(usage.totalTokenCount)) {
+    normalized.total_tokens = usage.totalTokenCount;
+  }
+
+  // Calculate total if not provided
+  if (
+    !normalized.total_tokens &&
+    normalized.prompt_tokens &&
+    normalized.completion_tokens
+  ) {
+    normalized.total_tokens =
+      normalized.prompt_tokens + normalized.completion_tokens;
+  }
+
+  // Return undefined if no usage data was found
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
 export interface ProviderFormatter {
-  formatInput: (input: any) => PrettyViewData | null;
-  formatOutput: (output: any) => PrettyViewData | null;
+  formatInput: (input: unknown) => PrettyViewData | null;
+  formatOutput: (output: unknown) => PrettyViewData | null;
 }
 
 /**
  * OpenAI formatter for pretty view
  */
 const openAIFormatter: ProviderFormatter = {
-  formatInput: (input: any): PrettyViewData | null => {
-    if (!isObject(input) || !("messages" in input) || !isArray(input.messages)) {
+  formatInput: (input: unknown): PrettyViewData | null => {
+    if (
+      !isObject(input) ||
+      !("messages" in input) ||
+      !isArray(input.messages)
+    ) {
       return null;
     }
 
@@ -44,7 +103,8 @@ const openAIFormatter: ProviderFormatter = {
     } else if (isArray(lastMessage.content)) {
       // Handle multimodal content
       const textContent = lastMessage.content.find(
-        (item: any) => isObject(item) && item.type === "text" && isString(item.text)
+        (item: unknown) =>
+          isObject(item) && item.type === "text" && isString(item.text),
       );
       if (textContent) {
         content = textContent.text;
@@ -65,8 +125,12 @@ const openAIFormatter: ProviderFormatter = {
     };
   },
 
-  formatOutput: (output: any): PrettyViewData | null => {
-    if (!isObject(output) || !("choices" in output) || !isArray(output.choices)) {
+  formatOutput: (output: unknown): PrettyViewData | null => {
+    if (
+      !isObject(output) ||
+      !("choices" in output) ||
+      !isArray(output.choices)
+    ) {
       return null;
     }
 
@@ -76,7 +140,11 @@ const openAIFormatter: ProviderFormatter = {
     }
 
     const message = lastChoice.message;
-    if (!isObject(message) || !("content" in message) || !isString(message.content)) {
+    if (
+      !isObject(message) ||
+      !("content" in message) ||
+      !isString(message.content)
+    ) {
       return null;
     }
 
@@ -84,7 +152,7 @@ const openAIFormatter: ProviderFormatter = {
       content: message.content,
       metadata: {
         model: output.model,
-        usage: output.usage,
+        usage: normalizeUsageData(output.usage),
         finish_reason: lastChoice.finish_reason,
       },
     };
@@ -95,8 +163,12 @@ const openAIFormatter: ProviderFormatter = {
  * Anthropic formatter for pretty view
  */
 const anthropicFormatter: ProviderFormatter = {
-  formatInput: (input: any): PrettyViewData | null => {
-    if (!isObject(input) || !("messages" in input) || !isArray(input.messages)) {
+  formatInput: (input: unknown): PrettyViewData | null => {
+    if (
+      !isObject(input) ||
+      !("messages" in input) ||
+      !isArray(input.messages)
+    ) {
       return null;
     }
 
@@ -111,7 +183,8 @@ const anthropicFormatter: ProviderFormatter = {
     } else if (isArray(lastMessage.content)) {
       // Handle multimodal content
       const textContent = lastMessage.content.find(
-        (item: any) => isObject(item) && item.type === "text" && isString(item.text)
+        (item: unknown) =>
+          isObject(item) && item.type === "text" && isString(item.text),
       );
       if (textContent) {
         content = textContent.text;
@@ -132,7 +205,7 @@ const anthropicFormatter: ProviderFormatter = {
     };
   },
 
-  formatOutput: (output: any): PrettyViewData | null => {
+  formatOutput: (output: unknown): PrettyViewData | null => {
     if (!isObject(output) || !("content" in output)) {
       return null;
     }
@@ -143,7 +216,8 @@ const anthropicFormatter: ProviderFormatter = {
     } else if (isArray(output.content)) {
       // Handle multimodal content
       const textContent = output.content.find(
-        (item: any) => isObject(item) && item.type === "text" && isString(item.text)
+        (item: unknown) =>
+          isObject(item) && item.type === "text" && isString(item.text),
       );
       if (textContent) {
         content = textContent.text;
@@ -158,7 +232,7 @@ const anthropicFormatter: ProviderFormatter = {
       content,
       metadata: {
         model: output.model,
-        usage: output.usage,
+        usage: normalizeUsageData(output.usage),
         stop_reason: output.stop_reason,
       },
     };
@@ -169,18 +243,30 @@ const anthropicFormatter: ProviderFormatter = {
  * Gemini formatter for pretty view
  */
 const geminiFormatter: ProviderFormatter = {
-  formatInput: (input: any): PrettyViewData | null => {
-    if (!isObject(input) || !("contents" in input) || !isArray(input.contents)) {
+  formatInput: (input: unknown): PrettyViewData | null => {
+    if (
+      !isObject(input) ||
+      !("contents" in input) ||
+      !isArray(input.contents)
+    ) {
       return null;
     }
 
     const lastContent = last(input.contents);
-    if (!isObject(lastContent) || !("parts" in lastContent) || !isArray(lastContent.parts)) {
+    if (
+      !isObject(lastContent) ||
+      !("parts" in lastContent) ||
+      !isArray(lastContent.parts)
+    ) {
       return null;
     }
 
     const lastPart = last(lastContent.parts);
-    if (!isObject(lastPart) || !("text" in lastPart) || !isString(lastPart.text)) {
+    if (
+      !isObject(lastPart) ||
+      !("text" in lastPart) ||
+      !isString(lastPart.text)
+    ) {
       return null;
     }
 
@@ -194,8 +280,12 @@ const geminiFormatter: ProviderFormatter = {
     };
   },
 
-  formatOutput: (output: any): PrettyViewData | null => {
-    if (!isObject(output) || !("candidates" in output) || !isArray(output.candidates)) {
+  formatOutput: (output: unknown): PrettyViewData | null => {
+    if (
+      !isObject(output) ||
+      !("candidates" in output) ||
+      !isArray(output.candidates)
+    ) {
       return null;
     }
 
@@ -205,12 +295,20 @@ const geminiFormatter: ProviderFormatter = {
     }
 
     const content = lastCandidate.content;
-    if (!isObject(content) || !("parts" in content) || !isArray(content.parts)) {
+    if (
+      !isObject(content) ||
+      !("parts" in content) ||
+      !isArray(content.parts)
+    ) {
       return null;
     }
 
     const lastPart = last(content.parts);
-    if (!isObject(lastPart) || !("text" in lastPart) || !isString(lastPart.text)) {
+    if (
+      !isObject(lastPart) ||
+      !("text" in lastPart) ||
+      !isString(lastPart.text)
+    ) {
       return null;
     }
 
@@ -218,7 +316,7 @@ const geminiFormatter: ProviderFormatter = {
       content: lastPart.text,
       metadata: {
         model: output.model,
-        usage: output.usageMetadata,
+        usage: normalizeUsageData(output.usageMetadata),
         finishReason: lastCandidate.finishReason,
       },
     };
@@ -229,12 +327,12 @@ const geminiFormatter: ProviderFormatter = {
  * Vertex AI formatter for pretty view (similar to Gemini)
  */
 const vertexAIFormatter: ProviderFormatter = {
-  formatInput: (input: any): PrettyViewData | null => {
+  formatInput: (input: unknown): PrettyViewData | null => {
     // Vertex AI uses similar structure to Gemini
     return geminiFormatter.formatInput(input);
   },
 
-  formatOutput: (output: any): PrettyViewData | null => {
+  formatOutput: (output: unknown): PrettyViewData | null => {
     // Vertex AI uses similar structure to Gemini
     return geminiFormatter.formatOutput(output);
   },
@@ -253,12 +351,27 @@ const providerFormatters: Record<PROVIDER_TYPE, ProviderFormatter> = {
 };
 
 /**
+ * Get list of providers that support pretty view formatting
+ * Derived from providerFormatters to ensure consistency
+ */
+export const getSupportedProviders = (): PROVIDER_TYPE[] => {
+  return Object.keys(providerFormatters) as PROVIDER_TYPE[];
+};
+
+/**
+ * Check if a provider supports pretty view formatting
+ */
+export const supportsPrettyView = (provider: PROVIDER_TYPE): boolean => {
+  return provider in providerFormatters;
+};
+
+/**
  * Formats input/output data for a specific provider
  */
 export const formatProviderData = (
   provider: PROVIDER_TYPE,
-  data: any,
-  type: "input" | "output"
+  data: unknown,
+  type: "input" | "output",
 ): PrettyViewData | null => {
   const formatter = providerFormatters[provider];
   if (!formatter) {
@@ -277,8 +390,8 @@ export const formatProviderData = (
  */
 export const canFormatProviderData = (
   provider: PROVIDER_TYPE,
-  data: any,
-  type: "input" | "output"
+  data: unknown,
+  type: "input" | "output",
 ): boolean => {
   const formatted = formatProviderData(provider, data, type);
   return formatted !== null && formatted.content.length > 0;

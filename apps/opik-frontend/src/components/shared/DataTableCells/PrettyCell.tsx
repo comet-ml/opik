@@ -7,7 +7,7 @@ import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWr
 import { prettifyMessage } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
 import { CompactPrettyView } from "@/components/shared/PrettyView";
-import { Trace, Span } from "@/types/traces";
+import { isTraceOrSpan } from "@/lib/type-guards";
 
 type CustomMeta = {
   fieldType: "input" | "output";
@@ -26,8 +26,8 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const value = context.getValue() as string | object | undefined | null;
 
   // Try to get the full trace/span data from the row
-  const rowData = context.row.original as any;
-  const isTraceOrSpan = rowData && (rowData.id && (rowData.project_id || rowData.trace_id));
+  const rowData = context.row.original;
+  const isValidTraceOrSpan = isTraceOrSpan(rowData);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
@@ -37,11 +37,11 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
-    // If we have trace/span data, use the new pretty view
-    if (isTraceOrSpan && (rowData as Trace | Span)) {
+    // If we have valid trace/span data, use the new pretty view
+    if (isValidTraceOrSpan) {
       return (
         <CompactPrettyView
-          data={rowData as Trace | Span}
+          data={rowData}
           type={fieldType}
           maxLength={maxDataLength}
         />
@@ -49,13 +49,15 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     }
 
     // Fallback to original logic for other data types
-    const rawValue = isObject(value) ? JSON.stringify(value, null, 2) : (value ?? "-");
+    const rawValue = isObject(value)
+      ? JSON.stringify(value, null, 2)
+      : value ?? "-";
     const hasExceededLimit = rawValue.length > maxDataLength;
-    
+
     const response = prettifyMessage(value, { type: fieldType });
-    const message = isObject(response.message) 
-      ? JSON.stringify(value, null, 2) 
-      : (response.message || "");
+    const message = isObject(response.message)
+      ? JSON.stringify(value, null, 2)
+      : response.message || "";
 
     if (isSmall) {
       return (
@@ -75,7 +77,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
         {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
       </div>
     );
-  }, [isTraceOrSpan, rowData, fieldType, maxDataLength, value, isSmall]);
+  }, [isValidTraceOrSpan, rowData, fieldType, maxDataLength, value, isSmall]);
 
   return (
     <CellWrapper
