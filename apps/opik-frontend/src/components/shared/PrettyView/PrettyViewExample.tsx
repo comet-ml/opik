@@ -31,7 +31,7 @@ const PrettyViewExample: React.FC<PrettyViewExampleProps> = ({
             <h4 className="comet-body-s-accented mb-2">Input</h4>
             <PrettyViewContainer data={trace} type="input" />
           </div>
-          
+
           <div>
             <h4 className="comet-body-s-accented mb-2">Output</h4>
             <PrettyViewContainer data={trace} type="output" />

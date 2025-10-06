@@ -1,5 +1,6 @@
 import { PROVIDER_TYPE } from "@/types/providers";
 import { Trace, Span } from "@/types/traces";
+import { supportsPrettyView as schemaSupportsPrettyView } from "@/lib/provider-schemas";
 import isString from "lodash/isString";
 import isObject from "lodash/isObject";
 
@@ -7,12 +8,12 @@ import isObject from "lodash/isObject";
  * Detects the LLM provider from trace or span data
  */
 export const detectProvider = (data: Trace | Span): PROVIDER_TYPE | null => {
-  // Check if provider is explicitly set in span
+  // 1. Check if provider is explicitly set in span (most reliable)
   if ("provider" in data && isString(data.provider)) {
     return data.provider as PROVIDER_TYPE;
   }
 
-  // Check metadata for provider information
+  // 2. Check metadata for provider information (very reliable)
   if (isObject(data.metadata) && "provider" in data.metadata) {
     const provider = data.metadata.provider;
     if (isString(provider)) {
@@ -20,12 +21,12 @@ export const detectProvider = (data: Trace | Span): PROVIDER_TYPE | null => {
     }
   }
 
-  // Check model name to infer provider
+  // 3. Check model name to infer provider (reliable for most cases)
   if ("model" in data && isString(data.model)) {
     return detectProviderFromModel(data.model);
   }
 
-  // Check metadata for model information
+  // 4. Check metadata for model information
   if (isObject(data.metadata) && "model" in data.metadata) {
     const model = data.metadata.model;
     if (isString(model)) {
@@ -33,7 +34,7 @@ export const detectProvider = (data: Trace | Span): PROVIDER_TYPE | null => {
     }
   }
 
-  // Check input/output structure for provider-specific patterns
+  // 5. Check input/output structure for provider-specific patterns (least reliable)
   return detectProviderFromStructure(data);
 };
 
@@ -74,34 +75,31 @@ const detectProviderFromModel = (model: string): PROVIDER_TYPE | null => {
 /**
  * Detects provider from input/output structure patterns
  */
-const detectProviderFromStructure = (data: Trace | Span): PROVIDER_TYPE | null => {
-  // Check for OpenAI structure
-  if (isObject(data.input) && "messages" in data.input) {
-    return PROVIDER_TYPE.OPEN_AI;
-  }
-
+const detectProviderFromStructure = (
+  data: Trace | Span,
+): PROVIDER_TYPE | null => {
+  // Check for OpenAI structure - look for the distinctive "choices" output
   if (isObject(data.output) && "choices" in data.output) {
     return PROVIDER_TYPE.OPEN_AI;
   }
 
-  // Check for Anthropic structure
-  if (isObject(data.input) && "messages" in data.input) {
-    const messages = data.input.messages;
-    if (Array.isArray(messages) && messages.length > 0) {
-      const firstMessage = messages[0];
-      if (isObject(firstMessage) && "role" in firstMessage) {
-        // Anthropic uses different role names
-        if (firstMessage.role === "user" || firstMessage.role === "assistant") {
-          return PROVIDER_TYPE.ANTHROPIC;
-        }
-      }
-    }
+  // Check for Anthropic structure - look for direct "content" in output
+  if (
+    isObject(data.output) &&
+    "content" in data.output &&
+    !("choices" in data.output)
+  ) {
+    return PROVIDER_TYPE.ANTHROPIC;
   }
 
-  // Check for Google/Gemini structure
+  // Check for Google/Gemini structure - distinctive "contents" field
   if (isObject(data.input) && "contents" in data.input) {
     return PROVIDER_TYPE.GEMINI;
   }
+
+  // Note: We can't distinguish OpenAI vs Anthropic based on input "messages" alone
+  // since both use the same structure. We need to rely on output structure or
+  // explicit provider information from metadata/model names.
 
   return null;
 };
@@ -124,14 +122,8 @@ export const getProviderDisplayName = (provider: PROVIDER_TYPE): string => {
 
 /**
  * Checks if a provider supports pretty view formatting
+ * Delegates to provider-schemas to ensure consistency
  */
 export const supportsPrettyView = (provider: PROVIDER_TYPE): boolean => {
-  const supportedProviders = [
-    PROVIDER_TYPE.OPEN_AI,
-    PROVIDER_TYPE.ANTHROPIC,
-    PROVIDER_TYPE.GEMINI,
-    PROVIDER_TYPE.VERTEX_AI,
-  ];
-
-  return supportedProviders.includes(provider);
+  return schemaSupportsPrettyView(provider);
 };

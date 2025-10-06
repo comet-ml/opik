@@ -2,12 +2,14 @@ import React from "react";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { PrettyViewData } from "@/lib/provider-schemas";
 import { getProviderDisplayName } from "@/lib/provider-detection";
-import { getProviderBadgeVariant, getProviderIcon, getProviderClassName } from "@/lib/provider-styling";
+import {
+  getProviderBadgeVariant,
+  getProviderIcon,
+  getProviderClassName,
+} from "@/lib/provider-styling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownPreview } from "@/components/shared/MarkdownPreview";
-import { JsonView } from "@/components/shared/JsonView";
-import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import { cn } from "@/lib/utils";
 
 interface ProviderPrettyViewProps {
@@ -23,7 +25,6 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
   type,
   className,
 }) => {
-  const jsonViewTheme = useJsonViewTheme();
   const providerName = getProviderDisplayName(provider);
 
   return (
@@ -34,7 +35,10 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
             {type === "input" ? "Input" : "Output"}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Badge variant={getProviderBadgeVariant(provider)} className="comet-body-xs">
+            <Badge
+              variant={getProviderBadgeVariant(provider)}
+              className="comet-body-xs"
+            >
               <span className="mr-1">{getProviderIcon(provider)}</span>
               {providerName}
             </Badge>
@@ -62,31 +66,47 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {data.metadata.model && (
                   <div>
-                    <span className="comet-body-xs text-muted-foreground">Model:</span>
-                    <p className={getProviderClassName(provider, "comet-body-s")}>{data.metadata.model}</p>
+                    <span className="comet-body-xs text-muted-foreground">
+                      Model:
+                    </span>
+                    <p
+                      className={getProviderClassName(provider, "comet-body-s")}
+                    >
+                      {data.metadata.model}
+                    </p>
                   </div>
                 )}
                 {data.metadata.temperature !== undefined && (
                   <div>
-                    <span className="comet-body-xs text-muted-foreground">Temperature:</span>
+                    <span className="comet-body-xs text-muted-foreground">
+                      Temperature:
+                    </span>
                     <p className="comet-body-s">{data.metadata.temperature}</p>
                   </div>
                 )}
                 {data.metadata.max_tokens && (
                   <div>
-                    <span className="comet-body-xs text-muted-foreground">Max Tokens:</span>
+                    <span className="comet-body-xs text-muted-foreground">
+                      Max Tokens:
+                    </span>
                     <p className="comet-body-s">{data.metadata.max_tokens}</p>
                   </div>
                 )}
                 {data.metadata.finish_reason && (
                   <div>
-                    <span className="comet-body-xs text-muted-foreground">Finish Reason:</span>
-                    <p className="comet-body-s">{data.metadata.finish_reason}</p>
+                    <span className="comet-body-xs text-muted-foreground">
+                      Finish Reason:
+                    </span>
+                    <p className="comet-body-s">
+                      {data.metadata.finish_reason}
+                    </p>
                   </div>
                 )}
                 {data.metadata.stop_reason && (
                   <div>
-                    <span className="comet-body-xs text-muted-foreground">Stop Reason:</span>
+                    <span className="comet-body-xs text-muted-foreground">
+                      Stop Reason:
+                    </span>
                     <p className="comet-body-s">{data.metadata.stop_reason}</p>
                   </div>
                 )}
@@ -99,7 +119,9 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                     {data.metadata.usage.prompt_tokens !== undefined && (
                       <div className="rounded-md bg-muted p-2">
-                        <span className="comet-body-xs text-muted-foreground">Prompt Tokens:</span>
+                        <span className="comet-body-xs text-muted-foreground">
+                          Prompt Tokens:
+                        </span>
                         <p className="comet-body-s font-medium">
                           {data.metadata.usage.prompt_tokens.toLocaleString()}
                         </p>
@@ -107,7 +129,9 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
                     )}
                     {data.metadata.usage.completion_tokens !== undefined && (
                       <div className="rounded-md bg-muted p-2">
-                        <span className="comet-body-xs text-muted-foreground">Completion Tokens:</span>
+                        <span className="comet-body-xs text-muted-foreground">
+                          Completion Tokens:
+                        </span>
                         <p className="comet-body-s font-medium">
                           {data.metadata.usage.completion_tokens.toLocaleString()}
                         </p>
@@ -115,7 +139,9 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
                     )}
                     {data.metadata.usage.total_tokens !== undefined && (
                       <div className="rounded-md bg-muted p-2">
-                        <span className="comet-body-xs text-muted-foreground">Total Tokens:</span>
+                        <span className="comet-body-xs text-muted-foreground">
+                          Total Tokens:
+                        </span>
                         <p className="comet-body-s font-medium">
                           {data.metadata.usage.total_tokens.toLocaleString()}
                         </p>
