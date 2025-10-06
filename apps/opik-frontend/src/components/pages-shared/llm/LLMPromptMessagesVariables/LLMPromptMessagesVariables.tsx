@@ -1,11 +1,11 @@
 import React, { useCallback, useMemo } from "react";
-import { Info } from "lucide-react";
 
 import { DropdownOption } from "@/types/shared";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import LLMPromptMessagesVariable from "@/components/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariable";
 import { Description } from "@/components/ui/description";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINERS_MAP, EXPLAINER_ID } from "@/constants/explainers";
 
 const DEFAULT_DESCRIPTION =
   "Detected variables in your prompt (e.g., {{variable1}}) will appear below. For each one, select a field from a recent trace to map it — including image fields like input.image_url or output.image_base64. These mappings auto-fill the variables during rule execution.";
@@ -55,9 +55,9 @@ const LLMPromptMessagesVariables = ({
     <div className="pt-4">
       <div className="comet-body-s-accented mb-1 flex items-center gap-1 text-muted-slate">
         <span>Variable mapping ({variablesList.length})</span>
-        <TooltipWrapper content="Choose the trace field that should fill each variable. Map variables to any trace field, including image fields like input.image_url or output.image_base64.">
-          <Info className="size-3.5 text-light-slate" />
-        </TooltipWrapper>
+        <ExplainerIcon
+          {...EXPLAINERS_MAP[EXPLAINER_ID.llm_judge_variable_mapping]}
+        />
       </div>
       <Description className="mb-2 inline-block">{description}</Description>
       {parsingError && (

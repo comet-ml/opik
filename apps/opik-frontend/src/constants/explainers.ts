@@ -73,6 +73,7 @@ export enum EXPLAINER_ID {
   metric_context_precision = "metric_context_precision",
   metric_context_recall = "metric_context_recall",
   trace_opik_ai = "trace_opik_ai",
+  llm_judge_variable_mapping = "llm_judge_variable_mapping",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -512,5 +513,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.trace_opik_ai,
     description:
       "Our AI assistant allows you to analyze trace and spans data (which may include personal or sensitive information) using a generative AI model via OpenAI, L.L.C.",
+  },
+  [EXPLAINER_ID.llm_judge_variable_mapping]: {
+    id: EXPLAINER_ID.llm_judge_variable_mapping,
+    description:
+      "Choose the trace field that should fill each variable. Map variables to any trace field, including image fields like input.image_url or output.image_base64.",
   },
 };

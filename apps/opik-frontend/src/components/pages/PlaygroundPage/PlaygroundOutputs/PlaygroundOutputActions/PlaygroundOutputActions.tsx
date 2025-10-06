@@ -14,7 +14,6 @@ import {
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
 import { cn } from "@/lib/utils";
-import { isMessageContentEmpty } from "@/lib/llm";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
@@ -112,7 +111,7 @@ const PlaygroundOutputActions = ({
       (p) => !!p.model,
     );
     const allMessagesNotEmpty = Object.values(promptMap).every((p) =>
-      p.messages.every((m) => !isMessageContentEmpty(m.content)),
+      p.messages.every((m) => m.content?.length > 0),
     );
     const isDatasetEmpty =
       !loadingDatasetItems && !!datasetId && datasetItems.length === 0;

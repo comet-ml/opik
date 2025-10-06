@@ -6,22 +6,14 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
   LLM_SCHEMA_TYPE,
   LLMMessage,
-  LLMMessageContentItem,
   ProviderMessageType,
 } from "@/types/llm";
-import { COLUMN_TYPE } from "@/types/shared";
 import { generateRandomString } from "@/lib/utils";
-import {
-  getMessageContentTextSegments,
-  isMessageContentEmpty,
-  tryDeserializeMessageContent,
-} from "@/lib/llm";
 
 const RuleNameSchema = z
   .string({
@@ -39,92 +31,6 @@ const SamplingRateSchema = z.number();
 
 const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
 
-const TextMessageContentSchema = z.object({
-  type: z.literal("text"),
-  text: z.string(),
-});
-
-const ImageMessageContentSchema = z.object({
-  type: z.literal("image_url"),
-  image_url: z.object({
-    url: z.string().min(1, { message: "Image URL is required" }),
-    detail: z.string().optional(),
-  }),
-});
-
-const StructuredMessageContentSchema = z.array(
-  z.union([TextMessageContentSchema, ImageMessageContentSchema]),
-);
-
-const MessageContentSchema = z
-  .union([z.string(), StructuredMessageContentSchema])
-  .refine((value) => !isMessageContentEmpty(value as never), {
-    message: "Message is required",
-  });
-
-export const FilterSchema = z.object({
-  id: z.string(),
-  field: z.string(),
-  type: z.nativeEnum(COLUMN_TYPE).or(z.literal("")),
-  operator: z.union([
-    z.literal("contains"),
-    z.literal("not_contains"),
-    z.literal("starts_with"),
-    z.literal("ends_with"),
-    z.literal("is_empty"),
-    z.literal("is_not_empty"),
-    z.literal("="),
-    z.literal(">"),
-    z.literal(">="),
-    z.literal("<"),
-    z.literal("<="),
-    z.literal(""),
-  ]),
-  key: z.string().optional(),
-  value: z.union([z.string(), z.number()]),
-  error: z.string().optional(),
-});
-
-export const FiltersSchema = z
-  .array(FilterSchema)
-  .superRefine((filters, ctx) => {
-    filters.forEach((filter, index) => {
-      // Validate field
-      if (!filter.field || filter.field.trim().length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Field is required",
-          path: [index, "field"],
-        });
-      }
-
-      // Validate operator
-      if (!filter.operator || filter.operator.trim().length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Operator is required",
-          path: [index, "operator"],
-        });
-      }
-
-      // Validate value (only for operators that require it)
-      if (
-        filter.operator &&
-        filter.operator !== "is_empty" &&
-        filter.operator !== "is_not_empty"
-      ) {
-        const valueString = String(filter.value || "").trim();
-        if (valueString.length === 0) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Value is required for this operator",
-            path: [index, "value"],
-          });
-        }
-      }
-    });
-  });
-
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
@@ -133,18 +39,12 @@ const LLMJudgeBaseSchema = z.object({
     .min(1, { message: "Model is required" }),
   config: z.object({
     temperature: z.number(),
-    seed: z
-      .number()
-      .int()
-      .min(0, { message: "Seed must be a non-negative integer" })
-      .optional()
-      .nullable(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
     z.object({
       id: z.string(),
-      content: MessageContentSchema,
+      content: z.string().min(1, { message: "Message is required" }),
       role: z.nativeEnum(LLM_MESSAGE_ROLE),
     }),
   ),
@@ -191,10 +91,9 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) => {
-    const segments = getMessageContentTextSegments(m.content);
-    return segments.some((segment) => segment.includes("{{context}}"));
-  }).length;
+  const contextCount = data.messages.filter((m) =>
+    m.content.includes("{{context}}"),
+  ).length;
 
   if (contextCount < 1) {
     ctx.addIssue({
@@ -213,13 +112,8 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   }
 
   data.messages.forEach((message, index) => {
-    const segments = getMessageContentTextSegments(message.content);
-    segments.forEach((segment) => {
-      const matches = segment.match(/{{([^}]+)}}/g);
-      if (!matches) {
-        return;
-      }
-
+    const matches = message.content.match(/{{([^}]+)}}/g);
+    if (matches) {
       matches.forEach((match) => {
         if (match !== "{{context}}") {
           ctx.addIssue({
@@ -229,7 +123,7 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
           });
         }
       });
-    });
+    }
   });
 });
 
@@ -265,7 +159,6 @@ export const BaseEvaluationRuleFormSchema = z.object({
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
   enabled: z.boolean().default(true),
-  filters: FiltersSchema.default([]),
 });
 
 export const LLMJudgeTraceEvaluationRuleFormSchema =
@@ -310,36 +203,13 @@ export type LLMJudgeDetailsThreadFormType = z.infer<
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
 
 const convertLLMToProviderMessages = (messages: LLMMessage[]) =>
-  messages.map(
-    (m) =>
-      ({
-        content: m.content,
-        role: m.role.toUpperCase(),
-      }) as ProviderMessageType,
-  );
-
-/**
- * Normalize serialized message content into the structured shape expected by the form.
- * Supports JSON arrays as well as legacy `<<<image>>>URL<<</image>>>` placeholder formats.
- */
-const deserializeMessageContent = (
-  content: string | LLMMessageContentItem[],
-): string | LLMMessageContentItem[] => {
-  if (typeof content !== "string") {
-    return content;
-  }
-
-  return tryDeserializeMessageContent(content) as
-    | string
-    | LLMMessageContentItem[];
-};
+  messages.map((m) => ({ content: m.content, role: m.role.toUpperCase() }));
 
 const convertProviderToLLMMessages = (messages: ProviderMessageType[]) =>
   messages.map(
     (m) =>
       ({
         ...m,
-        content: deserializeMessageContent(m.content),
         role: m.role.toLowerCase(),
         id: generateRandomString(),
       }) as LLMMessage,
@@ -350,7 +220,6 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     model: data.model?.name ?? "",
     config: {
       temperature: data.model?.temperature ?? 0,
-      seed: data.model?.seed ?? null,
     },
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
@@ -363,26 +232,13 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
 export const convertLLMJudgeDataToLLMJudgeObject = (
   data: LLMJudgeDetailsTraceFormType | LLMJudgeDetailsThreadFormType,
 ) => {
-  const { temperature, seed } = data.config;
-  const model: LLMJudgeObject["model"] = {
-    name: data.model as PROVIDER_MODEL_TYPE,
-    temperature,
-  };
-
-  if (seed != null) {
-    model.seed = seed;
-  }
-
-  const sanitizedSchema = data.schema.map((item) => {
-    const { unsaved: _ignoredUnsaved, ...rest } = item;
-    void _ignoredUnsaved;
-    return rest;
-  });
-
   return {
-    model,
+    model: {
+      name: data.model,
+      temperature: data.config.temperature,
+    },
     messages: convertLLMToProviderMessages(data.messages),
     variables: data.variables,
-    schema: sanitizedSchema as LLMJudgeObject["schema"],
+    schema: data.schema,
   };
 };

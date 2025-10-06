@@ -19,23 +19,9 @@ export const mustachePlugin = ViewPlugin.fromClass(
       const widgets = [];
       for (const { from, to } of view.visibleRanges) {
         const text = view.state.doc.sliceString(from, to);
-
-        // First pass: highlight image delimiters (<<<image>>> and <<</image>>>)
-        const imageDelimiterRegex = /(<<<image>>>|<<<\/image>>>)/g;
+        const regex = /{{(.*?)}}/g;
         let match;
-        while ((match = imageDelimiterRegex.exec(text)) !== null) {
-          const start = from + match.index;
-          const end = start + match[0].length;
-          widgets.push(
-            Decoration.mark({
-              class: "text-[var(--color-orange)]",
-            }).range(start, end),
-          );
-        }
-
-        // Second pass: highlight all {{mustache}} variables (including those inside image tags)
-        const mustacheRegex = /{{(.*?)}}/g;
-        while ((match = mustacheRegex.exec(text)) !== null) {
+        while ((match = regex.exec(text)) !== null) {
           const start = from + match.index;
           const end = start + match[0].length;
           widgets.push(

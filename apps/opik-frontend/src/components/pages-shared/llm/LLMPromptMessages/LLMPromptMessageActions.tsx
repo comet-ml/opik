@@ -20,11 +20,6 @@ import usePromptById from "@/api/prompts/usePromptById";
 import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
-import {
-  isMessageContentEmpty,
-  stringifyMessageContent,
-  tryDeserializeMessageContent,
-} from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
 
@@ -77,9 +72,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
   const resetHandler = useCallback(() => {
     onChangeMessage({
-      content: tryDeserializeMessageContent(
-        promptData!.latest_version?.template ?? "",
-      ),
+      content: promptData!.latest_version?.template ?? "",
       promptVersionId: promptData!.latest_version?.id,
     });
   }, [onChangeMessage, promptData]);
@@ -88,42 +81,25 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     (version: PromptVersion) => {
       onChangeMessage({
         promptId: version.prompt_id,
+        content: version.template ?? "",
         promptVersionId: version.id,
       });
     },
     [onChangeMessage],
   );
 
-  const latestTemplateContent = useMemo(
-    () =>
-      tryDeserializeMessageContent(promptData?.latest_version?.template ?? ""),
-    [promptData?.latest_version?.template],
-  );
-  const latestTemplate = useMemo(
-    () =>
-      stringifyMessageContent(latestTemplateContent, {
-        includeImagePlaceholders: true,
-      }),
-    [latestTemplateContent],
-  );
-  const contentAsString = useMemo(
-    () =>
-      stringifyMessageContent(message.content, {
-        includeImagePlaceholders: true,
-      }),
-    [message.content],
-  );
-  const contentMatchesTemplate = contentAsString === latestTemplate;
-
   const resetDisabled =
-    !promptId || promptData?.id !== promptId || contentMatchesTemplate;
+    !promptId ||
+    promptData?.id !== promptId ||
+    (promptData?.id === promptId &&
+      message.content === promptData?.latest_version?.template);
 
-  const saveDisabled = isMessageContentEmpty(message.content);
+  const saveDisabled = message.content === "";
   const saveWarning = Boolean(
     !saveDisabled &&
       promptId &&
       promptData?.id === promptId &&
-      contentAsString !== latestTemplate,
+      message.content !== promptData?.latest_version?.template,
   );
   isPromptSaveWarningRef.current = saveWarning;
   const saveTooltip = saveWarning
@@ -175,18 +151,12 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     ) {
       selectedPromptIdRef.current = undefined;
       onChangeMessage({
-        content: latestTemplateContent,
+        content: promptData.latest_version?.template ?? "",
         promptVersionId: promptData.latest_version?.id,
       });
       setIsLoading(false);
     }
-  }, [
-    latestTemplateContent,
-    onChangeMessage,
-    promptData,
-    promptId,
-    setIsLoading,
-  ]);
+  }, [onChangeMessage, promptData, promptId, setIsLoading]);
 
   return (
     <div className="flex h-full flex-1 cursor-default flex-nowrap items-center justify-start gap-2">
@@ -195,7 +165,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           value={promptId}
           onValueChange={(id) => {
             if (id !== promptId) {
-              if (isMessageContentEmpty(content) || isUndefined(id)) {
+              if (content === "" || isUndefined(id)) {
                 handleUpdateExternalPromptId(id);
               } else {
                 setOpen("load");
@@ -249,7 +219,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         open={open === "save"}
         setOpen={setOpen}
         prompt={promptData}
-        template={contentAsString}
+        template={content}
         onSave={onSaveHandler}
       />
     </div>

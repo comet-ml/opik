@@ -17,29 +17,9 @@ const useRuleUpdateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ rule, ruleId }: UseRuleUpdateMutationParams) => {
-      // Clean schema to remove frontend-only fields like 'unsaved'
-      const cleanedRule = {
-        ...rule,
-        code: rule.code
-          ? {
-              ...rule.code,
-              // Only process schema if it exists (LLM judge rules)
-              ...("schema" in rule.code && rule.code.schema
-                ? {
-                    schema: rule.code.schema.map((item) => {
-                      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                      const { unsaved, ...rest } = item;
-                      return rest;
-                    }),
-                  }
-                : {}),
-            }
-          : rule.code,
-      };
-
       const { data } = await api.patch(
         `${AUTOMATIONS_REST_ENDPOINT}evaluators/${ruleId}`,
-        cleanedRule,
+        rule,
       );
       return data;
     },

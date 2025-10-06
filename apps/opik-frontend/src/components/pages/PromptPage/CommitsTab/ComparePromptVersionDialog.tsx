@@ -12,10 +12,6 @@ import TextDiff from "@/components/shared/CodeDiff/TextDiff";
 import { PromptVersion } from "@/types/prompts";
 import { formatDate } from "@/lib/date";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import {
-  stringifyMessageContent,
-  tryDeserializeMessageContent,
-} from "@/lib/llm";
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -99,18 +95,9 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   };
 
   const generateDiffView = (c1: string, c2: string) => {
-    const formatted1 = stringifyMessageContent(
-      tryDeserializeMessageContent(c1 ?? ""),
-      { includeImagePlaceholders: true },
-    );
-    const formatted2 = stringifyMessageContent(
-      tryDeserializeMessageContent(c2 ?? ""),
-      { includeImagePlaceholders: true },
-    );
-
     return (
       <div className="comet-code h-[620px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
-        <TextDiff content1={formatted1} content2={formatted2} />
+        <TextDiff content1={c1} content2={c2} />
       </div>
     );
   };
