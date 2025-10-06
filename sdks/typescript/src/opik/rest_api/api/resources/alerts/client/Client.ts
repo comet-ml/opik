@@ -158,8 +158,7 @@ export class Alerts {
      *     await client.alerts.createAlert({
      *         name: "name",
      *         webhook: {
-     *             url: "url",
-     *             secretToken: "secret_token"
+     *             url: "url"
      *         }
      *     })
      */
@@ -429,8 +428,7 @@ export class Alerts {
      *     await client.alerts.updateAlert("id", {
      *         name: "name",
      *         webhook: {
-     *             url: "url",
-     *             secretToken: "secret_token"
+     *             url: "url"
      *         }
      *     })
      */
