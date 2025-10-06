@@ -376,8 +376,9 @@ npm run typecheck # TypeScript type checking
 
 #### Testing
 
-```
-npm run e2e # End-to-end tests
+```bash
+cd apps/opik-frontend
+npm run test # Unit tests for utilities and helpers
 ```
 
 ### Contributing to the backend
