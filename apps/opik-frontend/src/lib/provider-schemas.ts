@@ -1,0 +1,741 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { PROVIDER_TYPE } from "@/types/providers";
+import isString from "lodash/isString";
+import isObject from "lodash/isObject";
+import isArray from "lodash/isArray";
+import isNumber from "lodash/isNumber";
+import last from "lodash/last";
+
+/**
+ * Helper function to determine content type from object properties
+ */
+function getContentTypeFromObject(obj: any): string | null {
+  // Check for common multimodal content properties
+  if (obj.image_url) return "image_url";
+  if (obj.audio) return "audio";
+  if (obj.video) return "video";
+  if (obj.document) return "document";
+  if (obj.file) return "file";
+  if (obj.attachment) return "attachment";
+
+  // Check for data URLs or base64 content
+  if (obj.url && typeof obj.url === "string") {
+    if (obj.url.startsWith("data:image/")) return "image";
+    if (obj.url.startsWith("data:audio/")) return "audio";
+    if (obj.url.startsWith("data:video/")) return "video";
+    return "media";
+  }
+
+  return null;
+}
+
+/**
+ * Provider-specific response interfaces
+ */
+
+// OpenAI interfaces
+interface OpenAIMessage {
+  role: string;
+  content: string;
+}
+
+interface OpenAIChoice {
+  message: OpenAIMessage;
+  finish_reason?: string;
+}
+
+interface OpenAIUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+interface OpenAIInput {
+  messages: OpenAIMessage[];
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+interface OpenAIOutput {
+  choices: OpenAIChoice[];
+  model?: string;
+  usage?: OpenAIUsage;
+}
+
+// Anthropic interfaces
+interface AnthropicMessage {
+  role: string;
+  content: string;
+}
+
+interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
+interface AnthropicInput {
+  messages: AnthropicMessage[];
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+interface AnthropicOutput {
+  content: string;
+  model?: string;
+  usage?: AnthropicUsage;
+  stop_reason?: string;
+}
+
+// Gemini interfaces
+interface GeminiPart {
+  text: string;
+}
+
+interface GeminiContent {
+  parts: GeminiPart[];
+}
+
+interface GeminiUsage {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+}
+
+interface GeminiInput {
+  contents: GeminiContent[];
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}
+
+interface GeminiCandidate {
+  content: GeminiContent;
+  finishReason?: string;
+}
+
+interface GeminiOutput {
+  candidates: GeminiCandidate[];
+  model?: string;
+  usageMetadata?: GeminiUsage;
+}
+
+export interface PrettyViewData {
+  content: string;
+  metadata?: {
+    model?: string;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+    };
+    finish_reason?: string;
+    stop_reason?: string;
+    finishReason?: string;
+    temperature?: number;
+    max_tokens?: number;
+    maxOutputTokens?: number;
+  };
+}
+
+/**
+ * Normalizes usage data from different providers to a standard format
+ */
+const normalizeUsageData = (
+  usage: OpenAIUsage | AnthropicUsage | GeminiUsage | unknown,
+): NonNullable<PrettyViewData["metadata"]>["usage"] | undefined => {
+  if (!isObject(usage)) return undefined;
+
+  const normalized: NonNullable<PrettyViewData["metadata"]>["usage"] = {};
+  let hasValidData = false;
+
+  // Helper function to safely extract and validate numbers
+  const extractNumber = (value: unknown): number | undefined => {
+    if (isNumber(value) && !isNaN(value) && value >= 0) {
+      return value;
+    }
+    return undefined;
+  };
+
+  // OpenAI format: prompt_tokens, completion_tokens, total_tokens
+  const openAIUsage = usage as OpenAIUsage;
+  if (openAIUsage.prompt_tokens !== undefined) {
+    const value = extractNumber(openAIUsage.prompt_tokens);
+    if (value !== undefined) {
+      normalized.prompt_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (openAIUsage.completion_tokens !== undefined) {
+    const value = extractNumber(openAIUsage.completion_tokens);
+    if (value !== undefined) {
+      normalized.completion_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (openAIUsage.total_tokens !== undefined) {
+    const value = extractNumber(openAIUsage.total_tokens);
+    if (value !== undefined) {
+      normalized.total_tokens = value;
+      hasValidData = true;
+    }
+  }
+
+  // Anthropic format: input_tokens, output_tokens (only if not already set)
+  const anthropicUsage = usage as AnthropicUsage;
+  if (
+    anthropicUsage.input_tokens !== undefined &&
+    normalized.prompt_tokens === undefined
+  ) {
+    const value = extractNumber(anthropicUsage.input_tokens);
+    if (value !== undefined) {
+      normalized.prompt_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (
+    anthropicUsage.output_tokens !== undefined &&
+    normalized.completion_tokens === undefined
+  ) {
+    const value = extractNumber(anthropicUsage.output_tokens);
+    if (value !== undefined) {
+      normalized.completion_tokens = value;
+      hasValidData = true;
+    }
+  }
+
+  // Gemini format: promptTokenCount, candidatesTokenCount, totalTokenCount (only if not already set)
+  const geminiUsage = usage as GeminiUsage;
+  if (
+    geminiUsage.promptTokenCount !== undefined &&
+    normalized.prompt_tokens === undefined
+  ) {
+    const value = extractNumber(geminiUsage.promptTokenCount);
+    if (value !== undefined) {
+      normalized.prompt_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (
+    geminiUsage.candidatesTokenCount !== undefined &&
+    normalized.completion_tokens === undefined
+  ) {
+    const value = extractNumber(geminiUsage.candidatesTokenCount);
+    if (value !== undefined) {
+      normalized.completion_tokens = value;
+      hasValidData = true;
+    }
+  }
+  if (
+    geminiUsage.totalTokenCount !== undefined &&
+    normalized.total_tokens === undefined
+  ) {
+    const value = extractNumber(geminiUsage.totalTokenCount);
+    if (value !== undefined) {
+      normalized.total_tokens = value;
+      hasValidData = true;
+    }
+  }
+
+  // Calculate total if not provided and we have both prompt and completion tokens
+  if (
+    normalized.total_tokens === undefined &&
+    normalized.prompt_tokens !== undefined &&
+    normalized.completion_tokens !== undefined
+  ) {
+    normalized.total_tokens =
+      normalized.prompt_tokens + normalized.completion_tokens;
+    hasValidData = true;
+  }
+
+  // Return undefined if no valid usage data was found
+  return hasValidData ? normalized : undefined;
+};
+
+export interface ProviderFormatter {
+  formatInput: (input: unknown) => PrettyViewData | null;
+  formatOutput: (output: unknown) => PrettyViewData | null;
+}
+
+/**
+ * OpenAI formatter for pretty view
+ */
+const openAIFormatter: ProviderFormatter = {
+  formatInput: (input: unknown): PrettyViewData | null => {
+    if (
+      !isObject(input) ||
+      !("messages" in input) ||
+      !isArray(input.messages)
+    ) {
+      return null;
+    }
+
+    const openAIInput = input as OpenAIInput;
+    // Find the last user message instead of just the last message
+    const userMessages = openAIInput.messages.filter(
+      (msg) => msg.role === "user",
+    );
+    const lastUserMessage = last(userMessages);
+    if (!isObject(lastUserMessage) || !("content" in lastUserMessage)) {
+      return null;
+    }
+
+    let content = "";
+    if (isString(lastUserMessage.content)) {
+      content = lastUserMessage.content;
+    } else if (isArray(lastUserMessage.content)) {
+      // Handle multimodal content - prefer text, but don't discard other content
+      const textContent = (lastUserMessage.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
+      );
+
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (lastUserMessage.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
+        }
+      }
+    }
+
+    if (!content) {
+      return null;
+    }
+
+    return {
+      content,
+      metadata: {
+        model: openAIInput.model,
+        temperature: openAIInput.temperature,
+        max_tokens: openAIInput.max_tokens,
+      },
+    };
+  },
+
+  formatOutput: (output: unknown): PrettyViewData | null => {
+    if (
+      !isObject(output) ||
+      !("choices" in output) ||
+      !isArray(output.choices)
+    ) {
+      return null;
+    }
+
+    const openAIOutput = output as OpenAIOutput;
+    const lastChoice = last(openAIOutput.choices);
+    if (!isObject(lastChoice) || !("message" in lastChoice)) {
+      return null;
+    }
+
+    const message = lastChoice.message;
+    if (!isObject(message) || !("content" in message)) {
+      return null;
+    }
+
+    let content = "";
+    if (isString(message.content)) {
+      content = message.content;
+    } else if (isArray(message.content)) {
+      // Handle multimodal content - prefer text, but don't discard other content
+      const textContent = (message.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
+      );
+
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (message.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
+        }
+      }
+    }
+
+    if (!content) {
+      return null;
+    }
+
+    return {
+      content,
+      metadata: {
+        model: openAIOutput.model,
+        usage: normalizeUsageData(openAIOutput.usage),
+        finish_reason: lastChoice.finish_reason,
+      },
+    };
+  },
+};
+
+/**
+ * Anthropic formatter for pretty view
+ */
+const anthropicFormatter: ProviderFormatter = {
+  formatInput: (input: unknown): PrettyViewData | null => {
+    if (
+      !isObject(input) ||
+      !("messages" in input) ||
+      !isArray(input.messages)
+    ) {
+      return null;
+    }
+
+    const anthropicInput = input as AnthropicInput;
+    // Find the last user message instead of just the last message
+    const userMessages = anthropicInput.messages.filter(
+      (msg) => msg.role === "user",
+    );
+    const lastUserMessage = last(userMessages);
+    if (!isObject(lastUserMessage) || !("content" in lastUserMessage)) {
+      return null;
+    }
+
+    let content = "";
+    if (isString(lastUserMessage.content)) {
+      content = lastUserMessage.content;
+    } else if (isArray(lastUserMessage.content)) {
+      // Handle multimodal content - prefer text, but don't discard other content
+      const textContent = (lastUserMessage.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
+      );
+
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (lastUserMessage.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
+        }
+      }
+    }
+
+    if (!content) {
+      return null;
+    }
+
+    return {
+      content,
+      metadata: {
+        model: anthropicInput.model,
+        temperature: anthropicInput.temperature,
+        max_tokens: anthropicInput.max_tokens,
+      },
+    };
+  },
+
+  formatOutput: (output: unknown): PrettyViewData | null => {
+    if (!isObject(output) || !("content" in output)) {
+      return null;
+    }
+
+    const anthropicOutput = output as AnthropicOutput;
+    let content = "";
+    if (isString(anthropicOutput.content)) {
+      content = anthropicOutput.content;
+    } else if (isArray(anthropicOutput.content)) {
+      // Handle multimodal content - prefer text, but don't discard other content
+      const textContent = (anthropicOutput.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
+      );
+
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (anthropicOutput.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            // Include items that are explicitly non-text OR have no type but have other content properties
+            // OR are completely unknown (no type and no recognizable properties)
+            return (
+              (obj.type && obj.type !== "text") ||
+              (!obj.type &&
+                (obj.image_url ||
+                  obj.audio ||
+                  obj.video ||
+                  obj.document ||
+                  obj.file ||
+                  obj.attachment)) ||
+              (!obj.type && !obj.text && Object.keys(obj).length > 0)
+            );
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          // Use a more descriptive fallback when type is falsy
+          const contentType =
+            obj.type || getContentTypeFromObject(obj) || "unknown content";
+          content = `[${contentType}]`;
+        }
+      }
+    }
+
+    if (!content) {
+      return null;
+    }
+
+    return {
+      content,
+      metadata: {
+        model: anthropicOutput.model,
+        usage: normalizeUsageData(anthropicOutput.usage),
+        stop_reason: anthropicOutput.stop_reason,
+      },
+    };
+  },
+};
+
+/**
+ * Gemini formatter for pretty view
+ */
+const geminiFormatter: ProviderFormatter = {
+  formatInput: (input: unknown): PrettyViewData | null => {
+    if (
+      !isObject(input) ||
+      !("contents" in input) ||
+      !isArray(input.contents)
+    ) {
+      return null;
+    }
+
+    const geminiInput = input as GeminiInput;
+    const lastContent = last(geminiInput.contents);
+    if (
+      !isObject(lastContent) ||
+      !("parts" in lastContent) ||
+      !isArray(lastContent.parts)
+    ) {
+      return null;
+    }
+
+    const lastPart = last(lastContent.parts);
+    if (
+      !isObject(lastPart) ||
+      !("text" in lastPart) ||
+      !isString(lastPart.text)
+    ) {
+      return null;
+    }
+
+    return {
+      content: lastPart.text,
+      metadata: {
+        model: geminiInput.model,
+        temperature: geminiInput.temperature,
+        maxOutputTokens: geminiInput.maxOutputTokens,
+      },
+    };
+  },
+
+  formatOutput: (output: unknown): PrettyViewData | null => {
+    if (
+      !isObject(output) ||
+      !("candidates" in output) ||
+      !isArray(output.candidates)
+    ) {
+      return null;
+    }
+
+    const geminiOutput = output as GeminiOutput;
+    const lastCandidate = last(geminiOutput.candidates);
+    if (!isObject(lastCandidate) || !("content" in lastCandidate)) {
+      return null;
+    }
+
+    const content = lastCandidate.content;
+    if (
+      !isObject(content) ||
+      !("parts" in content) ||
+      !isArray(content.parts)
+    ) {
+      return null;
+    }
+
+    const lastPart = last(content.parts);
+    if (
+      !isObject(lastPart) ||
+      !("text" in lastPart) ||
+      !isString(lastPart.text)
+    ) {
+      return null;
+    }
+
+    return {
+      content: lastPart.text,
+      metadata: {
+        model: geminiOutput.model,
+        usage: normalizeUsageData(geminiOutput.usageMetadata),
+        finishReason: lastCandidate.finishReason,
+      },
+    };
+  },
+};
+
+/**
+ * Vertex AI formatter for pretty view (similar to Gemini)
+ */
+const vertexAIFormatter: ProviderFormatter = {
+  formatInput: (input: unknown): PrettyViewData | null => {
+    // Vertex AI uses similar structure to Gemini
+    return geminiFormatter.formatInput(input);
+  },
+
+  formatOutput: (output: unknown): PrettyViewData | null => {
+    // Vertex AI uses similar structure to Gemini
+    return geminiFormatter.formatOutput(output);
+  },
+};
+
+/**
+ * Provider formatters registry
+ */
+const providerFormatters: Record<PROVIDER_TYPE, ProviderFormatter> = {
+  [PROVIDER_TYPE.OPEN_AI]: openAIFormatter,
+  [PROVIDER_TYPE.ANTHROPIC]: anthropicFormatter,
+  [PROVIDER_TYPE.GEMINI]: geminiFormatter,
+  [PROVIDER_TYPE.VERTEX_AI]: vertexAIFormatter,
+  [PROVIDER_TYPE.OPEN_ROUTER]: openAIFormatter, // OpenRouter is OpenAI-compatible
+  [PROVIDER_TYPE.CUSTOM]: openAIFormatter, // Custom providers are typically OpenAI-compatible
+};
+
+/**
+ * Get list of providers that support pretty view formatting
+ * Derived from providerFormatters to ensure consistency
+ */
+export const getSupportedProviders = (): PROVIDER_TYPE[] => {
+  return Object.keys(providerFormatters) as PROVIDER_TYPE[];
+};
+
+/**
+ * Check if a provider supports pretty view formatting
+ */
+export const supportsPrettyView = (provider: PROVIDER_TYPE): boolean => {
+  return provider in providerFormatters;
+};
+
+/**
+ * Formats input/output data for a specific provider
+ */
+export const formatProviderData = (
+  provider: PROVIDER_TYPE,
+  data: unknown,
+  type: "input" | "output",
+): PrettyViewData | null => {
+  const formatter = providerFormatters[provider];
+  if (!formatter) {
+    return null;
+  }
+
+  if (type === "input") {
+    return formatter.formatInput(data);
+  } else {
+    return formatter.formatOutput(data);
+  }
+};
+
+/**
+ * Checks if data can be formatted for a specific provider
+ */
+export const canFormatProviderData = (
+  provider: PROVIDER_TYPE,
+  data: unknown,
+  type: "input" | "output",
+): boolean => {
+  const formatted = formatProviderData(provider, data, type);
+  return formatted !== null && formatted.content.length > 0;
+};
