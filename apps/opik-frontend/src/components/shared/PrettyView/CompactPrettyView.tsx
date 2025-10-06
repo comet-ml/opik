@@ -5,6 +5,7 @@ import {
   formatProviderData,
   canFormatProviderData,
 } from "@/lib/provider-schemas";
+import { isTraceOrSpan } from "@/lib/type-guards";
 import JsonView from "react18-json-view";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import { cn } from "@/lib/utils";
@@ -26,13 +27,23 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
 }) => {
   const jsonViewTheme = useJsonViewTheme();
 
-  const { formattedData, shouldUsePrettyView } = useMemo(() => {
+  const { formattedData, shouldUsePrettyView, isValidData } = useMemo(() => {
+    // Validate that data is actually a Trace or Span
+    if (!isTraceOrSpan(data)) {
+      return {
+        formattedData: null,
+        shouldUsePrettyView: false,
+        isValidData: false,
+      };
+    }
+
     const provider = detectProvider(data);
 
     if (!provider || !supportsPrettyView(provider)) {
       return {
         formattedData: null,
         shouldUsePrettyView: false,
+        isValidData: true,
       };
     }
 
@@ -47,8 +58,18 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
     return {
       formattedData,
       shouldUsePrettyView,
+      isValidData: true,
     };
   }, [data, type]);
+
+  // Handle invalid data
+  if (!isValidData) {
+    return (
+      <span className={cn("text-muted-foreground", className)}>
+        Invalid data structure
+      </span>
+    );
+  }
 
   // If we can't use pretty view, fall back to JSON view
   if (!shouldUsePrettyView || !formattedData) {

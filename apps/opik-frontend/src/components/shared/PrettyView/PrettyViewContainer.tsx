@@ -67,27 +67,11 @@ const PrettyViewContainer: React.FC<PrettyViewContainerProps> = ({
 
   // Handle invalid data
   if (!isValidData) {
-    const rawData = type === "input" ? data.input : data.output;
-
-    if (isObject(rawData)) {
-      return (
-        <div className={cn("w-full", className)}>
-          <JsonView
-            src={rawData}
-            {...jsonViewTheme}
-            className="comet-code"
-            collapseStringsAfterLength={10000}
-            enableClipboard={false}
-          />
-        </div>
-      );
-    } else if (isUndefined(rawData)) {
-      return <span className={cn("text-muted-foreground", className)}>-</span>;
-    } else {
-      return (
-        <span className={cn("comet-body", className)}>{String(rawData)}</span>
-      );
-    }
+    return (
+      <span className={cn("text-muted-foreground", className)}>
+        Invalid data structure
+      </span>
+    );
   }
 
   // If we can't use pretty view, fall back to JSON view

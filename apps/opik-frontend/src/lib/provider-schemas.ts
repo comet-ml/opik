@@ -6,6 +6,98 @@ import isArray from "lodash/isArray";
 import isNumber from "lodash/isNumber";
 import last from "lodash/last";
 
+/**
+ * Provider-specific response interfaces
+ */
+
+// OpenAI interfaces
+interface OpenAIMessage {
+  role: string;
+  content: string;
+}
+
+interface OpenAIChoice {
+  message: OpenAIMessage;
+  finish_reason?: string;
+}
+
+interface OpenAIUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+interface OpenAIInput {
+  messages: OpenAIMessage[];
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+interface OpenAIOutput {
+  choices: OpenAIChoice[];
+  model?: string;
+  usage?: OpenAIUsage;
+}
+
+// Anthropic interfaces
+interface AnthropicMessage {
+  role: string;
+  content: string;
+}
+
+interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
+interface AnthropicInput {
+  messages: AnthropicMessage[];
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+interface AnthropicOutput {
+  content: string;
+  model?: string;
+  usage?: AnthropicUsage;
+  stop_reason?: string;
+}
+
+// Gemini interfaces
+interface GeminiPart {
+  text: string;
+}
+
+interface GeminiContent {
+  parts: GeminiPart[];
+}
+
+interface GeminiUsage {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+}
+
+interface GeminiInput {
+  contents: GeminiContent[];
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}
+
+interface GeminiCandidate {
+  content: GeminiContent;
+  finishReason?: string;
+}
+
+interface GeminiOutput {
+  candidates: GeminiCandidate[];
+  model?: string;
+  usageMetadata?: GeminiUsage;
+}
+
 export interface PrettyViewData {
   content: string;
   metadata?: {
@@ -16,47 +108,52 @@ export interface PrettyViewData {
       total_tokens?: number;
     };
     finish_reason?: string;
+    stop_reason?: string;
+    finishReason?: string;
     temperature?: number;
     max_tokens?: number;
+    maxOutputTokens?: number;
   };
 }
 
 /**
  * Normalizes usage data from different providers to a standard format
  */
-const normalizeUsageData = (usage: unknown): any => {
+const normalizeUsageData = (
+  usage: OpenAIUsage | AnthropicUsage | GeminiUsage | unknown,
+): NonNullable<PrettyViewData["metadata"]>["usage"] | undefined => {
   if (!isObject(usage)) return undefined;
 
-  const normalized: any = {};
+  const normalized: NonNullable<PrettyViewData["metadata"]>["usage"] = {};
 
   // OpenAI format: prompt_tokens, completion_tokens, total_tokens
-  if (isNumber((usage as any).prompt_tokens)) {
-    normalized.prompt_tokens = (usage as any).prompt_tokens;
+  if ("prompt_tokens" in usage && isNumber(usage.prompt_tokens)) {
+    normalized.prompt_tokens = usage.prompt_tokens;
   }
-  if (isNumber((usage as any).completion_tokens)) {
-    normalized.completion_tokens = (usage as any).completion_tokens;
+  if ("completion_tokens" in usage && isNumber(usage.completion_tokens)) {
+    normalized.completion_tokens = usage.completion_tokens;
   }
-  if (isNumber((usage as any).total_tokens)) {
-    normalized.total_tokens = (usage as any).total_tokens;
+  if ("total_tokens" in usage && isNumber(usage.total_tokens)) {
+    normalized.total_tokens = usage.total_tokens;
   }
 
   // Anthropic format: input_tokens, output_tokens
-  if (isNumber((usage as any).input_tokens)) {
-    normalized.prompt_tokens = (usage as any).input_tokens;
+  if ("input_tokens" in usage && isNumber(usage.input_tokens)) {
+    normalized.prompt_tokens = usage.input_tokens;
   }
-  if (isNumber((usage as any).output_tokens)) {
-    normalized.completion_tokens = (usage as any).output_tokens;
+  if ("output_tokens" in usage && isNumber(usage.output_tokens)) {
+    normalized.completion_tokens = usage.output_tokens;
   }
 
   // Gemini format: promptTokenCount, candidatesTokenCount, totalTokenCount
-  if (isNumber((usage as any).promptTokenCount)) {
-    normalized.prompt_tokens = (usage as any).promptTokenCount;
+  if ("promptTokenCount" in usage && isNumber(usage.promptTokenCount)) {
+    normalized.prompt_tokens = usage.promptTokenCount;
   }
-  if (isNumber((usage as any).candidatesTokenCount)) {
-    normalized.completion_tokens = (usage as any).candidatesTokenCount;
+  if ("candidatesTokenCount" in usage && isNumber(usage.candidatesTokenCount)) {
+    normalized.completion_tokens = usage.candidatesTokenCount;
   }
-  if (isNumber((usage as any).totalTokenCount)) {
-    normalized.total_tokens = (usage as any).totalTokenCount;
+  if ("totalTokenCount" in usage && isNumber(usage.totalTokenCount)) {
+    normalized.total_tokens = usage.totalTokenCount;
   }
 
   // Calculate total if not provided
@@ -91,7 +188,8 @@ const openAIFormatter: ProviderFormatter = {
       return null;
     }
 
-    const lastMessage = last(input.messages);
+    const openAIInput = input as OpenAIInput;
+    const lastMessage = last(openAIInput.messages);
     if (!isObject(lastMessage) || !("content" in lastMessage)) {
       return null;
     }
@@ -101,14 +199,15 @@ const openAIFormatter: ProviderFormatter = {
       content = lastMessage.content;
     } else if (isArray(lastMessage.content)) {
       // Handle multimodal content
-      const textContent = lastMessage.content.find(
-        (item: unknown) =>
-          isObject(item) &&
-          (item as any).type === "text" &&
-          isString((item as any).text),
+      const textContent = (lastMessage.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
       );
-      if (textContent) {
-        content = textContent.text;
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
       }
     }
 
@@ -119,9 +218,9 @@ const openAIFormatter: ProviderFormatter = {
     return {
       content,
       metadata: {
-        model: (input as any).model,
-        temperature: (input as any).temperature,
-        max_tokens: (input as any).max_tokens,
+        model: openAIInput.model,
+        temperature: openAIInput.temperature,
+        max_tokens: openAIInput.max_tokens,
       },
     };
   },
@@ -135,7 +234,8 @@ const openAIFormatter: ProviderFormatter = {
       return null;
     }
 
-    const lastChoice = last(output.choices);
+    const openAIOutput = output as OpenAIOutput;
+    const lastChoice = last(openAIOutput.choices);
     if (!isObject(lastChoice) || !("message" in lastChoice)) {
       return null;
     }
@@ -152,9 +252,9 @@ const openAIFormatter: ProviderFormatter = {
     return {
       content: message.content,
       metadata: {
-        model: (output as any).model,
-        usage: normalizeUsageData((output as any).usage),
-        finish_reason: (lastChoice as any).finish_reason,
+        model: openAIOutput.model,
+        usage: normalizeUsageData(openAIOutput.usage),
+        finish_reason: lastChoice.finish_reason,
       },
     };
   },
@@ -173,7 +273,8 @@ const anthropicFormatter: ProviderFormatter = {
       return null;
     }
 
-    const lastMessage = last(input.messages);
+    const anthropicInput = input as AnthropicInput;
+    const lastMessage = last(anthropicInput.messages);
     if (!isObject(lastMessage) || !("content" in lastMessage)) {
       return null;
     }
@@ -183,14 +284,15 @@ const anthropicFormatter: ProviderFormatter = {
       content = lastMessage.content;
     } else if (isArray(lastMessage.content)) {
       // Handle multimodal content
-      const textContent = lastMessage.content.find(
-        (item: unknown) =>
-          isObject(item) &&
-          (item as any).type === "text" &&
-          isString((item as any).text),
+      const textContent = (lastMessage.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
       );
-      if (textContent) {
-        content = textContent.text;
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
       }
     }
 
@@ -201,9 +303,9 @@ const anthropicFormatter: ProviderFormatter = {
     return {
       content,
       metadata: {
-        model: (input as any).model,
-        temperature: (input as any).temperature,
-        max_tokens: (input as any).max_tokens,
+        model: anthropicInput.model,
+        temperature: anthropicInput.temperature,
+        max_tokens: anthropicInput.max_tokens,
       },
     };
   },
@@ -213,19 +315,21 @@ const anthropicFormatter: ProviderFormatter = {
       return null;
     }
 
+    const anthropicOutput = output as AnthropicOutput;
     let content = "";
-    if (isString(output.content)) {
-      content = output.content;
-    } else if (isArray(output.content)) {
+    if (isString(anthropicOutput.content)) {
+      content = anthropicOutput.content;
+    } else if (isArray(anthropicOutput.content)) {
       // Handle multimodal content
-      const textContent = output.content.find(
-        (item: unknown) =>
-          isObject(item) &&
-          (item as any).type === "text" &&
-          isString((item as any).text),
+      const textContent = (anthropicOutput.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
       );
-      if (textContent) {
-        content = textContent.text;
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
       }
     }
 
@@ -236,10 +340,10 @@ const anthropicFormatter: ProviderFormatter = {
     return {
       content,
       metadata: {
-        model: (output as any).model,
-        usage: normalizeUsageData((output as any).usage),
-        stop_reason: (output as any).stop_reason,
-      } as any,
+        model: anthropicOutput.model,
+        usage: normalizeUsageData(anthropicOutput.usage),
+        stop_reason: anthropicOutput.stop_reason,
+      },
     };
   },
 };
@@ -257,7 +361,8 @@ const geminiFormatter: ProviderFormatter = {
       return null;
     }
 
-    const lastContent = last(input.contents);
+    const geminiInput = input as GeminiInput;
+    const lastContent = last(geminiInput.contents);
     if (
       !isObject(lastContent) ||
       !("parts" in lastContent) ||
@@ -278,10 +383,10 @@ const geminiFormatter: ProviderFormatter = {
     return {
       content: lastPart.text,
       metadata: {
-        model: (input as any).model,
-        temperature: (input as any).temperature,
-        maxOutputTokens: (input as any).maxOutputTokens,
-      } as any,
+        model: geminiInput.model,
+        temperature: geminiInput.temperature,
+        maxOutputTokens: geminiInput.maxOutputTokens,
+      },
     };
   },
 
@@ -294,7 +399,8 @@ const geminiFormatter: ProviderFormatter = {
       return null;
     }
 
-    const lastCandidate = last(output.candidates);
+    const geminiOutput = output as GeminiOutput;
+    const lastCandidate = last(geminiOutput.candidates);
     if (!isObject(lastCandidate) || !("content" in lastCandidate)) {
       return null;
     }
@@ -320,10 +426,10 @@ const geminiFormatter: ProviderFormatter = {
     return {
       content: lastPart.text,
       metadata: {
-        model: (output as any).model,
-        usage: normalizeUsageData((output as any).usageMetadata),
-        finishReason: (lastCandidate as any).finishReason,
-      } as any,
+        model: geminiOutput.model,
+        usage: normalizeUsageData(geminiOutput.usageMetadata),
+        finishReason: lastCandidate.finishReason,
+      },
     };
   },
 };

@@ -103,14 +103,12 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
                     </p>
                   </div>
                 )}
-                {(data.metadata as any).stop_reason && (
+                {data.metadata.stop_reason && (
                   <div>
                     <span className="comet-body-xs text-muted-foreground">
                       Stop Reason:
                     </span>
-                    <p className="comet-body-s">
-                      {(data.metadata as any).stop_reason}
-                    </p>
+                    <p className="comet-body-s">{data.metadata.stop_reason}</p>
                   </div>
                 )}
               </div>
