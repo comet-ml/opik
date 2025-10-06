@@ -20,7 +20,7 @@ class TracesPage:
         )
         self.delete_button_locator = (
             self.page.locator("div")
-            .filter(has_text=re.compile(r"^Add to datasetAdd tags$"))
+            .filter(has_text=re.compile(r"^Add toAdd tags$"))
             .get_by_role("button")
             .nth(3)
         )
@@ -151,7 +151,8 @@ class TracesPage:
 
     def add_all_traces_to_new_dataset(self, dataset_name: str):
         self.page.get_by_label("Select all").click()
-        self.page.get_by_role("button", name="Add to dataset").click()
+        self.page.get_by_role("button", name="Add to").click()
+        self.page.get_by_role("menuitem", name="Dataset").click()
         self.page.get_by_role("button", name="Create new dataset").click()
         self.page.get_by_placeholder("Dataset name").fill(dataset_name)
         self.page.get_by_role("button", name="Create dataset").click()

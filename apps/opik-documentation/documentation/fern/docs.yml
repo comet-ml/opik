@@ -285,6 +285,10 @@ navigation:
                 path: docs/contributing/documentation.mdx
                 slug: documentation
                 icon: fa-regular fa-book
+              - page: Local Development Setup
+                path: docs/contributing/local-development.mdx
+                slug: local-development
+                icon: fa-regular fa-laptop-code
               - page: Python SDK
                 path: docs/contributing/python-sdk.mdx
                 slug: python-sdk
@@ -373,7 +377,7 @@ navigation:
               - page: DSPy
                 path: docs/tracing/integrations/dspy.mdx
                 slug: dspy
-              - page: Google Agent Development Kit
+              - page: Google ADK
                 path: docs/tracing/integrations/adk.mdx
                 slug: adk
               - page: Haystack
@@ -394,6 +398,9 @@ navigation:
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
                 slug: llama_index
+              - page: Microsoft Agent Framework (Python)
+                path: docs/tracing/integrations/microsoft-agent-framework.mdx
+                slug: microsoft-agent-framework
               - page: OpenAI Agents
                 path: docs/tracing/integrations/openai_agents.mdx
                 slug: openai_agents
@@ -512,6 +519,16 @@ navigation:
           - page: Spring AI
             path: docs/tracing/integrations/spring-ai.mdx
             slug: spring-ai
+      - section: .NET
+        skip-slug: true
+        icon: fa-solid fa-code
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: Microsoft Agent Framework (.NET)
+                path: docs/tracing/integrations/microsoft-agent-framework-dotnet.mdx
+                slug: microsoft-agent-framework-dotnet
       - section: Ruby
         skip-slug: true
         icon: fa-solid fa-gem
@@ -672,6 +689,9 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
+          - page: Opik Configure
+            path: docs/reference/typescript-sdk/opik-configure.mdx
+            slug: opik-configure
           - section: Evaluation
             slug: evaluation
             contents:

@@ -1,0 +1,14 @@
+{
+  "printWidth": 80,
+  "proseWrap": "always",
+  "singleQuote": true,
+  "trailingComma": "all",
+  "overrides": [
+    {
+      "files": "CHANGELOG.md",
+      "options": {
+        "proseWrap": "preserve"
+      }
+    }
+  ]
+}

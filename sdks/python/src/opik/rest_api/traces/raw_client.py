@@ -516,7 +516,11 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TracePublic]:
         """
         Get trace by id
@@ -524,6 +528,8 @@ class RawTracesClient:
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -536,6 +542,9 @@ class RawTracesClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/traces/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "truncate": truncate,
+            },
             request_options=request_options,
         )
         try:
@@ -2302,7 +2311,11 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TracePublic]:
         """
         Get trace by id
@@ -2310,6 +2323,8 @@ class AsyncRawTracesClient:
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2322,6 +2337,9 @@ class AsyncRawTracesClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/traces/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "truncate": truncate,
+            },
             request_options=request_options,
         )
         try:

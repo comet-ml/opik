@@ -1,0 +1,214 @@
+---
+title: Observability for Microsoft Agent Framework (.NET) with Opik
+description: Start here to integrate Opik into your Microsoft Agent Framework-based .NET application for end-to-end LLM observability, unit testing, and optimization.
+---
+
+[Microsoft Agent Framework](https://github.com/microsoft/agent-framework) is a comprehensive multi-language framework for building, orchestrating, and deploying AI agents and multi-agent workflows with support for both Python and .NET implementations.
+
+The framework provides everything from simple chat agents to complex multi-agent workflows with graph-based orchestration, built-in OpenTelemetry integration for distributed tracing and monitoring, and a flexible middleware system for request/response processing.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=agent-framework-dotnet&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=agent-framework-dotnet&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=agent-framework-dotnet&utm_campaign=opik) for more information.
+
+<Frame>
+  <img src="/img/tracing/microsoft-agent-framework-dotnet_integration.png" alt="Microsoft Agent Framework .NET tracing" />
+</Frame>
+
+## Getting started
+
+To use the Microsoft Agent Framework .NET integration with Opik, you will need to have the Agent Framework and the required OpenTelemetry packages installed:
+
+```bash
+# Agent Framework (2 packages)
+dotnet add package Microsoft.Agents.AI --prerelease
+dotnet add package Microsoft.Extensions.AI.OpenAI --prerelease
+
+# Hosting (1 package)
+dotnet add package Microsoft.Extensions.Hosting
+
+# OpenTelemetry (3 packages)
+dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
+dotnet add package OpenTelemetry.Extensions.Hosting
+dotnet add package OpenTelemetry.Instrumentation.Http
+```
+
+You will also need to configure your OpenAI API key:
+
+```bash
+export OPENAI_API_KEY=<your-openai-api-key>
+```
+
+In addition, you will need to set the following environment variables to configure OpenTelemetry to send data to Opik:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel/v1/traces
+        export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,Comet-Workspace=default"
+        export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>"
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel/v1/traces
+        export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,Comet-Workspace=default"
+        export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>"
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel/v1/traces
+    export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash
+        export OTEL_EXPORTER_OTLP_HEADERS="projectName=<your-project-name>"
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+## Using Opik with Microsoft Agent Framework (.NET)
+
+The Microsoft Agent Framework has built-in OpenTelemetry instrumentation. You need to configure the OpenTelemetry SDK to use HTTP/Protobuf protocol and export to Opik. Here's a complete example:
+
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using OpenAI;
+using OpenTelemetry;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+
+#pragma warning disable OPENAI001
+
+const string SourceName = "AgentFramework";
+
+// Create host with OpenTelemetry configuration
+var builder = Host.CreateApplicationBuilder(args);
+
+// Configure OpenTelemetry
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource
+        .AddService(serviceName: "agent-framework-demo", serviceVersion: "1.0.0"))
+    .WithTracing(tracing => tracing
+        .AddSource(SourceName)                      // Our custom spans
+        .AddSource("*Microsoft.Extensions.AI")      // Chat client telemetry
+        .AddSource("*Microsoft.Extensions.Agents*") // Agent telemetry
+        .AddHttpClientInstrumentation()             // HTTP calls
+        .AddOtlpExporter());                        // Reads OTEL_EXPORTER_OTLP_* env vars automatically
+
+var host = builder.Build();
+await host.StartAsync();
+
+// Create instrumented chat client
+// Note: OpenAI SDK requires explicit API key, but you can read from env var
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
+    ?? throw new InvalidOperationException("OPENAI_API_KEY environment variable is required");
+
+using var instrumentedChatClient = new OpenAIClient(apiKey)
+    .GetChatClient("gpt-4o-mini")
+    .AsIChatClient()                    // Convert to Microsoft.Extensions.AI.IChatClient
+    .AsBuilder()
+    .UseOpenTelemetry(                  // Enable telemetry on chat client
+        sourceName: SourceName,
+        configure: (cfg) => cfg.EnableSensitiveData = true)
+    .Build();
+
+// Create instrumented agent
+var agent = new ChatClientAgent(
+    instrumentedChatClient,
+    name: "Assistant",
+    instructions: "You are a helpful assistant.")
+    .AsBuilder()
+    .UseOpenTelemetry(SourceName)       // Enable telemetry on agent
+    .Build();
+
+// Run agent - telemetry is automatic!
+Console.WriteLine(await agent.RunAsync("Write a haiku about AI agents."));
+
+// Ensure traces are flushed
+var tracerProvider = host.Services.GetService<TracerProvider>();
+tracerProvider?.ForceFlush();
+await Task.Delay(2000);
+
+await host.StopAsync();
+```
+
+<Note>
+**Important**: The .NET OpenTelemetry SDK requires explicitly setting `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` to use HTTP with Protocol Buffers. If not set, it defaults to gRPC which is not supported by Opik's endpoint.
+
+You can also configure this programmatically:
+```csharp
+.AddOtlpExporter(options =>
+{
+    options.Protocol = OtlpExportProtocol.HttpProtobuf;
+})
+```
+</Note>
+
+The framework will automatically:
+- Create traces for agent executions
+- Log input prompts and outputs
+- Track token usage and performance metrics
+- Capture any errors or exceptions
+
+## Further improvements
+
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).
+
+## Reference
+
+For more information about the Microsoft Agent Framework OpenTelemetry integration, see:
+- [Agent Framework OpenTelemetry Sample](https://github.com/microsoft/agent-framework/tree/main/dotnet/samples/GettingStarted/AgentOpenTelemetry)
+- [OpenTelemetry .NET Documentation](https://opentelemetry.io/docs/languages/net/)
+
+
