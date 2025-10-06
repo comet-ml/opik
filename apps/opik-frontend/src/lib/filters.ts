@@ -42,7 +42,7 @@ export const generateSearchByFieldFilters = (
   field: string,
   search?: string,
 ) => {
-  if (!search) return undefined;
+  if (!search) return [];
 
   return [
     {

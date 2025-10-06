@@ -1,7 +1,8 @@
 import {
   ALERT_EVENT_TYPE,
-  AlertEvent,
-  ALERT_CONDITION_TYPE,
+  AlertTrigger,
+  ALERT_TRIGGER_CONFIG_TYPE,
+  AlertTriggerConfig,
 } from "@/types/alerts";
 import isArray from "lodash/isArray";
 
@@ -21,38 +22,44 @@ export type EventTriggersObject = {
 
   promptLibraryNewPrompt: boolean;
   promptLibraryNewCommit: boolean;
+  promptLibraryDeleted: boolean;
 };
 
-const getProjectScopeFromConditions = (
-  conditions?: AlertEvent["conditions"],
+const getProjectScopeFromTriggerConfigs = (
+  triggerConfigs?: AlertTriggerConfig[],
 ): string[] => {
-  const projectCondition = conditions?.find(
-    (condition) => condition.type === ALERT_CONDITION_TYPE.project_scope,
+  const projectConfig = triggerConfigs?.find(
+    (config) => config.type === ALERT_TRIGGER_CONFIG_TYPE["scope:project"],
   );
 
-  if (
-    projectCondition &&
-    projectCondition.type === ALERT_CONDITION_TYPE.project_scope
-  ) {
-    return projectCondition.value || [];
+  if (projectConfig) {
+    const projectIds = projectConfig.config_value?.project_ids;
+    if (!projectIds || projectIds.trim() === "") {
+      return [];
+    }
+    return projectIds.split(",");
   }
 
   return [];
 };
 
-const createProjectScopeCondition = (projectIds: string[]) => {
+const createProjectScopeTriggerConfig = (
+  projectIds: string[],
+): AlertTriggerConfig[] => {
   if (projectIds.length === 0) return [];
 
   return [
     {
-      type: ALERT_CONDITION_TYPE.project_scope,
-      value: projectIds,
+      type: ALERT_TRIGGER_CONFIG_TYPE["scope:project"],
+      config_value: {
+        project_ids: projectIds.join(","),
+      },
     },
   ];
 };
 
-export const alertEventsToEventTriggersObject = (
-  events?: AlertEvent[],
+export const alertTriggersToEventTriggersObject = (
+  triggers?: AlertTrigger[],
 ): EventTriggersObject => {
   const retVal: EventTriggersObject = {
     traceErrorNewError: false,
@@ -67,43 +74,50 @@ export const alertEventsToEventTriggersObject = (
     feedbackScoreScopeToggle: true,
     promptLibraryNewPrompt: false,
     promptLibraryNewCommit: false,
+    promptLibraryDeleted: false,
   };
 
-  if (isArray(events)) {
-    events.forEach((event) => {
-      const projectScope = getProjectScopeFromConditions(event.conditions);
+  if (isArray(triggers)) {
+    triggers.forEach((trigger) => {
+      const projectScope = getProjectScopeFromTriggerConfigs(
+        trigger.trigger_configs,
+      );
 
-      switch (event.event_type) {
-        case ALERT_EVENT_TYPE.trace_errors:
+      switch (trigger.event_type) {
+        case ALERT_EVENT_TYPE["trace:errors"]:
           retVal.traceErrorNewError = true;
           retVal.traceErrorScope = projectScope;
           retVal.traceErrorScopeToggle = projectScope.length === 0;
           break;
 
-        case ALERT_EVENT_TYPE.guardrails:
+        case ALERT_EVENT_TYPE["span:guardrails_triggered"]:
           retVal.guardrailTriggered = true;
           retVal.guardrailScope = projectScope;
           retVal.guardrailScopeToggle = projectScope.length === 0;
           break;
 
-        case ALERT_EVENT_TYPE.trace_score:
+        case ALERT_EVENT_TYPE["trace:feedback_score"]:
           retVal.feedbackScoreNewTrace = true;
           retVal.feedbackScoreScope = projectScope;
           retVal.feedbackScoreScopeToggle = projectScope.length === 0;
           break;
 
-        case ALERT_EVENT_TYPE.thread_score:
+        case ALERT_EVENT_TYPE["trace_thread:feedback_score"]:
           retVal.feedbackScoreNewThread = true;
           retVal.feedbackScoreScope = projectScope;
           retVal.feedbackScoreScopeToggle = projectScope.length === 0;
           break;
 
-        case ALERT_EVENT_TYPE.prompt_creation:
+        case ALERT_EVENT_TYPE["prompt:created"]:
           retVal.promptLibraryNewPrompt = true;
           break;
 
-        case ALERT_EVENT_TYPE.prompt_commit:
+        case ALERT_EVENT_TYPE["prompt:committed"]:
           retVal.promptLibraryNewCommit = true;
+          break;
+
+        case ALERT_EVENT_TYPE["prompt:deleted"]:
+          retVal.promptLibraryDeleted = true;
           break;
       }
     });
@@ -112,58 +126,64 @@ export const alertEventsToEventTriggersObject = (
   return retVal;
 };
 
-export const eventTriggersObjectToAlertEvents = (
+export const eventTriggersObjectToAlertTriggers = (
   eventTriggers: EventTriggersObject,
-): AlertEvent[] => {
-  const events: AlertEvent[] = [];
+): AlertTrigger[] => {
+  const triggers: AlertTrigger[] = [];
 
   if (eventTriggers.traceErrorNewError) {
-    events.push({
-      event_type: ALERT_EVENT_TYPE.trace_errors,
-      conditions: eventTriggers.traceErrorScopeToggle
+    triggers.push({
+      event_type: ALERT_EVENT_TYPE["trace:errors"],
+      trigger_configs: eventTriggers.traceErrorScopeToggle
         ? []
-        : createProjectScopeCondition(eventTriggers.traceErrorScope),
+        : createProjectScopeTriggerConfig(eventTriggers.traceErrorScope),
     });
   }
 
   if (eventTriggers.guardrailTriggered) {
-    events.push({
-      event_type: ALERT_EVENT_TYPE.guardrails,
-      conditions: eventTriggers.guardrailScopeToggle
+    triggers.push({
+      event_type: ALERT_EVENT_TYPE["span:guardrails_triggered"],
+      trigger_configs: eventTriggers.guardrailScopeToggle
         ? []
-        : createProjectScopeCondition(eventTriggers.guardrailScope),
+        : createProjectScopeTriggerConfig(eventTriggers.guardrailScope),
     });
   }
 
   if (eventTriggers.feedbackScoreNewTrace) {
-    events.push({
-      event_type: ALERT_EVENT_TYPE.trace_score,
-      conditions: eventTriggers.feedbackScoreScopeToggle
+    triggers.push({
+      event_type: ALERT_EVENT_TYPE["trace:feedback_score"],
+      trigger_configs: eventTriggers.feedbackScoreScopeToggle
         ? []
-        : createProjectScopeCondition(eventTriggers.feedbackScoreScope),
+        : createProjectScopeTriggerConfig(eventTriggers.feedbackScoreScope),
     });
   }
 
   if (eventTriggers.feedbackScoreNewThread) {
-    events.push({
-      event_type: ALERT_EVENT_TYPE.thread_score,
-      conditions: eventTriggers.feedbackScoreScopeToggle
+    triggers.push({
+      event_type: ALERT_EVENT_TYPE["trace_thread:feedback_score"],
+      trigger_configs: eventTriggers.feedbackScoreScopeToggle
         ? []
-        : createProjectScopeCondition(eventTriggers.feedbackScoreScope),
+        : createProjectScopeTriggerConfig(eventTriggers.feedbackScoreScope),
     });
   }
 
   if (eventTriggers.promptLibraryNewPrompt) {
-    events.push({
-      event_type: ALERT_EVENT_TYPE.prompt_creation,
+    triggers.push({
+      event_type: ALERT_EVENT_TYPE["prompt:created"],
     });
   }
 
   if (eventTriggers.promptLibraryNewCommit) {
-    events.push({
-      event_type: ALERT_EVENT_TYPE.prompt_commit,
+    triggers.push({
+      event_type: ALERT_EVENT_TYPE["prompt:committed"],
     });
   }
 
-  return events;
+  if (eventTriggers.promptLibraryDeleted) {
+    triggers.push({
+      event_type: ALERT_EVENT_TYPE["prompt:deleted"],
+    });
+  }
+
+  return triggers;
 };
