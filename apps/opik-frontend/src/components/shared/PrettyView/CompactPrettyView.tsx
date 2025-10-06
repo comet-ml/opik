@@ -5,7 +5,7 @@ import {
   formatProviderData,
   canFormatProviderData,
 } from "@/lib/provider-schemas";
-import { JsonView } from "@/components/shared/JsonView";
+import JsonView from "react18-json-view";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import { cn } from "@/lib/utils";
 import isObject from "lodash/isObject";

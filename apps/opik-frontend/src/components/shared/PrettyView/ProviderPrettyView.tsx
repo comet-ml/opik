@@ -8,8 +8,8 @@ import {
   getProviderClassName,
 } from "@/lib/provider-styling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { MarkdownPreview } from "@/components/shared/MarkdownPreview";
+import { Tag } from "@/components/ui/tag";
+import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import { cn } from "@/lib/utils";
 
 interface ProviderPrettyViewProps {
@@ -35,17 +35,17 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
             {type === "input" ? "Input" : "Output"}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Badge
+            <Tag
               variant={getProviderBadgeVariant(provider)}
               className="comet-body-xs"
             >
               <span className="mr-1">{getProviderIcon(provider)}</span>
               {providerName}
-            </Badge>
+            </Tag>
             {data.metadata?.model && (
-              <Badge variant="outline" className="comet-body-xs">
+              <Tag variant="default" className="comet-body-xs">
                 {data.metadata.model}
-              </Badge>
+              </Tag>
             )}
           </div>
         </div>
@@ -102,12 +102,12 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
                     </p>
                   </div>
                 )}
-                {data.metadata.stop_reason && (
+                {(data.metadata as any).stop_reason && (
                   <div>
                     <span className="comet-body-xs text-muted-foreground">
                       Stop Reason:
                     </span>
-                    <p className="comet-body-s">{data.metadata.stop_reason}</p>
+                    <p className="comet-body-s">{(data.metadata as any).stop_reason}</p>
                   </div>
                 )}
               </div>

@@ -19,17 +19,17 @@ export const getProviderColor = (provider: PROVIDER_TYPE): string => {
 
 export const getProviderBadgeVariant = (
   provider: PROVIDER_TYPE,
-): "default" | "secondary" | "outline" => {
-  const variants: Record<PROVIDER_TYPE, "default" | "secondary" | "outline"> = {
-    [PROVIDER_TYPE.OPEN_AI]: "default",
-    [PROVIDER_TYPE.ANTHROPIC]: "secondary",
-    [PROVIDER_TYPE.GEMINI]: "outline",
-    [PROVIDER_TYPE.VERTEX_AI]: "outline",
-    [PROVIDER_TYPE.OPEN_ROUTER]: "secondary",
-    [PROVIDER_TYPE.CUSTOM]: "outline",
+): "default" | "primary" | "gray" | "purple" | "burgundy" | "pink" | "red" | "orange" | "yellow" | "green" | "turquoise" | "blue" => {
+  const variants: Record<PROVIDER_TYPE, "default" | "primary" | "gray" | "purple" | "burgundy" | "pink" | "red" | "orange" | "yellow" | "green" | "turquoise" | "blue"> = {
+    [PROVIDER_TYPE.OPEN_AI]: "green",
+    [PROVIDER_TYPE.ANTHROPIC]: "orange",
+    [PROVIDER_TYPE.GEMINI]: "blue",
+    [PROVIDER_TYPE.VERTEX_AI]: "purple",
+    [PROVIDER_TYPE.OPEN_ROUTER]: "gray",
+    [PROVIDER_TYPE.CUSTOM]: "gray",
   };
 
-  return variants[provider] || "outline";
+  return variants[provider] || "gray";
 };
 
 export const getProviderIcon = (provider: PROVIDER_TYPE): string => {
