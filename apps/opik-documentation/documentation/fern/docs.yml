@@ -661,6 +661,9 @@ navigation:
       - page: Platform Architecture
         path: docs/self-host/architecture.mdx
         slug: architecture
+      - page: Scaling Opik
+        path: docs/self-host/scaling.mdx
+        slug: scaling
       - page: Advanced clickhouse backup
         path: docs/self-host/backup.mdx
         slug: backup
