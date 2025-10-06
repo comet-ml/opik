@@ -36,13 +36,13 @@ import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.jupiter.api.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -440,7 +440,8 @@ class OpenTelemetryResourceTest {
             assertThat(trace.threadId()).isEqualTo(threadId);
 
             // Verify the spans were created
-            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId, "Test Project", workspaceName, okApikey);
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
             assertThat(generatedSpanPage.size()).isEqualTo(2);
 
             // Verify the root span has thread_id in metadata
