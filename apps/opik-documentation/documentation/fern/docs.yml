@@ -664,15 +664,15 @@ navigation:
       - page: Advanced clickhouse backup
         path: docs/self-host/backup.mdx
         slug: backup
-      - page: Scaling Opik
-        path: docs/self-host/scaling.mdx
-        slug: scaling
       - section: Configuration
         slug: /configure
         contents:
           - page: Anonymous usage statistics
             path: docs/self-host/configure/anonymous_usage_statistics.mdx
             slug: anonymous_usage_statistics
+          - page: Scaling Opik
+            path: docs/self-host/scaling.mdx
+            slug: scaling
   - tab: reference
     layout:
       - page: Overview
