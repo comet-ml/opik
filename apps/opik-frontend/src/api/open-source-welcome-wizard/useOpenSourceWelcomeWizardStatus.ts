@@ -8,10 +8,6 @@ import { OpenSourceWelcomeWizardTracking } from "@/types/open-source-welcome-wiz
 export const OPEN_SOURCE_WELCOME_WIZARD_QUERY_KEY =
   "open-source-welcome-wizard";
 
-type UseOpenSourceWelcomeWizardStatusParams = {
-  workspaceName: string;
-};
-
 const getOpenSourceWelcomeWizardStatus = async ({
   signal,
 }: QueryFunctionContext) => {
@@ -26,11 +22,10 @@ const getOpenSourceWelcomeWizardStatus = async ({
 };
 
 export default function useOpenSourceWelcomeWizardStatus(
-  params: UseOpenSourceWelcomeWizardStatusParams,
   options?: QueryConfig<OpenSourceWelcomeWizardTracking>,
 ) {
   return useQuery({
-    queryKey: [OPEN_SOURCE_WELCOME_WIZARD_QUERY_KEY, params],
+    queryKey: [OPEN_SOURCE_WELCOME_WIZARD_QUERY_KEY, {}],
     queryFn: (context) => getOpenSourceWelcomeWizardStatus(context),
     ...options,
   });
