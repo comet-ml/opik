@@ -14,6 +14,8 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class SortingQueryBuilder {
+    private static final String JSON_EXTRACT_RAW_PREFIX = "JSONExtractRaw(";
+
     public String toOrderBySql(@NonNull List<SortingField> sorting) {
         return toOrderBySql(sorting, null);
     }
@@ -31,8 +33,11 @@ public class SortingQueryBuilder {
                 .map(sortingField -> {
                     String dbField = fieldMapper.apply(sortingField);
 
-                    // Handle null direction for dynamic fields
-                    if (sortingField.handleNullDirection().isEmpty()) {
+                    // Skip null handling for JSONExtractRaw fields (they're JSON strings, not maps)
+                    boolean isJsonExtract = dbField.startsWith(JSON_EXTRACT_RAW_PREFIX);
+
+                    // Handle null direction for dynamic fields (unless it's a JSON extract)
+                    if (sortingField.handleNullDirection().isEmpty() || isJsonExtract) {
                         return "%s %s".formatted(dbField, getDirection(sortingField));
                     } else {
                         return "(%s, %s) %s".formatted(dbField, sortingField.handleNullDirection(),
@@ -43,12 +48,17 @@ public class SortingQueryBuilder {
     }
 
     public boolean hasDynamicKeys(@NonNull List<SortingField> sorting) {
-        return sorting.stream().anyMatch(SortingField::isDynamic);
+        // Only fields with bindKeyParam need dynamic binding
+        // Fields without bindKeyParam use literal keys in field mappings (e.g., JSONExtractRaw)
+        return sorting.stream()
+                .filter(SortingField::isDynamic)
+                .anyMatch(field -> field.bindKeyParam() != null);
     }
 
     public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting) {
         sorting.stream()
                 .filter(SortingField::isDynamic)
+                .filter(sortingField -> sortingField.bindKeyParam() != null)
                 .forEach(sortingField -> {
                     try {
                         statement.bind(sortingField.bindKey(), sortingField.dynamicKey());
