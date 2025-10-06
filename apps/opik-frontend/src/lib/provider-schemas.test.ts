@@ -153,8 +153,9 @@ describe("provider-schemas", () => {
           metadata: {
             model: "claude-3-sonnet",
             usage: {
-              input_tokens: 5,
-              output_tokens: 15,
+              prompt_tokens: 5,
+              completion_tokens: 15,
+              total_tokens: 20,
             },
             stop_reason: "end_turn",
           },
@@ -218,9 +219,9 @@ describe("provider-schemas", () => {
           metadata: {
             model: "gemini-2.0-flash",
             usage: {
-              promptTokenCount: 4,
-              candidatesTokenCount: 20,
-              totalTokenCount: 24,
+              prompt_tokens: 4,
+              completion_tokens: 20,
+              total_tokens: 24,
             },
             finishReason: "STOP",
           },
