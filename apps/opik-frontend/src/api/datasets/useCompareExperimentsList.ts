@@ -6,7 +6,9 @@ import api, {
 } from "@/api/api";
 import { DatasetItemColumn, ExperimentsCompare } from "@/types/datasets";
 import { Filters } from "@/types/filters";
+import { Sorting } from "@/types/sorting";
 import { processFilters } from "@/lib/filters";
+import { processSorting } from "@/lib/sorting";
 
 type UseCompareExperimentsListParams = {
   workspaceName: string;
@@ -14,6 +16,7 @@ type UseCompareExperimentsListParams = {
   experimentsIds: string[];
   search?: string;
   filters?: Filters;
+  sorting?: Sorting;
   truncate?: boolean;
   page: number;
   size: number;
@@ -23,6 +26,7 @@ export type UseCompareExperimentsListResponse = {
   content: ExperimentsCompare[];
   columns: DatasetItemColumn[];
   total: number;
+  sortable_by: string[];
 };
 
 const getCompareExperimentsList = async (
@@ -33,6 +37,7 @@ const getCompareExperimentsList = async (
     experimentsIds,
     search,
     filters,
+    sorting,
     truncate = false,
     size,
     page,
@@ -46,6 +51,7 @@ const getCompareExperimentsList = async (
         workspace_name: workspaceName,
         experiment_ids: JSON.stringify(experimentsIds),
         ...processFilters(filters),
+        ...processSorting(sorting),
         ...(search && { name: search }),
         truncate,
         size,
