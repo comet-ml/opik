@@ -264,6 +264,25 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                   </div>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="eventTriggers.promptLibraryDeleted"
+                render={({ field }) => (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="promptLibraryDeleted"
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                    <Label
+                      htmlFor="promptLibraryDeleted"
+                      className="cursor-pointer text-sm font-normal"
+                    >
+                      Prompt is deleted
+                    </Label>
+                  </div>
+                )}
+              />
             </div>
           </CardContent>
         </Card>
