@@ -659,6 +659,7 @@ export class Traces {
      * Get trace by id
      *
      * @param {string} id
+     * @param {OpikApi.GetTraceByIdRequest} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
@@ -666,15 +667,23 @@ export class Traces {
      */
     public getTraceById(
         id: string,
+        request: OpikApi.GetTraceByIdRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.TracePublic> {
-        return core.HttpResponsePromise.fromPromise(this.__getTraceById(id, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__getTraceById(id, request, requestOptions));
     }
 
     private async __getTraceById(
         id: string,
+        request: OpikApi.GetTraceByIdRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePublic>> {
+        const { truncate } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (truncate != null) {
+            _queryParams["truncate"] = truncate.toString();
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -695,6 +704,7 @@ export class Traces {
                 ...requestOptions?.headers,
             },
             contentType: "application/json",
+            queryParameters: _queryParams,
             requestType: "json",
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,

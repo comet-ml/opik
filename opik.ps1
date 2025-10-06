@@ -68,6 +68,71 @@ function Write-DebugLog {
     }
 }
 
+function Get-SystemInfo {
+    # Function to gather system info without failing the script
+    # All commands wrapped with error handling and fallbacks
+    
+    # OS detection - safe with fallback
+    $osInfo = "unknown"
+    try {
+        $osVersion = [System.Environment]::OSVersion
+        if ($osVersion) {
+            $osInfo = "Windows $($osVersion.Version.Major).$($osVersion.Version.Minor).$($osVersion.Version.Build)"
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get OS info: $_"
+    }
+    
+    # Docker version - safe with fallback
+    $dockerVersion = "unknown"
+    try {
+        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+        if ($dockerCmd) {
+            $dockerOutput = (docker --version 2>&1 | Out-String).Trim()
+            # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
+            if ($dockerOutput -match 'Docker version ([^,\s]+)') {
+                $dockerVersion = $Matches[1]
+            }
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get Docker version: $_"
+    }
+    
+    # Docker Compose version - safe with fallback
+    # Try both V2 (docker compose) and V1 (docker-compose) commands
+    $dockerComposeVersion = "unknown"
+    try {
+        # Try Docker Compose V2 (plugin)
+        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+        if ($dockerCmd) {
+            $composeOutput = (docker compose version 2>&1 | Out-String).Trim()
+            # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
+            if ($composeOutput -match 'Docker Compose version (.+)$') {
+                $dockerComposeVersion = $Matches[1].Trim()
+            }
+        }
+        
+        # If V2 failed, try Docker Compose V1 (standalone)
+        if ($dockerComposeVersion -eq "unknown") {
+            $dockerComposeCmd = Get-Command docker-compose -ErrorAction SilentlyContinue
+            if ($dockerComposeCmd) {
+                $composeV1Output = (docker-compose version --short 2>&1 | Out-String).Trim()
+                if (-not [string]::IsNullOrWhiteSpace($composeV1Output)) {
+                    $dockerComposeVersion = $composeV1Output
+                }
+            }
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get Docker Compose version: $_"
+    }
+    
+    return @{
+        Os = $osInfo
+        DockerVersion = $dockerVersion
+        DockerComposeVersion = $dockerComposeVersion
+    }
+}
+
 function Show-Usage {
     Write-Host 'Usage: opik.ps1 [OPTIONS]'
     Write-Host ''
@@ -170,6 +235,20 @@ function Send-InstallReport {
         }
     } else {
         $EventType = "opik_os_install_started"
+        
+        # Get system info safely - wrapped to prevent script failure
+        try {
+            $SystemInfo = Get-SystemInfo
+        } catch {
+            Write-DebugLog "[WARN] Failed to get system info, using defaults: $_"
+            $SystemInfo = @{
+                Os = "unknown"
+                DockerVersion = "unknown"
+                DockerComposeVersion = "unknown"
+            }
+        }
+        
+        Write-DebugLog "[DEBUG] System info: OS=$($SystemInfo.Os), Docker=$($SystemInfo.DockerVersion), Docker Compose=$($SystemInfo.DockerComposeVersion)"
 
         $Payload = @{
             anonymous_id = $Uuid
@@ -178,6 +257,9 @@ function Send-InstallReport {
                 start_time = $StartTime
                 event_ver  = "1"
                 script_type = "ps1"
+                os = $SystemInfo.Os
+                docker_version = $SystemInfo.DockerVersion
+                docker_compose_version = $SystemInfo.DockerComposeVersion
             }
         }
     }
@@ -355,7 +437,16 @@ function Get-UIUrl {
 }
 
 function New-OpikConfigIfMissing {
-    $configFile = Join-Path $env:USERPROFILE ".opik.config"
+    # Cross-platform home directory handling
+    # Use $HOME automatic variable as final fallback (always set by PowerShell)
+    $homeDir = if ($env:USERPROFILE) { 
+        $env:USERPROFILE 
+    } elseif ($env:HOME) { 
+        $env:HOME 
+    } else { 
+        $HOME  # PowerShell automatic variable (not environment variable)
+    }
+    $configFile = Join-Path $homeDir ".opik.config"
     
     if (Test-Path $configFile) {
         Write-DebugLog "[DEBUG] .opik.config file already exists, skipping creation"
@@ -515,6 +606,8 @@ if ($options -contains '--infra') {
 
 if ($options -contains '--backend') {
     $BACKEND = $true
+    # Enable CORS for frontend development
+    $env:CORS = "true"
     $options = $options | Where-Object { $_ -ne '--backend' }
 }
 

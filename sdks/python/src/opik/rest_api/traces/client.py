@@ -438,13 +438,21 @@ class TracesClient:
         _response = self._raw_client.create_traces(traces=traces, request_options=request_options)
         return _response.data
 
-    def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    def get_trace_by_id(
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TracePublic:
         """
         Get trace by id
 
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -460,7 +468,7 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.get_trace_by_id(id='id', )
         """
-        _response = self._raw_client.get_trace_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_trace_by_id(id, truncate=truncate, request_options=request_options)
         return _response.data
 
     def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
@@ -1773,13 +1781,21 @@ class AsyncTracesClient:
         _response = await self._raw_client.create_traces(traces=traces, request_options=request_options)
         return _response.data
 
-    async def get_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> TracePublic:
+    async def get_trace_by_id(
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> TracePublic:
         """
         Get trace by id
 
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1798,7 +1814,7 @@ class AsyncTracesClient:
             await client.traces.get_trace_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_trace_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_trace_by_id(id, truncate=truncate, request_options=request_options)
         return _response.data
 
     async def delete_trace_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:

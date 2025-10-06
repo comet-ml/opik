@@ -3,6 +3,7 @@ import { AnnotationQueue } from "@/types/annotation-queues";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface EditAnnotationQueueButtonProps {
   annotationQueue: AnnotationQueue;
@@ -29,10 +30,12 @@ const EditAnnotationQueueButton: React.FunctionComponent<
         projectId={annotationQueue.project_id}
         scope={annotationQueue.scope}
       />
-      <Button size="sm" variant="outline" onClick={handleOpenEditDialog}>
-        <Pencil className="mr-1.5 size-3.5" />
-        Edit queue
-      </Button>
+      <TooltipWrapper content="Edit annotation queue">
+        <Button size="sm" variant="outline" onClick={handleOpenEditDialog}>
+          <Pencil className="mr-1.5 size-3.5" />
+          Edit
+        </Button>
+      </TooltipWrapper>
     </>
   );
 };

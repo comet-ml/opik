@@ -79,6 +79,58 @@ debugLog() {
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
 }
 
+get_system_info() {
+  # Function to gather system info without failing the script
+  # All commands wrapped with error handling and fallbacks
+  
+  # OS detection - safe with fallback
+  local os_info="unknown"
+  if command -v uname >/dev/null 2>&1; then
+    os_info=$(uname -s 2>/dev/null || echo "unknown")
+    if [[ "$os_info" == "Darwin" ]]; then
+      local os_version=$(sw_vers -productVersion 2>/dev/null || echo "")
+      [[ -n "$os_version" ]] && os_info="macOS ${os_version}" || os_info="macOS"
+    elif [[ "$os_info" == "Linux" ]]; then
+      if [[ -f /etc/os-release ]]; then
+        local distro=$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "Linux")
+        [[ -n "$distro" ]] && os_info="$distro" || os_info="Linux"
+      fi
+    fi
+  fi
+  
+  # Docker version - safe with fallback
+  local docker_version="unknown"
+  if command -v docker >/dev/null 2>&1; then
+    local docker_output=$(docker --version 2>/dev/null || echo "")
+    if [[ -n "$docker_output" ]]; then
+      # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
+      docker_version=$(echo "$docker_output" | sed -n 's/^Docker version \([^,]*\).*/\1/p' || echo "unknown")
+      [[ -z "$docker_version" ]] && docker_version="unknown"
+    fi
+  fi
+  
+  # Docker Compose version - safe with fallback
+  # Try both V2 (docker compose) and V1 (docker-compose) commands
+  local docker_compose_version="unknown"
+  if command -v docker >/dev/null 2>&1; then
+    # Try Docker Compose V2 (plugin)
+    local compose_output=$(docker compose version 2>/dev/null || echo "")
+    if [[ -n "$compose_output" ]]; then
+      # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
+      docker_compose_version=$(echo "$compose_output" | sed -n 's/^Docker Compose version \(.*\)$/\1/p' || echo "unknown")
+      [[ -z "$docker_compose_version" ]] && docker_compose_version="unknown"
+    fi
+  fi
+  
+  # If V2 failed, try Docker Compose V1 (standalone)
+  if [[ "$docker_compose_version" == "unknown" ]] && command -v docker-compose >/dev/null 2>&1; then
+    docker_compose_version=$(docker-compose version --short 2>/dev/null || echo "unknown")
+  fi
+  
+  # Return as tab-delimited string (tabs are extremely unlikely in version strings)
+  printf "%s\t%s\t%s" "$os_info" "$docker_version" "$docker_compose_version"
+}
+
 get_docker_compose_cmd() {
   local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
@@ -378,6 +430,13 @@ EOF
 )
   else
     event_type="opik_os_install_started"
+    
+    # Get system info safely - wrapped to prevent script failure
+    system_info=$(get_system_info 2>/dev/null || printf "unknown\tunknown\tunknown")
+    IFS=$'\t' read -r os_info docker_ver docker_compose_ver <<< "$system_info"
+    
+    debugLog "[DEBUG] System info: OS=$os_info, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
+    
     json_payload=$(cat <<EOF
 {
   "anonymous_id": "$uuid",
@@ -385,7 +444,10 @@ EOF
   "event_properties": {
     "start_time": "$start_time",
     "event_ver": "1",
-    "script_type": "sh"
+    "script_type": "sh",
+    "os": "$os_info",
+    "docker_version": "$docker_ver",
+    "docker_compose_version": "$docker_compose_ver"
   }
 }
 EOF
@@ -454,6 +516,8 @@ fi
 
 if [[ "$*" == *"--backend"* ]]; then
   BACKEND=true
+  # Enable CORS for frontend development
+  export CORS=true
   # Remove the flag from arguments
   set -- ${@/--backend/}
 fi
