@@ -27,6 +27,8 @@ describe("provider-detection", () => {
         project_id: "project-1",
         type: SPAN_TYPE.llm,
         provider: PROVIDER_TYPE.OPEN_AI,
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(span)).toBe(PROVIDER_TYPE.OPEN_AI);
@@ -45,6 +47,8 @@ describe("provider-detection", () => {
         last_updated_at: "2024-01-01T00:01:00Z",
         metadata: { provider: PROVIDER_TYPE.ANTHROPIC },
         project_id: "project-1",
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(trace)).toBe(PROVIDER_TYPE.ANTHROPIC);
@@ -67,6 +71,8 @@ describe("provider-detection", () => {
         project_id: "project-1",
         type: SPAN_TYPE.llm,
         provider: PROVIDER_TYPE.ANTHROPIC, // Explicit Anthropic provider
+        comments: [],
+        tags: [],
       };
 
       // Should return Anthropic despite OpenAI-like structure
@@ -90,6 +96,8 @@ describe("provider-detection", () => {
         project_id: "project-1",
         type: SPAN_TYPE.llm,
         model: "gpt-4",
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(span)).toBe(PROVIDER_TYPE.OPEN_AI);
@@ -112,6 +120,8 @@ describe("provider-detection", () => {
         project_id: "project-1",
         type: SPAN_TYPE.llm,
         model: "claude-3-sonnet",
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(span)).toBe(PROVIDER_TYPE.ANTHROPIC);
@@ -134,6 +144,8 @@ describe("provider-detection", () => {
         project_id: "project-1",
         type: SPAN_TYPE.llm,
         model: "gemini-2.0-flash",
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(span)).toBe(PROVIDER_TYPE.GEMINI);
@@ -152,6 +164,8 @@ describe("provider-detection", () => {
         last_updated_at: "2024-01-01T00:01:00Z",
         metadata: {},
         project_id: "project-1",
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(trace)).toBe(PROVIDER_TYPE.OPEN_AI);
@@ -170,6 +184,8 @@ describe("provider-detection", () => {
         last_updated_at: "2024-01-01T00:01:00Z",
         metadata: {},
         project_id: "project-1",
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(trace)).toBe(PROVIDER_TYPE.ANTHROPIC);
@@ -188,6 +204,8 @@ describe("provider-detection", () => {
         last_updated_at: "2024-01-01T00:01:00Z",
         metadata: {},
         project_id: "project-1",
+        comments: [],
+        tags: [],
       };
 
       // Should return null since we can't distinguish between providers
@@ -208,6 +226,8 @@ describe("provider-detection", () => {
         last_updated_at: "2024-01-01T00:01:00Z",
         metadata: {},
         project_id: "project-1",
+        comments: [],
+        tags: [],
       };
 
       expect(detectProvider(trace)).toBeNull();

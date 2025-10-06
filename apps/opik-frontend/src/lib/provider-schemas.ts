@@ -25,39 +25,39 @@ export interface PrettyViewData {
  */
 const normalizeUsageData = (
   usage: unknown,
-): PrettyViewData["metadata"]["usage"] | undefined => {
+): any => {
   if (!isObject(usage)) return undefined;
 
-  const normalized: PrettyViewData["metadata"]["usage"] = {};
+  const normalized: any = {};
 
   // OpenAI format: prompt_tokens, completion_tokens, total_tokens
-  if (isNumber(usage.prompt_tokens)) {
-    normalized.prompt_tokens = usage.prompt_tokens;
+  if (isNumber((usage as any).prompt_tokens)) {
+    normalized.prompt_tokens = (usage as any).prompt_tokens;
   }
-  if (isNumber(usage.completion_tokens)) {
-    normalized.completion_tokens = usage.completion_tokens;
+  if (isNumber((usage as any).completion_tokens)) {
+    normalized.completion_tokens = (usage as any).completion_tokens;
   }
-  if (isNumber(usage.total_tokens)) {
-    normalized.total_tokens = usage.total_tokens;
+  if (isNumber((usage as any).total_tokens)) {
+    normalized.total_tokens = (usage as any).total_tokens;
   }
 
   // Anthropic format: input_tokens, output_tokens
-  if (isNumber(usage.input_tokens)) {
-    normalized.prompt_tokens = usage.input_tokens;
+  if (isNumber((usage as any).input_tokens)) {
+    normalized.prompt_tokens = (usage as any).input_tokens;
   }
-  if (isNumber(usage.output_tokens)) {
-    normalized.completion_tokens = usage.output_tokens;
+  if (isNumber((usage as any).output_tokens)) {
+    normalized.completion_tokens = (usage as any).output_tokens;
   }
 
   // Gemini format: promptTokenCount, candidatesTokenCount, totalTokenCount
-  if (isNumber(usage.promptTokenCount)) {
-    normalized.prompt_tokens = usage.promptTokenCount;
+  if (isNumber((usage as any).promptTokenCount)) {
+    normalized.prompt_tokens = (usage as any).promptTokenCount;
   }
-  if (isNumber(usage.candidatesTokenCount)) {
-    normalized.completion_tokens = usage.candidatesTokenCount;
+  if (isNumber((usage as any).candidatesTokenCount)) {
+    normalized.completion_tokens = (usage as any).candidatesTokenCount;
   }
-  if (isNumber(usage.totalTokenCount)) {
-    normalized.total_tokens = usage.totalTokenCount;
+  if (isNumber((usage as any).totalTokenCount)) {
+    normalized.total_tokens = (usage as any).totalTokenCount;
   }
 
   // Calculate total if not provided
@@ -104,7 +104,7 @@ const openAIFormatter: ProviderFormatter = {
       // Handle multimodal content
       const textContent = lastMessage.content.find(
         (item: unknown) =>
-          isObject(item) && item.type === "text" && isString(item.text),
+          isObject(item) && (item as any).type === "text" && isString((item as any).text),
       );
       if (textContent) {
         content = textContent.text;
@@ -118,9 +118,9 @@ const openAIFormatter: ProviderFormatter = {
     return {
       content,
       metadata: {
-        model: input.model,
-        temperature: input.temperature,
-        max_tokens: input.max_tokens,
+        model: (input as any).model,
+        temperature: (input as any).temperature,
+        max_tokens: (input as any).max_tokens,
       },
     };
   },
@@ -151,9 +151,9 @@ const openAIFormatter: ProviderFormatter = {
     return {
       content: message.content,
       metadata: {
-        model: output.model,
-        usage: normalizeUsageData(output.usage),
-        finish_reason: lastChoice.finish_reason,
+        model: (output as any).model,
+        usage: normalizeUsageData((output as any).usage),
+        finish_reason: (lastChoice as any).finish_reason,
       },
     };
   },
@@ -184,7 +184,7 @@ const anthropicFormatter: ProviderFormatter = {
       // Handle multimodal content
       const textContent = lastMessage.content.find(
         (item: unknown) =>
-          isObject(item) && item.type === "text" && isString(item.text),
+          isObject(item) && (item as any).type === "text" && isString((item as any).text),
       );
       if (textContent) {
         content = textContent.text;
@@ -198,9 +198,9 @@ const anthropicFormatter: ProviderFormatter = {
     return {
       content,
       metadata: {
-        model: input.model,
-        temperature: input.temperature,
-        max_tokens: input.max_tokens,
+        model: (input as any).model,
+        temperature: (input as any).temperature,
+        max_tokens: (input as any).max_tokens,
       },
     };
   },
@@ -217,7 +217,7 @@ const anthropicFormatter: ProviderFormatter = {
       // Handle multimodal content
       const textContent = output.content.find(
         (item: unknown) =>
-          isObject(item) && item.type === "text" && isString(item.text),
+          isObject(item) && (item as any).type === "text" && isString((item as any).text),
       );
       if (textContent) {
         content = textContent.text;
@@ -231,10 +231,10 @@ const anthropicFormatter: ProviderFormatter = {
     return {
       content,
       metadata: {
-        model: output.model,
-        usage: normalizeUsageData(output.usage),
-        stop_reason: output.stop_reason,
-      },
+        model: (output as any).model,
+        usage: normalizeUsageData((output as any).usage),
+        stop_reason: (output as any).stop_reason,
+      } as any,
     };
   },
 };
@@ -273,10 +273,10 @@ const geminiFormatter: ProviderFormatter = {
     return {
       content: lastPart.text,
       metadata: {
-        model: input.model,
-        temperature: input.temperature,
-        maxOutputTokens: input.maxOutputTokens,
-      },
+        model: (input as any).model,
+        temperature: (input as any).temperature,
+        maxOutputTokens: (input as any).maxOutputTokens,
+      } as any,
     };
   },
 
@@ -315,10 +315,10 @@ const geminiFormatter: ProviderFormatter = {
     return {
       content: lastPart.text,
       metadata: {
-        model: output.model,
-        usage: normalizeUsageData(output.usageMetadata),
-        finishReason: lastCandidate.finishReason,
-      },
+        model: (output as any).model,
+        usage: normalizeUsageData((output as any).usageMetadata),
+        finishReason: (lastCandidate as any).finishReason,
+      } as any,
     };
   },
 };

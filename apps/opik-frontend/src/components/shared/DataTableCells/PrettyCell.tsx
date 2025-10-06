@@ -54,7 +54,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
       : value ?? "-";
     const hasExceededLimit = rawValue.length > maxDataLength;
 
-    const response = prettifyMessage(value, { type: fieldType });
+    const response = prettifyMessage(value ?? "", { type: fieldType });
     const message = isObject(response.message)
       ? JSON.stringify(value, null, 2)
       : response.message || "";

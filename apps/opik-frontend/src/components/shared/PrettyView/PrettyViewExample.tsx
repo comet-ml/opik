@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Tag } from "@/components/ui/tag";
 import { PrettyViewContainer } from "./index";
 import { Trace } from "@/types/traces";
 
@@ -23,7 +23,7 @@ const PrettyViewExample: React.FC<PrettyViewExampleProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             Pretty View Example
-            <Badge variant="outline">New</Badge>
+            <Tag variant="default">New</Tag>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">

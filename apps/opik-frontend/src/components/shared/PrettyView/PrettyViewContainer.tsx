@@ -6,7 +6,7 @@ import {
   canFormatProviderData,
 } from "@/lib/provider-schemas";
 import { isTraceOrSpan } from "@/lib/type-guards";
-import { JsonView } from "@/components/shared/JsonView";
+import JsonView from "react18-json-view";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import ProviderPrettyView from "./ProviderPrettyView";
 import { cn } from "@/lib/utils";
