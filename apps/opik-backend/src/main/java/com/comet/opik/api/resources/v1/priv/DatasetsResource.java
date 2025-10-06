@@ -418,16 +418,20 @@ public class DatasetsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
             @QueryParam("filters") String filters,
+            @QueryParam("sorting") String sorting,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
 
         var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
 
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(datasetId)
                 .experimentIds(experimentIds)
                 .filters(queryFilters)
+                .sortingFields(sortingFields)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .build();
