@@ -193,8 +193,7 @@ class OpenTelemetryMapperTest {
                 KeyValue.newBuilder()
                         .setKey("thread_id")
                         .setValue(AnyValue.newBuilder().setStringValue("test-thread-123"))
-                        .build()
-        );
+                        .build());
 
         var spanBuilder = Span.builder()
                 .id(UUID.randomUUID())
