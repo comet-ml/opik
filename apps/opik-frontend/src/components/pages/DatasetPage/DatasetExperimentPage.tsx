@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { ColumnSort, RowSelectionState } from "@tanstack/react-table";
+/* eslint-disable tailwindcss/no-custom-classname */
+import { useCallback, useMemo } from "react";
+import { ColumnSort } from "@tanstack/react-table";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -8,8 +9,6 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import TextCell from "@/components/shared/DataTableCells/TextCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import Loader from "@/components/shared/Loader/Loader";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -19,7 +18,6 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_ID_ID,
@@ -42,27 +40,32 @@ const DEFAULT_COLUMNS: ColumnData<Experiment>[] = [
     id: "name",
     label: "Name",
     type: COLUMN_TYPE.string,
-    cell: TextCell,
   },
   {
     id: "experiment_type",
     label: "Type",
     type: COLUMN_TYPE.string,
-    cell: TextCell,
   },
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    cell: ({ getValue }) => {
-      const value = getValue() as string;
-      return <span className="text-muted-foreground">{formatDate(value)}</span>;
-    },
+    cell: ((
+      cell: import("@tanstack/react-table").CellContext<Experiment, unknown>,
+    ) => {
+      const value = cell.getValue();
+      return (
+        <span className="text-muted-foreground">
+          {typeof value === "string" && value ? formatDate(value) : "-"}
+        </span>
+      );
+    }) as unknown as import("@tanstack/react-table").Cell<Experiment, unknown>,
   },
   {
     id: COLUMN_COMMENTS_ID,
     label: "Comments",
     type: COLUMN_TYPE.number,
+
     cell: CommentsCell as never,
   },
 ];
@@ -94,29 +97,21 @@ const DatasetExperimentsPage = () => {
     },
   );
 
-  const [sorting, setSorting] = useLocalStorageState<ColumnSort[]>(
-    COLUMNS_SORT_KEY,
-    {
-      defaultValue: [],
-    },
-  );
+  const [sorting] = useLocalStorageState<ColumnSort[]>(COLUMNS_SORT_KEY, {
+    defaultValue: [],
+  });
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const safePage = page ?? 1;
 
   const { data, isPending } = useExperimentsList(
     {
       datasetId,
       workspaceName,
-      search,
-      page,
+      search: search ?? undefined,
+      page: safePage,
       size,
       types: [EXPERIMENT_TYPE.REGULAR], // Filter to regular experiments
-      sorting: sorting?.[0]
-        ? {
-            id: sorting[0].id,
-            desc: sorting[0].desc,
-          }
-        : undefined,
+      sorting: sorting && sorting.length > 0 ? sorting : undefined,
     },
     {
       placeholderData: keepPreviousData,
@@ -133,13 +128,9 @@ const DatasetExperimentsPage = () => {
   const columns = useMemo(() => {
     const retVal = [
       generateSelectColumDef<Experiment>(),
-      ...convertColumnDataToColumn<Experiment, Experiment>(
-        DEFAULT_COLUMNS,
-        {
-          columnsData: DEFAULT_COLUMNS,
-          selectedColumns,
-        },
-      ),
+      ...convertColumnDataToColumn<Experiment, Experiment>(DEFAULT_COLUMNS, {
+        selectedColumns,
+      }),
     ];
 
     return retVal;
@@ -174,7 +165,7 @@ const DatasetExperimentsPage = () => {
     <div className="pt-6">
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
-          searchText={search}
+          searchText={search ?? undefined}
           setSearchText={handleSearch}
           placeholder="Search by experiment name"
           className="w-[320px]"
@@ -190,14 +181,10 @@ const DatasetExperimentsPage = () => {
         </div>
       </div>
 
-      <div className="border rounded-md">
+      <div className="rounded-md border">
         <DataTable
           columns={columns}
           data={experiments}
-          onRowSelectionChange={setRowSelection}
-          rowSelection={rowSelection}
-          sorting={sorting}
-          setSorting={setSorting}
           getRowId={getRowId}
           noData={
             <DataTableNoData title={noDataText}>
@@ -213,12 +200,11 @@ const DatasetExperimentsPage = () => {
 
       <div className="py-4">
         <DataTablePagination
-          page={page}
-          pageCount={Math.ceil(total / size)}
+          page={safePage}
           total={total}
-          pageSize={size}
-          onPageChange={handleNewPage}
-          onPageSizeChange={handleNewPageSize}
+          size={size}
+          pageChange={handleNewPage}
+          sizeChange={handleNewPageSize}
         />
       </div>
     </div>
