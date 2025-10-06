@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { PrettyViewData } from "@/lib/provider-schemas";
@@ -107,7 +108,9 @@ const ProviderPrettyView: React.FC<ProviderPrettyViewProps> = ({
                     <span className="comet-body-xs text-muted-foreground">
                       Stop Reason:
                     </span>
-                    <p className="comet-body-s">{(data.metadata as any).stop_reason}</p>
+                    <p className="comet-body-s">
+                      {(data.metadata as any).stop_reason}
+                    </p>
                   </div>
                 )}
               </div>

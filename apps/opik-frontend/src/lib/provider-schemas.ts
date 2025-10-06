@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { PROVIDER_TYPE } from "@/types/providers";
 import isString from "lodash/isString";
 import isObject from "lodash/isObject";
@@ -23,9 +24,7 @@ export interface PrettyViewData {
 /**
  * Normalizes usage data from different providers to a standard format
  */
-const normalizeUsageData = (
-  usage: unknown,
-): any => {
+const normalizeUsageData = (usage: unknown): any => {
   if (!isObject(usage)) return undefined;
 
   const normalized: any = {};
@@ -104,7 +103,9 @@ const openAIFormatter: ProviderFormatter = {
       // Handle multimodal content
       const textContent = lastMessage.content.find(
         (item: unknown) =>
-          isObject(item) && (item as any).type === "text" && isString((item as any).text),
+          isObject(item) &&
+          (item as any).type === "text" &&
+          isString((item as any).text),
       );
       if (textContent) {
         content = textContent.text;
@@ -184,7 +185,9 @@ const anthropicFormatter: ProviderFormatter = {
       // Handle multimodal content
       const textContent = lastMessage.content.find(
         (item: unknown) =>
-          isObject(item) && (item as any).type === "text" && isString((item as any).text),
+          isObject(item) &&
+          (item as any).type === "text" &&
+          isString((item as any).text),
       );
       if (textContent) {
         content = textContent.text;
@@ -217,7 +220,9 @@ const anthropicFormatter: ProviderFormatter = {
       // Handle multimodal content
       const textContent = output.content.find(
         (item: unknown) =>
-          isObject(item) && (item as any).type === "text" && isString((item as any).text),
+          isObject(item) &&
+          (item as any).type === "text" &&
+          isString((item as any).text),
       );
       if (textContent) {
         content = textContent.text;
