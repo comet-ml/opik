@@ -16,8 +16,12 @@ export const isTrace = (data: unknown): data is Trace => {
   const hasRequiredFields =
     isString((data as any).id) &&
     isString((data as any).name) &&
-    ((data as any).input === null || (data as any).input === undefined || isObject((data as any).input)) &&
-    ((data as any).output === null || (data as any).output === undefined || isObject((data as any).output)) &&
+    ((data as any).input === null ||
+      (data as any).input === undefined ||
+      isObject((data as any).input)) &&
+    ((data as any).output === null ||
+      (data as any).output === undefined ||
+      isObject((data as any).output)) &&
     isString((data as any).start_time) &&
     isString((data as any).end_time) &&
     isNumber((data as any).duration) &&
@@ -89,8 +93,12 @@ export const isSpan = (data: unknown): data is Span => {
   const hasRequiredFields =
     isString((data as any).id) &&
     isString((data as any).name) &&
-    ((data as any).input === null || (data as any).input === undefined || isObject((data as any).input)) &&
-    ((data as any).output === null || (data as any).output === undefined || isObject((data as any).output)) &&
+    ((data as any).input === null ||
+      (data as any).input === undefined ||
+      isObject((data as any).input)) &&
+    ((data as any).output === null ||
+      (data as any).output === undefined ||
+      isObject((data as any).output)) &&
     isString((data as any).start_time) &&
     isString((data as any).end_time) &&
     isNumber((data as any).duration) &&
@@ -163,8 +171,12 @@ export const hasTraceSpanStructure = (data: unknown): boolean => {
   return (
     isString((data as any).id) &&
     isString((data as any).name) &&
-    ((data as any).input === null || (data as any).input === undefined || isObject((data as any).input)) &&
-    ((data as any).output === null || (data as any).output === undefined || isObject((data as any).output)) &&
+    ((data as any).input === null ||
+      (data as any).input === undefined ||
+      isObject((data as any).input)) &&
+    ((data as any).output === null ||
+      (data as any).output === undefined ||
+      isObject((data as any).output)) &&
     isString((data as any).start_time) &&
     isString((data as any).end_time) &&
     isNumber((data as any).duration) &&
