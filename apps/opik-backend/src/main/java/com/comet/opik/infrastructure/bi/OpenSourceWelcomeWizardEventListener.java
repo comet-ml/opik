@@ -71,7 +71,9 @@ public class OpenSourceWelcomeWizardEventListener {
                 eventProperties.put("join_beta_program", String.valueOf(event.getJoinBetaProgram()));
             }
 
-            biEventService.reportEvent(anonymousId, BI_EVENT_TYPE, BI_EVENT_TYPE, eventProperties);
+            // Use workspace-specific event type for tracking (consistent with DAO)
+            String eventType = "open_source_welcome_wizard_" + event.getWorkspaceId();
+            biEventService.reportEvent(anonymousId, eventType, BI_EVENT_TYPE, eventProperties);
             log.info("BI event sent for OSS welcome wizard submission for workspace: '{}'",
                     event.getWorkspaceId());
         } catch (Exception e) {
