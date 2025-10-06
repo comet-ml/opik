@@ -107,7 +107,7 @@ class AlertsClient:
         from Opik import OpikApi
         from Opik import WebhookWrite
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.alerts.create_alert(name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+        client.alerts.create_alert(name='name', webhook=WebhookWrite(url='url', ), )
         """
         _response = self._raw_client.create_alert(
             name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
@@ -205,7 +205,7 @@ class AlertsClient:
         from Opik import OpikApi
         from Opik import WebhookWrite
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+        client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', ), )
         """
         _response = self._raw_client.update_alert(
             id_, name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
@@ -311,7 +311,7 @@ class AsyncAlertsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.alerts.create_alert(name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+            await client.alerts.create_alert(name='name', webhook=WebhookWrite(url='url', ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_alert(
@@ -418,7 +418,7 @@ class AsyncAlertsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+            await client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.update_alert(

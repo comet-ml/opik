@@ -11,7 +11,7 @@ class WebhookPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     url: str
-    secret_token: str
+    secret_token: typing.Optional[str] = None
     headers: typing.Optional[typing.Dict[str, str]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

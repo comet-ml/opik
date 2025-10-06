@@ -440,7 +440,11 @@ class RawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_span_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SpanPublic]:
         """
         Get span by id
@@ -448,6 +452,8 @@ class RawSpansClient:
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -460,6 +466,9 @@ class RawSpansClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/spans/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "truncate": truncate,
+            },
             request_options=request_options,
         )
         try:
@@ -1508,7 +1517,11 @@ class AsyncRawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_span_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SpanPublic]:
         """
         Get span by id
@@ -1516,6 +1529,8 @@ class AsyncRawSpansClient:
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1528,6 +1543,9 @@ class AsyncRawSpansClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/spans/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "truncate": truncate,
+            },
             request_options=request_options,
         )
         try:

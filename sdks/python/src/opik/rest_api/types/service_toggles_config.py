@@ -15,6 +15,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     ]
     guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
+    alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

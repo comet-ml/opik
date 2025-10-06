@@ -10,7 +10,7 @@ class WebhookWrite(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     url: str
-    secret_token: str
+    secret_token: typing.Optional[str] = None
     headers: typing.Optional[typing.Dict[str, str]] = None
 
     if IS_PYDANTIC_V2:

@@ -1322,7 +1322,6 @@ paths:
         in: query
         required: true
         schema:
-          minLength: 1
           type: string
       - name: filters
         in: query
@@ -1359,6 +1358,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Dataset_Public"
+  /v1/private/datasets/{id}/items/experiments/items/stats:
+    get:
+      tags:
+      - Datasets
+      summary: Get experiment items stats for dataset
+      description: Get experiment items stats for dataset
+      operationId: getDatasetExperimentItemsStats
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: experiment_ids
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment items stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
   /v1/private/datasets/items/{itemId}:
     get:
       tags:
@@ -3176,6 +3205,13 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: truncate
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns references; if false, returns reinjected\
+            \ base64. Matches traces endpoint for consistency and API discoverability."
+          default: false
       responses:
         "200":
           description: Span resource
@@ -3649,6 +3685,12 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: truncate
+        in: query
+        schema:
+          type: boolean
+          description: "Truncate image included in either input, output or metadata"
+          default: false
       responses:
         "200":
           description: Trace resource
@@ -4701,7 +4743,6 @@ components:
           readOnly: true
     Webhook:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4797,7 +4838,6 @@ components:
             $ref: "#/components/schemas/AlertTrigger_Write"
     Webhook_Write:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4955,7 +4995,6 @@ components:
           readOnly: true
     Webhook_Public:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -7464,6 +7503,65 @@ components:
         dataset_name:
           minLength: 1
           type: string
+    AvgValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            type: number
+            format: double
+    CountValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            type: integer
+            format: int64
+    PercentageValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            $ref: "#/components/schemas/PercentageValues_Public"
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+    ProjectStatItemObject_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - COUNT
+          - PERCENTAGE
+          - AVG
+      discriminator:
+        propertyName: type
+        mapping:
+          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
+          COUNT: "#/components/schemas/CountValueStat_Public"
+          AVG: "#/components/schemas/AvgValueStat_Public"
+    ProjectStats_Public:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatItemObject_Public"
     DatasetItem_Public:
       required:
       - data
@@ -8520,15 +8618,6 @@ components:
         items:
           type: object
       - type: string
-    PercentageValues_Public:
-      type: object
-      properties:
-        p50:
-          type: number
-        p90:
-          type: number
-        p99:
-          type: number
     PromptVersionLink_Public:
       required:
       - id
@@ -10352,6 +10441,7 @@ components:
             type: string
     ServiceTogglesConfig:
       required:
+      - alertsEnabled
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
@@ -10365,6 +10455,8 @@ components:
         guardrailsEnabled:
           type: boolean
         opikAIEnabled:
+          type: boolean
+        alertsEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -10669,56 +10761,6 @@ components:
           type: array
           items:
             type: string
-    AvgValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: number
-            format: double
-    CountValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: integer
-            format: int64
-    PercentageValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            $ref: "#/components/schemas/PercentageValues_Public"
-    ProjectStatItemObject_Public:
-      type: object
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-          enum:
-          - COUNT
-          - PERCENTAGE
-          - AVG
-      discriminator:
-        propertyName: type
-        mapping:
-          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
-          COUNT: "#/components/schemas/CountValueStat_Public"
-          AVG: "#/components/schemas/AvgValueStat_Public"
-    ProjectStats_Public:
-      type: object
-      properties:
-        stats:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProjectStatItemObject_Public"
     FeedbackScoreBatch:
       required:
       - scores

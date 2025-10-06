@@ -519,6 +519,7 @@ export class Spans {
      * Get span by id
      *
      * @param {string} id
+     * @param {OpikApi.GetSpanByIdRequest} request
      * @param {Spans.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
@@ -528,15 +529,23 @@ export class Spans {
      */
     public getSpanById(
         id: string,
+        request: OpikApi.GetSpanByIdRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.SpanPublic> {
-        return core.HttpResponsePromise.fromPromise(this.__getSpanById(id, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__getSpanById(id, request, requestOptions));
     }
 
     private async __getSpanById(
         id: string,
+        request: OpikApi.GetSpanByIdRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.SpanPublic>> {
+        const { truncate } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (truncate != null) {
+            _queryParams["truncate"] = truncate.toString();
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -557,6 +566,7 @@ export class Spans {
                 ...requestOptions?.headers,
             },
             contentType: "application/json",
+            queryParameters: _queryParams,
             requestType: "json",
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
