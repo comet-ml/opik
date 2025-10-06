@@ -249,25 +249,45 @@ const openAIFormatter: ProviderFormatter = {
     }
 
     const openAIInput = input as OpenAIInput;
-    const lastMessage = last(openAIInput.messages);
-    if (!isObject(lastMessage) || !("content" in lastMessage)) {
+    // Find the last user message instead of just the last message
+    const userMessages = openAIInput.messages.filter(
+      (msg) => msg.role === "user",
+    );
+    const lastUserMessage = last(userMessages);
+    if (!isObject(lastUserMessage) || !("content" in lastUserMessage)) {
       return null;
     }
 
     let content = "";
-    if (isString(lastMessage.content)) {
-      content = lastMessage.content;
-    } else if (isArray(lastMessage.content)) {
-      // Handle multimodal content
-      const textContent = (lastMessage.content as unknown[]).find(
+    if (isString(lastUserMessage.content)) {
+      content = lastUserMessage.content;
+    } else if (isArray(lastUserMessage.content)) {
+      // Handle multimodal content - prefer text, but don't discard other content
+      const textContent = (lastUserMessage.content as unknown[]).find(
         (item: unknown) => {
           if (!isObject(item)) return false;
           const obj = item as any;
           return obj.type === "text" && isString(obj.text);
         },
       );
+
       if (textContent && isObject(textContent) && "text" in textContent) {
         content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (lastUserMessage.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            return obj.type && obj.type !== "text";
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          content = `[${obj.type || "content"}]`;
+        }
       }
     }
 
@@ -301,16 +321,49 @@ const openAIFormatter: ProviderFormatter = {
     }
 
     const message = lastChoice.message;
-    if (
-      !isObject(message) ||
-      !("content" in message) ||
-      !isString(message.content)
-    ) {
+    if (!isObject(message) || !("content" in message)) {
+      return null;
+    }
+
+    let content = "";
+    if (isString(message.content)) {
+      content = message.content;
+    } else if (isArray(message.content)) {
+      // Handle multimodal content - prefer text, but don't discard other content
+      const textContent = (message.content as unknown[]).find(
+        (item: unknown) => {
+          if (!isObject(item)) return false;
+          const obj = item as any;
+          return obj.type === "text" && isString(obj.text);
+        },
+      );
+
+      if (textContent && isObject(textContent) && "text" in textContent) {
+        content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (message.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            return obj.type && obj.type !== "text";
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          content = `[${obj.type || "content"}]`;
+        }
+      }
+    }
+
+    if (!content) {
       return null;
     }
 
     return {
-      content: message.content,
+      content,
       metadata: {
         model: openAIOutput.model,
         usage: normalizeUsageData(openAIOutput.usage),
@@ -334,25 +387,45 @@ const anthropicFormatter: ProviderFormatter = {
     }
 
     const anthropicInput = input as AnthropicInput;
-    const lastMessage = last(anthropicInput.messages);
-    if (!isObject(lastMessage) || !("content" in lastMessage)) {
+    // Find the last user message instead of just the last message
+    const userMessages = anthropicInput.messages.filter(
+      (msg) => msg.role === "user",
+    );
+    const lastUserMessage = last(userMessages);
+    if (!isObject(lastUserMessage) || !("content" in lastUserMessage)) {
       return null;
     }
 
     let content = "";
-    if (isString(lastMessage.content)) {
-      content = lastMessage.content;
-    } else if (isArray(lastMessage.content)) {
-      // Handle multimodal content
-      const textContent = (lastMessage.content as unknown[]).find(
+    if (isString(lastUserMessage.content)) {
+      content = lastUserMessage.content;
+    } else if (isArray(lastUserMessage.content)) {
+      // Handle multimodal content - prefer text, but don't discard other content
+      const textContent = (lastUserMessage.content as unknown[]).find(
         (item: unknown) => {
           if (!isObject(item)) return false;
           const obj = item as any;
           return obj.type === "text" && isString(obj.text);
         },
       );
+
       if (textContent && isObject(textContent) && "text" in textContent) {
         content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (lastUserMessage.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            return obj.type && obj.type !== "text";
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          content = `[${obj.type || "content"}]`;
+        }
       }
     }
 
@@ -380,7 +453,7 @@ const anthropicFormatter: ProviderFormatter = {
     if (isString(anthropicOutput.content)) {
       content = anthropicOutput.content;
     } else if (isArray(anthropicOutput.content)) {
-      // Handle multimodal content
+      // Handle multimodal content - prefer text, but don't discard other content
       const textContent = (anthropicOutput.content as unknown[]).find(
         (item: unknown) => {
           if (!isObject(item)) return false;
@@ -388,8 +461,24 @@ const anthropicFormatter: ProviderFormatter = {
           return obj.type === "text" && isString(obj.text);
         },
       );
+
       if (textContent && isObject(textContent) && "text" in textContent) {
         content = (textContent as { text: string }).text;
+      } else {
+        // If no text content, try to extract meaningful content from other types
+        const nonTextContent = (anthropicOutput.content as unknown[]).find(
+          (item: unknown) => {
+            if (!isObject(item)) return false;
+            const obj = item as any;
+            return obj.type && obj.type !== "text";
+          },
+        );
+
+        if (nonTextContent && isObject(nonTextContent)) {
+          // Create a description of the non-text content
+          const obj = nonTextContent as any;
+          content = `[${obj.type || "content"}]`;
+        }
       }
     }
 
