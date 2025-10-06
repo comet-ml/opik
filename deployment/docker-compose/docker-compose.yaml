@@ -112,7 +112,7 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
-    pull_policy: build
+    pull_policy: always
     profiles:
       - backend
       - opik
