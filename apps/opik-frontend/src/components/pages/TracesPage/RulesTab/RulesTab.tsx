@@ -7,6 +7,7 @@ import {
   ColumnPinningState,
   RowSelectionState,
 } from "@tanstack/react-table";
+import round from "lodash/round";
 
 import {
   COLUMN_ID_ID,
@@ -79,6 +80,7 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     id: "sampling_rate",
     label: "Sampling rate",
     type: COLUMN_TYPE.number,
+    accessorFn: (row) => `${round(row.sampling_rate * 100, 1)}%`,
   },
   {
     id: "scope",
