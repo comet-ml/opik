@@ -68,19 +68,59 @@ description: Start here to integrate Opik into your [INTEGRATION NAME]-based gen
 
 ### Language Specification Rules
 
-- **Include language specification** `(Python)`, `(TypeScript)`, `(JavaScript)`, `(Java)`, or `(.NET)` in the title **if and only if** there are multiple language integrations for the same service
-- **When multiple language versions exist**, BOTH/ALL versions must include the language specification in their titles
-- **Single language integrations** should not include language specification in the title
-- **Examples:**
+**⚠️ CRITICAL: Language specifications appear in different locations depending on the context:**
+
+| Location | Include Language Spec? | Reason |
+|----------|----------------------|---------|
+| **Page Title (frontmatter)** | ✅ YES (when multiple versions exist) | Provides clear identification in page metadata |
+| **Navigation (docs.yml)** | ❌ NO | Language context provided by section organization |
+| **Overview Cards (overview.mdx)** | ❌ NO | Language context provided by section organization |
+| **README Tables/Lists** | ✅ YES (when multiple versions exist) | NO section organization - flat list needs disambiguation |
+
+#### Page Title Frontmatter (metadata):
+- **Include language specification** `(Python)`, `(TypeScript)`, `(JavaScript)`, `(Java)`, or `(.NET)` in the frontmatter title **if and only if** there are multiple language integrations for the same service
+- **When multiple language versions exist**, BOTH/ALL versions must include the language specification in their frontmatter titles
+- **Single language integrations** should not include language specification in the frontmatter title
+
+**Examples:**
   - ✅ `title: Observability for LangChain (Python) with Opik` (Python version when TypeScript also exists)
   - ✅ `title: Observability for LangChain (JavaScript) with Opik` (TypeScript version when Python also exists)
   - ✅ `title: Observability for OpenAI (Python) with Opik` (Python version when TypeScript also exists)
   - ✅ `title: Observability for OpenAI (TypeScript) with Opik` (TypeScript version when Python also exists)
   - ✅ `title: Observability for Google Gemini (Python) with Opik` (Python version when TypeScript also exists)
   - ✅ `title: Observability for Google Gemini (TypeScript) with Opik` (TypeScript version when Python also exists)
-  - ✅ `title: Observability for Spring AI (Java) with Opik` (Java only, no other languages)
+  - ✅ `title: Observability for Microsoft Agent Framework (Python) with Opik` (Python version when .NET also exists)
+  - ✅ `title: Observability for Microsoft Agent Framework (.NET) with Opik` (.NET version when Python also exists)
+  - ✅ `title: Observability for Spring AI (Java) with Opik` (Java only, no other languages - but includes (Java) for clarity)
+  - ✅ `title: Observability for Semantic Kernel (Python) with Opik` (Python only, no other languages - but includes (Python) for clarity)
   - ✅ `title: Observability for CrewAI with Opik` (Python only, no other languages)
   - ❌ `title: Observability for LangChain with Opik` (Missing language spec when multiple versions exist)
+
+#### Navigation (docs.yml) and Overview Cards (overview.mdx):
+- **NEVER include language specifications** in page names in `docs.yml` navigation
+- **NEVER include language specifications** in card titles in `overview.mdx` 
+- **Language context is provided by the section organization** (TypeScript section, Python section, etc.)
+
+**Examples:**
+  - ✅ Navigation: `- page: Microsoft Agent Framework` (no language spec)
+  - ✅ Overview card: `<Card title="Microsoft Agent Framework" href="..." />` (no language spec)
+  - ✅ Navigation: `- page: OpenAI` (no language spec, even though multiple language versions exist)
+  - ✅ Overview card: `<Card title="OpenAI" href="..." />` (no language spec)
+  - ❌ Navigation: `- page: Microsoft Agent Framework (Python)` (incorrect - removes language spec)
+  - ❌ Overview card: `<Card title="OpenAI (Python)" href="..." />` (incorrect - removes language spec)
+
+#### README Tables/Lists (README.md and translated versions):
+- **ALWAYS include language specifications** when multiple language versions exist
+- **Language context is NOT provided by organization** - READMEs are flat lists/tables without language sections
+- **Required for disambiguation** - users need to know which language version they're looking at
+
+**Examples:**
+  - ✅ README: `| BeeAI (Python) | Log traces for BeeAI Python agent framework calls | [Documentation](...) |`
+  - ✅ README: `| BeeAI (TypeScript) | Log traces for BeeAI TypeScript agent framework calls | [Documentation](...) |`
+  - ✅ README: `| OpenAI (Python) | Log traces for OpenAI Python calls | [Documentation](...) |`
+  - ✅ README: `| OpenAI (TypeScript) | Log traces for OpenAI TypeScript calls | [Documentation](...) |`
+  - ✅ README: `| CrewAI | Log traces for CrewAI agent framework calls | [Documentation](...) |` (only one language version)
+  - ❌ README: `| OpenAI | Log traces for OpenAI calls | [Documentation](...) |` (ambiguous when multiple versions exist)
 
 ### Content Structure
 
@@ -151,6 +191,17 @@ Customize these sections based on integration type:
 #### Environment Variables with Tabs Structure
 
 Use the standardized tab structure for all deployment types:
+
+**⚠️ CRITICAL: Endpoint Format for Node.js/TypeScript Integrations**
+
+For **Node.js/TypeScript** OpenTelemetry integrations using `OTLPTraceExporter` from `@opentelemetry/exporter-trace-otlp-http`:
+- **DO NOT include `/v1/traces`** in the endpoint URL
+- The Node.js exporter **automatically appends** `/v1/traces` to the base URL
+- Using the full path will result in a **404 error** (double path: `/v1/traces/v1/traces`)
+
+For **Python** OpenTelemetry integrations:
+- The endpoint format shown below works correctly for Python exporters
+- Python exporters handle both with and without the `/v1/traces` suffix
 
 ```markdown
 <Tabs>
@@ -653,6 +704,7 @@ When modifying integrations, verify:
 
 - [ ] All README files are updated (README.md, readme_CN.md, readme_JP.md, readme_KO.md)
 - [ ] README integration tables use 3-column format (Integration, Description, Documentation)
+- [ ] **README integration entries include language specifications when multiple versions exist** (e.g., `OpenAI (Python)`, `OpenAI (TypeScript)`)
 - [ ] Integration overview cards are updated with correct language-based organization
 - [ ] Language headers use `<Icon icon="..." />` component in H2 headers
 - [ ] Subsections use H3 headers within each language
@@ -662,6 +714,8 @@ When modifying integrations, verify:
 - [ ] Integration is properly categorized in the correct subsection (Frameworks, Model Providers, etc.)
 - [ ] **Integration is in the same subsection (Frameworks, Model Providers, etc.) in BOTH docs.yml navigation AND overview.mdx page**
 - [ ] Integration names are consistent across all locations
+- [ ] **Language specifications appear ONLY in page title frontmatter, NOT in navigation or overview cards**
+- [ ] When multiple language versions exist, ALL versions include language spec in frontmatter title
 - [ ] Documentation links point to `/docs/opik/integrations/[integration_name]`
 - [ ] Language sections have `icon` property with Font Awesome icon class
 - [ ] All sections have `skip-slug: true` to maintain clean URLs
@@ -712,8 +766,13 @@ When modifying integrations, verify:
 - ❌ Adding Colab links in README files instead of pointing to comprehensive integration docs
 - ❌ Using old `/tracing/integrations/` URLs in README instead of `/integrations/`
 - ❌ Including "Try in Colab" column in README integration tables (use 3-column format only)
-- ❌ Missing language specification in title when multiple language versions exist (e.g., `LangChain` instead of `LangChain (Python)` when TypeScript version also exists)
-- ❌ Only adding language specification to one version when multiple exist (both/all versions must include language spec)
+- ❌ Missing language specification in page title frontmatter when multiple language versions exist (e.g., `title: Observability for LangChain with Opik` instead of `title: Observability for LangChain (Python) with Opik` when TypeScript version also exists)
+- ❌ Only adding language specification to one page title when multiple language versions exist (both/all versions must include language spec in frontmatter)
+- ❌ **Including language specifications in navigation page names** (e.g., `- page: Microsoft Agent Framework (Python)` - should be `- page: Microsoft Agent Framework`)
+- ❌ **Including language specifications in overview card titles** (e.g., `<Card title="OpenAI (Python)" />` - should be `<Card title="OpenAI" />`)
+- ❌ **Omitting language specifications in README tables/lists when multiple versions exist** (e.g., `| OpenAI |` should be `| OpenAI (Python) |` and `| OpenAI (TypeScript) |`)
+- ❌ **Including `/v1/traces` suffix in OTEL endpoint URLs for Node.js/TypeScript integrations** - Node.js `OTLPTraceExporter` automatically appends this, causing 404 errors
+- ❌ **Using incorrect OTEL endpoint format**: Always use base URL `https://www.comet.com/opik/api/v1/private/otel` (NOT `/otel/v1/traces`)
 
 ## 📖 Integration-Specific Guidance
 
