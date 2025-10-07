@@ -1,3 +1,8 @@
+---
+description: Local development workflow guide for development
+globs:
+alwaysApply: false
+---
 # Local Development Workflow
 
 ## Overview
