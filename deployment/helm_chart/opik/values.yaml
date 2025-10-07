@@ -24,6 +24,7 @@ serviceAccount:
 
 demoDataJob: 
   enabled: true
+  useHelmHooks: true
 nodeSelector: {}
 tolerations: []
 affinity: {}
