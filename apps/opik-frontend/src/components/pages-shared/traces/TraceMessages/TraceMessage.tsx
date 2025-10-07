@@ -33,14 +33,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     >
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
-          <MessageRenderer
-            message={trace.input}
-            attemptTextExtraction={true}
-            jsonViewProps={{
-              collapseStringsAfterLength: 10000,
-              enableClipboard: false,
-            }}
-          />
+          <MessageRenderer message={trace.input} attemptTextExtraction={true} />
         </div>
       </div>
       <div key={`${trace.id}_output`} className="flex justify-start">
@@ -48,10 +41,6 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           <MessageRenderer
             message={trace.output}
             attemptTextExtraction={true}
-            jsonViewProps={{
-              collapseStringsAfterLength: 10000,
-              enableClipboard: false,
-            }}
           />
         </div>
       </div>

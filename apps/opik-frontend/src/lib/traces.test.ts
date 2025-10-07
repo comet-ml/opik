@@ -8,7 +8,7 @@ import { prettifyMessage } from "./traces";
 describe("prettifyMessage", () => {
   it("returns the content of the last message if config type is 'input'", () => {
     const message = { messages: [{ content: "Hello" }] };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "Hello", prettified: true });
   });
 
@@ -23,7 +23,7 @@ describe("prettifyMessage", () => {
         },
       ],
     };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "Hello there", prettified: true });
   });
 
@@ -34,25 +34,25 @@ describe("prettifyMessage", () => {
         { message: { content: "I'm fine" } },
       ],
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "I'm fine", prettified: true });
   });
 
   it("unwraps a single key object to get its string value", () => {
     const message = { question: "What is your name?" };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "What is your name?", prettified: true });
   });
 
   it("extracts the correct string using a predefined key map when multiple keys exist", () => {
     const message = { query: "Explain recursion.", extra: "unused" };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "Explain recursion.", prettified: true });
   });
 
   it("returns the original message if it is already a string and marks it as not prettified", () => {
     const message = "Simple string message";
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message: "Simple string message",
       prettified: false,
@@ -61,24 +61,24 @@ describe("prettifyMessage", () => {
 
   it("returns the original message content when it cannot be prettified", () => {
     const message = { otherKey: "Not relevant" };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "Not relevant", prettified: true });
   });
 
   it("gracefully handles an undefined message", () => {
-    const result = prettifyMessage(undefined, { type: "input" });
+    const result = prettifyMessage(undefined);
     expect(result).toEqual({ message: undefined, prettified: false });
   });
 
   it("handles ADK input message format", () => {
     const message = { parts: [{ text: "Hello ADK" }] };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "Hello ADK", prettified: true });
   });
 
   it("handles ADK spans input message format", () => {
     const message = { contents: [{ parts: [{ text: "Hello ADK" }] }] };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "Hello ADK", prettified: true });
   });
 
@@ -88,7 +88,7 @@ describe("prettifyMessage", () => {
         parts: [{ text: "ADK Response" }],
       },
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "ADK Response", prettified: true });
   });
 
@@ -96,7 +96,7 @@ describe("prettifyMessage", () => {
     const message = {
       messages: [{ type: "human", content: "User message" }],
     };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "User message", prettified: true });
   });
 
@@ -109,7 +109,7 @@ describe("prettifyMessage", () => {
         { type: "ai", content: "AI response 2" },
       ],
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message: "AI response 2",
       prettified: true,
@@ -124,7 +124,7 @@ describe("prettifyMessage", () => {
 
   it("handles empty array content in messages", () => {
     const message = { messages: [{ content: [] }] };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message, prettified: false });
   });
 
@@ -132,7 +132,7 @@ describe("prettifyMessage", () => {
     const message = {
       choices: [{ incomplete: "data" }],
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message, prettified: false });
   });
 
@@ -142,7 +142,7 @@ describe("prettifyMessage", () => {
         response: "Nested response",
       },
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({ message: "Nested response", prettified: true });
   });
 
@@ -155,7 +155,7 @@ describe("prettifyMessage", () => {
         { role: "user", content: "User message 2" },
       ],
     };
-    const result = prettifyMessage(message, { type: "input" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message: "User message 1\n\n  ----------------- \n\nUser message 2",
       prettified: true,
@@ -178,7 +178,7 @@ describe("prettifyMessage", () => {
         },
       ],
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message:
         "Assistant response 1\n\n  ----------------- \n\nAssistant response 2",
@@ -196,7 +196,7 @@ describe("prettifyMessage", () => {
         },
       ],
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message:
         "Opik is a tool that has been specifically designed to support high volumes of traces, making it suitable for monitoring production applications, particularly LLM applications.",
@@ -218,7 +218,7 @@ describe("prettifyMessage", () => {
         },
       ],
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message: "First paragraph content.\n\nSecond paragraph content.",
       prettified: true,
@@ -244,7 +244,7 @@ describe("prettifyMessage", () => {
         },
       ],
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message: "This is the text content.",
       prettified: true,
@@ -263,7 +263,7 @@ describe("prettifyMessage", () => {
         ],
       },
     };
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message:
         "Opik's morning routine before diving into LLM evaluations involves logging, viewing, and evaluating LLM traces using the Opik platform and LLM as a Judge evaluators. This allows for the identification and fixing of issues in the LLM application.",
@@ -305,7 +305,7 @@ describe("prettifyMessage", () => {
           "['The Baffler | The Baffler is a magazine of cultural, political, and business analysis. Established in 1988 by editors Thomas Frank and Keith White, it was headquartered in Chicago, Illinois until 2010, when it moved to Cambridge, Massachusetts. In 2016, it moved its headquarters to New York City. The first incarnation of \"The Baffler\" had up to 12,000 subscribers.', 'Movmnt | movmnt magazine is an urban-leaning lifestyle magazine which was co-founded in 2006 by David Benaym and Danny Tidwell. The magazine has featured columns by Mario Spinetti, Mia Michaels, Robert Battle, Debbie Allen, Alisan Porter, Rasta Thomas, and Frank Conway. Both Travis Wall and Ivan Koumaev have made guest contributions to the publication, which has published photographs by Gary Land, Dave Hill, James Archibald Houston, and Alison Jackson.', \"Fantasy Advertiser | Fantasy Advertiser, later abbreviated to FA, was a British fanzine which discussed comic books. The magazine was established in 1965. It was initially edited by Frank Dobson, essentially as an advertising service for comic collectors, and when Dobson emigrated to Australia in 1970 he handed it on to two contributors, Dez Skinn and Paul McCartney, to continue. Skinn and McCartney expanded the magazine to include more articles and artwork. Regular contributors included Dave Gibbons, Steve Parkhouse, Paul Neary, Jim Baikie and Kevin O'Neill. Skinn left in 1976.\"]",
       },
     ];
-    const result = prettifyMessage(message, { type: "output" });
+    const result = prettifyMessage(message);
     expect(result).toEqual({
       message:
         '**System**:\nAnswer the question with a direct phrase. Use the tool `search_wikipedia` if you need it.\n\n**User**:\nWhat magazine was established in 1988 by Frank Thomas and Keith White?\n\n**Tool call: search_wikipedia**\n*Results*:\n1. The Baffler | The Baffler is a magazine of cultural, political, and business analysis. Established in 1988 by editors Thomas Frank and Keith White, it was headquartered in Chicago, Illinois until 2010, when it moved to Cambridge, Massachusetts. In 2016, it moved its headquarters to New York City. The first incarnation of "The Baffler" had up to 12,000 subscribers.\n2. Movmnt | movmnt magazine is an urban-leaning lifestyle magazine which was co-founded in 2006 by David Benaym and Danny Tidwell. The magazine has featured columns by Mario Spinetti, Mia Michaels, Robert Battle, Debbie Allen, Alisan Porter, Rasta Thomas, and Frank Conway. Both Travis Wall and Ivan Koumaev have made guest contributions to the publication, which has published photographs by Gary Land, Dave Hill, James Archibald Houston, and Alison Jackson.\n3. Fantasy Advertiser | Fantasy Advertiser, later abbreviated to FA, was a British fanzine which discussed comic books. The magazine was established in 1965. It was initially edited by Frank Dobson, essentially as an advertising service for comic collectors, and when Dobson emigrated to Australia in 1970 he handed it on to two contributors, Dez Skinn and Paul McCartney, to continue. Skinn and McCartney expanded the magazine to include more articles and artwork. Regular contributors included Dave Gibbons, Steve Parkhouse, Paul Neary, Jim Baikie and Kevin O\'Neill. Skinn left in 1976.',
