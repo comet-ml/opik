@@ -607,6 +607,16 @@
   }
 }
 
+/* Specific styling for MarkdownHighlighter component only */
+.comet-markdown-highlighter {
+  /* Override prose H2 styling to be smaller and less bold */
+  h2 {
+    @apply comet-title-s;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+}
+
 .comet-button-badge {
   position: relative;
   --size: 10px;

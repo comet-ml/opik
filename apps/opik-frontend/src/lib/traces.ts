@@ -1,16 +1,11 @@
 import md5 from "md5";
 import get from "lodash/get";
-import last from "lodash/last";
-import findLast from "lodash/findLast";
-import isArray from "lodash/isArray";
 import isNumber from "lodash/isNumber";
 import isObject from "lodash/isObject";
 import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
 import { TRACE_VISIBILITY_MODE } from "@/types/traces";
-
-const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
 export const generateTagVariant = (label: string) => {
   const hash = md5(label);
@@ -37,427 +32,442 @@ export const traceExist = (item: ExperimentItem) =>
 export const traceVisible = (item: ExperimentItem) =>
   item.trace_visibility_mode === TRACE_VISIBILITY_MODE.default;
 
-type PrettifyMessageConfig = {
-  type: "input" | "output";
-};
-
 type PrettifyMessageResponse = {
   message: object | string | undefined;
   prettified: boolean;
 };
 
-const prettifyOpenAIMessageLogic = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig,
-): string | undefined => {
-  if (
-    config.type === "input" &&
-    isObject(message) &&
-    "messages" in message &&
-    isArray(message.messages)
-  ) {
-    const lastMessage = last(message.messages);
-    if (lastMessage && isObject(lastMessage) && "content" in lastMessage) {
-      if (isString(lastMessage.content) && lastMessage.content.length > 0) {
-        return lastMessage.content;
-      } else if (isArray(lastMessage.content)) {
-        const lastTextContent = findLast(
-          lastMessage.content,
-          (c) => c.type === "text",
-        );
+/**
+ * Enhanced text extraction logic that handles various message formats.
+ * This replaces the complex framework-specific logic with a more general approach.
+ */
+const extractTextFromObject = (obj: object): string | undefined => {
+  // Direct string fields
+  const directTextFields = [
+    "content",
+    "text",
+    "message",
+    "response",
+    "answer",
+    "output",
+    "input",
+    "query",
+    "prompt",
+    "question",
+    "user_input",
+  ];
 
+  for (const field of directTextFields) {
+    const value = (obj as Record<string, unknown>)[field];
+    if (isString(value) && value.trim()) {
+      return value;
+    }
+  }
+
+  // Handle OpenAI format: { messages: [{ content: "..." }] }
+  if (
+    "messages" in obj &&
+    Array.isArray((obj as Record<string, unknown>).messages)
+  ) {
+    const messages = (obj as Record<string, unknown>).messages as unknown[];
+    const lastMessage = messages[messages.length - 1];
+    if (
+      lastMessage &&
+      typeof lastMessage === "object" &&
+      lastMessage !== null &&
+      "content" in lastMessage
+    ) {
+      const messageContent = (lastMessage as Record<string, unknown>).content;
+      if (typeof messageContent === "string" && messageContent.trim()) {
+        return messageContent;
+      }
+      // Handle array content format
+      if (Array.isArray(messageContent)) {
+        const textContent = messageContent.find(
+          (c: unknown) =>
+            typeof c === "object" &&
+            c !== null &&
+            "type" in c &&
+            (c as Record<string, unknown>).type === "text",
+        );
         if (
-          lastTextContent &&
-          "text" in lastTextContent &&
-          isString(lastTextContent.text) &&
-          lastTextContent.text.length > 0
+          textContent &&
+          typeof textContent === "object" &&
+          textContent !== null &&
+          "text" in textContent &&
+          typeof (textContent as Record<string, unknown>).text === "string" &&
+          ((textContent as Record<string, unknown>).text as string).trim()
         ) {
-          return lastTextContent.text;
+          return (textContent as Record<string, unknown>).text as string;
         }
       }
     }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "choices" in message &&
-    isArray(message.choices)
+  }
+
+  // Handle OpenAI choices format: { choices: [{ message: { content: "..." } }] }
+  if (
+    "choices" in obj &&
+    Array.isArray((obj as Record<string, unknown>).choices)
   ) {
-    const lastChoice = last(message.choices);
+    const choices = (obj as Record<string, unknown>).choices as unknown[];
+    const lastChoice = choices[choices.length - 1];
     if (
       lastChoice &&
-      "message" in lastChoice &&
-      isObject(lastChoice.message) &&
-      "content" in lastChoice.message &&
-      isString(lastChoice.message.content) &&
-      lastChoice.message.content.length > 0
+      typeof lastChoice === "object" &&
+      lastChoice !== null &&
+      "message" in lastChoice
     ) {
-      return lastChoice.message.content;
+      const message = (lastChoice as Record<string, unknown>).message;
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "content" in message &&
+        typeof (message as Record<string, unknown>).content === "string" &&
+        ((message as Record<string, unknown>).content as string).trim()
+      ) {
+        return ((message as Record<string, unknown>).content as string).trim();
+      }
     }
   }
-};
 
-const prettifyOpenAIAgentsMessageLogic = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig,
-): string | undefined => {
+  // Handle LangChain format: { generations: [[{ text: "..." }]] }
   if (
-    config.type === "input" &&
-    isObject(message) &&
-    "input" in message &&
-    isArray(message.input)
+    "generations" in obj &&
+    Array.isArray((obj as Record<string, unknown>).generations)
   ) {
-    const userMessages = message.input.filter(
-      (m) =>
-        isObject(m) &&
-        "role" in m &&
-        m.role === "user" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
-
-    if (userMessages.length > 0) {
-      return userMessages.map((m) => m.content).join(MESSAGES_DIVIDER);
-    }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "output" in message &&
-    isArray(message.output)
-  ) {
-    const assistantMessageObjects = message.output.filter(
-      (m) =>
-        isObject(m) &&
-        "role" in m &&
-        m.role === "assistant" &&
-        "type" in m &&
-        m.type === "message" &&
-        "content" in m &&
-        isArray(m.content),
-    );
-
-    const userMessages = assistantMessageObjects.reduce<string[]>((acc, m) => {
-      return acc.concat(
-        m.content
-          .filter(
-            (c: unknown) =>
-              isObject(c) &&
-              "type" in c &&
-              c.type === "output_text" &&
-              "text" in c &&
-              isString(c.text) &&
-              c.text !== "",
-          )
-          .map((c: { text: string }) => c.text),
-      );
-    }, []);
-
-    if (userMessages.length > 0) {
-      return userMessages.join(MESSAGES_DIVIDER);
+    const generations = (obj as Record<string, unknown>)
+      .generations as unknown[];
+    if (generations.length === 1 && Array.isArray(generations[0])) {
+      const generation = generations[0] as unknown[];
+      const lastGen = generation[generation.length - 1];
+      if (
+        lastGen &&
+        typeof lastGen === "object" &&
+        lastGen !== null &&
+        "text" in lastGen &&
+        typeof (lastGen as Record<string, unknown>).text === "string" &&
+        ((lastGen as Record<string, unknown>).text as string).trim()
+      ) {
+        return (lastGen as Record<string, unknown>).text as string;
+      }
     }
   }
 
-  return undefined;
-};
-
-const prettifyADKMessageLogic = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig,
-): string | undefined => {
-  if (config.type === "input" && isObject(message)) {
-    const unwrappedMessage =
-      !("parts" in message) &&
-      "contents" in message &&
-      isArray(message.contents)
-        ? last(message.contents)
-        : message;
-
+  // Handle ADK format: { parts: [{ text: "..." }] }
+  if ("parts" in obj && Array.isArray((obj as Record<string, unknown>).parts)) {
+    const parts = (obj as Record<string, unknown>).parts as unknown[];
+    const lastPart = parts[parts.length - 1];
     if (
-      isObject(unwrappedMessage) &&
-      "parts" in unwrappedMessage &&
-      isArray(unwrappedMessage.parts)
+      lastPart &&
+      typeof lastPart === "object" &&
+      lastPart !== null &&
+      "text" in lastPart &&
+      typeof (lastPart as Record<string, unknown>).text === "string" &&
+      ((lastPart as Record<string, unknown>).text as string).trim()
     ) {
-      const lastPart = last(unwrappedMessage.parts);
-      if (isObject(lastPart) && "text" in lastPart && isString(lastPart.text)) {
-        return lastPart.text;
+      return (lastPart as Record<string, unknown>).text as string;
+    }
+  }
+
+  // Handle ADK spans format: { contents: [{ parts: [{ text: "..." }] }] }
+  if (
+    "contents" in obj &&
+    Array.isArray((obj as Record<string, unknown>).contents)
+  ) {
+    const contents = (obj as Record<string, unknown>).contents as unknown[];
+    const lastContent = contents[contents.length - 1];
+    if (
+      lastContent &&
+      typeof lastContent === "object" &&
+      lastContent !== null &&
+      "parts" in lastContent &&
+      Array.isArray((lastContent as Record<string, unknown>).parts)
+    ) {
+      const parts = (lastContent as Record<string, unknown>).parts as unknown[];
+      const lastPart = parts[parts.length - 1];
+      if (
+        lastPart &&
+        typeof lastPart === "object" &&
+        lastPart !== null &&
+        "text" in lastPart &&
+        typeof (lastPart as Record<string, unknown>).text === "string" &&
+        ((lastPart as Record<string, unknown>).text as string).trim()
+      ) {
+        return (lastPart as Record<string, unknown>).text as string;
       }
     }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "content" in message &&
-    isObject(message.content) &&
-    "parts" in message.content &&
-    isArray(message.content.parts)
-  ) {
-    const lastPart = last(message.content.parts);
-    if (isObject(lastPart) && "text" in lastPart && isString(lastPart.text)) {
-      return lastPart.text;
-    }
   }
-};
 
-const prettifyLangGraphLogic = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig,
-): string | undefined => {
+  // Handle ADK output format: { content: { parts: [{ text: "..." }] } }
   if (
-    config.type === "input" &&
-    isObject(message) &&
-    "messages" in message &&
-    isArray(message.messages)
+    "content" in obj &&
+    typeof (obj as Record<string, unknown>).content === "object" &&
+    (obj as Record<string, unknown>).content !== null
   ) {
-    // Find the first human message
-    const humanMessages = message.messages.filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
-
-    if (humanMessages.length > 0) {
-      return humanMessages[0].content;
-    }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "messages" in message &&
-    isArray(message.messages)
-  ) {
-    // Get the last AI message, and extract the string output from the various supported formats
-    const aiMessages = [];
-
-    // Iterate on all AI messages
-    for (const m of message.messages) {
-      if (isObject(m) && "type" in m && m.type === "ai" && "content" in m) {
-        // The message can either contains a string attribute named `content`
-        if (isString(m.content)) {
-          aiMessages.push(m.content);
-        }
-        // Or content can be an array with text content. For example when using OpenAI chat model with the Responses API
-        // https://python.langchain.com/docs/integrations/chat/openai/#responses-api
-        else if (isArray(m.content)) {
-          const textItems = m.content.filter(
-            (c) =>
-              isObject(c) &&
-              "type" in c &&
-              c.type === "text" &&
-              "text" in c &&
-              isString(c.text) &&
-              c.text !== "",
-          );
-
-          // Check that there is only one text item
-          if (textItems.length === 1) {
-            aiMessages.push(textItems[0].text);
-          }
-        }
+    const content = (obj as Record<string, unknown>).content as Record<
+      string,
+      unknown
+    >;
+    if ("parts" in content && Array.isArray(content.parts)) {
+      const parts = content.parts as unknown[];
+      const lastPart = parts[parts.length - 1];
+      if (
+        lastPart &&
+        typeof lastPart === "object" &&
+        lastPart !== null &&
+        "text" in lastPart &&
+        typeof (lastPart as Record<string, unknown>).text === "string" &&
+        ((lastPart as Record<string, unknown>).text as string).trim()
+      ) {
+        return (lastPart as Record<string, unknown>).text as string;
       }
     }
-
-    if (aiMessages.length > 0) {
-      return last(aiMessages);
-    }
   }
-};
 
-const prettifyLangChainLogic = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig,
-): string | undefined => {
-  // Some older models can return multiple generations, and Langchain can be
-  // called with several prompts at the same time. When that happens, there is
-  // no clear way to "know" which generation or prompt the user wants to see.
-  // Given that it's not the common case, we should only prettify when there
-  // is a single prompt and generation.
+  // Handle Demo project blocks format: { blocks: [{ block_type: "text", text: "..." }] }
   if (
-    config.type === "input" &&
-    isObject(message) &&
-    "messages" in message &&
-    isArray(message.messages) &&
-    message.messages.length == 1 &&
-    isArray(message.messages[0])
+    "blocks" in obj &&
+    Array.isArray((obj as Record<string, unknown>).blocks)
   ) {
-    // Find the first human message
-    const humanMessages = message.messages[0].filter(
-      (m) =>
-        isObject(m) &&
-        "type" in m &&
-        m.type === "human" &&
-        "content" in m &&
-        isString(m.content) &&
-        m.content !== "",
-    );
-
-    if (humanMessages.length > 0) {
-      return humanMessages[0].content;
-    }
-  } else if (
-    config.type === "output" &&
-    isObject(message) &&
-    "generations" in message &&
-    isArray(message.generations) &&
-    message.generations.length == 1 &&
-    isArray(message.generations[0])
-  ) {
-    // Get the last AI message
-    const aiMessages = message.generations[0].filter(
-      (m) =>
-        isObject(m) &&
-        "message" in m &&
-        isObject(m.message) &&
-        "kwargs" in m.message &&
-        isObject(m.message.kwargs) &&
-        "type" in m.message.kwargs &&
-        m.message.kwargs.type === "ai" &&
-        "text" in m &&
-        isString(m.text) &&
-        m.text !== "",
-    );
-
-    if (aiMessages.length > 0) {
-      return last(aiMessages).text;
-    }
-  }
-};
-
-/**
- * Prettifies Demo project's blocks-based message format.
- *
- * Handles two formats:
- * - Direct: { blocks: [{ block_type: "text", text: "..." }] }
- * - Nested: { output: { blocks: [{ block_type: "text", text: "..." }] } }
- */
-const prettifyDemoProjectLogic = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig,
-): string | undefined => {
-  const extractTextFromBlocks = (blocks: unknown[]): string | undefined => {
+    const blocks = (obj as Record<string, unknown>).blocks as unknown[];
     const textBlocks = blocks.filter(
-      (block): block is { block_type: string; text: string } =>
-        isObject(block) &&
-        "block_type" in block &&
-        block.block_type === "text" &&
-        "text" in block &&
-        isString(block.text) &&
-        block.text.trim() !== "",
+      (block: unknown) =>
+        typeof block === "object" &&
+        block !== null &&
+        "block_type" in (block as Record<string, unknown>) &&
+        (block as Record<string, unknown>).block_type === "text" &&
+        "text" in (block as Record<string, unknown>) &&
+        typeof (block as Record<string, unknown>).text === "string" &&
+        ((block as Record<string, unknown>).text as string).trim() !== "",
     );
 
-    return textBlocks.length > 0
-      ? textBlocks.map((block) => block.text).join("\n\n")
-      : undefined;
-  };
-
-  // Handle direct blocks structure: { blocks: [...] }
-  if (isObject(message) && "blocks" in message && isArray(message.blocks)) {
-    return extractTextFromBlocks(message.blocks);
+    if (textBlocks.length > 0) {
+      return textBlocks
+        .map(
+          (block: unknown) => (block as Record<string, unknown>).text as string,
+        )
+        .join("\n\n");
+    }
   }
 
-  // Handle nested blocks structure: { output: { blocks: [...] } }
+  // Handle Demo project nested blocks: { output: { blocks: [...] } }
   if (
-    config.type === "output" &&
-    isObject(message) &&
-    "output" in message &&
-    isObject(message.output) &&
-    "blocks" in message.output &&
-    isArray(message.output.blocks)
+    "output" in obj &&
+    typeof (obj as Record<string, unknown>).output === "object" &&
+    (obj as Record<string, unknown>).output !== null
   ) {
-    return extractTextFromBlocks(message.output.blocks);
+    const output = (obj as Record<string, unknown>).output as Record<
+      string,
+      unknown
+    >;
+    if ("blocks" in output && Array.isArray(output.blocks)) {
+      const blocks = output.blocks as unknown[];
+      const textBlocks = blocks.filter(
+        (block: unknown) =>
+          typeof block === "object" &&
+          block !== null &&
+          "block_type" in (block as Record<string, unknown>) &&
+          (block as Record<string, unknown>).block_type === "text" &&
+          "text" in (block as Record<string, unknown>) &&
+          typeof (block as Record<string, unknown>).text === "string" &&
+          ((block as Record<string, unknown>).text as string).trim() !== "",
+      );
+
+      if (textBlocks.length > 0) {
+        return textBlocks
+          .map(
+            (block: unknown) =>
+              (block as Record<string, unknown>).text as string,
+          )
+          .join("\n\n");
+      }
+    }
+  }
+
+  // Handle OpenAI Agents input format: { input: [{ role: "user", content: "..." }] }
+  if ("input" in obj && Array.isArray((obj as Record<string, unknown>).input)) {
+    const input = (obj as Record<string, unknown>).input as unknown[];
+    const userMessages = input.filter(
+      (m: unknown) =>
+        typeof m === "object" &&
+        m !== null &&
+        "role" in (m as Record<string, unknown>) &&
+        (m as Record<string, unknown>).role === "user" &&
+        "content" in (m as Record<string, unknown>) &&
+        typeof (m as Record<string, unknown>).content === "string" &&
+        ((m as Record<string, unknown>).content as string).trim() !== "",
+    );
+
+    if (userMessages.length > 0) {
+      return userMessages
+        .map((m: unknown) => (m as Record<string, unknown>).content as string)
+        .join("\n\n  ----------------- \n\n");
+    }
+  }
+
+  // Handle OpenAI Agents output format: { output: [{ role: "assistant", content: [...] }] }
+  if (
+    "output" in obj &&
+    Array.isArray((obj as Record<string, unknown>).output)
+  ) {
+    const output = (obj as Record<string, unknown>).output as unknown[];
+    const assistantMessages = output.filter(
+      (m: unknown) =>
+        typeof m === "object" &&
+        m !== null &&
+        "role" in (m as Record<string, unknown>) &&
+        (m as Record<string, unknown>).role === "assistant" &&
+        "type" in (m as Record<string, unknown>) &&
+        (m as Record<string, unknown>).type === "message" &&
+        "content" in (m as Record<string, unknown>) &&
+        Array.isArray((m as Record<string, unknown>).content),
+    );
+
+    const textMessages = assistantMessages.reduce(
+      (acc: string[], m: unknown) => {
+        const message = m as Record<string, unknown>;
+        const content = message.content as unknown[];
+        const textItems = content.filter(
+          (c: unknown) =>
+            typeof c === "object" &&
+            c !== null &&
+            "type" in (c as Record<string, unknown>) &&
+            (c as Record<string, unknown>).type === "output_text" &&
+            "text" in (c as Record<string, unknown>) &&
+            typeof (c as Record<string, unknown>).text === "string" &&
+            ((c as Record<string, unknown>).text as string).trim() !== "",
+        );
+
+        return acc.concat(
+          textItems.map(
+            (c: unknown) => (c as Record<string, unknown>).text as string,
+          ),
+        );
+      },
+      [],
+    );
+
+    if (textMessages.length > 0) {
+      return textMessages.join("\n\n  ----------------- \n\n");
+    }
+  }
+
+  // Handle nested objects with common patterns
+  const nestedPaths = [
+    "data.result.output",
+    "data.content",
+    "result.output",
+    "output.content",
+    "response.data",
+    "data.text",
+    "data.response", // Added for the test case
+  ];
+
+  for (const path of nestedPaths) {
+    const value = get(obj, path);
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  // Check if it's a single-key object with a string value
+  const keys = Object.keys(obj);
+  if (keys.length === 1) {
+    const value = (obj as Record<string, unknown>)[keys[0]];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
   }
 
   return undefined;
 };
 
-const prettifyGenericLogic = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig,
-): string | undefined => {
-  const PREDEFINED_KEYS_MAP = {
-    input: [
-      "question",
-      "messages",
-      "user_input",
-      "query",
-      "input_prompt",
-      "prompt",
-      "sys.query", // Dify
-    ],
-    output: ["answer", "output", "response"],
-  };
-
-  let unwrappedMessage = message;
-
-  if (isObject(message) && Object.keys(message).length === 1) {
-    unwrappedMessage = get(message, Object.keys(message)[0]);
-  }
-
-  if (isString(unwrappedMessage)) {
-    return unwrappedMessage;
-  }
-
-  if (isObject(unwrappedMessage)) {
-    if (Object.keys(unwrappedMessage).length === 1) {
-      const value = get(unwrappedMessage, Object.keys(unwrappedMessage)[0]);
-
-      if (isString(value)) {
-        return value;
-      }
-    } else {
-      for (const key of PREDEFINED_KEYS_MAP[config.type]) {
-        const value = get(unwrappedMessage, key);
-        if (isString(value)) {
-          return value;
-        }
-      }
-    }
-  }
-};
-
-export const prettifyMessage = (
-  message: object | string | undefined,
-  config: PrettifyMessageConfig = {
-    type: "input",
-  },
-) => {
+export const prettifyMessage = (message: object | string | undefined) => {
   if (isString(message)) {
     return {
       message,
       prettified: false,
     } as PrettifyMessageResponse;
   }
+
   try {
-    let processedMessage = prettifyOpenAIMessageLogic(message, config);
+    let extractedText: string | undefined;
 
-    if (!isString(processedMessage)) {
-      processedMessage = prettifyOpenAIAgentsMessageLogic(message, config);
+    // Handle arrays of objects/strings - simplified processing
+    if (Array.isArray(message)) {
+      const textItems: string[] = [];
+      for (const item of message) {
+        if (typeof item === "string" && item.trim()) {
+          textItems.push(item);
+        } else if (isObject(item)) {
+          // Check if this is a role-based message (like chat messages)
+          if (
+            "role" in item &&
+            "content" in item &&
+            typeof (item as Record<string, unknown>).role === "string"
+          ) {
+            const role = (item as Record<string, unknown>).role as string;
+            const content = (item as Record<string, unknown>).content;
+            const roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
+
+            // Handle string content
+            if (typeof content === "string" && content.trim()) {
+              textItems.push(`**${roleHeader}**:\n${content}`);
+            }
+            // Handle null content (e.g., assistant messages with tool_calls)
+            else if (content === null) {
+              // Check if there are tool_calls to process
+              if (
+                "tool_calls" in item &&
+                Array.isArray((item as Record<string, unknown>).tool_calls)
+              ) {
+                const toolCalls = (item as Record<string, unknown>)
+                  .tool_calls as unknown[];
+                if (toolCalls.length > 0) {
+                  textItems.push(
+                    `**${roleHeader}**:\n[Tool calls: ${toolCalls.length}]`,
+                  );
+                }
+              } else {
+                textItems.push(`**${roleHeader}**:\n[No content]`);
+              }
+            }
+            // Handle other content types
+            else if (content !== undefined) {
+              textItems.push(`**${roleHeader}**:\n${String(content)}`);
+            }
+          } else {
+            const extracted = extractTextFromObject(item);
+            if (extracted) {
+              textItems.push(extracted);
+            }
+          }
+        }
+      }
+      extractedText = textItems.length > 0 ? textItems.join("\n\n") : undefined;
+    } else if (isObject(message)) {
+      extractedText = extractTextFromObject(message);
     }
 
-    if (!isString(processedMessage)) {
-      processedMessage = prettifyADKMessageLogic(message, config);
+    // If we can extract text, use it
+    if (extractedText) {
+      return {
+        message: extractedText,
+        prettified: true,
+      } as PrettifyMessageResponse;
     }
 
-    if (!isString(processedMessage)) {
-      processedMessage = prettifyLangGraphLogic(message, config);
-    }
-
-    if (!isString(processedMessage)) {
-      processedMessage = prettifyLangChainLogic(message, config);
-    }
-
-    if (!isString(processedMessage)) {
-      processedMessage = prettifyDemoProjectLogic(message, config);
-    }
-
-    if (!isString(processedMessage)) {
-      processedMessage = prettifyGenericLogic(message, config);
+    // If we can't extract text, return the original message as not prettified
+    if (isObject(message)) {
+      return {
+        message: message,
+        prettified: false,
+      } as PrettifyMessageResponse;
     }
 
     return {
-      message: processedMessage ? processedMessage : message,
-      prettified: Boolean(processedMessage),
+      message: message,
+      prettified: false,
     } as PrettifyMessageResponse;
   } catch (error) {
     return {
