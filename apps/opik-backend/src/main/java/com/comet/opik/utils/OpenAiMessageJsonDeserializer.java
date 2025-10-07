@@ -6,13 +6,16 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.model.openai.internal.chat.FunctionMessage;
+import dev.langchain4j.model.openai.internal.chat.ImageDetail;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.chat.ToolMessage;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.util.Locale;
 
 /**
  * The Message interface of openai4j has not appropriate deserialization support for all its polymorphic implementors
@@ -30,10 +33,74 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
         var role = context.readTreeAsValue(jsonNode.get("role"), Role.class);
         return switch (role) {
             case SYSTEM -> context.readTreeAsValue(jsonNode, SystemMessage.class);
-            case USER -> context.readTreeAsValue(jsonNode, UserMessage.class);
+            case USER -> deserializeUserMessage(jsonNode);
             case ASSISTANT -> context.readTreeAsValue(jsonNode, AssistantMessage.class);
             case TOOL -> context.readTreeAsValue(jsonNode, ToolMessage.class);
             case FUNCTION -> context.readTreeAsValue(jsonNode, FunctionMessage.class);
         };
+    }
+
+    private UserMessage deserializeUserMessage(JsonNode jsonNode) throws IOException {
+        var builder = UserMessage.builder();
+
+        JsonNode nameNode = jsonNode.get("name");
+        if (nameNode != null && !nameNode.isNull()) {
+            builder.name(nameNode.asText());
+        }
+
+        JsonNode contentNode = jsonNode.get("content");
+
+        if (contentNode == null || contentNode.isNull()) {
+            return builder.build();
+        }
+
+        if (contentNode.isTextual()) {
+            builder.content(contentNode.asText());
+            return builder.build();
+        }
+
+        if (contentNode.isArray()) {
+            for (JsonNode partNode : contentNode) {
+                String type = partNode.path("type").asText();
+
+                switch (type) {
+                    case "text", "input_text" -> builder.addText(partNode.path("text").asText(""));
+                    case "image_url" -> handleImageUrlPart(builder, partNode.path("image_url"));
+                    default -> {
+                        // unsupported content type - skip
+                    }
+                }
+            }
+
+            return builder.build();
+        }
+
+        builder.content(contentNode.toString());
+        return builder.build();
+    }
+
+    private void handleImageUrlPart(UserMessage.Builder builder, JsonNode imageUrlNode) {
+        if (imageUrlNode == null || imageUrlNode.isNull()) {
+            return;
+        }
+
+        String url = imageUrlNode.path("url").asText(null);
+        if (StringUtils.isBlank(url)) {
+            return;
+        }
+
+        String detailText = imageUrlNode.path("detail").asText(null);
+
+        if (StringUtils.isBlank(detailText)) {
+            builder.addImageUrl(url);
+            return;
+        }
+
+        try {
+            var detail = ImageDetail.valueOf(detailText.toUpperCase(Locale.ENGLISH));
+            builder.addImageUrl(url, detail);
+        } catch (IllegalArgumentException exception) {
+            builder.addImageUrl(url);
+        }
     }
 }

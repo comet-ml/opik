@@ -34,6 +34,8 @@ import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import useAppStore from "@/store/AppStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import { useMessageContent } from "@/hooks/useMessageContent";
 
 type AddPromptDialogProps = {
   open: boolean;
@@ -59,6 +61,12 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const theme = useCodemirrorTheme({
     editable: true,
   });
+
+  const { localText, images, setImages, handleContentChange } =
+    useMessageContent({
+      content: template,
+      onChangeContent: setTemplate,
+    });
 
   const { mutate: createMutate } = usePromptCreateMutation();
   const { mutate: updateMutate } = usePromptUpdateMutation();
@@ -153,8 +161,13 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                 id="template"
                 className="comet-code"
                 placeholder="Prompt"
-                value={template}
-                onChange={(event) => setTemplate(event.target.value)}
+                value={localText}
+                onChange={(event) => handleContentChange(event.target.value)}
+              />
+              <PromptMessageImageTags
+                images={images}
+                setImages={setImages}
+                align="start"
               />
               <Description>
                 {
