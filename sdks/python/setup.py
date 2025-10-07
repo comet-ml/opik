@@ -42,7 +42,9 @@ setup(
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "rapidfuzz>=3.0.0,<4.0.0",
         # Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
-        "litellm!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5",
+        # Cap at 1.77.4: version 1.77.5+ removes trace_id/parent_span_id passthrough
+        # See: https://github.com/BerriAI/litellm/commit/dd4fa371fa59ef635a86ea3788639c456019fa59
+        "litellm<1.77.5,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5",
         "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
