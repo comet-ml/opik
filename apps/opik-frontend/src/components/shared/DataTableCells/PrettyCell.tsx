@@ -42,7 +42,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
       return (
         <div>
           {/* DEBUG: Visual indicator for new pretty view logic */}
-          <div className="mb-1 text-xs text-blue-600 font-semibold">
+          <div className="mb-1 text-xs font-semibold text-blue-600">
             🔄 NEW PRETTY VIEW LOGIC 🔄
           </div>
           <CompactPrettyView

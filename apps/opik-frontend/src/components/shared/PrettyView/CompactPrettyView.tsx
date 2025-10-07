@@ -39,7 +39,12 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
     }
 
     const provider = detectProvider(data);
-    console.log("🔍 CompactPrettyView: Detected provider", provider, "for", type);
+    console.log(
+      "🔍 CompactPrettyView: Detected provider",
+      provider,
+      "for",
+      type,
+    );
 
     if (!provider || !supportsPrettyView(provider)) {
       console.log("🔍 CompactPrettyView: Provider not supported", provider);
@@ -62,7 +67,7 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
       shouldUsePrettyView,
       contentLength: formattedData?.content?.length || 0,
       provider,
-      type
+      type,
     });
 
     return {
@@ -115,7 +120,7 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
   return (
     <div className={cn("w-full", className)}>
       {/* DEBUG: Visual indicator for pretty view */}
-      <div className="mb-1 text-xs text-green-600 font-semibold">
+      <div className="mb-1 text-xs font-semibold text-green-600">
         ✨ PRETTY VIEW ACTIVE ✨
       </div>
       <div className="comet-body whitespace-pre-wrap break-words">
