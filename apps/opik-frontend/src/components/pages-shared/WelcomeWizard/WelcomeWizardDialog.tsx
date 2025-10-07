@@ -27,12 +27,12 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import useOpenSourceWelcomeWizardSubmitMutation from "@/api/open-source-welcome-wizard/useOpenSourceWelcomeWizardSubmitMutation";
-import { OpenSourceWelcomeWizardSubmission } from "@/types/open-source-welcome-wizard";
+import useWelcomeWizardSubmitMutation from "@/api/welcome-wizard/useWelcomeWizardSubmitMutation";
+import { WelcomeWizardSubmission } from "@/types/welcome-wizard";
 import { Loader } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
-interface OpenSourceWelcomeWizardDialogProps {
+interface WelcomeWizardDialogProps {
   open: boolean;
   onClose: () => void;
 }
@@ -71,11 +71,10 @@ const INTEGRATIONS = [
   "Other",
 ];
 
-const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
-  OpenSourceWelcomeWizardDialogProps
+const WelcomeWizardDialog: React.FunctionComponent<
+  WelcomeWizardDialogProps
 > = ({ open, onClose }) => {
-  const { mutate: submitWizard, isPending } =
-    useOpenSourceWelcomeWizardSubmitMutation();
+  const { mutate: submitWizard, isPending } = useWelcomeWizardSubmitMutation();
   const { toast } = useToast();
   const [showCustomIntegration, setShowCustomIntegration] = useState(false);
 
@@ -99,7 +98,7 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
 
   const handleDismiss = useCallback(() => {
     // Submit empty data to mark as completed without collecting any info
-    const emptySubmission: OpenSourceWelcomeWizardSubmission = {};
+    const emptySubmission: WelcomeWizardSubmission = {};
     submitWizard(emptySubmission, {
       onSuccess: () => {
         onClose();
@@ -118,7 +117,7 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
         ];
       }
 
-      const submission: OpenSourceWelcomeWizardSubmission = {
+      const submission: WelcomeWizardSubmission = {
         role: data.role || undefined,
         integrations:
           finalIntegrations.length > 0 ? finalIntegrations : undefined,
@@ -319,4 +318,4 @@ const OpenSourceWelcomeWizardDialog: React.FunctionComponent<
   );
 };
 
-export default OpenSourceWelcomeWizardDialog;
+export default WelcomeWizardDialog;

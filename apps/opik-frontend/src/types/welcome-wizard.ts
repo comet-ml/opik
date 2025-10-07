@@ -1,8 +1,8 @@
-export interface OpenSourceWelcomeWizardTracking {
+export interface WelcomeWizardTracking {
   completed: boolean;
 }
 
-export interface OpenSourceWelcomeWizardSubmission {
+export interface WelcomeWizardSubmission {
   role?: string;
   integrations?: string[];
   email?: string;

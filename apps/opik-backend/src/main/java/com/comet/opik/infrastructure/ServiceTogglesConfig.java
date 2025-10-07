@@ -18,5 +18,5 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean alertsEnabled;
     @JsonProperty
-    @NotNull boolean openSourceWelcomeWizardEnabled;
+    @NotNull boolean welcomeWizardEnabled;
 }

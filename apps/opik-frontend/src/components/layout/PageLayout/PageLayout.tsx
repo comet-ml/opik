@@ -5,8 +5,8 @@ import TopBar from "@/components/layout/TopBar/TopBar";
 import { cn } from "@/lib/utils";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
-import OpenSourceWelcomeWizardDialog from "@/components/pages-shared/OpenSourceWelcomeWizard/OpenSourceWelcomeWizardDialog";
-import useOpenSourceWelcomeWizardStatus from "@/api/open-source-welcome-wizard/useOpenSourceWelcomeWizardStatus";
+import WelcomeWizardDialog from "@/components/pages-shared/WelcomeWizard/WelcomeWizardDialog";
+import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
@@ -16,20 +16,20 @@ const PageLayout = () => {
   const [bannerHeight, setBannerHeight] = useState(0);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
 
-  const openSourceWelcomeWizardEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPEN_SOURCE_WELCOME_WIZARD_ENABLED,
+  const welcomeWizardEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
   );
 
-  const { data: wizardStatus } = useOpenSourceWelcomeWizardStatus({
-    enabled: openSourceWelcomeWizardEnabled,
+  const { data: wizardStatus } = useWelcomeWizardStatus({
+    enabled: welcomeWizardEnabled,
   });
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
 
-  // Show OSS welcome wizard if enabled and not completed
+  // Show welcome wizard if enabled and not completed
   useEffect(() => {
     if (
-      openSourceWelcomeWizardEnabled &&
+      welcomeWizardEnabled &&
       wizardStatus &&
       !wizardStatus.completed &&
       !showWelcomeWizard
@@ -41,7 +41,7 @@ const PageLayout = () => {
 
       return () => clearTimeout(timer);
     }
-  }, [openSourceWelcomeWizardEnabled, wizardStatus, showWelcomeWizard]);
+  }, [welcomeWizardEnabled, wizardStatus, showWelcomeWizard]);
 
   const handleCloseWelcomeWizard = useCallback(() => {
     setShowWelcomeWizard(false);
@@ -73,8 +73,8 @@ const PageLayout = () => {
         </section>
       </main>
 
-      {/* Open Source Welcome Wizard Dialog */}
-      <OpenSourceWelcomeWizardDialog
+      {/* Welcome Wizard Dialog */}
+      <WelcomeWizardDialog
         open={showWelcomeWizard}
         onClose={handleCloseWelcomeWizard}
       />

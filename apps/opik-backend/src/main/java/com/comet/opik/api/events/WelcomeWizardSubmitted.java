@@ -2,7 +2,7 @@ package com.comet.opik.api.events;
 
 import java.util.List;
 
-public record OpenSourceWelcomeWizardSubmitted(
+public record WelcomeWizardSubmitted(
         String workspaceId,
         String email,
         String role,

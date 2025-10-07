@@ -1,4 +1,4 @@
-package com.comet.opik.api.opensourcewelcomewizard;
+package com.comet.opik.api.welcomewizard;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -9,6 +9,6 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record OpenSourceWelcomeWizardTracking(
+public record WelcomeWizardTracking(
         @Schema(description = "Whether the welcome wizard has been completed") boolean completed) {
 }

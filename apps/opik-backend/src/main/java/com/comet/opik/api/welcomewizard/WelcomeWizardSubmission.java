@@ -1,4 +1,4 @@
-package com.comet.opik.api.opensourcewelcomewizard;
+package com.comet.opik.api.welcomewizard;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -13,7 +13,7 @@ import java.util.List;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record OpenSourceWelcomeWizardSubmission(
+public record WelcomeWizardSubmission(
         @Size(max = 100, message = "Role cannot exceed 100 characters") @Schema(description = "Optional user role") String role,
 
         @Schema(description = "List of integrations the user selected") List<String> integrations,
