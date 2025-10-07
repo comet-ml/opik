@@ -7,7 +7,7 @@ import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
 import OpenSourceWelcomeWizardDialog from "@/components/pages-shared/OpenSourceWelcomeWizard/OpenSourceWelcomeWizardDialog";
 import useOpenSourceWelcomeWizardStatus from "@/api/open-source-welcome-wizard/useOpenSourceWelcomeWizardStatus";
-import { useFeatureToggles } from "@/components/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const PageLayout = () => {
@@ -16,9 +16,9 @@ const PageLayout = () => {
   const [bannerHeight, setBannerHeight] = useState(0);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
 
-  const toggles = useFeatureToggles();
-  const openSourceWelcomeWizardEnabled =
-    toggles?.[FeatureToggleKeys.OPEN_SOURCE_WELCOME_WIZARD_ENABLED] ?? false;
+  const openSourceWelcomeWizardEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPEN_SOURCE_WELCOME_WIZARD_ENABLED,
+  );
 
   const { data: wizardStatus } = useOpenSourceWelcomeWizardStatus({
     enabled: openSourceWelcomeWizardEnabled,
