@@ -49,9 +49,22 @@ The **recommended approach** uses `scripts/dev-runner.sh`, which runs backend an
 
 ## Access URLs
 
-**Standard Mode:** Frontend `http://localhost:5174`, Backend `http://localhost:8080`  
-**BE-Only Mode:** Frontend `http://localhost:5173`, Backend `http://localhost:8080`  
-**Health Check:** `http://localhost:8080/is-alive/ping`
+**Standard Mode:**
+
+- Frontend UI: `http://localhost:5174`
+- Backend API: `http://localhost:8080`
+
+**BE-Only Mode:**
+
+- Frontend UI: `http://localhost:5173`
+- Backend API: `http://localhost:8080`
+
+**Backend Health & Utilities:**
+
+- API Base: `http://localhost:8080`
+- Health Check: `http://localhost:8080/health`
+- API Ping: `http://localhost:8080/is-alive/ping`
+- API Docs (Swagger): `http://localhost:8080/swagger`
 
 **Logs:**
 
