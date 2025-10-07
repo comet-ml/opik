@@ -298,7 +298,7 @@ cd apps/opik-frontend && rm -rf node_modules && npm install
 ```bash
 tail -100 /tmp/opik-backend.log           # Check migration errors
 ./scripts/dev-runner.sh --stop
-docker volume prune -a -f                 # ⚠️ DATA LOSS - removes ALL databases
+docker volume prune -a -f                 # ⚠️ DATA LOSS - removes ALL unused volumes (including database data if not in use)
 ./scripts/dev-runner.sh --restart
 ```
 
