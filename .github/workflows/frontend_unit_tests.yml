@@ -1,5 +1,7 @@
 name: Frontend Unit Tests
 run-name: "Frontend Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 on:
   pull_request:
     paths:
