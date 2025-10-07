@@ -2,847 +2,271 @@
 
 ## Overview
 
-This workflow provides a seamless build and run experience for the Opik platform within Cursor. The **recommended approach** uses the `scripts/dev-runner.sh` script, which runs backend and frontend as local processes for faster development cycles and easier debugging.
+The **recommended approach** uses `scripts/dev-runner.sh`, which runs backend and frontend as local processes for faster development cycles and easier debugging.
 
-The goal is to enable any engineer to spin up the entire application stack without leaving the IDE, with the flexibility to choose between:
+**Two modes available:**
 
-1. **Local Processes** (Recommended): Backend and frontend run as local processes for rapid iteration
-2. **Docker-Based**: Full containerized environment for production-like testing
+1. **Standard Mode** (Recommended): Both backend and frontend as local processes
+2. **BE-Only Mode**: Backend as process, frontend in Docker (faster backend rebuilds)
 
-## Quick Start (Recommended)
+## Quick Start
 
 ### **First Time Setup**
 
 ```bash
-# Build and start everything (recommended for first run)
 ./scripts/dev-runner.sh --restart
-
-# This will:
-# 1. Stop any running services
-# 2. Start Docker infrastructure (databases, redis, etc.)
-# 3. Build backend (Maven)
-# 4. Build frontend (npm)
-# 5. Run database migrations
-# 6. Start backend process
-# 7. Start frontend process
+# Builds everything and starts all services
 ```
 
-### **Daily Development**
+### **Daily Commands**
 
 ```bash
-# Quick restart (default - rebuilds and restarts everything)
-./scripts/dev-runner.sh
-
-# Start without rebuilding (faster, uses existing builds)
-./scripts/dev-runner.sh --start
-
-# Stop everything (infrastructure + backend + frontend)
-./scripts/dev-runner.sh --stop
-
-# Check status of all services
-./scripts/dev-runner.sh --verify
-
-# View recent logs
-./scripts/dev-runner.sh --logs
-
-# Enable debug mode for detailed logging
-./scripts/dev-runner.sh --restart --debug
+./scripts/dev-runner.sh           # Default: full rebuild and restart
+./scripts/dev-runner.sh --start   # Start without rebuilding (faster)
+./scripts/dev-runner.sh --stop    # Stop all services
+./scripts/dev-runner.sh --verify  # Check status
+./scripts/dev-runner.sh --logs    # View recent logs
+./scripts/dev-runner.sh --debug   # Enable debug logging (combine with other flags)
 ```
 
-### **Backend-Only Development Mode**
-
-When you only need to work on backend code and want to use the Docker frontend:
+### **Backend-Only Mode**
 
 ```bash
-# Build and start backend process with Docker frontend
-./scripts/dev-runner.sh --be-only-restart
-
-# Quick start (without rebuilding)
-./scripts/dev-runner.sh --be-only-start
-
-# Stop backend-only services
-./scripts/dev-runner.sh --be-only-stop
-
-# Check backend-only status
-./scripts/dev-runner.sh --be-only-verify
+./scripts/dev-runner.sh --be-only-restart  # Backend process + Docker frontend
+./scripts/dev-runner.sh --be-only-start    # Start without rebuilding
+./scripts/dev-runner.sh --be-only-stop     # Stop BE-only services
 ```
 
-### **Individual Build & Lint Operations**
+### **Build & Lint**
 
 ```bash
-# Build only backend
-./scripts/dev-runner.sh --build-be
-
-# Build only frontend
-./scripts/dev-runner.sh --build-fe
-
-# Run database migrations only
-./scripts/dev-runner.sh --migrate
-
-# Lint backend code (applies Spotless formatting)
-./scripts/dev-runner.sh --lint-be
-
-# Lint frontend code (runs ESLint)
-./scripts/dev-runner.sh --lint-fe
+./scripts/dev-runner.sh --build-be   # Build backend
+./scripts/dev-runner.sh --build-fe   # Build frontend
+./scripts/dev-runner.sh --migrate    # Run database migrations
+./scripts/dev-runner.sh --lint-be    # Lint backend (Spotless)
+./scripts/dev-runner.sh --lint-fe    # Lint frontend (ESLint)
 ```
 
-## Accessing the Application
+## Access URLs
 
-After starting services with `dev-runner.sh`, you can access:
+**Standard Mode:** Frontend `http://localhost:5174`, Backend `http://localhost:8080`  
+**BE-Only Mode:** Frontend `http://localhost:5173`, Backend `http://localhost:8080`  
+**Health Check:** `http://localhost:8080/is-alive/ping`
 
-### **Standard Mode (Local Processes)**
+**Logs:**
 
-```bash
-# After running: ./scripts/dev-runner.sh --restart (or --start)
+- Backend: `tail -f /tmp/opik-backend.log`
+- Frontend: `tail -f /tmp/opik-frontend.log` (or `docker logs -f opik-frontend-1` for BE-only)
 
-🚀 Frontend UI:          http://localhost:5174
-🛠️  Backend API:         http://localhost:8080
-📊 Health Check:         http://localhost:8080/is-alive/ping
-
-📝 Logs:
-   Backend:  tail -f /tmp/opik-backend.log
-   Frontend: tail -f /tmp/opik-frontend.log
-```
-
-### **BE-Only Mode (Backend Process + Docker Frontend)**
+**SDK Configuration:**
 
 ```bash
-# After running: ./scripts/dev-runner.sh --be-only-restart (or --be-only-start)
-
-🚀 Frontend UI:          http://localhost:5173
-🛠️  Backend API:         http://localhost:8080
-📊 Health Check:         http://localhost:8080/is-alive/ping
-
-📝 Logs:
-   Backend Process: tail -f /tmp/opik-backend.log
-   Docker Frontend: docker logs -f opik-frontend-1
-```
-
-### **SDK Configuration**
-
-To use the Python or TypeScript SDK with your local development environment:
-
-```bash
-# Configure SDK to use local instance
-opik configure --use_local
-
-# When prompted, use URL: http://localhost:8080
-# For standard mode: manually edit ~/.opik.config and remove '/api' from URL
-# For BE-only mode: the URL can include '/api'
-
-# Alternative: Set environment variables
 export OPIK_URL_OVERRIDE='http://localhost:8080'
 export OPIK_WORKSPACE='default'
 ```
 
-## Individual Application Development
+## Development Workflows
 
-### **Backend (Java) Development**
-
-When working on backend code:
+### **Backend-Focused (BE-Only Mode)**
 
 ```bash
-# Quick backend rebuild and restart
-./scripts/dev-runner.sh --build-be  # Build
-./scripts/dev-runner.sh --stop      # Stop current services
-./scripts/dev-runner.sh --start     # Start with new build
-
-# Or use the combined restart command
-./scripts/dev-runner.sh --restart
-
-# For backend-only development
-./scripts/dev-runner.sh --be-only-restart
-
-# Manual backend operations (if needed)
-cd apps/opik-backend
-mvn clean compile       # Compile only
-mvn test               # Run tests
-mvn clean package      # Build JAR
+./scripts/dev-runner.sh --be-only-restart  # Initial start
+# Make backend changes, then:
+./scripts/dev-runner.sh --build-be         # Quick rebuild
+tail -f /tmp/opik-backend.log              # Monitor
 ```
 
-### **Frontend (React/TypeScript) Development**
+**Benefits:** Faster rebuilds, easy debugging, Docker frontend
 
-When working on frontend code:
+### **Frontend-Focused (Standard Mode)**
 
 ```bash
-# Quick frontend rebuild and restart
-./scripts/dev-runner.sh --build-fe  # Build
-./scripts/dev-runner.sh --stop      # Stop current services
-./scripts/dev-runner.sh --start     # Start with new build
-
-# Or use the combined restart command
-./scripts/dev-runner.sh --restart
-
-# Manual frontend operations (if needed)
-cd apps/opik-frontend
-npm install            # Install dependencies
-npm test              # Run tests
-npm run typecheck     # Type checking
-npm run lint          # Run linting
-npm run e2e           # Run e2e tests
+./scripts/dev-runner.sh --restart          # Initial start
+# Make frontend changes - auto-reloads with HMR
+tail -f /tmp/opik-frontend.log             # Monitor if needed
 ```
 
-### **Python SDK Development**
+**Benefits:** Instant hot reload, browser debugging, React DevTools
+
+### **Full Stack (Standard Mode)**
 
 ```bash
-# Navigate to Python SDK directory
-cd sdks/python
-
-# Install in development mode
-pip install -e .
-
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=opik
-
-# Build package
-python setup.py sdist bdist_wheel
+./scripts/dev-runner.sh --restart          # Initial start
+# Make changes to both, then:
+./scripts/dev-runner.sh --restart          # Rebuild both
+tail -f /tmp/opik-*.log                    # Monitor both
 ```
 
-### **TypeScript SDK Development**
+**Benefits:** Fast iteration, full visibility, end-to-end debugging
+
+## Alternative: Docker Mode
+
+Use `opik.sh` for production-like testing:
 
 ```bash
-# Navigate to TypeScript SDK directory
-cd sdks/typescript
-
-# Install dependencies
-npm install
-
-# Build package
-npm run build
-
-# Run tests
-npm test
-
-# Run type checking
-npm run typecheck
+./opik.sh --build   # Full stack
+./opik.sh --infra   # Infrastructure only
+./opik.sh --verify  # Health check
+./opik.sh --stop    # Stop all
 ```
 
-## Development Workflows with dev-runner.sh
+**When to use Docker:** Production testing, container orchestration, guardrails backend  
+**When to use dev-runner:** Daily development, debugging, fast iteration
 
-### **Backend-Focused Development Workflow**
+## Configuration
 
-#### Recommended: Use BE-Only Mode
+**Auto-configured by dev-runner.sh:**
 
-```bash
-# 1. Start BE-only environment (backend process + Docker frontend)
-./scripts/dev-runner.sh --be-only-restart --debug
+- Backend CORS enabled
+- Frontend API URL set
+- PID files in `/tmp/opik-*.pid`
+- Logs in `/tmp/opik-*.log`
 
-# 2. Make backend changes in your editor
-
-# 3. Quick rebuild and restart backend only
-./scripts/dev-runner.sh --be-only-restart
-
-# 4. View backend logs
-tail -f /tmp/opik-backend.log
-
-# 5. Test your changes
-curl http://localhost:8080/is-alive/ping
-```
-
-#### Benefits of BE-Only Mode
-
-- ✅ Faster backend rebuilds (Maven only)
-- ✅ Frontend runs in Docker (no npm overhead)
-- ✅ Easier debugging with local backend process
-- ✅ Can attach debugger to backend Java process
-
-### **Frontend-Focused Development Workflow**
-
-#### Recommended: Use Standard Mode for Frontend
+**Debug mode:**
 
 ```bash
-# 1. Start standard environment (both as processes)
 ./scripts/dev-runner.sh --restart --debug
-
-# 2. Make frontend changes in your editor
-
-# 3. Frontend auto-reloads with Vite HMR
-# No manual restart needed - just save and see changes
-
-# 4. View frontend logs if needed
-tail -f /tmp/opik-frontend.log
-
-# 5. If frontend crashes, restart it
-./scripts/dev-runner.sh --start
 ```
 
-#### Benefits of Standard Mode for Frontend
-
-- ✅ Instant hot reload with Vite
-- ✅ Full access to frontend process
-- ✅ Easy browser debugging
-- ✅ React DevTools work seamlessly
-
-### **Full Stack Development Workflow**
-
-#### Recommended: Use Standard Mode for Full Stack
-
-```bash
-# 1. Initial setup
-./scripts/dev-runner.sh --restart --debug
-
-# 2. Make changes to both backend and frontend
-
-# 3. Full rebuild and restart
-./scripts/dev-runner.sh --restart
-
-# 4. Monitor both logs
-tail -f /tmp/opik-backend.log /tmp/opik-frontend.log
-
-# 5. Verify everything works
-./scripts/dev-runner.sh --verify
-```
-
-#### Benefits of Full Stack Mode
-
-- ✅ Both services run as local processes
-- ✅ Faster iteration cycles
-- ✅ Better visibility into both services
-- ✅ Easier to debug full stack flows
-
-## Alternative: Docker-Based Development
-
-If you prefer a full containerized environment or need to test production-like setup, use `opik.sh`:
-
-### **Full Stack with Docker Compose**
-
-```bash
-# Start entire platform (recommended for production-like testing)
-./opik.sh --build
-
-# Start with debug mode
-./opik.sh --debug
-
-# Start with port mapping (exposes all container ports)
-./opik.sh --port-mapping
-
-# Check container health
-./opik.sh --verify
-
-# Stop all containers
-./opik.sh --stop
-```
-
-### **Service Profile Operations**
-
-```bash
-# Start only infrastructure (databases, redis, storage)
-./opik.sh --infra --port-mapping
-
-# Start infrastructure + backend services
-./opik.sh --backend --port-mapping
-
-# Start full suite (default)
-./opik.sh --port-mapping
-```
-
-### **When to Use Docker-Based Development**
-
-Use `opik.sh` Docker mode when:
-
-- 🔧 Testing production-like environment
-- 🐳 Verifying Docker configurations
-- 📦 Testing container orchestration
-- 🔄 Need to test guardrails backend
-- 🏗️ Working on deployment configurations
-
-Use `dev-runner.sh` (recommended) when:
-
-- 💻 Daily feature development
-- 🐛 Debugging backend or frontend
-- ⚡ Need fast iteration cycles
-- 🔍 Require deep debugging with IDE
-
-## Environment Configuration
-
-### **Dev-Runner Configuration**
-
-The `dev-runner.sh` script automatically:
-
-- Sets `CORS=true` for backend
-- Configures `VITE_BASE_API_URL=http://localhost:8080` for frontend
-- Creates PID files in `/tmp/opik-*.pid`
-- Stores logs in `/tmp/opik-*.log`
-
-### **Debug Mode**
-
-Enable debug mode for detailed logging:
-
-```bash
-# With dev-runner.sh
-./scripts/dev-runner.sh --restart --debug
-
-# Or set environment variable
-DEBUG_MODE=true ./scripts/dev-runner.sh --restart
-
-# Debug mode sets:
-# - GENERAL_LOG_LEVEL=DEBUG
-# - OPIK_LOG_LEVEL=DEBUG
-# - NODE_ENV=development
-```
-
-### **Configuration File**
-
-Create `~/.opik.config` for SDK usage:
+**SDK config (`~/.opik.config`):**
 
 ```ini
 [opik]
-# For standard mode (local processes)
 url_override = http://localhost:8080
 workspace = default
-
-# For BE-only mode (may work with /api)
-# url_override = http://localhost:5173/api/
-# workspace = default
 ```
 
 ## Troubleshooting
 
-### **Common Issues with dev-runner.sh**
-
-#### **1. Backend Won't Start**
+### **Service Won't Start**
 
 ```bash
-# Check if backend is already running
-./scripts/dev-runner.sh --verify
-
-# View backend logs for errors
-tail -50 /tmp/opik-backend.log
-
-# Check for port conflicts
-lsof -i :8080
-
-# If port is in use, kill the process
-kill -9 <PID>
-
-# Clean build and restart
-./scripts/dev-runner.sh --stop
-./scripts/dev-runner.sh --build-be
-./scripts/dev-runner.sh --start
-
-# Check for JAR file issues
-cd apps/opik-backend
-ls -la target/opik-backend-*.jar
+./scripts/dev-runner.sh --verify           # Check status
+tail -50 /tmp/opik-backend.log            # View backend logs
+tail -50 /tmp/opik-frontend.log           # View frontend logs
+lsof -i :8080                             # Check port conflicts
 ```
 
-#### **2. Frontend Won't Start**
+**Fix:** `./scripts/dev-runner.sh --stop && ./scripts/dev-runner.sh --restart`
+
+### **Build Failures**
 
 ```bash
-# Check frontend status
-./scripts/dev-runner.sh --verify
+# Backend
+cd apps/opik-backend && mvn clean install -DskipTests
 
-# View frontend logs
-tail -50 /tmp/opik-frontend.log
-
-# Check for port conflicts
-lsof -i :5174  # Standard mode
-lsof -i :5173  # BE-only mode (Docker)
-
-# Stop and clean orphaned processes
-./scripts/dev-runner.sh --stop
-
-# Rebuild and restart
-./scripts/dev-runner.sh --build-fe
-./scripts/dev-runner.sh --start
+# Frontend
+cd apps/opik-frontend && rm -rf node_modules && npm install
 ```
 
-#### **3. Database Migration Failures**
+### **Database Issues**
 
 ```bash
-# View migration errors
-tail -100 /tmp/opik-backend.log
-
-# If migrations fail, you may need to clean Docker volumes
+tail -100 /tmp/opik-backend.log           # Check migration errors
 ./scripts/dev-runner.sh --stop
-
-# WARNING: This removes ALL data
-docker volume prune -a -f
-
-# Restart fresh
+docker volume prune -a -f                 # ⚠️ Removes all data
 ./scripts/dev-runner.sh --restart
 ```
 
-#### **4. Stale Process Issues**
+### **Stale Processes**
 
 ```bash
-# Stop all services to clean up
 ./scripts/dev-runner.sh --stop
-
-# Check for orphaned processes
 ps aux | grep -E '(opik-backend|npm.*opik-frontend)'
-
-# Kill orphaned processes if found
-kill -9 <PID>
-
-# Remove stale PID files
-rm -f /tmp/opik-backend.pid /tmp/opik-frontend.pid
-
-# Start fresh
+kill -9 <PID>                             # If needed
+rm -f /tmp/opik-*.pid
 ./scripts/dev-runner.sh --start
 ```
 
-#### **5. Build Failures**
+### **Quick Recovery**
 
 ```bash
-# Backend build issues
-cd apps/opik-backend
-mvn clean install -DskipTests  # Force clean build
-
-# Frontend build issues
-cd apps/opik-frontend
-rm -rf node_modules package-lock.json
-npm install
-
-# Then restart with dev-runner.sh
-./scripts/dev-runner.sh --restart
-```
-
-### **Docker Infrastructure Issues**
-
-Since dev-runner.sh uses Docker for infrastructure (MySQL, ClickHouse, Redis):
-
-```bash
-# Check Docker container health
-docker ps
-docker stats
-
-# View Docker logs
-docker logs opik-mysql-1
-docker logs opik-clickhouse-1
-
-# Restart Docker infrastructure
-./scripts/dev-runner.sh --stop
-docker compose -f deployment/docker-compose/docker-compose.yaml --profile backend down
-docker compose -f deployment/docker-compose/docker-compose.yaml up -d
-
-# Or use opik.sh to restart infrastructure
-./opik.sh --infra --port-mapping
-
-# Clean Docker resources (WARNING: removes all data)
-docker system prune -a -f
-docker volume prune -a -f
-```
-
-### **Development Tips**
-
-#### **Best Practices**
-
-1. **Always use `--debug` flag** when troubleshooting:
-
-   ```bash
-   ./scripts/dev-runner.sh --restart --debug
-   ```
-
-2. **Check logs first** before restarting:
-
-   ```bash
-   ./scripts/dev-runner.sh --logs
-   ```
-
-3. **Verify status** after any operation:
-
-   ```bash
-   ./scripts/dev-runner.sh --verify
-   ```
-
-4. **Use `--start` instead of `--restart`** when you haven't changed code:
-
-   ```bash
-   ./scripts/dev-runner.sh --start  # Faster, doesn't rebuild
-   ```
-
-#### **Performance Tips**
-
-1. **Use BE-only mode** when only working on backend:
-
-   ```bash
-   ./scripts/dev-runner.sh --be-only-restart
-   ```
-
-2. **Keep Docker Desktop resource limits high** for smooth development
-
-3. **Monitor resource usage**:
-
-   ```bash
-   # Backend process
-   ps aux | grep opik-backend
-   
-   # Frontend process
-   ps aux | grep npm
-   
-   # Docker containers
-   docker stats --no-stream
-   ```
-
-#### **Quick Recovery Commands**
-
-```bash
-# Full reset (preserves Docker volumes)
-./scripts/dev-runner.sh --stop
-./scripts/dev-runner.sh --restart
+# Soft reset
+./scripts/dev-runner.sh --stop && ./scripts/dev-runner.sh --restart
 
 # Nuclear option (removes all data)
 ./scripts/dev-runner.sh --stop
 docker volume prune -a -f
 ./scripts/dev-runner.sh --restart
-
-# Just restart processes (keeps infrastructure running)
-./scripts/dev-runner.sh --stop
-# Fix issues manually
-./scripts/dev-runner.sh --start
 ```
 
-## Integration with Cursor
+## Cursor Integration
 
-### **Recommended Cursor Setup**
+### **Terminal Setup**
 
-#### **Terminal Integration**
-
-Use Cursor's integrated terminal with split panes:
+Use split panes:
 
 ```bash
-# Terminal 1: Main dev-runner.sh operations
-./scripts/dev-runner.sh --restart --debug
-
-# Terminal 2: Backend logs
-tail -f /tmp/opik-backend.log
-
-# Terminal 3: Frontend logs (if using standard mode)
-tail -f /tmp/opik-frontend.log
-
-# Terminal 4: Ad-hoc commands (git, testing, etc.)
+# Pane 1: dev-runner.sh operations
+# Pane 2: tail -f /tmp/opik-backend.log
+# Pane 3: tail -f /tmp/opik-frontend.log
 ```
 
-#### **Cursor Tasks Configuration**
+### **Tasks Configuration**
 
-Create `.vscode/tasks.json` for quick access to common commands:
+Create `.vscode/tasks.json`:
 
 ```json
 {
   "version": "2.0.0",
   "tasks": [
-    {
-      "label": "Opik: Restart All (Standard)",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --restart --debug",
-      "problemMatcher": [],
-      "group": "build"
-    },
-    {
-      "label": "Opik: Restart Backend Only",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --be-only-restart --debug",
-      "problemMatcher": [],
-      "group": "build"
-    },
-    {
-      "label": "Opik: Start (No Rebuild)",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --start",
-      "problemMatcher": [],
-      "group": "build"
-    },
-    {
-      "label": "Opik: Stop All",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --stop",
-      "problemMatcher": []
-    },
-    {
-      "label": "Opik: Verify Status",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --verify",
-      "problemMatcher": []
-    },
-    {
-      "label": "Opik: View Logs",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --logs",
-      "problemMatcher": []
-    },
-    {
-      "label": "Backend: Build",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --build-be",
-      "problemMatcher": [],
-      "group": "build"
-    },
-    {
-      "label": "Backend: Lint",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --lint-be",
-      "problemMatcher": []
-    },
-    {
-      "label": "Frontend: Build",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --build-fe",
-      "problemMatcher": [],
-      "group": "build"
-    },
-    {
-      "label": "Frontend: Lint",
-      "type": "shell",
-      "command": "./scripts/dev-runner.sh --lint-fe",
-      "problemMatcher": []
-    }
+    {"label": "Opik: Restart", "type": "shell", "command": "./scripts/dev-runner.sh --restart --debug"},
+    {"label": "Opik: BE-Only", "type": "shell", "command": "./scripts/dev-runner.sh --be-only-restart"},
+    {"label": "Opik: Start", "type": "shell", "command": "./scripts/dev-runner.sh --start"},
+    {"label": "Opik: Stop", "type": "shell", "command": "./scripts/dev-runner.sh --stop"},
+    {"label": "Build Backend", "type": "shell", "command": "./scripts/dev-runner.sh --build-be"},
+    {"label": "Build Frontend", "type": "shell", "command": "./scripts/dev-runner.sh --build-fe"}
   ]
 }
 ```
 
-Access tasks in Cursor: `Cmd/Ctrl + Shift + P` → "Tasks: Run Task"
+Access: `Cmd/Ctrl + Shift + P` → "Tasks: Run Task"
 
-#### **Debugging Configuration**
+### **Debugging**
 
-##### Backend Debugging (Java)
+**Backend (Java):**
 
-Create `.vscode/launch.json` for attaching debugger to backend:
+`.vscode/launch.json`:
 
 ```json
 {
   "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "java",
-      "name": "Attach to Opik Backend",
-      "request": "attach",
-      "hostName": "localhost",
-      "port": 5005
-    }
-  ]
+  "configurations": [{
+    "type": "java",
+    "name": "Attach to Backend",
+    "request": "attach",
+    "hostName": "localhost",
+    "port": 5005
+  }]
 }
 ```
 
-Start backend with debug port:
+**Frontend:** Use Chrome DevTools (F12) at `http://localhost:5174`
 
-```bash
-# Modify the dev-runner.sh start_backend function to add:
-# java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005 -jar ...
-```
-
-##### Frontend Debugging
-
-Use Chrome DevTools directly:
-
-1. Open `http://localhost:5174` in Chrome
-2. Press `F12` to open DevTools
-3. Use Sources tab to set breakpoints
-4. Use Console tab for interactive debugging
-
-### **Workflow Automation**
-
-#### **Quick Commands** (add to shell aliases)
+### **Shell Aliases**
 
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
 alias opik-start='./scripts/dev-runner.sh --start'
 alias opik-restart='./scripts/dev-runner.sh --restart --debug'
 alias opik-stop='./scripts/dev-runner.sh --stop'
-alias opik-status='./scripts/dev-runner.sh --verify'
-alias opik-logs='./scripts/dev-runner.sh --logs'
-alias opik-be='./scripts/dev-runner.sh --be-only-restart --debug'
-
-# Quick access to logs
-alias opik-be-logs='tail -f /tmp/opik-backend.log'
-alias opik-fe-logs='tail -f /tmp/opik-frontend.log'
-
-# Quick testing
-alias opik-test-be='cd ~/workspace/opik/apps/opik-backend && mvn test'
-alias opik-test-fe='cd ~/workspace/opik/apps/opik-frontend && npm test'
+alias opik-logs='tail -f /tmp/opik-*.log'
 ```
 
-#### **Git Pre-Commit Workflow**
-
-Before committing:
+### **Pre-Commit**
 
 ```bash
-# 1. Lint your changes
-./scripts/dev-runner.sh --lint-be  # If backend changes
-./scripts/dev-runner.sh --lint-fe  # If frontend changes
-
-# 2. Run quick verification
-./scripts/dev-runner.sh --verify
-
-# 3. Check that changes work
-./scripts/dev-runner.sh --restart --debug
-
-# 4. Run relevant tests
-cd apps/opik-backend && mvn test  # If backend
-cd apps/opik-frontend && npm test # If frontend
+./scripts/dev-runner.sh --lint-be  # Lint backend
+./scripts/dev-runner.sh --lint-fe  # Lint frontend
+./scripts/dev-runner.sh --verify   # Verify status
 ```
 
-## Performance Optimization
+## Performance Tips
 
-### **Development Performance**
-
-#### **With dev-runner.sh**
-
-1. **Use `--start` instead of `--restart`** when no code changes:
-
-   ```bash
-   ./scripts/dev-runner.sh --start  # Faster startup
-   ```
-
-2. **Use BE-only mode** for backend development:
-
-   ```bash
-   ./scripts/dev-runner.sh --be-only-restart
-   ```
-
-3. **Frontend benefits from Vite HMR**:
-   - Instant hot reload without full rebuild
-   - Preserves application state during development
-   - No manual restart needed for most changes
-
-4. **Backend incremental compilation**:
-   - dev-runner.sh uses Maven with optimized flags
-   - Faster compilation with `-T 1C` (parallel builds)
-   - Skips unnecessary steps (tests, spotless, javadoc)
-
-### **Resource Management**
-
-#### **Monitor Resources**
-
-```bash
-# Check process resources
-ps aux | grep -E '(opik-backend|npm)'
-
-# Check Docker resources
-docker stats --no-stream
-
-# Monitor disk usage
-du -sh apps/opik-backend/target
-du -sh apps/opik-frontend/node_modules
-```
-
-#### **Clean Up**
-
-```bash
-# Clean backend build artifacts
-cd apps/opik-backend
-mvn clean
-
-# Clean frontend node_modules
-cd apps/opik-frontend
-rm -rf node_modules package-lock.json
-npm install
-
-# Clean Docker resources (WARNING: removes data)
-docker system prune -a -f
-docker volume prune -a -f
-```
-
-#### **Optimize Docker Desktop**
-
-Recommended Docker Desktop settings for development:
-
-- **CPUs**: 4-6 cores
-- **Memory**: 8-12 GB
-- **Disk**: 60+ GB
-- **Enable VirtioFS** for better file sharing performance
+1. Use `--start` (no rebuild) when code unchanged
+2. Use BE-only mode for backend work
+3. Frontend has instant HMR with Vite
+4. Increase Docker resources: 4-6 CPUs, 8-12GB RAM
 
 ## Summary
 
