@@ -2,19 +2,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@e2e/*": [
-        "./e2e/*"
-      ]
+      "@/*": ["./src/*"],
+      "@e2e/*": ["./e2e/*"]
     },
     "target": "esnext",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -35,12 +27,6 @@
       "node"
     ]
   },
-  "include": [
-    "src",
-    "e2e/**/*.ts",
-    "playwright.config.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src", "e2e/**/*.ts", "playwright.config.ts"],
+  "exclude": ["node_modules"]
 }
