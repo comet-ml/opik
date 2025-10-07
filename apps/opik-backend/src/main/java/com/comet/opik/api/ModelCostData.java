@@ -10,5 +10,6 @@ public record ModelCostData(String litellmProvider,
         String inputCostPerToken,
         String outputCostPerToken,
         String cacheCreationInputTokenCost,
-        String cacheReadInputTokenCost) {
+        String cacheReadInputTokenCost,
+        Boolean supportsVision) {
 }

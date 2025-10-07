@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -14,7 +15,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -23,6 +26,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -55,6 +59,10 @@ public class OnlineScoringEngine {
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
+    private static final Pattern IMAGE_PLACEHOLDER_PATTERN = Pattern.compile(
+            Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_START) + "(.*?)"
+                    + Pattern.quote(MessageContentNormalizer.IMAGE_PLACEHOLDER_END),
+            Pattern.DOTALL);
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering the template messages with
@@ -116,7 +124,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -150,7 +158,7 @@ public class OnlineScoringEngine {
                     var renderedMessage = TemplateParseUtils.render(
                             templateMessage.content(), replacements, PromptType.MUSTACHE);
                     return switch (templateMessage.role()) {
-                        case USER -> UserMessage.from(renderedMessage);
+                        case USER -> buildUserMessage(renderedMessage);
                         case SYSTEM -> SystemMessage.from(renderedMessage);
                         default -> {
                             log.info("No mapping for message role type {}", templateMessage.role());
@@ -209,6 +217,47 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    private static UserMessage buildUserMessage(String content) {
+        Matcher matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
+        boolean foundAny = false;
+
+        UserMessage.Builder builder = UserMessage.builder();
+        int lastIndex = 0;
+
+        while (matcher.find()) {
+            foundAny = true;
+
+            if (matcher.start() > lastIndex) {
+                String textSegment = content.substring(lastIndex, matcher.start());
+                appendTextContent(builder, textSegment);
+            }
+
+            String url = matcher.group(1).trim();
+            if (!url.isEmpty()) {
+                builder.addContent(ImageContent.from(url));
+            }
+
+            lastIndex = matcher.end();
+        }
+
+        if (!foundAny) {
+            return UserMessage.from(content);
+        }
+
+        if (lastIndex < content.length()) {
+            String trailingText = content.substring(lastIndex);
+            appendTextContent(builder, trailingText);
+        }
+
+        return builder.build();
+    }
+
+    private static void appendTextContent(UserMessage.Builder builder, String textSegment) {
+        if (StringUtils.isNotBlank(textSegment)) {
+            builder.addContent(TextContent.from(textSegment));
+        }
     }
 
     private static String extractFromJson(JsonNode json, String path) {
