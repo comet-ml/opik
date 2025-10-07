@@ -93,6 +93,28 @@ export const FiltersSchema = z
           });
         }
       }
+
+      // Validate key for dictionary types
+      if (
+        (filter.type === COLUMN_TYPE.dictionary ||
+          filter.type === COLUMN_TYPE.numberDictionary) &&
+        (!filter.key || filter.key.trim().length === 0)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Key is required for dictionary fields",
+          path: [index, "key"],
+        });
+      }
+
+      // Add custom error if present
+      if (filter.error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: filter.error,
+          path: [index, "value"],
+        });
+      }
     });
   });
 
