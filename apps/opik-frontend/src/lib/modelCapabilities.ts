@@ -1,4 +1,5 @@
 import modelPricing from "@/data/model_prices_and_context_window.json";
+import { CUSTOM_PROVIDER_MODEL_PREFIX } from "@/constants/providers";
 
 type ModelPricingEntry = {
   supports_vision?: boolean;
@@ -59,6 +60,17 @@ const candidateKeys = (modelName: string): string[] => {
 };
 
 /**
+ * Checks if a model is from a custom provider.
+ * Custom provider models are prefixed with the CUSTOM_PROVIDER_MODEL_PREFIX.
+ *
+ * @param model - The model name to check
+ * @returns true if the model is from a custom provider, false otherwise
+ */
+export const isCustomProviderModel = (model: string): boolean => {
+  return model.startsWith(`${CUSTOM_PROVIDER_MODEL_PREFIX}/`);
+};
+
+/**
  * Checks if a model supports image input (vision capabilities).
  * Uses fuzzy matching to handle various model name formats.
  *
@@ -68,6 +80,11 @@ const candidateKeys = (modelName: string): string[] => {
 export const supportsImageInput = (model?: string | null): boolean => {
   if (!model) {
     return false;
+  }
+
+  // Check if it's a custom model from custom provider
+  if (isCustomProviderModel(model)) {
+    return true;
   }
 
   // First try exact match
