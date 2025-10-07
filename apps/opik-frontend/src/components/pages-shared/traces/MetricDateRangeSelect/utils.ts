@@ -70,8 +70,10 @@ export const calculateIntervalStartAndEnd = (
   const startOf = daysDiff <= 1 ? "hour" : "day";
 
   // Check if the end date is today (relative to provided currentTime)
-  // Compare local calendar day to avoid timezone shift issues
-  const isEndDateToday = dayjs(dateRange.to).isSame(dayjs(currentTime), "day");
+  // Compare UTC calendar day to ensure deterministic behavior
+  const isEndDateToday = dayjs(dateRange.to)
+    .utc()
+    .isSame(dayjs(currentTime).utc(), "day");
 
   let endTime: dayjs.Dayjs;
   let startTime: dayjs.Dayjs;
