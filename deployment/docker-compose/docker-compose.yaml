@@ -158,7 +158,7 @@ services:
       S3_URL: http://minio:9000
       PYTHON_EVALUATOR_URL: http://python-backend:8000
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
-      TOGGLE_OPEN_SOURCE_WELCOME_WIZARD_ENABLED: ${TOGGLE_OPEN_SOURCE_WELCOME_WIZARD_ENABLED:-"true"}
+      TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
       CORS: ${CORS:-false}
     ports:
       - "3003" # OpenAPI specification port
