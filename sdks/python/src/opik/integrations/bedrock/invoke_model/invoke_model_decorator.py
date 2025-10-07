@@ -95,7 +95,7 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
             output, metadata = dict_utils.split_dict_by_keys(
                 output, RESPONSE_KEYS_TO_LOG_AS_OUTPUTS
             )
-            subprovider = _extract_subprovider_from_model_id(
+            subprovider = usage_extraction.extract_subprovider_from_model_id(
                 cast(str, current_span_data.model)
             )
             opik_usage = usage_extraction.try_extract_usage_from_bedrock_response(  # type: ignore
@@ -176,21 +176,3 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         STREAM_NOT_FOUND = None
 
         return STREAM_NOT_FOUND
-
-
-def _extract_subprovider_from_model_id(model_id: str) -> str:
-    """
-    Extracts the subprovider name from a Bedrock modelId.
-
-    Examples:
-        ai21.j2-mid-v1                -> ai21
-        amazon.nova-lite-v1:0         -> amazon
-        anthropic.claude-v2:1         -> anthropic
-        us.meta.llama3-1-70b-instruct -> meta
-    """
-    parts = model_id.split(".")
-
-    if parts[0] in {"us", "eu", "apac"}:
-        return parts[1]
-
-    return parts[0]
