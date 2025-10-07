@@ -30,6 +30,7 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
   const { formattedData, shouldUsePrettyView, isValidData } = useMemo(() => {
     // Validate that data is actually a Trace or Span
     if (!isTraceOrSpan(data)) {
+      console.log("🔍 CompactPrettyView: Invalid data structure", data);
       return {
         formattedData: null,
         shouldUsePrettyView: false,
@@ -38,8 +39,10 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
     }
 
     const provider = detectProvider(data);
+    console.log("🔍 CompactPrettyView: Detected provider", provider, "for", type);
 
     if (!provider || !supportsPrettyView(provider)) {
+      console.log("🔍 CompactPrettyView: Provider not supported", provider);
       return {
         formattedData: null,
         shouldUsePrettyView: false,
@@ -54,6 +57,13 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
       formattedData !== null &&
       formattedData.content.length > 0 &&
       canFormatProviderData(provider, rawData, type);
+
+    console.log("🔍 CompactPrettyView: Pretty view result", {
+      shouldUsePrettyView,
+      contentLength: formattedData?.content?.length || 0,
+      provider,
+      type
+    });
 
     return {
       formattedData,
@@ -104,6 +114,10 @@ const CompactPrettyView: React.FC<CompactPrettyViewProps> = ({
 
   return (
     <div className={cn("w-full", className)}>
+      {/* DEBUG: Visual indicator for pretty view */}
+      <div className="mb-1 text-xs text-green-600 font-semibold">
+        ✨ PRETTY VIEW ACTIVE ✨
+      </div>
       <div className="comet-body whitespace-pre-wrap break-words">
         {displayContent}
       </div>

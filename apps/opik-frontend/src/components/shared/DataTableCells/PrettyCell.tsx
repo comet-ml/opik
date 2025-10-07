@@ -40,11 +40,17 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     // If we have valid trace/span data, use the new pretty view
     if (isValidTraceOrSpan) {
       return (
-        <CompactPrettyView
-          data={rowData}
-          type={fieldType}
-          maxLength={maxDataLength}
-        />
+        <div>
+          {/* DEBUG: Visual indicator for new pretty view logic */}
+          <div className="mb-1 text-xs text-blue-600 font-semibold">
+            🔄 NEW PRETTY VIEW LOGIC 🔄
+          </div>
+          <CompactPrettyView
+            data={rowData}
+            type={fieldType}
+            maxLength={maxDataLength}
+          />
+        </div>
       );
     }
 
