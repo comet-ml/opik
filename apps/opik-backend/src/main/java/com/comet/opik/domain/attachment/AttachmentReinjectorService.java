@@ -146,7 +146,8 @@ public class AttachmentReinjectorService {
     private Mono<JsonNode> reinjectIntoJson(JsonNode node, List<AttachmentInfo> attachments,
             String workspaceId) {
         if (node == null || node.isNull()) {
-            return Mono.just(node);
+            // Return a NullNode instead of null to avoid NPE in Mono.just()
+            return Mono.just(objectMapper.getNodeFactory().nullNode());
         }
 
         // Convert JsonNode to string
