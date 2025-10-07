@@ -27,14 +27,14 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Path("/v1/private/open-source-welcome-wizard")
+@Path("/v1/private/welcome-wizard")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Open Source Welcome Wizard", description = "Open source welcome wizard tracking resources")
+@Tag(name = "Welcome Wizard", description = "Welcome wizard tracking resources")
 public class OpenSourceWelcomeWizardResource {
 
     private final @NonNull Provider<RequestContext> requestContext;

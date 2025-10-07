@@ -13,7 +13,7 @@ export const CODE_EXECUTOR_SERVICE_URL = import.meta.env
   .VITE_GET_STARTED_API_URL;
 export const FEATURE_TOGGLES_REST_ENDPOINT = "/v1/private/toggles/";
 export const OPEN_SOURCE_WELCOME_WIZARD_REST_ENDPOINT =
-  "/v1/private/open-source-welcome-wizard";
+  "/v1/private/welcome-wizard";
 export const PROJECTS_REST_ENDPOINT = "/v1/private/projects/";
 export const DATASETS_REST_ENDPOINT = "/v1/private/datasets/";
 export const EXPERIMENTS_REST_ENDPOINT = "/v1/private/experiments/";
