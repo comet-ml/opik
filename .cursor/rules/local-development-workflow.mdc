@@ -255,7 +255,11 @@ workspace = default
 ./scripts/dev-runner.sh --verify           # Check status
 tail -50 /tmp/opik-backend.log            # View backend logs
 tail -50 /tmp/opik-frontend.log           # View frontend logs
-lsof -i :8080                             # Check port conflicts
+
+# Check port conflicts
+lsof -i :8080                             # Backend port
+lsof -i :5174                             # Frontend (standard mode)
+lsof -i :5173                             # Frontend (BE-only mode)
 ```
 
 **Fix:** `./scripts/dev-runner.sh --stop && ./scripts/dev-runner.sh --restart`
@@ -299,6 +303,44 @@ rm -f /tmp/opik-*.pid
 ./scripts/dev-runner.sh --stop
 docker volume prune -a -f
 ./scripts/dev-runner.sh --restart
+```
+
+### **Docker Issues**
+
+```bash
+# Check container status
+docker ps -a
+./opik.sh --verify
+
+# View container logs
+docker logs opik-backend-1
+docker logs opik-frontend-1
+docker logs opik-mysql-1
+docker logs opik-clickhouse-1
+
+# Follow logs in real-time
+docker logs -f opik-backend-1
+
+# Clean up Docker resources (removes all stopped containers, networks, images)
+docker system prune -a
+```
+
+### **Resource Management**
+
+```bash
+# Monitor container resource usage
+docker stats
+
+# Clean up unused Docker resources
+docker system df                          # Show disk usage
+docker system prune                       # Remove unused data
+docker volume prune                       # Remove unused volumes
+docker image prune -a                     # Remove unused images
+
+# Full cleanup (⚠️ removes all data)
+./opik.sh --stop
+docker system prune -a -f
+docker volume prune -a -f
 ```
 
 ## Cursor Integration
