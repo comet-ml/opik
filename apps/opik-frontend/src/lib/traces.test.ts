@@ -308,7 +308,45 @@ describe("prettifyMessage", () => {
     const result = prettifyMessage(message);
     expect(result).toEqual({
       message:
-        "**System**:\nAnswer the question with a direct phrase. Use the tool `search_wikipedia` if you need it.\n\n**User**:\nWhat magazine was established in 1988 by Frank Thomas and Keith White?\n\n**Tool**:\n['The Baffler | The Baffler is a magazine of cultural, political, and business analysis. Established in 1988 by editors Thomas Frank and Keith White, it was headquartered in Chicago, Illinois until 2010, when it moved to Cambridge, Massachusetts. In 2016, it moved its headquarters to New York City. The first incarnation of \"The Baffler\" had up to 12,000 subscribers.', 'Movmnt | movmnt magazine is an urban-leaning lifestyle magazine which was co-founded in 2006 by David Benaym and Danny Tidwell. The magazine has featured columns by Mario Spinetti, Mia Michaels, Robert Battle, Debbie Allen, Alisan Porter, Rasta Thomas, and Frank Conway. Both Travis Wall and Ivan Koumaev have made guest contributions to the publication, which has published photographs by Gary Land, Dave Hill, James Archibald Houston, and Alison Jackson.', \"Fantasy Advertiser | Fantasy Advertiser, later abbreviated to FA, was a British fanzine which discussed comic books. The magazine was established in 1965. It was initially edited by Frank Dobson, essentially as an advertising service for comic collectors, and when Dobson emigrated to Australia in 1970 he handed it on to two contributors, Dez Skinn and Paul McCartney, to continue. Skinn and McCartney expanded the magazine to include more articles and artwork. Regular contributors included Dave Gibbons, Steve Parkhouse, Paul Neary, Jim Baikie and Kevin O'Neill. Skinn left in 1976.\"]",
+        "**System**:\nAnswer the question with a direct phrase. Use the tool `search_wikipedia` if you need it.\n\n**User**:\nWhat magazine was established in 1988 by Frank Thomas and Keith White?\n\n**Assistant**:\n[Tool calls: 1]\n\n**Tool**:\n['The Baffler | The Baffler is a magazine of cultural, political, and business analysis. Established in 1988 by editors Thomas Frank and Keith White, it was headquartered in Chicago, Illinois until 2010, when it moved to Cambridge, Massachusetts. In 2016, it moved its headquarters to New York City. The first incarnation of \"The Baffler\" had up to 12,000 subscribers.', 'Movmnt | movmnt magazine is an urban-leaning lifestyle magazine which was co-founded in 2006 by David Benaym and Danny Tidwell. The magazine has featured columns by Mario Spinetti, Mia Michaels, Robert Battle, Debbie Allen, Alisan Porter, Rasta Thomas, and Frank Conway. Both Travis Wall and Ivan Koumaev have made guest contributions to the publication, which has published photographs by Gary Land, Dave Hill, James Archibald Houston, and Alison Jackson.', \"Fantasy Advertiser | Fantasy Advertiser, later abbreviated to FA, was a British fanzine which discussed comic books. The magazine was established in 1965. It was initially edited by Frank Dobson, essentially as an advertising service for comic collectors, and when Dobson emigrated to Australia in 1970 he handed it on to two contributors, Dez Skinn and Paul McCartney, to continue. Skinn and McCartney expanded the magazine to include more articles and artwork. Regular contributors included Dave Gibbons, Steve Parkhouse, Paul Neary, Jim Baikie and Kevin O'Neill. Skinn left in 1976.\"]",
+      prettified: true,
+    });
+  });
+
+  it("handles role-based messages with null content", () => {
+    const message = [
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            function: {
+              name: "search_wikipedia",
+              arguments: '{"query":"test"}',
+            },
+            id: "call_123",
+            type: "function",
+          },
+        ],
+      },
+    ];
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message: "**Assistant**:\n[Tool calls: 1]",
+      prettified: true,
+    });
+  });
+
+  it("handles role-based messages with null content and no tool calls", () => {
+    const message = [
+      {
+        role: "assistant",
+        content: null,
+      },
+    ];
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message: "**Assistant**:\n[No content]",
       prettified: true,
     });
   });

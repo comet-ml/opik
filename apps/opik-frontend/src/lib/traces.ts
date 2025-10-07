@@ -404,14 +404,37 @@ export const prettifyMessage = (message: object | string | undefined) => {
           if (
             "role" in item &&
             "content" in item &&
-            typeof (item as Record<string, unknown>).role === "string" &&
-            typeof (item as Record<string, unknown>).content === "string"
+            typeof (item as Record<string, unknown>).role === "string"
           ) {
             const role = (item as Record<string, unknown>).role as string;
-            const content = (item as Record<string, unknown>).content as string;
-            if (content.trim()) {
-              const roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
+            const content = (item as Record<string, unknown>).content;
+            const roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
+
+            // Handle string content
+            if (typeof content === "string" && content.trim()) {
               textItems.push(`**${roleHeader}**:\n${content}`);
+            }
+            // Handle null content (e.g., assistant messages with tool_calls)
+            else if (content === null) {
+              // Check if there are tool_calls to process
+              if (
+                "tool_calls" in item &&
+                Array.isArray((item as Record<string, unknown>).tool_calls)
+              ) {
+                const toolCalls = (item as Record<string, unknown>)
+                  .tool_calls as unknown[];
+                if (toolCalls.length > 0) {
+                  textItems.push(
+                    `**${roleHeader}**:\n[Tool calls: ${toolCalls.length}]`,
+                  );
+                }
+              } else {
+                textItems.push(`**${roleHeader}**:\n[No content]`);
+              }
+            }
+            // Handle other content types
+            else if (content !== undefined) {
+              textItems.push(`**${roleHeader}**:\n${String(content)}`);
             }
           } else {
             const extracted = extractTextFromObject(item);
