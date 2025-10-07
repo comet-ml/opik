@@ -21,7 +21,6 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Getter
 public class AlertEvent {
-    @NotBlank private String id;
     @NotNull private AlertEventType eventType;
     @NotBlank private String workspaceId;
     private UUID projectId;
