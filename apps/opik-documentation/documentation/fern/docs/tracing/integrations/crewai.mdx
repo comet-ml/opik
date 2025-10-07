@@ -185,3 +185,30 @@ Cost information is automatically captured and displayed in the Opik UI, includi
 <Tip>
   View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
 </Tip>
+
+## Grouping traces into conversational threads using `thread_id`
+
+Threads in Opik are collections of traces that are grouped together using a unique `thread_id`.
+
+The `thread_id` can be passed to the CrewAI crew as a parameter, which will be used to group all traces into a single thread.
+
+```python
+from crewai import Agent, Crew, Task, Process
+from opik.integrations.crewai import track_crewai
+
+track_crewai(project_name="crewai-integration-demo")
+
+# Define your crew (using the example from above)
+my_crew = YourCrewName().crew()
+
+# Pass thread_id via opik_args
+args_dict = {
+    "trace": {
+        "thread_id": "conversation-2",
+    },
+}
+
+result = my_crew.kickoff(opik_args=args_dict)
+```
+
+More information on logging chat conversations can be found in the [Log conversations](/tracing/log_chat_conversations) section.
