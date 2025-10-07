@@ -177,7 +177,7 @@ public class AlertResource {
     }
 
     @POST
-    @Path("/webhook/test")
+    @Path("/webhooks/tests")
     @Operation(operationId = "testWebhook", summary = "Test alert webhook", description = "Test alert webhook", responses = {
             @ApiResponse(responseCode = "200", description = "Webhook test", content = @Content(schema = @Schema(implementation = WebhookTestResult.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))

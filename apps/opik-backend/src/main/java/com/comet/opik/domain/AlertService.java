@@ -153,13 +153,13 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    public Alert getById(UUID id) {
+    public Alert getById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return getByIdAndWorkspace(id, workspaceId);
     }
 
     @Override
-    public Alert getByIdAndWorkspace(UUID id, String workspaceId) {
+    public Alert getByIdAndWorkspace(@NonNull UUID id, @NonNull String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 
@@ -174,7 +174,7 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    public void deleteBatch(Set<UUID> ids) {
+    public void deleteBatch(@NonNull Set<UUID> ids) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             deleteBatch(handle, ids);
             return null;
@@ -182,7 +182,7 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    public WebhookTestResult testWebhook(Alert alert) {
+    public WebhookTestResult testWebhook(@NonNull Alert alert) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 

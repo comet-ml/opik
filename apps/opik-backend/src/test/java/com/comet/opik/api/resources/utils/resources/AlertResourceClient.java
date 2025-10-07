@@ -158,8 +158,8 @@ public class AlertResourceClient {
 
     public WebhookTestResult testWebhook(Alert alert, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("webhook")
-                .path("test")
+                .path("webhooks")
+                .path("tests")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
