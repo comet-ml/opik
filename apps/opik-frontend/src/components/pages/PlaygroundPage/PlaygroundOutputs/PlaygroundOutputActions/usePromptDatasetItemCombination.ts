@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
@@ -9,28 +10,82 @@ import {
 } from "@/store/PlaygroundStore";
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
-import { getPromptMustacheTags } from "@/lib/prompt";
+import { getMessageContentMustacheTags, renderMessageContent } from "@/lib/llm";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
-import mustache from "mustache";
 import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
 import { parseCompletionOutput } from "@/lib/playground";
+import { processInputData } from "@/lib/images";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
   prompt: PlaygroundPromptType;
 }
 
+const IMAGE_PLACEHOLDER_REGEX = /\[image(?:_\d+)?\]/i;
+
+const containsImagePlaceholder = (value: unknown): boolean => {
+  if (typeof value === "string") {
+    return IMAGE_PLACEHOLDER_REGEX.test(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(containsImagePlaceholder);
+  }
+
+  if (isObject(value)) {
+    return Object.values(value).some(containsImagePlaceholder);
+  }
+
+  return false;
+};
+
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
-  const newDatasetItem = cloneDeep(datasetItem);
+  const newDatasetItem = cloneDeep(datasetItem) as Record<string, unknown>;
+
+  const placeholderMap = (() => {
+    try {
+      const { images } = processInputData(datasetItem as object);
+      const map = images.reduce<Record<string, string>>((acc, image) => {
+        if (!image.name || !image.url) {
+          return acc;
+        }
+
+        const match = image.name.match(/\[(image(?:_\d+)?)\]/i);
+        if (match) {
+          acc[`[${match[1]}]`] = image.url;
+        }
+
+        return acc;
+      }, {});
+
+      if (!map["[image]"] && images[0]?.url) {
+        map["[image]"] = images[0].url;
+      }
+
+      return map;
+    } catch (error) {
+      return {};
+    }
+  })();
 
   tags.forEach((tag) => {
     const value = get(newDatasetItem, tag);
+    if (typeof value === "string") {
+      const normalized = value.trim().replace(/^"(.*)"$/, "$1");
+      if (placeholderMap[normalized]) {
+        set(newDatasetItem, tag, placeholderMap[normalized]);
+        return;
+      }
+
+      set(newDatasetItem, tag, normalized);
+      return;
+    }
+
     set(newDatasetItem, tag, isObject(value) ? JSON.stringify(value) : value);
   });
-
   return newDatasetItem;
 };
 
@@ -38,7 +93,7 @@ const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
-  const messageTags = getPromptMustacheTags(message.content);
+  const messageTags = getMessageContentMustacheTags(message.content);
   const serializedDatasetItem = serializeTags(datasetItem, messageTags);
 
   const notDefinedVariables = messageTags.filter((tag) =>
@@ -51,15 +106,7 @@ const transformMessageIntoProviderMessage = (
 
   return {
     role: message.role,
-    content: mustache.render(
-      message.content,
-      serializedDatasetItem,
-      {},
-      {
-        // avoid escaping of a mustache
-        escape: (val: string) => val,
-      },
-    ),
+    content: renderMessageContent(message.content, serializedDatasetItem),
   };
 };
 
@@ -96,6 +143,43 @@ const usePromptDatasetItemCombination = ({
 
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
+  const datasetItemDataCache = useRef(new Map<string, DatasetItem["data"]>());
+
+  const hydrateDatasetItemData = useCallback(
+    async (datasetItem?: DatasetItem): Promise<DatasetItem["data"]> => {
+      if (!datasetItem) {
+        return {};
+      }
+
+      const cached = datasetItemDataCache.current.get(datasetItem.id);
+      if (cached) {
+        return cached;
+      }
+
+      let hydratedData = datasetItem.data ?? {};
+
+      if (containsImagePlaceholder(hydratedData)) {
+        try {
+          const { data } = await api.get(
+            `${DATASETS_REST_ENDPOINT}items/${datasetItem.id}`,
+          );
+
+          if (data?.data) {
+            hydratedData = data.data as DatasetItem["data"];
+          }
+        } catch (error) {
+          console.warn(
+            "Failed to hydrate dataset item data with full payload",
+            error,
+          );
+        }
+      }
+
+      datasetItemDataCache.current.set(datasetItem.id, hydratedData);
+      return hydratedData;
+    },
+    [],
+  );
 
   const createCombinations = useCallback((): DatasetItemPromptCombination[] => {
     if (datasetItems.length > 0 && promptIds.length > 0) {
@@ -124,7 +208,7 @@ const usePromptDatasetItemCombination = ({
       const controller = new AbortController();
 
       const datasetItemId = datasetItem?.id || "";
-      const datasetItemData = datasetItem?.data || {};
+      const datasetItemData = await hydrateDatasetItemData(datasetItem);
       const key = `${datasetItemId}-${prompt.id}`;
 
       addAbortController(key, controller);
@@ -200,6 +284,7 @@ const usePromptDatasetItemCombination = ({
       runStreaming,
       datasetName,
       deleteAbortController,
+      hydrateDatasetItemData,
     ],
   );
 
