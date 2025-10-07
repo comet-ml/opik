@@ -204,6 +204,14 @@ function Send-InstallReport {
 
     $OpikUsageEnabled = $env:OPIK_USAGE_REPORT_ENABLED
 
+    # Configure usage reporting based on deployment mode
+    # $PROFILE_COUNT: if > 0, it's a partial profile; if = 0, it's full Opik
+    if ($script:PROFILE_COUNT -gt 0) {
+        # Partial profile mode - disable reporting
+        $OpikUsageEnabled = "false"
+        Write-DebugLog "[DEBUG] Disabling usage reporting due to not starting the full Opik suite"
+    }
+
     if ($OpikUsageEnabled -ne "true" -and $null -ne $OpikUsageEnabled) {
         Write-DebugLog "[DEBUG] Usage reporting is disabled. Skipping install report."
         return
@@ -627,13 +635,14 @@ if ($options -contains '--guardrails') {
     $options = $options | Where-Object { $_ -ne '--guardrails' }
 }
 
-# Validate mutually exclusive profile flags
-$profileCount = 0
-if ($INFRA) { $profileCount++ }
-if ($BACKEND) { $profileCount++ }
-if ($LOCAL_BE) { $profileCount++ }
+# Count active partial profiles
+$PROFILE_COUNT = 0
+if ($INFRA) { $PROFILE_COUNT++ }
+if ($BACKEND) { $PROFILE_COUNT++ }
+if ($LOCAL_BE) { $PROFILE_COUNT++ }
 
-if ($profileCount -gt 1) {
+# Validate mutually exclusive profile flags
+if ($PROFILE_COUNT -gt 1) {
     Write-Host "❌ Error: --infra, --backend, and --local-be flags are mutually exclusive."
     Write-Host "   Choose one of the following:"
     Write-Host "   • .\opik.ps1 --infra      (infrastructure services only)"

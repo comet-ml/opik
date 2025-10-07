@@ -387,6 +387,14 @@ send_install_report() {
   event_completed="$2"  # Pass "true" to send opik_os_install_completed
   start_time="$3"  # Optional: start time in ISO 8601 format
 
+  # Configure usage reporting based on deployment mode
+  # $PROFILE_COUNT: if > 0, it's a partial profile; if = 0, it's full Opik
+  if [[ $PROFILE_COUNT -gt 0 ]]; then
+    # Partial profile mode - disable reporting
+    export OPIK_USAGE_REPORT_ENABLED=false
+    debugLog "[DEBUG] Disabling usage reporting due to not starting the full Opik suite"
+  fi
+
   if [ "$OPIK_USAGE_REPORT_ENABLED" != "true" ] && [ "$OPIK_USAGE_REPORT_ENABLED" != "" ]; then
     debugLog "[DEBUG] Usage reporting is disabled. Skipping install report."
     return
@@ -541,13 +549,14 @@ if [[ "$*" == *"--guardrails"* ]]; then
   set -- ${@/--guardrails/}
 fi
 
-# Validate mutually exclusive profile flags
-profile_count=0
-[[ "$INFRA" == "true" ]] && ((profile_count++))
-[[ "$BACKEND" == "true" ]] && ((profile_count++))
-[[ "$LOCAL_BE" == "true" ]] && ((profile_count++))
+# Count active partial profiles
+PROFILE_COUNT=0
+[[ "$INFRA" == "true" ]] && ((PROFILE_COUNT++))
+[[ "$BACKEND" == "true" ]] && ((PROFILE_COUNT++))
+[[ "$LOCAL_BE" == "true" ]] && ((PROFILE_COUNT++))
 
-if [[ $profile_count -gt 1 ]]; then
+# Validate mutually exclusive profile flags
+if [[ $PROFILE_COUNT -gt 1 ]]; then
   echo "❌ Error: --infra, --backend, and --local-be flags are mutually exclusive."
   echo "   Choose one of the following:"
   echo "   • ./opik.sh --infra      (infrastructure services only)"
