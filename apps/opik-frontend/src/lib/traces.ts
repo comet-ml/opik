@@ -125,20 +125,7 @@ const extractTextFromObject = (obj: object): string | undefined => {
         typeof (message as Record<string, unknown>).content === "string" &&
         ((message as Record<string, unknown>).content as string).trim()
       ) {
-        const content = (
-          (message as Record<string, unknown>).content as string
-        ).trim();
-
-        // Check if content is JSON serializable
-        if (shouldRenderAsJsonTable(content)) {
-          const parsed = parseJsonForTable(content);
-          if (parsed !== null) {
-            // Return a special marker that indicates this should be rendered as a JSON table
-            return `__JSON_TABLE__:${JSON.stringify(parsed)}`;
-          }
-        }
-
-        return content;
+        return ((message as Record<string, unknown>).content as string).trim();
       }
     }
   }
@@ -395,295 +382,6 @@ const extractTextFromObject = (obj: object): string | undefined => {
   return undefined;
 };
 
-/**
- * Check if content should be rendered as a JSON table
- */
-export const shouldRenderAsJsonTable = (content: string): boolean => {
-  return content.trim().startsWith("{") && content.trim().endsWith("}");
-};
-
-/**
- * Parse JSON content for table rendering
- */
-export const parseJsonForTable = (content: string): unknown | null => {
-  try {
-    const parsed = JSON.parse(content);
-    if (typeof parsed === "object" && parsed !== null) {
-      return parsed;
-    }
-  } catch {
-    // If JSON parsing fails, return null
-  }
-  return null;
-};
-
-/**
- * Format structured JSON data in a readable way
- */
-const formatStructuredData = (data: unknown): string => {
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "message_list" in (data as Record<string, unknown>) &&
-    Array.isArray((data as Record<string, unknown>).message_list)
-  ) {
-    // Handle message_list + examples format
-    const parts: string[] = [];
-    const dataObj = data as Record<string, unknown>;
-
-    // Format the message_list as a nested conversation
-    if ((dataObj.message_list as unknown[]).length > 0) {
-      parts.push("**Message Template:**");
-      (dataObj.message_list as unknown[]).forEach((msg: unknown) => {
-        if (
-          typeof msg === "object" &&
-          msg !== null &&
-          "role" in (msg as Record<string, unknown>) &&
-          "content" in (msg as Record<string, unknown>)
-        ) {
-          const msgObj = msg as Record<string, unknown>;
-          const role = msgObj.role as string;
-          const content = msgObj.content as string;
-          const roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
-          parts.push(`  **${roleHeader}**: ${content}`);
-        }
-      });
-    }
-
-    // Format examples if present
-    if (
-      "examples" in dataObj &&
-      Array.isArray(dataObj.examples) &&
-      (dataObj.examples as unknown[]).length > 0
-    ) {
-      parts.push("\n**Examples:**");
-      (dataObj.examples as unknown[]).forEach(
-        (example: unknown, index: number) => {
-          if (
-            typeof example === "object" &&
-            example !== null &&
-            "question" in (example as Record<string, unknown>) &&
-            "answer" in (example as Record<string, unknown>)
-          ) {
-            const exampleObj = example as Record<string, unknown>;
-            const question = exampleObj.question as string;
-            const answer = exampleObj.answer as string;
-            parts.push(`  ${index + 1}. **Q:** ${question}`);
-            parts.push(`     **A:** ${answer}`);
-          }
-        },
-      );
-    }
-
-    return parts.join("\n");
-  }
-
-  // Fallback to JSON string for other structured data
-  return JSON.stringify(data, null, 2);
-};
-
-/**
- * Extract text from an array of objects by processing each object
- */
-const extractTextFromArray = (arr: unknown[]): string | undefined => {
-  const textItems: string[] = [];
-
-  // First pass: collect tool names from assistant messages with tool_calls
-  const toolNames: { [toolCallId: string]: string } = {};
-  for (const item of arr) {
-    if (
-      isObject(item) &&
-      "role" in item &&
-      (item as Record<string, unknown>).role === "assistant" &&
-      "tool_calls" in item
-    ) {
-      const toolCalls = (item as Record<string, unknown>).tool_calls;
-      if (Array.isArray(toolCalls)) {
-        for (const toolCall of toolCalls) {
-          if (
-            typeof toolCall === "object" &&
-            toolCall !== null &&
-            "id" in (toolCall as Record<string, unknown>) &&
-            "function" in (toolCall as Record<string, unknown>)
-          ) {
-            const toolCallObj = toolCall as Record<string, unknown>;
-            const functionObj = toolCallObj.function as Record<string, unknown>;
-            if (
-              toolCallObj.id &&
-              functionObj &&
-              "name" in functionObj &&
-              functionObj.name
-            ) {
-              toolNames[toolCallObj.id as string] = functionObj.name as string;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  for (const item of arr) {
-    if (typeof item === "string" && item.trim()) {
-      textItems.push(item);
-    } else if (isObject(item)) {
-      // Check if this is a role-based message (like chat messages)
-      if (
-        "role" in item &&
-        "content" in item &&
-        typeof (item as Record<string, unknown>).role === "string" &&
-        typeof (item as Record<string, unknown>).content === "string"
-      ) {
-        const role = (item as Record<string, unknown>).role as string;
-        const content = (item as Record<string, unknown>).content as string;
-        if (content.trim()) {
-          // Check if content is JSON
-          if (content.trim().startsWith("{") && content.trim().endsWith("}")) {
-            try {
-              const parsed = JSON.parse(content);
-              const formatted = formatStructuredData(parsed);
-              // For JSON content, don't show role header - just show the formatted data
-              textItems.push(formatted);
-            } catch {
-              // If JSON parsing fails, treat as regular content
-              const roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
-              textItems.push(`**${roleHeader}**:\n${content}`);
-            }
-          } else {
-            // Check if content looks like a JavaScript array representation
-            const trimmedContent = content.trim();
-            if (
-              trimmedContent.startsWith("[") &&
-              trimmedContent.endsWith("]")
-            ) {
-              try {
-                // Try to parse as JSON first (handles double quotes)
-                const parsedArray = JSON.parse(trimmedContent);
-                if (Array.isArray(parsedArray)) {
-                  // Convert array to ordered list with new format
-                  const arrayContent = parsedArray
-                    .map((item, index) => `${index + 1}. ${item}`)
-                    .join("\n");
-
-                  // Extract tool name from the message structure
-                  let toolName = "unknown_tool";
-                  if (role === "tool" && "tool_call_id" in item) {
-                    const toolCallId = (item as Record<string, unknown>)
-                      .tool_call_id;
-                    if (toolCallId && toolNames[toolCallId as string]) {
-                      toolName = toolNames[toolCallId as string];
-                    }
-                  }
-
-                  textItems.push(
-                    `**Tool call: ${toolName}**\n*Results*:\n${arrayContent}`,
-                  );
-                } else {
-                  // Not an array, treat as regular content
-                  let roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
-
-                  // Special handling for tool role - extract tool name
-                  if (role === "tool" && "tool_call_id" in item) {
-                    const toolCallId = (item as Record<string, unknown>)
-                      .tool_call_id;
-                    if (toolCallId && toolNames[toolCallId as string]) {
-                      roleHeader = `Tool call: ${
-                        toolNames[toolCallId as string]
-                      }`;
-                    }
-                  }
-
-                  textItems.push(`**${roleHeader}**:\n${content}`);
-                }
-              } catch {
-                // If JSON parsing fails, try to parse as JavaScript array (handles single quotes)
-                try {
-                  // Use eval to parse JavaScript array (safer than JSON.parse for this case)
-                  const parsedArray = eval(trimmedContent);
-                  if (Array.isArray(parsedArray)) {
-                    // Convert array to ordered list with new format
-                    const arrayContent = parsedArray
-                      .map((item, index) => `${index + 1}. ${item}`)
-                      .join("\n");
-
-                    // Extract tool name from the message structure
-                    let toolName = "unknown_tool";
-                    if (role === "tool" && "tool_call_id" in item) {
-                      const toolCallId = (item as Record<string, unknown>)
-                        .tool_call_id;
-                      if (toolCallId && toolNames[toolCallId as string]) {
-                        toolName = toolNames[toolCallId as string];
-                      }
-                    }
-
-                    textItems.push(
-                      `**Tool call: ${toolName}**\n*Results*:\n${arrayContent}`,
-                    );
-                  } else {
-                    // Not an array, treat as regular content
-                    let roleHeader =
-                      role.charAt(0).toUpperCase() + role.slice(1);
-
-                    // Special handling for tool role - extract tool name
-                    if (role === "tool" && "tool_call_id" in item) {
-                      const toolCallId = (item as Record<string, unknown>)
-                        .tool_call_id;
-                      if (toolCallId && toolNames[toolCallId as string]) {
-                        roleHeader = `Tool call: ${
-                          toolNames[toolCallId as string]
-                        }`;
-                      }
-                    }
-
-                    textItems.push(`**${roleHeader}**:\n${content}`);
-                  }
-                } catch {
-                  // If both parsing attempts fail, treat as regular content
-                  let roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
-
-                  // Special handling for tool role - extract tool name
-                  if (role === "tool" && "tool_call_id" in item) {
-                    const toolCallId = (item as Record<string, unknown>)
-                      .tool_call_id;
-                    if (toolCallId && toolNames[toolCallId as string]) {
-                      roleHeader = `Tool call: ${
-                        toolNames[toolCallId as string]
-                      }`;
-                    }
-                  }
-
-                  textItems.push(`**${roleHeader}**:\n${content}`);
-                }
-              }
-            } else {
-              // Format with role header for non-JSON content
-              let roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
-
-              // Special handling for tool role - extract tool name
-              if (role === "tool" && "tool_call_id" in item) {
-                const toolCallId = (item as Record<string, unknown>)
-                  .tool_call_id;
-                if (toolCallId && toolNames[toolCallId as string]) {
-                  roleHeader = `Tool call: ${toolNames[toolCallId as string]}`;
-                }
-              }
-
-              textItems.push(`**${roleHeader}**:\n${content}`);
-            }
-          }
-        }
-      } else {
-        // Use regular object extraction
-        const extracted = extractTextFromObject(item);
-        if (extracted) {
-          textItems.push(extracted);
-        }
-      }
-    }
-  }
-
-  return textItems.length > 0 ? textItems.join("\n\n") : undefined;
-};
-
 export const prettifyMessage = (message: object | string | undefined) => {
   if (isString(message)) {
     return {
@@ -695,9 +393,35 @@ export const prettifyMessage = (message: object | string | undefined) => {
   try {
     let extractedText: string | undefined;
 
-    // Handle arrays of objects/strings
+    // Handle arrays of objects/strings - simplified processing
     if (Array.isArray(message)) {
-      extractedText = extractTextFromArray(message);
+      const textItems: string[] = [];
+      for (const item of message) {
+        if (typeof item === "string" && item.trim()) {
+          textItems.push(item);
+        } else if (isObject(item)) {
+          // Check if this is a role-based message (like chat messages)
+          if (
+            "role" in item &&
+            "content" in item &&
+            typeof (item as Record<string, unknown>).role === "string" &&
+            typeof (item as Record<string, unknown>).content === "string"
+          ) {
+            const role = (item as Record<string, unknown>).role as string;
+            const content = (item as Record<string, unknown>).content as string;
+            if (content.trim()) {
+              const roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
+              textItems.push(`**${roleHeader}**:\n${content}`);
+            }
+          } else {
+            const extracted = extractTextFromObject(item);
+            if (extracted) {
+              textItems.push(extracted);
+            }
+          }
+        }
+      }
+      extractedText = textItems.length > 0 ? textItems.join("\n\n") : undefined;
     } else if (isObject(message)) {
       extractedText = extractTextFromObject(message);
     }
