@@ -1,9 +1,6 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import { DateRangeValue } from "@/components/shared/DateRangeSelect";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-
-dayjs.extend(utc);
 
 export const serializeDateForURL = (date: Date): string => {
   return dayjs(date).format("YYYY-MM-DD");
@@ -74,7 +71,9 @@ export const calculateIntervalStartAndEnd = (
 
   // Check if the end date is today (relative to provided currentTime)
   // Use UTC comparison to ensure deterministic behavior across system timezones
-  const isEndDateToday = dayjs(dateRange.to).utc().isSame(dayjs(currentTime).utc(), "day");
+  const isEndDateToday = dayjs(dateRange.to)
+    .utc()
+    .isSame(dayjs(currentTime).utc(), "day");
 
   let endTime: dayjs.Dayjs;
   let startTime: dayjs.Dayjs;
