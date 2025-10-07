@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.AlertFilter;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -173,5 +174,25 @@ public class AlertResource {
                 batch.ids().size(), workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/webhooks/tests")
+    @Operation(operationId = "testWebhook", summary = "Test alert webhook", description = "Test alert webhook", responses = {
+            @ApiResponse(responseCode = "200", description = "Webhook test", content = @Content(schema = @Schema(implementation = WebhookTestResult.class))),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response testWebhook(
+            @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Testing alert webhook with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
+
+        var response = alertService.testWebhook(alert);
+
+        log.info("Tested alert webhook with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
+
+        return Response.ok().entity(response).build();
     }
 }

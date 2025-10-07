@@ -70,7 +70,8 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                             .build()
                             .add(1, attributes.toBuilder().put("status", "success").build());
                 })
-                .onErrorResume(throwable -> handlePermanentFailure(event, throwable));
+                .onErrorResume(throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()))
+                .then();
     }
 
     private Mono<Void> handlePermanentFailure(@NonNull WebhookEvent<?> event, @NonNull Throwable throwable) {
