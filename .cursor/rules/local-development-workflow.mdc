@@ -99,19 +99,130 @@ tail -f /tmp/opik-*.log                    # Monitor both
 
 **Benefits:** Fast iteration, full visibility, end-to-end debugging
 
-## Alternative: Docker Mode
+## SDK Development
 
-Use `opik.sh` for production-like testing:
+### **Python SDK**
 
 ```bash
-./opik.sh --build   # Full stack
-./opik.sh --infra   # Infrastructure only
-./opik.sh --verify  # Health check
-./opik.sh --stop    # Stop all
+cd sdks/python
+
+# Install in development mode
+pip install -e .
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=opik
+
+# Lint
+ruff check .
+
+# Build package
+python -m build
 ```
 
-**When to use Docker:** Production testing, container orchestration, guardrails backend  
-**When to use dev-runner:** Daily development, debugging, fast iteration
+**Configure SDK for local backend:**
+
+```bash
+export OPIK_URL_OVERRIDE='http://localhost:8080'
+export OPIK_WORKSPACE='default'
+```
+
+### **TypeScript SDK**
+
+```bash
+cd sdks/typescript
+
+# Install dependencies
+npm install
+
+# Build
+npm run build
+
+# Run tests
+npm test
+
+# Type check
+npm run typecheck
+
+# Lint
+npm run lint
+```
+
+**Configure SDK for local backend:**
+
+```typescript
+import { Opik } from 'opik';
+
+const client = new Opik({
+  apiKey: 'local',
+  baseURL: 'http://localhost:8080'
+});
+```
+
+## Docker Development (End-to-End)
+
+Use `opik.sh` for production-like testing and complete system validation:
+
+### **Full Stack**
+
+```bash
+# Build and start complete system
+./opik.sh --build --port-mapping
+
+# Start without building
+./opik.sh --port-mapping
+
+# Access: http://localhost:3000 (frontend), http://localhost:8080 (backend)
+```
+
+### **Profile-Based Development**
+
+```bash
+# Infrastructure only (MySQL, ClickHouse, Redis, MinIO)
+./opik.sh --infra --port-mapping
+
+# Infrastructure + Backend services
+./opik.sh --backend --port-mapping
+
+# All except backend (for local backend development)
+./opik.sh --local-be --port-mapping
+
+# With guardrails
+./opik.sh --build --guardrails --port-mapping
+```
+
+### **Debug Mode**
+
+```bash
+# Enable verbose logging
+./opik.sh --debug --port-mapping
+
+# Check container status
+./opik.sh --verify
+
+# View info banner
+./opik.sh --info
+
+# Stop all containers
+./opik.sh --stop
+```
+
+**Use Docker when:**
+
+- Testing production-like environment
+- Validating container orchestration
+- Testing guardrails backend integration
+- End-to-end system validation
+- CI/CD pipeline development
+
+**Use dev-runner when:**
+
+- Daily feature development
+- Debugging backend or frontend
+- Fast iteration cycles
+- IDE debugging required
 
 ## Configuration
 
