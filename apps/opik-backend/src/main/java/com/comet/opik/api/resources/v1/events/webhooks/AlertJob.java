@@ -100,7 +100,8 @@ public class AlertJob extends Job {
                                     alertId,
                                     bucketData.workspaceId(),
                                     eventType,
-                                    bucketData.eventIds()))
+                                    bucketData.eventIds(),
+                                    bucketData.payloads()))
                             .then(bucketService.deleteBucket(bucketKey));
                 })
                 .doOnSuccess(__ -> log.info("Successfully processed and deleted bucket: '{}'", bucketKey))
@@ -116,21 +117,25 @@ public class AlertJob extends Job {
      * @param workspaceId the workspace ID for the alert
      * @param eventType the event type
      * @param eventIds the set of aggregated event IDs
+     * @param payloads the set of aggregated event payloads
      * @return Mono that completes when the webhook is sent
      */
     private Mono<Void> processAlertBucket(
             @NonNull UUID alertId,
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds) {
+            @NonNull Set<String> eventIds,
+            @NonNull Set<String> payloads) {
 
-        log.info("Processing alert bucket: alertId='{}', workspaceId='{}', eventType='{}', eventCount='{}'",
-                alertId, workspaceId, eventType, eventIds.size());
+        log.info(
+                "Processing alert bucket: alertId='{}', workspaceId='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
+                alertId, workspaceId, eventType, eventIds.size(), payloads.size());
 
         return Mono.fromCallable(() -> alertService.getByIdAndWorkspace(alertId, workspaceId))
-                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds))
-                .doOnSuccess(__ -> log.info("Successfully sent webhook for alert '{}' with '{}' events",
-                        alertId, eventIds.size()))
+                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds, payloads))
+                .doOnSuccess(
+                        __ -> log.info("Successfully sent webhook for alert '{}' with '{}' events and '{}' payloads",
+                                alertId, eventIds.size(), payloads.size()))
                 .doOnError(error -> log.error("Failed to send webhook for alert '{}': {}",
                         alertId, error.getMessage(), error));
     }
@@ -142,13 +147,15 @@ public class AlertJob extends Job {
      * @param workspaceId the workspace ID
      * @param eventType the event type
      * @param eventIds the set of aggregated event IDs
+     * @param payloads the set of aggregated event payloads
      * @return Mono that completes when the webhook is sent
      */
     private Mono<Void> createAndSendWebhook(
             @NonNull Alert alert,
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds) {
+            @NonNull Set<String> eventIds,
+            @NonNull Set<String> payloads) {
 
         if (Boolean.FALSE.equals(alert.enabled())) {
             log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
@@ -160,8 +167,8 @@ public class AlertJob extends Job {
             return Mono.empty();
         }
 
-        log.debug("Creating consolidated webhook event for alert '{}' with '{}' events",
-                alert.id(), eventIds.size());
+        log.debug("Creating consolidated webhook event for alert '{}' with '{}' events and '{}' payloads",
+                alert.id(), eventIds.size(), payloads.size());
 
         // Create payload with alert and aggregation data
         Map<String, Object> payload = Map.of(
@@ -169,13 +176,15 @@ public class AlertJob extends Job {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
+                "payloads", payloads,
                 "eventCount", eventIds.size(),
+                "payloadCount", payloads.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
                         alert.name(), eventIds.size(), eventType.getValue()));
 
-        log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}'",
-                alert.name(), alert.id(), eventIds.size());
+        log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}', payloadCount='{}'",
+                alert.name(), alert.id(), eventIds.size(), payloads.size());
 
         // Send via WebhookPublisher with data from alert configuration
         return webhookPublisher.publishWebhookEvent(
