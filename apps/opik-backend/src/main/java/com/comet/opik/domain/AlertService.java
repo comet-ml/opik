@@ -16,6 +16,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
@@ -55,6 +56,8 @@ public interface AlertService {
     Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     Alert getById(UUID id);
+
+    List<Alert> findAllByWorkspace(String workspaceId);
 
     Alert getByIdAndWorkspace(UUID id, String workspaceId);
 
@@ -156,6 +159,18 @@ class AlertServiceImpl implements AlertService {
     public Alert getById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return getByIdAndWorkspace(id, workspaceId);
+    }
+
+    @Override
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspace(@NonNull String workspaceId) {
+        log.info("Fetching all alerts for workspace '{}'", workspaceId);
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+
+            return alertDAO.find(workspaceId, 0, 1000, null, null,
+                    Map.of());
+        });
     }
 
     @Override
