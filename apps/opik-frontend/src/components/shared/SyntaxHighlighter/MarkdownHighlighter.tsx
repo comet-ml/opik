@@ -45,22 +45,6 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
       return <JsonKeyValueTable data={codeOutput.message} maxDepth={3} />;
     }
 
-    // Check if message contains JSON table marker
-    const isJsonTable =
-      typeof codeOutput.message === "string" &&
-      codeOutput.message.startsWith("__JSON_TABLE__:");
-
-    if (isJsonTable) {
-      try {
-        const jsonData = JSON.parse(
-          codeOutput.message.substring("__JSON_TABLE__:".length),
-        );
-        return <JsonKeyValueTable data={jsonData} maxDepth={3} />;
-      } catch {
-        // If parsing fails, fall back to regular display
-      }
-    }
-
     if (isStringMarkdown(codeOutput.message)) {
       return (
         <ReactMarkdown

@@ -100,22 +100,6 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
           : extractTextFromObject(message);
 
         if (extractedText) {
-          // Check if the extracted text is a JSON table marker
-          if (
-            typeof extractedText === "string" &&
-            extractedText.startsWith("__JSON_TABLE__:")
-          ) {
-            try {
-              const jsonData = JSON.parse(
-                extractedText.substring("__JSON_TABLE__:".length),
-              );
-              return <JsonKeyValueTable data={jsonData} maxDepth={3} />;
-            } catch {
-              // If parsing fails, fall back to regular text display
-              return <MarkdownPreview>{extractedText}</MarkdownPreview>;
-            }
-          }
-
           return <MarkdownPreview>{extractedText}</MarkdownPreview>;
         }
       }
