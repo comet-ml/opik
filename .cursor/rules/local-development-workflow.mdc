@@ -293,7 +293,7 @@ cd apps/opik-frontend && rm -rf node_modules && npm install
 ```bash
 tail -100 /tmp/opik-backend.log           # Check migration errors
 ./scripts/dev-runner.sh --stop
-docker volume prune -a -f                 # ⚠️ Removes all data
+docker volume prune -a -f                 # ⚠️ DATA LOSS - removes ALL databases
 ./scripts/dev-runner.sh --restart
 ```
 
@@ -313,9 +313,9 @@ rm -f /tmp/opik-*.pid
 # Soft reset
 ./scripts/dev-runner.sh --stop && ./scripts/dev-runner.sh --restart
 
-# Nuclear option (removes all data)
+# Nuclear option (⚠️ DATA LOSS - removes all databases and storage)
 ./scripts/dev-runner.sh --stop
-docker volume prune -a -f
+docker volume prune -a -f                 # Removes ALL volumes (MySQL, ClickHouse data)
 ./scripts/dev-runner.sh --restart
 ```
 
@@ -335,7 +335,7 @@ docker logs opik-clickhouse-1
 # Follow logs in real-time
 docker logs -f opik-backend-1
 
-# Clean up Docker resources (removes all stopped containers, networks, images)
+# Clean up Docker resources (⚠️ removes all stopped containers, networks, images)
 docker system prune -a
 ```
 
@@ -347,14 +347,14 @@ docker stats
 
 # Clean up unused Docker resources
 docker system df                          # Show disk usage
-docker system prune                       # Remove unused data
-docker volume prune                       # Remove unused volumes
+docker system prune                       # Remove unused data (⚠️ may affect other projects)
+docker volume prune                       # Remove unused volumes (⚠️ DATA LOSS - removes databases)
 docker image prune -a                     # Remove unused images
 
-# Full cleanup (⚠️ removes all data)
+# Full cleanup (⚠️ DATA LOSS - removes ALL Docker data including databases)
 ./opik.sh --stop
-docker system prune -a -f
-docker volume prune -a -f
+docker system prune -a -f                 # Removes containers, networks, images
+docker volume prune -a -f                 # Removes volumes (databases, storage)
 ```
 
 ## Cursor Integration
