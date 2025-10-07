@@ -59,13 +59,12 @@ public interface OpenSourceWelcomeWizardTrackingService {
             });
 
             // Publish event for BI tracking (still send full data to BI)
-            var event = OpenSourceWelcomeWizardSubmitted.builder()
-                    .workspaceId(workspaceId)
-                    .email(submission.email())
-                    .role(submission.role())
-                    .integrations(submission.integrations())
-                    .joinBetaProgram(submission.joinBetaProgram())
-                    .build();
+            var event = new OpenSourceWelcomeWizardSubmitted(
+                    workspaceId,
+                    submission.email(),
+                    submission.role(),
+                    submission.integrations(),
+                    submission.joinBetaProgram());
 
             eventBus.post(event);
             log.info("OSS welcome wizard submitted event published for workspace: '{}'", workspaceId);

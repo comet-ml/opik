@@ -36,14 +36,14 @@ public class OpenSourceWelcomeWizardEventListener {
     private void sendBiEvent(OpenSourceWelcomeWizardSubmitted event) {
         try {
             // Check if this is an empty submission (dismissed without providing data)
-            boolean isEmpty = event.getEmail() == null
-                    && event.getRole() == null
-                    && (event.getIntegrations() == null || event.getIntegrations().isEmpty())
-                    && event.getJoinBetaProgram() == null;
+            boolean isEmpty = event.email() == null
+                    && event.role() == null
+                    && (event.integrations() == null || event.integrations().isEmpty())
+                    && event.joinBetaProgram() == null;
 
             if (isEmpty) {
                 log.info("Skipping BI event for empty OSS welcome wizard submission (dismissed) for workspace: '{}'",
-                        event.getWorkspaceId());
+                        event.workspaceId());
                 return;
             }
 
@@ -57,27 +57,27 @@ public class OpenSourceWelcomeWizardEventListener {
             eventProperties.put("opik_app_version", config.getMetadata().getVersion());
             eventProperties.put("date", Instant.now().toString());
 
-            if (event.getEmail() != null) {
-                eventProperties.put("email", event.getEmail());
+            if (event.email() != null) {
+                eventProperties.put("email", event.email());
             }
-            if (event.getRole() != null) {
-                eventProperties.put("role", event.getRole());
+            if (event.role() != null) {
+                eventProperties.put("role", event.role());
             }
-            if (event.getIntegrations() != null && !event.getIntegrations().isEmpty()) {
-                eventProperties.put("integrations", String.join(",", event.getIntegrations()));
-                eventProperties.put("integrations_count", String.valueOf(event.getIntegrations().size()));
+            if (event.integrations() != null && !event.integrations().isEmpty()) {
+                eventProperties.put("integrations", String.join(",", event.integrations()));
+                eventProperties.put("integrations_count", String.valueOf(event.integrations().size()));
             }
-            if (event.getJoinBetaProgram() != null) {
-                eventProperties.put("join_beta_program", String.valueOf(event.getJoinBetaProgram()));
+            if (event.joinBetaProgram() != null) {
+                eventProperties.put("join_beta_program", String.valueOf(event.joinBetaProgram()));
             }
 
             // Use workspace-specific event type for tracking (consistent with DAO)
-            String eventType = "open_source_welcome_wizard_" + event.getWorkspaceId();
+            String eventType = "open_source_welcome_wizard_" + event.workspaceId();
             biEventService.reportEvent(anonymousId, eventType, BI_EVENT_TYPE, eventProperties);
             log.info("BI event sent for OSS welcome wizard submission for workspace: '{}'",
-                    event.getWorkspaceId());
+                    event.workspaceId());
         } catch (Exception e) {
-            log.error("Failed to send BI event for OSS welcome wizard for workspace: '{}'", event.getWorkspaceId(),
+            log.error("Failed to send BI event for OSS welcome wizard for workspace: '{}'", event.workspaceId(),
                     e);
         }
     }
