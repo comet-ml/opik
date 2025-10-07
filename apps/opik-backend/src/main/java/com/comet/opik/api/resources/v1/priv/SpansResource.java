@@ -111,7 +111,8 @@ public class SpansResource {
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude) {
 
@@ -134,6 +135,7 @@ public class SpansResource {
                 .type(type)
                 .filters(spanFilters)
                 .truncate(truncate)
+                .stripAttachments(stripAttachments)
                 .sortingFields(sortingFields)
                 .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
                 .build();
@@ -163,17 +165,19 @@ public class SpansResource {
     @JsonView(View.Public.class)
     @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getById(@PathParam("id") @NotNull UUID id,
-            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "If true, returns references; if false, returns reinjected base64. Matches traces endpoint for consistency and API discoverability.") boolean truncate) {
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting span by id '{}' on workspace_id '{}' with truncate={}", id, workspaceId, truncate);
+        log.info("Getting span by id '{}' on workspace_id '{}' with stripAttachments={}", id, workspaceId,
+                stripAttachments);
 
-        var span = spanService.getById(id, truncate)
+        var span = spanService.getById(id, stripAttachments)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}' with truncate={}",
+        log.info(
+                "Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}' with stripAttachments={}",
                 span.id(), span.traceId(),
-                span.parentSpanId(), workspaceId, truncate);
+                span.parentSpanId(), workspaceId, stripAttachments);
 
         return Response.ok().entity(span).build();
     }
