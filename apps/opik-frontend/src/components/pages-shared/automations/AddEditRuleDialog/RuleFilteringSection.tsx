@@ -31,6 +31,7 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
+import round from "lodash/round";
 
 // Trace-specific columns for automation rule filtering
 export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
@@ -379,14 +380,17 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
               render={({ field }) => (
                 <SliderInputControl
                   min={0}
-                  max={1}
-                  step={0.01}
-                  defaultValue={DEFAULT_SAMPLING_RATE}
-                  value={field.value}
-                  onChange={field.onChange}
+                  max={100}
+                  step={1}
+                  defaultValue={DEFAULT_SAMPLING_RATE * 100}
+                  value={round((field.value ?? DEFAULT_SAMPLING_RATE) * 100, 1)}
+                  onChange={(displayValue) =>
+                    field.onChange(round(displayValue, 1) / 100)
+                  }
                   id="sampling_rate"
                   label="Sampling rate"
                   tooltip="Percentage of traces to evaluate"
+                  suffix="%"
                 />
               )}
             />

@@ -11,7 +11,7 @@ export const WebhookPublic: core.serialization.ObjectSchema<serializers.WebhookP
         id: core.serialization.string().optional(),
         name: core.serialization.string().optional(),
         url: core.serialization.string(),
-        secretToken: core.serialization.property("secret_token", core.serialization.string()),
+        secretToken: core.serialization.property("secret_token", core.serialization.string().optional()),
         headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -24,7 +24,7 @@ export declare namespace WebhookPublic {
         id?: string | null;
         name?: string | null;
         url: string;
-        secret_token: string;
+        secret_token?: string | null;
         headers?: Record<string, string> | null;
         created_at?: string | null;
         created_by?: string | null;
