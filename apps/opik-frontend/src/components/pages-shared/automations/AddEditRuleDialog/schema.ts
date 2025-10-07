@@ -6,6 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -14,6 +15,7 @@ import {
   ProviderMessageType,
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
+import { COLUMN_TYPE } from "@/types/shared";
 
 const RuleNameSchema = z
   .string({
@@ -31,6 +33,69 @@ const SamplingRateSchema = z.number();
 
 const ScopeSchema = z.nativeEnum(EVALUATORS_RULE_SCOPE);
 
+export const FilterSchema = z.object({
+  id: z.string(),
+  field: z.string(),
+  type: z.nativeEnum(COLUMN_TYPE).or(z.literal("")),
+  operator: z.union([
+    z.literal("contains"),
+    z.literal("not_contains"),
+    z.literal("starts_with"),
+    z.literal("ends_with"),
+    z.literal("is_empty"),
+    z.literal("is_not_empty"),
+    z.literal("="),
+    z.literal(">"),
+    z.literal(">="),
+    z.literal("<"),
+    z.literal("<="),
+    z.literal(""),
+  ]),
+  key: z.string().optional(),
+  value: z.union([z.string(), z.number()]),
+  error: z.string().optional(),
+});
+
+export const FiltersSchema = z
+  .array(FilterSchema)
+  .superRefine((filters, ctx) => {
+    filters.forEach((filter, index) => {
+      // Validate field
+      if (!filter.field || filter.field.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Field is required",
+          path: [index, "field"],
+        });
+      }
+
+      // Validate operator
+      if (!filter.operator || filter.operator.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Operator is required",
+          path: [index, "operator"],
+        });
+      }
+
+      // Validate value (only for operators that require it)
+      if (
+        filter.operator &&
+        filter.operator !== "is_empty" &&
+        filter.operator !== "is_not_empty"
+      ) {
+        const valueString = String(filter.value || "").trim();
+        if (valueString.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Value is required for this operator",
+            path: [index, "value"],
+          });
+        }
+      }
+    });
+  });
+
 const LLMJudgeBaseSchema = z.object({
   model: z
     .string({
@@ -39,6 +104,12 @@ const LLMJudgeBaseSchema = z.object({
     .min(1, { message: "Model is required" }),
   config: z.object({
     temperature: z.number(),
+    seed: z
+      .number()
+      .int()
+      .min(0, { message: "Seed must be a non-negative integer" })
+      .optional()
+      .nullable(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -159,6 +230,7 @@ export const BaseEvaluationRuleFormSchema = z.object({
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
   enabled: z.boolean().default(true),
+  filters: FiltersSchema.default([]),
 });
 
 export const LLMJudgeTraceEvaluationRuleFormSchema =
@@ -220,6 +292,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     model: data.model?.name ?? "",
     config: {
       temperature: data.model?.temperature ?? 0,
+      seed: data.model?.seed ?? null,
     },
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
@@ -232,11 +305,18 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
 export const convertLLMJudgeDataToLLMJudgeObject = (
   data: LLMJudgeDetailsTraceFormType | LLMJudgeDetailsThreadFormType,
 ) => {
+  const { temperature, seed } = data.config;
+  const model: LLMJudgeObject["model"] = {
+    name: data.model as PROVIDER_MODEL_TYPE,
+    temperature,
+  };
+
+  if (seed != null) {
+    model.seed = seed;
+  }
+
   return {
-    model: {
-      name: data.model,
-      temperature: data.config.temperature,
-    },
+    model,
     messages: convertLLMToProviderMessages(data.messages),
     variables: data.variables,
     schema: data.schema,
