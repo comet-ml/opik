@@ -219,7 +219,8 @@ const LLMPromptMessage = ({
                 extensions={[EditorView.lineWrapping, mustachePlugin]}
               />
               {!disableImages && (
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="comet-body-s-accented">Images</div>
                   <PromptMessageImageTags
                     images={images}
                     setImages={setImages}

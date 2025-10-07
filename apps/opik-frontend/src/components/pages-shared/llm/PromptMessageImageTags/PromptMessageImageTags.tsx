@@ -30,7 +30,7 @@ const PromptMessageImageTags: React.FunctionComponent<
 > = ({
   images = [],
   setImages,
-  align = "end",
+  align = "start",
   preview = true,
   editable = true,
 }) => {
@@ -74,9 +74,6 @@ const PromptMessageImageTags: React.FunctionComponent<
               e.currentTarget.style.display = "none";
             }}
           />
-          <p className="comet-body-xs truncate text-muted-foreground">
-            {imageStr}
-          </p>
         </div>
       );
     }
@@ -126,8 +123,10 @@ const PromptMessageImageTags: React.FunctionComponent<
   const canAddMore = images.length < MAX_IMAGES;
 
   return (
-    <div className="flex min-h-7 w-full flex-wrap items-center gap-1.5 overflow-x-hidden">
-      <Image className="mx-1 size-4 text-muted-slate" />
+    <div
+      className="flex min-h-7 w-full flex-wrap items-center gap-1.5 overflow-x-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
       {images.map((image, index) => {
         const tagContent = (
           <Tag
@@ -136,7 +135,8 @@ const PromptMessageImageTags: React.FunctionComponent<
             className="group/image-tag max-w-full shrink-0 pr-2 transition-all"
           >
             <div className="flex max-w-full items-center">
-              <span className="mr-1 truncate">
+              <Image className="size-3.5 shrink-0" />
+              <span className="mx-1 truncate">
                 {truncateImageString(image)}
               </span>
               {editable && (
@@ -176,7 +176,7 @@ const PromptMessageImageTags: React.FunctionComponent<
               </Button>
             </PopoverTrigger>
           </TooltipWrapper>
-          <PopoverContent className="w-[420px] p-6" align={align}>
+          <PopoverContent className="w-[460px] p-6" align={align}>
             <div className="space-y-3">
               <div className="flex gap-2">
                 <Input
@@ -195,9 +195,7 @@ const PromptMessageImageTags: React.FunctionComponent<
               </div>
               <p className="comet-body-xs text-muted-foreground">
                 You can add a base64 string, image URL, or template variable{" "}
-                <code className="comet-code rounded bg-muted px-1 py-0.5">
-                  {`{{image}}`}
-                </code>
+                <code>{`{{image}}`}</code>
               </p>
             </div>
           </PopoverContent>

@@ -162,11 +162,13 @@ const EditPromptVersionDialog: React.FunctionComponent<
                   value={localText}
                   onChange={(event) => handleContentChange(event.target.value)}
                 />
-                <PromptMessageImageTags
-                  images={images}
-                  setImages={setImages}
-                  align="start"
-                />
+                <Description>
+                  {
+                    EXPLAINERS_MAP[
+                      EXPLAINER_ID.what_format_should_the_prompt_be
+                    ].description
+                  }
+                </Description>
               </>
             ) : (
               <div className="flex flex-col gap-4">
@@ -204,13 +206,17 @@ const EditPromptVersionDialog: React.FunctionComponent<
                 )}
               </div>
             )}
-            <Description>
-              {
-                EXPLAINERS_MAP[EXPLAINER_ID.what_format_should_the_prompt_be]
-                  .description
-              }
-            </Description>
           </div>
+          {previewMode === PROMPT_PREVIEW_MODE.write && (
+            <div className="flex flex-col gap-2 pb-4">
+              <Label>Images</Label>
+              <PromptMessageImageTags
+                images={images}
+                setImages={setImages}
+                align="start"
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="promptMetadata">Commit message</Label>
             <Textarea
