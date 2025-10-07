@@ -65,6 +65,7 @@ The **recommended approach** uses `scripts/dev-runner.sh`, which runs backend an
 - Health Check: `http://localhost:8080/health`
 - API Ping: `http://localhost:8080/is-alive/ping`
 - API Docs (Swagger): `http://localhost:8080/swagger`
+- MinIO Console: `http://localhost:9090`
 
 **Logs:**
 
