@@ -9,10 +9,17 @@ metadata:
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+  {{- $annotations := dict }}
+  {{- if .Values.demoDataJob.useHelmHooks }}
+    {{- $_ := set $annotations "helm.sh/hook" "post-install,post-upgrade" }}
+    {{- $_ := set $annotations "helm.sh/hook-weight" "5" }}
+    {{- $_ := set $annotations "helm.sh/hook-delete-policy" "before-hook-creation" }}
+  {{- end }}
+  {{- $finalAnnotations := $annotations }}
+  {{- with $finalAnnotations }}
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "5"
-    helm.sh/hook-delete-policy: before-hook-creation
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   template:
     metadata:
