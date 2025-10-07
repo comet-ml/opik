@@ -710,11 +710,11 @@ export const prettifyMessage = (message: object | string | undefined) => {
       } as PrettifyMessageResponse;
     }
 
-    // If we can't extract text but it's a JSON object, it can still be prettified as a JSON table
+    // If we can't extract text, return the original message as not prettified
     if (isObject(message)) {
       return {
         message: message,
-        prettified: true,
+        prettified: false,
       } as PrettifyMessageResponse;
     }
 
