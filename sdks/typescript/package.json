@@ -54,7 +54,7 @@
     "lint": "eslint '**/*.{ts,tsx}'",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
-    "test": "vitest"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.1.9",
@@ -63,7 +63,9 @@
     "@opentelemetry/auto-instrumentations-node": "^0.56.0",
     "@opentelemetry/sdk-node": "^0.201.1",
     "@types/ini": "^4.1.1",
+    "@types/mustache": "^4.2.5",
     "@types/node-fetch": "^2.6.12",
+    "@types/nunjucks": "^3.2.6",
     "@types/qs": "^6.9.17",
     "@types/readable-stream": "^4.0.18",
     "@types/url-join": "^4.0.3",
@@ -96,10 +98,14 @@
     "ansi-escapes": "^7.0.0",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
+    "date-fns": "^3.5.0",
     "dotenv": "^16.5.0",
     "fast-json-stable-stringify": "^2.1.0",
     "ini": "^5.0.0",
+    "jest-diff": "^29.7.0",
+    "mustache": "^4.2.0",
     "node-fetch": "^3.3.2",
+    "nunjucks": "^3.2.4",
     "ora": "^8.2.0",
     "qs": "^6.13.1",
     "readable-stream": "^4.7.0",
