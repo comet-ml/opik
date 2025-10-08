@@ -116,6 +116,19 @@ export const extractTextFromObject = (
     }
   }
 
+  // Handle assistant messages with tool_calls (skip these as they don't contain displayable content)
+  if (
+    "role" in obj &&
+    (obj as Record<string, unknown>).role === "assistant" &&
+    "tool_calls" in obj &&
+    "content" in obj &&
+    (obj as Record<string, unknown>).content === null
+  ) {
+    // Skip assistant messages with tool_calls that have null content
+    // These are just function call requests and don't contain displayable text
+    return undefined;
+  }
+
   // Handle LangGraph format: { messages: [{ type: "ai", content: "..." }] }
   if (
     "messages" in obj &&
@@ -689,6 +702,7 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
             textItems.push(extracted);
           }
         }
+        // If extracted is undefined (e.g., for assistant messages with tool_calls), skip silently
       }
     }
   }

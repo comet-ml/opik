@@ -176,7 +176,7 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
                 )}
               </Button>
             )}
-            <span className="comet-code font-medium text-foreground">
+            <span className="comet-code font-semibold text-foreground">
               {row.original.key}
             </span>
           </div>
