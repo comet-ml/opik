@@ -317,6 +317,7 @@ class ClassInspector:
 
 
 classes_to_document = [
+    opik_optimizer.ParameterOptimizer,
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
     opik_optimizer.MiproOptimizer,
@@ -350,6 +351,7 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
 
+- **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 - **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
 - **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
 - **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
