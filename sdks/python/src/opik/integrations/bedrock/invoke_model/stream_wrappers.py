@@ -9,7 +9,7 @@ import opik.api_objects.span as span
 import opik.api_objects.trace as trace
 from opik.types import ErrorInfoDict
 from opik.decorator import generator_wrappers, error_info_collector
-from .. import helpers
+from .. import types
 
 import botocore.eventstream
 
@@ -20,11 +20,11 @@ __original_streaming_body_read = botocore.response.StreamingBody.read
 
 
 def wrap_invoke_model_response(
-    output: helpers.InvokeModelOutput,
+    output: types.InvokeModelOutput,
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
-) -> helpers.InvokeModelOutput:
+) -> types.InvokeModelOutput:
     response_metadata = output["ResponseMetadata"]
     streaming_body = output["body"]
 

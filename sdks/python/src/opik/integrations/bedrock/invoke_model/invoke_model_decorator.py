@@ -9,7 +9,7 @@ from opik import llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
-from .. import helpers
+from .. import types
 from . import stream_wrappers, usage_extraction, response_types
 
 import botocore.response
@@ -118,7 +118,7 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        helpers.InvokeModelOutput,
+        types.InvokeModelOutput,
         None,
     ]:
         # Despite the name, StreamingBody is not a stream in traditional LLM provider sense (response chunks).
@@ -171,7 +171,7 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
             )
 
             output["body"] = wrapped_stream
-            return cast(helpers.InvokeModelWithResponseStreamOutput, output)
+            return cast(types.InvokeModelWithResponseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
 
