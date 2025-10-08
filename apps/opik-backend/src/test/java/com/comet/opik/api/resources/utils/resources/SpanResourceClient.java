@@ -222,7 +222,6 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         }
 
         var response = requestBuilder
-                .queryParam("project_name", projectName)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
