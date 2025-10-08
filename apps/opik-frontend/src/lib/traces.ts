@@ -234,17 +234,42 @@ export const extractTextFromObject = (
           }
         }
 
-        // If content is not meaningful text (e.g., Python list representation, template strings),
-        // fall back to rendering the entire object as a JSON table
+        // Check if content is a JSON string that should be parsed
         if (
           content.startsWith("[") &&
-          content.includes("'role'") &&
-          content.includes("'content'")
+          (content.includes("'role'") || content.includes('"role"')) &&
+          (content.includes("'content'") || content.includes('"content"'))
         ) {
-          return {
-            renderType: "json-table",
-            data: obj,
-          };
+          // Try to parse the content as JSON first
+          try {
+            const parsedContent = JSON.parse(content);
+            if (Array.isArray(parsedContent)) {
+              // If it's a valid JSON array, return it as structured data
+              return {
+                renderType: "json-table",
+                data: parsedContent,
+              };
+            }
+          } catch {
+            // If JSON parsing fails, try to parse as JavaScript array literal
+            try {
+              // Handle multiple arrays separated by commas (JavaScript array literal format)
+              const arrayLiteral = `[${content}]`;
+              const parsedContent = JSON.parse(arrayLiteral);
+              if (Array.isArray(parsedContent)) {
+                return {
+                  renderType: "json-table",
+                  data: parsedContent,
+                };
+              }
+            } catch {
+              // If both JSON and array literal parsing fail, fall back to rendering the entire object as a JSON table
+              return {
+                renderType: "json-table",
+                data: obj,
+              };
+            }
+          }
         }
 
         return content;
