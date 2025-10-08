@@ -76,7 +76,7 @@ public class SpanService {
                             if (!resolvedCriteria.stripAttachments()) {
                                 return Flux.fromIterable(spanPage.content())
                                         .concatMap(span -> attachmentReinjectorService.reinjectAttachments(span,
-                                                resolvedCriteria.truncate()))
+                                                !resolvedCriteria.stripAttachments()))
                                         .collectList()
                                         .map(reinjectedSpans -> spanPage.toBuilder()
                                                 .content(reinjectedSpans)
@@ -394,10 +394,10 @@ public class SpanService {
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(resolvedCriteria -> spanDAO.search(limit, resolvedCriteria)
-                        .concatMap(span -> 
-                            // If stripAttachments=false, reinject attachments
-                            attachmentReinjectorService.reinjectAttachments(span,
-                                        !resolvedCriteria.stripAttachments())));
+                        .concatMap(span ->
+                        // If stripAttachments=false, reinject attachments
+                        attachmentReinjectorService.reinjectAttachments(span,
+                                !resolvedCriteria.stripAttachments())));
     }
 
     @WithSpan
