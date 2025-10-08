@@ -561,7 +561,18 @@ export class OpikClient {
         this.api.requestOptions
       );
 
-      return Prompt.fromApiResponse(promptData, versionResponse, this);
+      const prompt = Prompt.fromApiResponse(promptData, versionResponse, this);
+
+      logger.debug("Prompt created", { name: options.name });
+
+      if (options.description || options.tags) {
+        return await prompt.updateProperties({
+          description: options.description,
+          tags: options.tags,
+        });
+      }
+
+      return prompt;
     } catch (error) {
       logger.error("Failed to create prompt", { name: options.name, error });
       throw error;

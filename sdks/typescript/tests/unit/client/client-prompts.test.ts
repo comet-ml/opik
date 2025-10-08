@@ -749,6 +749,53 @@ describe("Opik prompt operations", () => {
       );
     });
 
+    it("should create prompt with tags and description in options", async () => {
+      const mockVersionDetail: OpikApi.PromptVersionDetail = {
+        id: "version-id",
+        promptId: "prompt-id",
+        commit: "abc123de",
+        template: "Test {{var}}",
+        type: "mustache",
+        createdAt: new Date("2024-01-01"),
+      };
+
+      const mockPromptData: OpikApi.PromptPublic = {
+        id: "prompt-id",
+        name: "prompt-with-tags",
+        description: "Test description",
+        tags: ["tag1", "tag2"],
+      };
+
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+
+      createPromptVersionSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockVersionDetail)
+      );
+
+      getPromptByIdSpy.mockImplementationOnce(() =>
+        createMockHttpResponsePromise(mockPromptData)
+      );
+
+      const updatePropertiesSpy = vi.fn();
+      vi.spyOn(Prompt.prototype, "updateProperties").mockImplementation(
+        updatePropertiesSpy
+      );
+
+      await client.createPrompt({
+        name: "prompt-with-tags",
+        prompt: "Test {{var}}",
+        description: "Test description",
+        tags: ["tag1", "tag2"],
+      });
+
+      expect(updatePropertiesSpy).toHaveBeenCalledWith({
+        description: "Test description",
+        tags: ["tag1", "tag2"],
+      });
+    });
+
     it("should handle API errors during search", async () => {
       const apiError = new OpikApiError({
         message: "Search failed",

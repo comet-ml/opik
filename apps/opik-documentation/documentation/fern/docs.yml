@@ -698,6 +698,12 @@ navigation:
           - page: Opik Configure
             path: docs/reference/typescript-sdk/opik-configure.mdx
             slug: opik-configure
+          - page: Prompts
+            path: docs/reference/typescript-sdk/prompts.mdx
+            slug: prompts
+          - page: Opik Query Language (OQL)
+            path: docs/reference/typescript-sdk/opik-query-language.mdx
+            slug: opik-query-language
           - section: Evaluation
             slug: evaluation
             contents:

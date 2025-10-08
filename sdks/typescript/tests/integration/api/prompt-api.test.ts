@@ -1,41 +1,28 @@
-/**
- * Real API Integration Tests for Prompt Management
- *
- * These tests run against actual Opik API endpoints.
- * They are SKIPPED by default and only run when OPIK_API_KEY is provided.
- *
- * To run these tests:
- * 1. Set OPIK_API_KEY in your .env file
- * 2. Run: npm run test:integration:api
- *
- * See tests/integration/api/README.md for details.
- */
-
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { PromptValidationError } from "@/prompt/errors";
+import {
+  shouldRunIntegrationTests,
+  getIntegrationTestStatus,
+} from "./shouldRunIntegrationTests";
 
-// change it to true to run the tests
-const shouldRunApiTests = true;
+const shouldRunApiTests = shouldRunIntegrationTests();
 
-// Skip entire suite if no API key
 describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
   let client: Opik;
   const createdPromptIds: string[] = [];
 
   beforeAll(() => {
-    if (!process.env.OPIK_API_KEY) {
-      console.warn("⚠️  Skipping real API tests - OPIK_API_KEY not set");
+    console.log(getIntegrationTestStatus());
+
+    if (!shouldRunApiTests) {
       return;
     }
 
     client = new Opik();
-
-    console.log("✅ Running real API integration tests");
   });
 
   afterEach(async () => {
-    // Clean up created prompts
     if (createdPromptIds.length > 0) {
       try {
         await client.deletePrompts(createdPromptIds);
@@ -538,6 +525,28 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
   });
 
   describe("Production Patterns", () => {
+    it("should create prompt with tags and description, syncing them with backend", async () => {
+      const promptName = `test-tags-desc-${Date.now()}`;
+
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Test {{input}}",
+        description: "Initial description",
+        tags: ["initial", "test"],
+      });
+      createdPromptIds.push(prompt.id);
+
+      // Verify local state
+      expect(prompt.description).toBe("Initial description");
+      expect(prompt.tags).toEqual(["initial", "test"]);
+
+      // Verify backend state
+      const retrieved = await client.getPrompt({ name: promptName });
+      expect(retrieved?.description).toBe("Initial description");
+      expect(retrieved?.tags).toContain("initial");
+      expect(retrieved?.tags).toContain("test");
+    }, 30000);
+
     it("should support A/B testing scenario with multiple versions", async () => {
       const promptName = `ab-test-${Date.now()}`;
 
