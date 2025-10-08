@@ -1,7 +1,7 @@
 ---
 description: Frontend UI component patterns and design system guidelines
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # UI Components & Design System

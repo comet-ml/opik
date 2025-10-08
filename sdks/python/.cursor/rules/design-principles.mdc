@@ -1,7 +1,7 @@
 ---
 description: SOLID principles and architectural design guidelines for the Python SDK
 globs: sdks/python/src/opik/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK Design Principles Guidelines
 

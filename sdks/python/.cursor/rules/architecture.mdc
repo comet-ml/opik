@@ -1,7 +1,7 @@
 ---
 description: Core library architecture and design patterns for the Python SDK
 globs: sdks/python/src/opik/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK Architecture Guidelines
 
