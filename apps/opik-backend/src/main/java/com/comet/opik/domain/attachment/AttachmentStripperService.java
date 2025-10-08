@@ -385,7 +385,7 @@ public class AttachmentStripperService {
             // Post event to EventBus for async processing
             eventBus.post(uploadEvent);
 
-            log.debug("Posted async upload event for attachment: '{}'", fileName);
+            log.info("Posted async upload event for attachment: '{}'", fileName);
 
             // Record that we posted an upload event (compare with uploadSuccesses/uploadFailures in AttachmentUploadListener)
             attachmentsProcessed.add(1);
