@@ -431,6 +431,143 @@ class OnlineScoringEngineTest {
     }
 
     @Test
+    @DisplayName("renderMessages should handle URLs with HTML-escaped characters")
+    void renderMessagesUnescapesHtmlEntitiesInImageUrls() {
+        // Simulate a URL that Mustache has HTML-escaped (& becomes &amp; and = becomes &#61;)
+        // This is a real-world case from Azure Blob Storage URLs with query parameters
+        var htmlEscapedUrl = "https://oaidalleapiprodscus.blob.core.windows.net/private/org-test/img.png?st&#61;2025-10-08T14%3A00%3A19Z&amp;se&#61;2025-10-08T16%3A00%3A19Z&amp;sp&#61;r";
+        var expectedUrl = "https://oaidalleapiprodscus.blob.core.windows.net/private/org-test/img.png?st=2025-10-08T14%3A00%3A19Z&se=2025-10-08T16%3A00%3A19Z&sp=r";
+
+        var templateMessages = List.of(
+                new LlmAsJudgeMessage(
+                        ChatMessageType.USER,
+                        "Image:<<<image>>>" + htmlEscapedUrl + "<<</image>>>"));
+
+        Trace trace = Trace.builder()
+                .startTime(Instant.now())
+                .input(JsonUtils.getJsonNodeOrDefault("{}"))
+                .build();
+
+        var rendered = OnlineScoringEngine.renderMessages(templateMessages, Map.of(), trace);
+
+        assertThat(rendered).hasSize(1);
+        assertThat(rendered.get(0)).isInstanceOf(UserMessage.class);
+
+        var userMessage = (UserMessage) rendered.get(0);
+        List<dev.langchain4j.data.message.Content> parts = userMessage.contents();
+
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(0)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(0)).text()).isEqualTo("Image:");
+        assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
+
+        // Verify that HTML entities were properly unescaped
+        var actualUrl = ((ImageContent) parts.get(1)).image().url().toString();
+        assertThat(actualUrl).isEqualTo(expectedUrl);
+
+        // Verify that the URL contains unescaped & and = characters
+        assertThat(actualUrl).contains("&se=");
+        assertThat(actualUrl).contains("&sp=");
+        assertThat(actualUrl).contains("?st=");
+
+        // Verify that HTML entities are NOT present in the final URL
+        assertThat(actualUrl).doesNotContain("&amp;");
+        assertThat(actualUrl).doesNotContain("&#61;");
+    }
+
+    @Test
+    @DisplayName("renderMessages should handle multiple images with HTML-escaped URLs")
+    void renderMessagesHandlesMultipleImagesWithHtmlEscapedUrls() {
+        // Test multiple images to ensure the fix works for all occurrences
+        var htmlEscapedUrl1 = "https://example.com/img1.png?param1&#61;value1&amp;param2&#61;value2";
+        var htmlEscapedUrl2 = "https://example.com/img2.png?key&#61;abc&amp;token&#61;xyz";
+
+        var templateMessages = List.of(
+                new LlmAsJudgeMessage(
+                        ChatMessageType.USER,
+                        "First image:<<<image>>>" + htmlEscapedUrl1 + "<<</image>>>Second image:<<<image>>>"
+                                + htmlEscapedUrl2 + "<<</image>>>"));
+
+        Trace trace = Trace.builder()
+                .startTime(Instant.now())
+                .input(JsonUtils.getJsonNodeOrDefault("{}"))
+                .build();
+
+        var rendered = OnlineScoringEngine.renderMessages(templateMessages, Map.of(), trace);
+
+        assertThat(rendered).hasSize(1);
+        assertThat(rendered.get(0)).isInstanceOf(UserMessage.class);
+
+        var userMessage = (UserMessage) rendered.get(0);
+        List<dev.langchain4j.data.message.Content> parts = userMessage.contents();
+
+        assertThat(parts).hasSize(4); // text, image, text, image
+
+        // Verify first image URL is correctly unescaped
+        assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
+        var firstImageUrl = ((ImageContent) parts.get(1)).image().url().toString();
+        assertThat(firstImageUrl).isEqualTo("https://example.com/img1.png?param1=value1&param2=value2");
+        assertThat(firstImageUrl).doesNotContain("&amp;");
+        assertThat(firstImageUrl).doesNotContain("&#61;");
+
+        // Verify second image URL is correctly unescaped
+        assertThat(parts.get(3)).isInstanceOf(ImageContent.class);
+        var secondImageUrl = ((ImageContent) parts.get(3)).image().url().toString();
+        assertThat(secondImageUrl).isEqualTo("https://example.com/img2.png?key=abc&token=xyz");
+        assertThat(secondImageUrl).doesNotContain("&amp;");
+        assertThat(secondImageUrl).doesNotContain("&#61;");
+    }
+
+    @Test
+    @DisplayName("renderMessages should work with triple-brace Mustache syntax (recommended approach)")
+    void renderMessagesWithTripleBraceUnescapedSyntax() {
+        // RECOMMENDED: Use triple braces {{{variable}}} in Mustache to prevent HTML escaping
+        // This test demonstrates the proper way to handle URLs with special characters
+        var urlWithSpecialChars = "https://oaidalleapiprodscus.blob.core.windows.net/private/org-test/img.png?st=2025-10-08T14%3A00%3A19Z&se=2025-10-08T16%3A00%3A19Z&sp=r";
+
+        // Template using {{{variable}}} instead of {{variable}} - prevents HTML escaping
+        var templateMessages = List.of(
+                new LlmAsJudgeMessage(
+                        ChatMessageType.USER,
+                        "Image:<<<image>>>{{{image_url}}}<<</image>>>"));
+
+        Trace trace = Trace.builder()
+                .startTime(Instant.now())
+                .input(JsonUtils.getJsonNodeOrDefault("{}"))
+                .build();
+
+        // When using triple braces, Mustache doesn't escape the URL
+        var rendered = OnlineScoringEngine.renderMessages(
+                templateMessages,
+                Map.of("image_url", urlWithSpecialChars),
+                trace);
+
+        assertThat(rendered).hasSize(1);
+        assertThat(rendered.get(0)).isInstanceOf(UserMessage.class);
+
+        var userMessage = (UserMessage) rendered.get(0);
+        List<dev.langchain4j.data.message.Content> parts = userMessage.contents();
+
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(0)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(0)).text()).isEqualTo("Image:");
+        assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
+
+        // With triple braces, URL is not escaped - no HTML entities present
+        var actualUrl = ((ImageContent) parts.get(1)).image().url().toString();
+        assertThat(actualUrl).isEqualTo(urlWithSpecialChars);
+
+        // Verify URL contains proper unescaped characters
+        assertThat(actualUrl).contains("&se=");
+        assertThat(actualUrl).contains("&sp=");
+        assertThat(actualUrl).contains("?st=");
+
+        // Verify no HTML entities in the URL (because we used triple braces)
+        assertThat(actualUrl).doesNotContain("&amp;");
+        assertThat(actualUrl).doesNotContain("&#61;");
+    }
+
+    @Test
     @DisplayName("parse variable mapping into a usable one")
     void testVariableMapping() throws JsonProcessingException {
         var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);

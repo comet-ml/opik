@@ -236,7 +236,11 @@ public class OnlineScoringEngine {
 
             String url = matcher.group(1).trim();
             if (!url.isEmpty()) {
-                builder.addContent(ImageContent.from(url));
+                // Unescape HTML entities for backward compatibility with templates using {{variable}}
+                // RECOMMENDED: Use {{{variable}}} (triple braces) or {{&variable}} in Mustache templates
+                // to prevent HTML escaping of URLs in the first place
+                String unescapedUrl = unescapeHtmlEntities(url);
+                builder.addContent(ImageContent.from(unescapedUrl));
             }
 
             lastIndex = matcher.end();
@@ -258,6 +262,36 @@ public class OnlineScoringEngine {
         if (StringUtils.isNotBlank(textSegment)) {
             builder.addContent(TextContent.from(textSegment));
         }
+    }
+
+    /**
+     * Unescapes common HTML entities that may be present in URLs due to Mustache template rendering.
+     *
+     * <p>This method provides backward compatibility for templates using {{variable}} syntax, which causes
+     * Mustache to HTML-escape special characters (&, =, etc.) in URLs.
+     *
+     * <p><strong>RECOMMENDED APPROACH:</strong> Use Mustache's unescaped output syntax in templates:
+     * <ul>
+     *   <li>{{{variable}}} - Triple braces (unescaped output)</li>
+     *   <li>{{&variable}} - Ampersand prefix (unescaped output)</li>
+     * </ul>
+     *
+     * <p>Example template with proper unescaped syntax:
+     * <pre>{@code
+     * <<<image>>>{{{trace.input.image_url}}}<<</image>>>
+     * }</pre>
+     *
+     * @param text the text containing HTML entities
+     * @return the text with HTML entities unescaped
+     */
+    private static String unescapeHtmlEntities(String text) {
+        return text
+                .replace("&amp;", "&")
+                .replace("&#61;", "=")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">");
     }
 
     private static String extractFromJson(JsonNode json, String path) {
@@ -312,7 +346,7 @@ public class OnlineScoringEngine {
             return Collections.emptyList();
         }
         var spliterator = Spliterators.spliteratorUnknownSize(
-                structuredResponse.fields(), Spliterator.ORDERED | Spliterator.NONNULL);
+                structuredResponse.properties().iterator(), Spliterator.ORDERED | Spliterator.NONNULL);
         List<FeedbackScoreBatchItem> results = StreamSupport.stream(spliterator, false)
                 .map(scoreMetric -> {
                     var scoreName = scoreMetric.getKey();
