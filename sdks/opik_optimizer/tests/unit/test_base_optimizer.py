@@ -17,10 +17,15 @@ class TestBaseOptimizer:
         # but it has abstract methods that must be implemented by subclasses
         assert hasattr(BaseOptimizer, "optimize_prompt")
         assert hasattr(BaseOptimizer, "optimize_mcp")
+        assert hasattr(BaseOptimizer, "optimize_parameter")
 
     def test_base_optimizer_has_required_methods(self) -> None:
         """Test that BaseOptimizer has required abstract methods."""
-        required_methods = ["optimize_prompt", "optimize_mcp"]
+        required_methods = [
+            "optimize_prompt",
+            "optimize_mcp",
+            "optimize_parameter",
+        ]
 
         for method_name in required_methods:
             assert hasattr(BaseOptimizer, method_name)
@@ -74,6 +79,28 @@ class TestBaseOptimizer:
 
         assert params == expected_params
 
+    def test_optimize_parameter_signature(self) -> None:
+        """Test that optimize_parameter has the correct signature."""
+        import inspect
+
+        sig = inspect.signature(BaseOptimizer.optimize_parameter)
+        params = list(sig.parameters.keys())
+
+        expected_params = [
+            "self",
+            "prompt",
+            "dataset",
+            "metric",
+            "parameter_space",
+            "experiment_config",
+            "n_trials",
+            "n_samples",
+            "agent_class",
+            "kwargs",
+        ]
+
+        assert params == expected_params
+
     def test_optimize_prompt_return_annotation(self) -> None:
         """Test that optimize_prompt has correct return annotation."""
         import inspect
@@ -90,6 +117,16 @@ class TestBaseOptimizer:
         from opik_optimizer.optimization_result import OptimizationResult
 
         sig = inspect.signature(BaseOptimizer.optimize_mcp)
+        return_annotation = sig.return_annotation
+
+        assert return_annotation == OptimizationResult
+
+    def test_optimize_parameter_return_annotation(self) -> None:
+        """Test that optimize_parameter has correct return annotation."""
+        import inspect
+        from opik_optimizer.optimization_result import OptimizationResult
+
+        sig = inspect.signature(BaseOptimizer.optimize_parameter)
         return_annotation = sig.return_annotation
 
         assert return_annotation == OptimizationResult
