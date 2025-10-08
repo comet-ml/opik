@@ -19,6 +19,12 @@ from .mipro_optimizer import MiproOptimizer
 from .reflective_optimizer import ReflectiveOptimizer
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
+from .parameter_optimizer import (
+    ParameterOptimizer,
+    ParameterSearchSpace,
+    ParameterSpec,
+    ParameterType,
+)
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
@@ -36,9 +42,13 @@ __all__ = [
     "MiproOptimizer",
     "EvolutionaryOptimizer",
     "ReflectiveOptimizer",
+    "ParameterOptimizer",
     "OptimizationResult",
     "OptimizableAgent",
     "setup_logging",
     "datasets",
     "TaskConfig",
+    "ParameterSearchSpace",
+    "ParameterSpec",
+    "ParameterType",
 ]
