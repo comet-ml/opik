@@ -127,10 +127,8 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     return tracesData.content.map((trace: Trace) => {
       const baseData: ExportTraceData = {
         id: trace.id,
-        input: prettifyMessage(trace.input, { type: "input" })
-          .message as JsonNode,
-        output: prettifyMessage(trace.output, { type: "output" })
-          .message as JsonNode,
+        input: prettifyMessage(trace.input).message as JsonNode,
+        output: prettifyMessage(trace.output).message as JsonNode,
         metadata: trace.metadata ?? {},
       };
 
@@ -170,10 +168,9 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     return threadsData.content.map((thread: Thread) => {
       const baseData: ExportThreadData = {
         id: thread.id,
-        first_message: prettifyMessage(thread.first_message, { type: "input" })
+        first_message: prettifyMessage(thread.first_message)
           .message as JsonNode,
-        last_message: prettifyMessage(thread.last_message, { type: "output" })
-          .message as JsonNode,
+        last_message: prettifyMessage(thread.last_message).message as JsonNode,
       };
 
       reviewers.forEach((reviewerName) => {
