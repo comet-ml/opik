@@ -609,11 +609,11 @@
 
 /* Specific styling for MarkdownHighlighter component only */
 .comet-markdown-highlighter {
-  /* Override prose H2 styling to be smaller and less bold */
+  /* Make H2 about the same size as strong elements */
   h2 {
-    @apply comet-title-s;
-    margin-top: 1.5rem;
-    margin-bottom: 0.75rem;
+    @apply text-base font-medium; /* Same size as base text but medium weight like strong */
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
   }
 }
 

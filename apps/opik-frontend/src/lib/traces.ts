@@ -234,9 +234,29 @@ export const extractTextFromObject = (
           }
         }
 
+        // If content is not meaningful text (e.g., Python list representation, template strings),
+        // fall back to rendering the entire object as a JSON table
+        if (
+          content.startsWith("[") &&
+          content.includes("'role'") &&
+          content.includes("'content'")
+        ) {
+          return {
+            renderType: "json-table",
+            data: obj,
+          };
+        }
+
         return content;
       }
     }
+
+    // If we have choices but can't extract meaningful text content,
+    // fall back to rendering the entire object as a JSON table
+    return {
+      renderType: "json-table",
+      data: obj,
+    };
   }
 
   // Handle LangChain format: { generations: [[{ text: "..." }]] }
@@ -592,8 +612,11 @@ const formatStructuredData = (data: unknown): string => {
 /**
  * Extract text from an array of objects by processing each object
  */
-const extractTextFromArray = (arr: unknown[]): string | undefined => {
+const extractTextFromArray = (
+  arr: unknown[],
+): string | ExtractTextResult | undefined => {
   const textItems: string[] = [];
+  let hasStructuredObjects = false;
 
   // First pass: collect tool names from assistant messages with tool_calls
   const toolNames: { [toolCallId: string]: string } = {};
@@ -695,6 +718,9 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
         if (extracted) {
           // Handle structured result
           if (typeof extracted === "object" && "renderType" in extracted) {
+            // If we have structured objects that should be rendered as JSON tables,
+            // return the entire array as a structured result
+            hasStructuredObjects = true;
             // For arrays, we'll convert structured results to text representation
             textItems.push(JSON.stringify(extracted.data, null, 2));
           } else if (typeof extracted === "string") {
@@ -705,6 +731,15 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
         // If extracted is undefined (e.g., for assistant messages with tool_calls), skip silently
       }
     }
+  }
+
+  // If we have structured objects that should be rendered as JSON tables,
+  // return the entire array as a structured result
+  if (hasStructuredObjects) {
+    return {
+      renderType: "json-table",
+      data: arr,
+    };
   }
 
   return textItems.length > 0 ? textItems.join("\n\n") : undefined;

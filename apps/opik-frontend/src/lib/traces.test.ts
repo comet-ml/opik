@@ -189,6 +189,77 @@ describe("prettifyMessage", () => {
     });
   });
 
+  it("renders OpenAI completion object with JsonKeyValueTable when content is not valid JSON", () => {
+    const message = {
+      id: "chatcmpl-COQWe7LJJW5rzSa1i2G2IKXc2qamO",
+      created: 1759937872,
+      model: "gpt-4o-mini-2024-07-18",
+      object: "chat.completion",
+      system_fingerprint: "fp_560af6e559",
+      choices: [
+        {
+          finish_reason: "stop",
+          index: 0,
+          message: {
+            content:
+              "[{'role': 'system', 'content': \"Provide a direct and concise answer to the user's question in one to two sentences. If necessary, utilize the `search_wikipedia` tool to confirm factual information before responding. Avoid any conversational tone or pleasantries.\"}, {'role': 'user', 'content': '{question}'}]",
+            role: "assistant",
+            tool_calls: null,
+            function_call: null,
+            annotations: [],
+          },
+          provider_specific_fields: {},
+        },
+      ],
+      usage: {
+        completion_tokens: 69,
+        prompt_tokens: 374,
+        total_tokens: 443,
+        completion_tokens_details: {
+          accepted_prediction_tokens: 0,
+          audio_tokens: 0,
+          reasoning_tokens: 0,
+          rejected_prediction_tokens: 0,
+          text_tokens: null,
+        },
+        prompt_tokens_details: {
+          audio_tokens: 0,
+          cached_tokens: 0,
+          text_tokens: null,
+          image_tokens: null,
+        },
+      },
+      service_tier: "default",
+    };
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message,
+      prettified: true,
+      renderType: "json-table",
+    });
+  });
+
+  it("renders array of objects with JsonKeyValueTable when objects should be rendered as tables", () => {
+    const message = [
+      {
+        id: "obj1",
+        name: "Object 1",
+        data: { key: "value1" },
+      },
+      {
+        id: "obj2",
+        name: "Object 2",
+        data: { key: "value2" },
+      },
+    ];
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message,
+      prettified: true,
+      renderType: "json-table",
+    });
+  });
+
   it("processes nested objects with predefined keys", () => {
     const message = {
       data: {
