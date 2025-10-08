@@ -398,6 +398,8 @@ from .value_entry_public_source import ValueEntryPublicSource
 from .value_entry_source import ValueEntrySource
 from .webhook import Webhook
 from .webhook_public import WebhookPublic
+from .webhook_test_result import WebhookTestResult
+from .webhook_test_result_status import WebhookTestResultStatus
 from .webhook_write import WebhookWrite
 from .workspace_configuration import WorkspaceConfiguration
 from .workspace_metric_request import WorkspaceMetricRequest
@@ -779,6 +781,8 @@ __all__ = [
     "ValueEntrySource",
     "Webhook",
     "WebhookPublic",
+    "WebhookTestResult",
+    "WebhookTestResultStatus",
     "WebhookWrite",
     "WorkspaceConfiguration",
     "WorkspaceMetricRequest",

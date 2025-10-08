@@ -27,6 +27,7 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   protected async getEntity(id: string) {
     return (await this.api.traces.getTraceById(
       id,
+      {},
       this.api.requestOptions
     )) as SavedTrace;
   }
