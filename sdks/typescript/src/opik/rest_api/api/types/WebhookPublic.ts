@@ -6,7 +6,7 @@ export interface WebhookPublic {
     id?: string;
     name?: string;
     url: string;
-    secretToken: string;
+    secretToken?: string;
     headers?: Record<string, string>;
     createdAt?: Date;
     createdBy?: string;

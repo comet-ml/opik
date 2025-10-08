@@ -376,13 +376,21 @@ class SpansClient:
         _response = self._raw_client.create_spans(spans=spans, request_options=request_options)
         return _response.data
 
-    def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    def get_span_by_id(
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SpanPublic:
         """
         Get span by id
 
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -398,7 +406,7 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.get_span_by_id(id='id', )
         """
-        _response = self._raw_client.get_span_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_span_by_id(id, truncate=truncate, request_options=request_options)
         return _response.data
 
     def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
@@ -1204,13 +1212,21 @@ class AsyncSpansClient:
         _response = await self._raw_client.create_spans(spans=spans, request_options=request_options)
         return _response.data
 
-    async def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    async def get_span_by_id(
+        self,
+        id: str,
+        *,
+        truncate: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SpanPublic:
         """
         Get span by id
 
         Parameters
         ----------
         id : str
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1229,7 +1245,7 @@ class AsyncSpansClient:
             await client.spans.get_span_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_span_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_span_by_id(id, truncate=truncate, request_options=request_options)
         return _response.data
 
     async def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
