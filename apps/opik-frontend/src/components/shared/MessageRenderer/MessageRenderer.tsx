@@ -125,7 +125,7 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
     }
 
     // Handle other types (numbers, booleans, etc.)
-    return <MarkdownPreview>{toString(String(message))}</MarkdownPreview>;
+    return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
   }, [message, attemptTextExtraction, customTextExtractor, fallbackContent]);
 
   return (
