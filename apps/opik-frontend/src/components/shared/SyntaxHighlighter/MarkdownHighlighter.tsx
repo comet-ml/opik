@@ -2,6 +2,7 @@ import React, { ReactNode, useMemo, useRef } from "react";
 import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
+import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
 import { cn, isStringMarkdown } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -39,10 +40,32 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   const markdownPreview = useMemo(() => {
     if (isNull(codeOutput.message)) return "";
 
+    // Handle object messages - render as JSON table
+    if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
+      return <JsonKeyValueTable data={codeOutput.message} maxDepth={3} />;
+    }
+
+    // Handle structured result from prettifyMessage
+    if (
+      typeof codeOutput.message === "object" &&
+      codeOutput.message !== null &&
+      "renderType" in codeOutput.message
+    ) {
+      const structuredResult = codeOutput.message as {
+        renderType: string;
+        data: unknown;
+      };
+      if (structuredResult.renderType === "json-table") {
+        return <JsonKeyValueTable data={structuredResult.data} maxDepth={3} />;
+      }
+    }
+
     if (isStringMarkdown(codeOutput.message)) {
       return (
         <ReactMarkdown
-          className={cn("prose dark:prose-invert comet-markdown")}
+          className={cn(
+            "prose dark:prose-invert comet-markdown comet-markdown-highlighter",
+          )}
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
           rehypePlugins={[rehypeRaw]}
         >
