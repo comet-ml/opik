@@ -153,10 +153,7 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
     () => initialExpanded,
   );
 
-  // Update expanded state when tableData changes
-  React.useEffect(() => {
-    setExpanded(initialExpanded);
-  }, [initialExpanded]);
+  // Removed useEffect that reset expanded state on initialExpanded changes to preserve user interaction state.
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
