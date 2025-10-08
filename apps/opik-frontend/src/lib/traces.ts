@@ -387,7 +387,7 @@ const extractTextFromObject = (
     "output.content",
     "response.data",
     "data.text",
-    "data.response", // Added for the test case
+    "data.response",
   ];
 
   for (const path of nestedPaths) {
