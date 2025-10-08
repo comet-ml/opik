@@ -437,7 +437,7 @@ export const parseJsonForTable = (content: string): unknown | null => {
       return parsed;
     }
   } catch {
-    // If JSON parsing fails, return null
+    
   }
   return null;
 };
