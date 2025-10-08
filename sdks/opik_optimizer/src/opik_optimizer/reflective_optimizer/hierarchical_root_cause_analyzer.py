@@ -10,6 +10,7 @@ from .types import (
     BatchAnalysis,
     HierarchicalRootCauseAnalysis,
 )
+from . import reporting
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ class HierarchicalRootCauseAnalyzer:
         reasoning_model: str, 
         seed: int,
         max_parallel_batches: int = MAX_PARALLEL_BATCHES,
+        verbose: int = 1,
     ):
         """
         Initialize the hierarchical root cause analyzer.
@@ -96,11 +98,13 @@ class HierarchicalRootCauseAnalyzer:
             reasoning_model: Name of the reasoning model to use
             seed: Random seed for reproducibility
             max_parallel_batches: Maximum number of batches to process concurrently (default: 5)
+            verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
         """
         self.call_model_fn = call_model_fn
         self.reasoning_model = reasoning_model
         self.seed = seed
         self.max_parallel_batches = max_parallel_batches
+        self.verbose = verbose
     
     def _format_test_results_batch(
         self, 
@@ -363,10 +367,14 @@ Scores:
         # Stage 2: Synthesize batch analyses
         logger.info("Stage 2: Synthesizing batch analyses...")
         
-        hierarchical_analysis = await self._synthesize_batch_analyses_async(
-            evaluation_result=evaluation_result,
-            batch_analyses=batch_analyses,
-        )
+        with reporting.display_batch_synthesis(
+            num_batches=len(batch_analyses),
+            verbose=self.verbose
+        ):
+            hierarchical_analysis = await self._synthesize_batch_analyses_async(
+                evaluation_result=evaluation_result,
+                batch_analyses=batch_analyses,
+            )
         
         logger.info(
             f"Synthesis complete: "

@@ -110,24 +110,36 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
 
 @contextmanager
 def display_evaluation(
-    message: str = "First we will establish the baseline performance:", verbose: int = 1
+    message: str = "First we will establish the baseline performance:", 
+    verbose: int = 1,
+    indent: str = "> "
 ) -> Any:
-    """Context manager to display messages during an evaluation phase."""
+    """Context manager to display messages during an evaluation phase.
+    
+    Args:
+        message: Message to display
+        verbose: Verbosity level
+        indent: Prefix for the message (default "> " for top-level, "│   " for nested)
+    """
     # Entry point
     if verbose >= 1:
-        console.print(Text(f"> {message}"))
+        console.print(Text(f"{indent}{message}"))
 
     # Create a simple object with a method to set the score
     class Reporter:
         def set_score(self, s: float) -> None:
             if verbose >= 1:
+                # Adjust score indentation based on indent style
+                score_indent = "  " if indent == "> " else "│   "
                 console.print(
-                    Text(f"\r  Baseline score was: {s:.4f}.\n", style="green")
+                    Text(f"\r{score_indent}Baseline score was: {s:.4f}.\n", style="green")
                 )
 
     # Use our log suppression context manager and yield the reporter
+    # Adjust progress bar indentation based on indent style
+    progress_indent = "  Evaluation" if indent == "> " else "│   Evaluation"
     with suppress_opik_logs():
-        with convert_tqdm_to_rich("  Evaluation", verbose=verbose):
+        with convert_tqdm_to_rich(progress_indent, verbose=verbose):
             try:
                 yield Reporter()
             finally:
@@ -303,6 +315,21 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
         pass
 
 
+@contextmanager
+def display_batch_synthesis(num_batches: int, verbose: int = 1) -> Iterator[Any]:
+    """Context manager to display message during batch synthesis."""
+    if verbose >= 1:
+        console.print(Text("│   Synthesizing failure modes", style="cyan"))
+    
+    class Reporter:
+        def set_completed(self, num_unified_modes: int) -> None:
+            # No completion message needed - failure modes will be displayed next
+            pass
+    
+    with suppress_opik_logs():
+        yield Reporter()
+
+
 def display_hierarchical_synthesis(
     total_test_cases: int,
     num_batches: int,
@@ -389,7 +416,52 @@ def display_failure_modes(
             console.print(Text("│   ") + Text.from_ansi(line))
         
         if idx < len(failure_modes):
-            console.print()
+            console.print("│")
+
+
+@contextmanager
+def display_prompt_improvement(
+    failure_mode_name: str,
+    verbose: int = 1
+) -> Iterator[Any]:
+    """Context manager to display progress while generating improved prompt."""
+    if verbose >= 1:
+        console.print()
+        console.print(Text("│   "))
+        console.print(Text(f"│   Addressing: {failure_mode_name}", style="bold cyan"))
+    
+    class Reporter:
+        def set_reasoning(self, reasoning: str) -> None:
+            if verbose >= 1:
+                reasoning_content = Text()
+                reasoning_content.append("Improvement Strategy:\n", style="cyan")
+                reasoning_content.append(reasoning)
+                
+                panel = Panel(
+                    reasoning_content,
+                    title="💡 Reasoning",
+                    title_align="left",
+                    border_style="blue",
+                    width=PANEL_WIDTH - 10,
+                    padding=(0, 1),
+                )
+                
+                # Capture and prefix each line
+                with console.capture() as capture:
+                    console.print(panel)
+                
+                rendered_panel = capture.get()
+                for line in rendered_panel.splitlines():
+                    console.print(Text("│     ") + Text.from_ansi(line))
+                
+                console.print(Text("│   "))
+    
+    try:
+        with suppress_opik_logs():
+            with convert_tqdm_to_rich("│     Generating improved prompt", verbose=verbose):
+                yield Reporter()
+    finally:
+        pass
 
 
 def display_improvement_reasoning(
@@ -403,7 +475,7 @@ def display_improvement_reasoning(
     
     console.print()
     console.print(Text("│   "))
-    console.print(Text(f"│       Addressing: {failure_mode_name}", style="bold cyan"))
+    console.print(Text(f"│   Addressing: {failure_mode_name}", style="bold cyan"))
     
     reasoning_content = Text()
     reasoning_content.append("Improvement Strategy:\n", style="cyan")
@@ -424,7 +496,7 @@ def display_improvement_reasoning(
     
     rendered_panel = capture.get()
     for line in rendered_panel.splitlines():
-        console.print(Text("│         ") + Text.from_ansi(line))
+        console.print(Text("│     ") + Text.from_ansi(line))
     
     console.print(Text("│   "))
 
@@ -441,12 +513,12 @@ def display_iteration_improvement(
     
     if improvement > 0:
         console.print(Text(
-            f"│         ✓ Improvement: {improvement:.2%} (from {best_score:.4f} to {current_score:.4f})",
+            f"│   ✓ Improvement: {improvement:.2%} (from {best_score:.4f} to {current_score:.4f})",
             style="green bold"
         ))
     else:
         console.print(Text(
-            f"│         ✗ No improvement: {improvement:.2%} (score: {current_score:.4f}, best: {best_score:.4f})",
+            f"│   ✗ No improvement: {improvement:.2%} (score: {current_score:.4f}, best: {best_score:.4f})",
             style="yellow"
         ))
 

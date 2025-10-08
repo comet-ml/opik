@@ -113,6 +113,7 @@ class ReflectiveOptimizer(BaseOptimizer):
             reasoning_model=self.reasoning_model,
             seed=self.seed,
             max_parallel_batches=self.max_parallel_batches,
+            verbose=self.verbose,
         )
 
     def _prepare_model_params(
@@ -367,8 +368,23 @@ class ReflectiveOptimizer(BaseOptimizer):
         logger.debug("Performing hierarchical root cause analysis...")
         return self._hierarchical_analyzer.analyze(evaluation_result)
 
-    def improve_prompt(self, prompt: chat_prompt.ChatPrompt, root_cause: FailureMode) -> ImprovedPrompt:
-        """Improve the prompt based on the root cause analysis."""
+    def improve_prompt(
+        self, 
+        prompt: chat_prompt.ChatPrompt, 
+        root_cause: FailureMode,
+        attempt: int = 1
+    ) -> ImprovedPrompt:
+        """
+        Improve the prompt based on the root cause analysis.
+        
+        Args:
+            prompt: Current prompt to improve
+            root_cause: The failure mode to address
+            attempt: Attempt number (1-indexed). Used to vary seed for retries.
+        
+        Returns:
+            ImprovedPrompt with reasoning and improved messages
+        """
         
         improve_prompt_prompt = IMPROVE_PROMPT_TEMPLATE.format(
             current_prompt=prompt.get_messages(),
@@ -377,10 +393,17 @@ class ReflectiveOptimizer(BaseOptimizer):
             failure_mode_root_cause=root_cause.root_cause,
         )
 
+        # Vary seed based on attempt to avoid cache hits and ensure different results
+        # Each attempt gets a unique seed: base_seed, base_seed+1000, base_seed+2000, etc.
+        attempt_seed = self.seed + (attempt - 1) * 1000
+        
+        if attempt > 1:
+            logger.debug(f"Retry attempt {attempt}: Using seed {attempt_seed} (base seed: {self.seed})")
+
         improve_prompt_response = self._call_model(
             model=self.reasoning_model,
             messages=[{"role": "user", "content": improve_prompt_prompt}],
-            seed=self.seed,
+            seed=attempt_seed,
             model_kwargs={},
             response_model=ImprovedPrompt,
         )
@@ -416,15 +439,17 @@ class ReflectiveOptimizer(BaseOptimizer):
         Returns:
             Tuple of (improved_prompt, improved_score)
         """
-        # Generate improvement
-        improved_prompt_response = self.improve_prompt(best_prompt, root_cause)
-        
-        # Display reasoning
-        reporting.display_improvement_reasoning(
+        # Generate improvement with progress indication
+        with reporting.display_prompt_improvement(
             failure_mode_name=root_cause.name,
-            reasoning=improved_prompt_response.reasoning,
-            verbose=self.verbose,
-        )
+            verbose=self.verbose
+        ) as improvement_reporter:
+            improved_prompt_response = self.improve_prompt(
+                prompt=best_prompt,
+                root_cause=root_cause,
+                attempt=attempt
+            )
+            improvement_reporter.set_reasoning(improved_prompt_response.reasoning)
         
         # Convert to chat prompt
         messages_as_dicts = [
@@ -446,7 +471,8 @@ class ReflectiveOptimizer(BaseOptimizer):
         
         with reporting.display_evaluation(
             message=eval_message,
-            verbose=self.verbose
+            verbose=self.verbose,
+            indent="│   "
         ) as improved_reporter:
             improved_experiment_result = self._evaluate_prompt(
                 prompt=improved_chat_prompt,
