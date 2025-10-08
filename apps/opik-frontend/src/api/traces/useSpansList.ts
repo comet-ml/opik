@@ -52,7 +52,9 @@ const getSpansList = async (
       ...processSorting(sorting),
       ...(exclude && { exclude: JSON.stringify(exclude) }),
       ...(truncate !== undefined && { truncate }),
-      ...(stripAttachments !== undefined && { strip_attachments: stripAttachments }),
+      ...(stripAttachments !== undefined && {
+        strip_attachments: stripAttachments,
+      }),
       size,
       page,
     },

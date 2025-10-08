@@ -15,7 +15,9 @@ const getTraceById = async (
   const { data } = await api.get<Trace>(TRACES_REST_ENDPOINT + traceId, {
     signal,
     params: {
-      ...(stripAttachments !== undefined && { strip_attachments: stripAttachments }),
+      ...(stripAttachments !== undefined && {
+        strip_attachments: stripAttachments,
+      }),
     },
   });
 
