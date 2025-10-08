@@ -57,9 +57,11 @@ export const parseArrayFromString = (
   } catch {
     // If JSON parsing fails, try to parse as JavaScript array with single quotes
     try {
+      // NOTE: This only replaces single quotes with double quotes.
+      // It does NOT attempt to quote object keys, which may cause parsing to fail for unquoted keys.
+      // For more robust parsing, consider using a library like 'json5'.
       const safeContent = trimmedContent
-        .replace(/'/g, '"') // Replace single quotes with double quotes
-        .replace(/(\w+):/g, '"$1":'); // Add quotes around object keys if any
+        .replace(/'/g, '"'); // Replace single quotes with double quotes
 
       const parsedArray = JSON.parse(safeContent);
       if (isArray(parsedArray)) {
