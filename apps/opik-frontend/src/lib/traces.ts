@@ -702,7 +702,7 @@ export const prettifyMessage = (
 ) => {
   // If config is provided, use it for type-specific prettification
   if (config && config.inputType) {
-    // Example: handle inputType-specific logic
+    
     if (config.inputType === "array" && Array.isArray(message)) {
       const extractedResult = extractTextFromArray(message);
       if (extractedResult) {
