@@ -211,12 +211,13 @@ public class SpanResourceClient extends BaseCommentResourceClient {
                 .queryParam("trace_id", traceId.toString());
 
         if (StringUtils.isNotEmpty(projectName)) {
-            requestBuilder = requestBuilder.queryParam("project", projectName);
+            requestBuilder = requestBuilder.queryParam("project_name", projectName);
         }
 
         if (truncate) {
             requestBuilder = requestBuilder.queryParam("truncate", true);
         }
+
         if (stripAttachments) {
             requestBuilder = requestBuilder.queryParam("strip_attachments", true);
         }
