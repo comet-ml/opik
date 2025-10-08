@@ -59,6 +59,7 @@ export class PromptBatchQueue extends BatchQueue<CreatePromptOptions> {
           {
             name: prompt.name,
             version: {
+              // Don't pass promptId - let backend assign based on name
               template: prompt.prompt,
               metadata: prompt.metadata,
               type: prompt.type,

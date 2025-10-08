@@ -4,6 +4,7 @@ import { PromptValidationError } from "../../../src/opik/prompt/errors";
 import { PromptType } from "../../../src/opik/prompt/types";
 import {
   createMockOpikClient,
+  createMockPromptData,
   validApiResponse,
   invalidApiResponses,
 } from "./fixtures";
@@ -19,8 +20,9 @@ describe("Prompt - fromApiResponse()", () => {
 
   describe("valid API responses", () => {
     it("should create prompt from complete API response", () => {
+      const promptData = createMockPromptData();
       const prompt = Prompt.fromApiResponse(
-        "test-prompt",
+        promptData,
         validApiResponse,
         mockOpikClient
       );
@@ -44,8 +46,9 @@ describe("Prompt - fromApiResponse()", () => {
         type: "mustache",
       };
 
+      const promptData = createMockPromptData();
       const prompt = Prompt.fromApiResponse(
-        "test-prompt",
+        promptData,
         minimalResponse,
         mockOpikClient
       );
@@ -64,8 +67,9 @@ describe("Prompt - fromApiResponse()", () => {
         template: "Hello {{ name }}!",
       };
 
+      const promptData = createMockPromptData();
       const prompt = Prompt.fromApiResponse(
-        "test-prompt",
+        promptData,
         jinja2Response,
         mockOpikClient
       );
@@ -87,8 +91,9 @@ describe("Prompt - fromApiResponse()", () => {
         metadata: complexMetadata,
       };
 
+      const promptData = createMockPromptData();
       const prompt = Prompt.fromApiResponse(
-        "test-prompt",
+        promptData,
         response,
         mockOpikClient
       );
@@ -96,22 +101,40 @@ describe("Prompt - fromApiResponse()", () => {
       expect(prompt.metadata).toEqual(complexMetadata);
     });
 
-    it("should preserve name parameter over API response", () => {
+    it("should preserve name from promptData", () => {
+      const promptData = createMockPromptData({ name: "custom-name" });
       const prompt = Prompt.fromApiResponse(
-        "custom-name",
+        promptData,
         validApiResponse,
         mockOpikClient
       );
 
       expect(prompt.name).toBe("custom-name");
     });
+
+    it("should preserve description and tags from promptData", () => {
+      const promptData = createMockPromptData({
+        description: "Test description",
+        tags: ["tag1", "tag2"],
+      });
+      const prompt = Prompt.fromApiResponse(
+        promptData,
+        validApiResponse,
+        mockOpikClient
+      );
+
+      expect(prompt.name).toBe("test-prompt");
+      expect(prompt.description).toBe("Test description");
+      expect(prompt.tags).toEqual(["tag1", "tag2"]);
+    });
   });
 
   describe("validation errors", () => {
     it("should throw error when template is missing", () => {
+      const promptData = createMockPromptData();
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.missingTemplate,
           mockOpikClient
         )
@@ -119,7 +142,7 @@ describe("Prompt - fromApiResponse()", () => {
 
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.missingTemplate,
           mockOpikClient
         )
@@ -127,9 +150,10 @@ describe("Prompt - fromApiResponse()", () => {
     });
 
     it("should throw error when commit is missing", () => {
+      const promptData = createMockPromptData();
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.missingCommit,
           mockOpikClient
         )
@@ -137,7 +161,7 @@ describe("Prompt - fromApiResponse()", () => {
 
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.missingCommit,
           mockOpikClient
         )
@@ -145,9 +169,10 @@ describe("Prompt - fromApiResponse()", () => {
     });
 
     it("should throw error when promptId is missing", () => {
+      const promptData = createMockPromptData();
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.missingPromptId,
           mockOpikClient
         )
@@ -155,7 +180,7 @@ describe("Prompt - fromApiResponse()", () => {
 
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.missingPromptId,
           mockOpikClient
         )
@@ -163,9 +188,10 @@ describe("Prompt - fromApiResponse()", () => {
     });
 
     it("should throw error for invalid prompt type", () => {
+      const promptData = createMockPromptData();
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.invalidType,
           mockOpikClient
         )
@@ -173,7 +199,7 @@ describe("Prompt - fromApiResponse()", () => {
 
       expect(() =>
         Prompt.fromApiResponse(
-          "test-prompt",
+          promptData,
           invalidApiResponses.invalidType,
           mockOpikClient
         )
@@ -183,8 +209,9 @@ describe("Prompt - fromApiResponse()", () => {
 
   describe("data integrity", () => {
     it("should create functional prompt that can be formatted", () => {
+      const promptData = createMockPromptData();
       const prompt = Prompt.fromApiResponse(
-        "test-prompt",
+        promptData,
         validApiResponse,
         mockOpikClient
       );
@@ -204,8 +231,9 @@ describe("Prompt - fromApiResponse()", () => {
         createdAt: new Date(),
       };
 
+      const promptData = createMockPromptData();
       const prompt = Prompt.fromApiResponse(
-        "test-prompt",
+        promptData,
         detailedResponse,
         mockOpikClient
       );

@@ -20,13 +20,16 @@ import { Experiment } from "@/experiment/Experiment";
 import { ExperimentType } from "@/rest_api/api/types";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
 import { parseNdjsonStreamToArray } from "@/utils/stream";
-import { PromptBatchQueue } from "./PromptBatchQueue";
 import {
   Prompt,
   CreatePromptOptions,
   GetPromptOptions,
   PromptType,
 } from "@/prompt";
+import {
+  fetchLatestPromptVersion,
+  shouldCreateNewVersion,
+} from "@/prompt/versionHelpers";
 import { OpikQueryLanguage } from "@/query";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
@@ -43,7 +46,6 @@ export class OpikClient {
   public spanFeedbackScoresBatchQueue: SpanFeedbackScoresBatchQueue;
   public traceFeedbackScoresBatchQueue: TraceFeedbackScoresBatchQueue;
   public datasetBatchQueue: DatasetBatchQueue;
-  public promptBatchQueue: PromptBatchQueue;
 
   private lastProjectNameLogged: string | undefined;
 
@@ -85,7 +87,6 @@ export class OpikClient {
       delay
     );
     this.datasetBatchQueue = new DatasetBatchQueue(this.api, delay);
-    this.promptBatchQueue = new PromptBatchQueue(this.api);
 
     clients.push(this);
   }
@@ -494,6 +495,13 @@ export class OpikClient {
   /**
    * Creates a new prompt or new version if content differs.
    *
+   * Key Behaviors:
+   * - Smart Versioning: Only creates a new version if template, metadata, or type differ from latest
+   * - Idempotent: Returns existing version if identical (no duplicate versions)
+   * - 404 Handling: Gracefully handles first-time prompt creation
+   * - Uses create_prompt_version endpoint (not create_prompt which is for containers)
+   * - Synchronous: Returns immediately with the created/retrieved version
+   *
    * @param options - Prompt configuration
    * @returns Promise resolving to Prompt instance
    * @throws PromptValidationError if parameters invalid
@@ -503,17 +511,61 @@ export class OpikClient {
   ): Promise<Prompt> => {
     logger.debug("Creating prompt", { name: options.name });
 
-    const data = {
-      ...options,
-      type: options.type ?? PromptType.MUSTACHE,
-      promptId: generateId(),
-    };
+    try {
+      // Fetch latest version (returns null if prompt doesn't exist yet)
+      const latestVersion = await fetchLatestPromptVersion(
+        this.api.prompts,
+        options.name,
+        this.api.requestOptions
+      );
 
-    const prompt = new Prompt(data, this);
+      // Determine if we need to create a new version
+      const normalizedType = options.type ?? PromptType.MUSTACHE;
+      const needsNewVersion = shouldCreateNewVersion(
+        options,
+        latestVersion,
+        normalizedType
+      );
 
-    this.promptBatchQueue.create(data);
+      let versionResponse: OpikApi.PromptVersionDetail;
 
-    return prompt;
+      if (needsNewVersion) {
+        // Create new version
+        logger.debug("Creating new prompt version", { name: options.name });
+        versionResponse = await this.api.prompts.createPromptVersion(
+          {
+            name: options.name,
+            version: {
+              template: options.prompt,
+              metadata: options.metadata,
+              type: normalizedType,
+            },
+          },
+          this.api.requestOptions
+        );
+      } else {
+        // Return existing version (idempotent)
+        logger.debug("Returning existing prompt version", {
+          name: options.name,
+        });
+        versionResponse = latestVersion!;
+      }
+
+      // Fetch full prompt data and create Prompt instance
+      if (!versionResponse.promptId) {
+        throw new Error("Invalid API response: missing promptId");
+      }
+
+      const promptData = await this.api.prompts.getPromptById(
+        versionResponse.promptId,
+        this.api.requestOptions
+      );
+
+      return Prompt.fromApiResponse(promptData, versionResponse, this);
+    } catch (error) {
+      logger.error("Failed to create prompt", { name: options.name, error });
+      throw error;
+    }
   };
 
   /**
@@ -528,14 +580,31 @@ export class OpikClient {
     logger.debug("Getting prompt", options);
 
     try {
-      await this.promptBatchQueue.flush();
+      // Step 1: Search for the prompt by name to get tags and description
+      const searchResponse = await this.api.prompts.getPrompts(
+        {
+          filters: JSON.stringify([
+            { field: "name", operator: "=", value: options.name },
+          ]),
+          size: 1,
+        },
+        this.api.requestOptions
+      );
 
-      const response = await this.api.prompts.retrievePromptVersion(
+      const promptData = searchResponse.content?.[0];
+      if (!promptData) {
+        logger.debug("Prompt not found", { name: options.name });
+        return null;
+      }
+
+      // Step 2: Get the version (latest if no commit specified)
+      const versionData = await this.api.prompts.retrievePromptVersion(
         options,
         this.api.requestOptions
       );
 
-      return Prompt.fromApiResponse(options.name, response, this);
+      // Step 3: Create the Prompt object with metadata
+      return Prompt.fromApiResponse(promptData, versionData, this);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         return null;
@@ -587,8 +656,6 @@ export class OpikClient {
     logger.debug("Searching prompts", { filterString });
 
     try {
-      await this.promptBatchQueue.flush();
-
       // Parse OQL filter string to JSON (aligned with Python SDK)
       let filters: string | undefined;
       if (filterString) {
@@ -622,11 +689,8 @@ export class OpikClient {
                 { name: promptData.name },
                 this.api.requestOptions
               );
-            return Prompt.fromApiResponse(
-              promptData.name,
-              versionResponse,
-              this
-            );
+            // Pass description and tags from PromptPublic
+            return Prompt.fromApiResponse(promptData, versionResponse, this);
           } catch (error) {
             logger.debug("Failed to get version for prompt", {
               name: promptData.name,
@@ -648,6 +712,7 @@ export class OpikClient {
 
   /**
    * Deletes multiple prompts and all their versions in batch.
+   * Performs synchronous deletion (no batching).
    *
    * @param ids - Array of prompt container IDs to delete
    */
@@ -655,9 +720,10 @@ export class OpikClient {
     logger.debug("Deleting prompts in batch", { count: ids.length });
 
     try {
-      for (const id of ids) {
-        this.promptBatchQueue.delete(id);
-      }
+      await this.api.prompts.deletePromptsBatch(
+        { ids },
+        this.api.requestOptions
+      );
 
       logger.info("Successfully deleted prompts", { count: ids.length });
     } catch (error) {
@@ -674,7 +740,7 @@ export class OpikClient {
       await this.traceFeedbackScoresBatchQueue.flush();
       await this.spanFeedbackScoresBatchQueue.flush();
       await this.datasetBatchQueue.flush();
-      await this.promptBatchQueue.flush();
+      // Note: Prompt operations are synchronous and don't use batching
       logger.info("Successfully flushed all data to Opik");
     } catch (error) {
       logger.error("Error during flush operation:", {

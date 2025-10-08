@@ -33,7 +33,7 @@ export class Prompt {
   // Mutable fields (can be updated via updateProperties)
   private _name: string;
   private _description: string | undefined;
-  private _tags: readonly string[] | undefined;
+  private _tags: string[];
 
   private readonly _metadata: OpikApi.JsonNode | undefined;
 
@@ -51,7 +51,7 @@ export class Prompt {
       type,
       changeDescription,
       description,
-      tags,
+      tags = [],
     }: PromptData,
     private opik: OpikClient
   ) {
@@ -62,7 +62,7 @@ export class Prompt {
     this.changeDescription = changeDescription;
     this._name = name;
     this._description = description;
-    this._tags = tags ? Object.freeze([...tags]) : undefined;
+    this._tags = [...tags];
     this._metadata = metadata;
   }
 
@@ -76,7 +76,7 @@ export class Prompt {
   }
 
   get tags(): readonly string[] | undefined {
-    return this._tags;
+    return Object.freeze([...this._tags]);
   }
 
   /**
@@ -125,11 +125,12 @@ export class Prompt {
    * @param name - Name of the prompt
    * @param apiResponse - REST API PromptVersionDetail response
    * @param opik - OpikClient instance
+   * @param promptPublicData - Optional PromptPublic data containing description and tags
    * @returns Prompt instance constructed from response data
    * @throws PromptValidationError if response structure invalid
    */
   static fromApiResponse(
-    name: string,
+    promptData: OpikApi.PromptPublic,
     apiResponse: OpikApi.PromptVersionDetail,
     opik: OpikClient
   ): Prompt {
@@ -165,12 +166,14 @@ export class Prompt {
     return new Prompt(
       {
         promptId: apiResponse.promptId,
-        name,
+        name: promptData.name,
         prompt: apiResponse.template,
         commit: apiResponse.commit,
         metadata: apiResponse.metadata,
         type: promptType,
         changeDescription: apiResponse.changeDescription,
+        description: promptData.description,
+        tags: promptData.tags,
       },
       opik
     );
@@ -178,47 +181,50 @@ export class Prompt {
 
   /**
    * Updates prompt properties (name, description, and/or tags).
-   * Enqueues update; call flush() to ensure completion.
+   * Performs synchronous update (no batching).
    *
    * @param updates - Partial updates with optional name, description, and tags
-   * @returns this Prompt instance for method chaining
+   * @returns Promise resolving to this Prompt instance for method chaining
    *
    * @example
    * ```typescript
    * const prompt = await client.getPrompt({ name: "my-prompt" });
-   * prompt.updateProperties({
+   * await prompt.updateProperties({
    *   name: "renamed-prompt",
    *   description: "Updated description",
    *   tags: ["tag1", "tag2"]
    * });
-   * await client.flush();
    * ```
    */
-  updateProperties(updates: {
+  async updateProperties(updates: {
     name?: string;
     description?: string;
     tags?: string[];
-  }) {
-    this.opik.promptBatchQueue.update(this.id, {
-      name: updates.name ?? this._name,
-      description: updates.description,
-      tags: updates.tags,
-    });
+  }): Promise<this> {
+    await this.opik.api.prompts.updatePrompt(
+      this.id,
+      {
+        name: updates.name ?? this._name,
+        description: updates.description,
+        tags: updates.tags,
+      },
+      this.opik.api.requestOptions
+    );
 
-    // Update local state directly via private fields
+    // Update local state after successful backend update
     this._name = updates.name ?? this._name;
     this._description = updates.description ?? this._description;
-    this._tags = updates.tags ? Object.freeze([...updates.tags]) : this._tags;
+    this._tags = updates.tags ?? this._tags;
 
     return this;
   }
 
   /**
    * Deletes this prompt from the backend.
-   * Enqueues deletion; call flush() to ensure completion.
+   * Performs synchronous deletion (no batching).
    */
-  delete() {
-    this.opik.promptBatchQueue.delete(this.id);
+  async delete(): Promise<void> {
+    await this.opik.deletePrompts([this.id]);
   }
 
   /**
@@ -247,9 +253,6 @@ export class Prompt {
     });
 
     try {
-      // Flush queue to ensure any pending operations complete
-      await this.opik.promptBatchQueue.flush();
-
       // Paginate through all versions (page size 100 to match Python SDK)
       const allVersions: OpikApi.PromptVersionDetail[] = [];
       let page = 1;
@@ -329,9 +332,6 @@ export class Prompt {
     });
 
     try {
-      // Flush queue to ensure any pending operations complete
-      await this.opik.promptBatchQueue.flush();
-
       // Call restore endpoint with the version ID
       const restoredVersionResponse =
         await this.opik.api.prompts.restorePromptVersion(
@@ -349,7 +349,11 @@ export class Prompt {
 
       // Return a new Prompt instance with the restored version
       return Prompt.fromApiResponse(
-        this.name,
+        {
+          name: this.name,
+          description: this.description,
+          tags: this._tags,
+        },
         restoredVersionResponse,
         this.opik
       );
@@ -383,8 +387,6 @@ export class Prompt {
    * ```
    */
   async getVersion(commit: string): Promise<Prompt | null> {
-    await this.opik.promptBatchQueue.flush();
-
     try {
       // Uses: POST /v1/private/prompts/versions/retrieve
       const response = await this.opik.api.prompts.retrievePromptVersion(
@@ -393,7 +395,15 @@ export class Prompt {
       );
 
       // Return a Prompt instance representing this version
-      return Prompt.fromApiResponse(this.name, response, this.opik);
+      return Prompt.fromApiResponse(
+        {
+          name: this.name,
+          description: this.description,
+          tags: this._tags,
+        },
+        response,
+        this.opik
+      );
     } catch (error) {
       // If version not found (404), return null instead of throwing
       if (

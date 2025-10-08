@@ -44,7 +44,6 @@ describe("Prompt - Instance Methods", () => {
 
       expect(versions).toHaveLength(150);
       expect(versions[0]).toBeInstanceOf(PromptVersion);
-      expect(mockOpikClient.promptBatchQueue.flush).toHaveBeenCalled();
       expect(
         mockOpikClient.api.prompts.getPromptVersions
       ).toHaveBeenCalledTimes(2);
@@ -83,23 +82,6 @@ describe("Prompt - Instance Methods", () => {
       const versions = await mockPrompt.getVersions();
 
       expect(versions).toHaveLength(0);
-    });
-
-    it("should flush queue before fetching versions", async () => {
-      vi.mocked(
-        mockOpikClient.api.prompts.getPromptVersions
-      ).mockResolvedValueOnce({
-        content: [],
-        page: 1,
-        size: 100,
-        total: 0,
-      });
-
-      await mockPrompt.getVersions();
-
-      expect(mockOpikClient.promptBatchQueue.flush).toHaveBeenCalledBefore(
-        mockOpikClient.api.prompts.getPromptVersions as unknown as never
-      );
     });
 
     it("should propagate API errors", async () => {
@@ -141,35 +123,12 @@ describe("Prompt - Instance Methods", () => {
       expect(restoredPrompt).toBeInstanceOf(Prompt);
       expect(restoredPrompt.prompt).toBe("Old template");
       expect(restoredPrompt.commit).toBe("new-commit");
-      expect(mockOpikClient.promptBatchQueue.flush).toHaveBeenCalled();
       expect(
         mockOpikClient.api.prompts.restorePromptVersion
       ).toHaveBeenCalledWith(
         mockPrompt.id,
         "version-123",
         mockOpikClient.api.requestOptions
-      );
-    });
-
-    it("should flush queue before restoring", async () => {
-      const targetVersion = new PromptVersion({
-        versionId: "version-123",
-        promptId: "test-prompt-id",
-        name: "test-prompt",
-        prompt: "Old template",
-        commit: "old-commit",
-        type: "mustache",
-        createdAt: new Date("2024-01-01T00:00:00Z"),
-      });
-
-      vi.mocked(
-        mockOpikClient.api.prompts.restorePromptVersion
-      ).mockResolvedValueOnce(createMockVersionDetail());
-
-      await mockPrompt.useVersion(targetVersion);
-
-      expect(mockOpikClient.promptBatchQueue.flush).toHaveBeenCalledBefore(
-        mockOpikClient.api.prompts.restorePromptVersion as unknown as never
       );
     });
 
@@ -211,7 +170,6 @@ describe("Prompt - Instance Methods", () => {
       expect(versionPrompt).toBeInstanceOf(Prompt);
       expect(versionPrompt?.commit).toBe("abc123de");
       expect(versionPrompt?.prompt).toBe("Version template");
-      expect(mockOpikClient.promptBatchQueue.flush).toHaveBeenCalled();
     });
 
     it("should return null for non-existent version", async () => {
@@ -241,68 +199,59 @@ describe("Prompt - Instance Methods", () => {
         "Server error"
       );
     });
-
-    it("should flush queue before retrieving version", async () => {
-      vi.mocked(
-        mockOpikClient.api.prompts.retrievePromptVersion
-      ).mockResolvedValueOnce(createMockVersionDetail());
-
-      await mockPrompt.getVersion("abc123");
-
-      expect(mockOpikClient.promptBatchQueue.flush).toHaveBeenCalledBefore(
-        mockOpikClient.api.prompts.retrievePromptVersion as unknown as never
-      );
-    });
   });
 
   describe("updateProperties()", () => {
-    it("should update name and enqueue update", () => {
-      mockPrompt.updateProperties({ name: "new-name" });
+    it("should update name via API", async () => {
+      await mockPrompt.updateProperties({ name: "new-name" });
 
       expect(mockPrompt.name).toBe("new-name");
-      expect(mockOpikClient.promptBatchQueue.update).toHaveBeenCalledWith(
+      expect(mockOpikClient.api.prompts.updatePrompt).toHaveBeenCalledWith(
         mockPrompt.id,
-        expect.objectContaining({ name: "new-name" })
+        expect.objectContaining({ name: "new-name" }),
+        mockOpikClient.api.requestOptions
       );
     });
 
-    it("should update description and enqueue update", () => {
-      mockPrompt.updateProperties({ description: "New description" });
+    it("should update description via API", async () => {
+      await mockPrompt.updateProperties({ description: "New description" });
 
       expect(mockPrompt.description).toBe("New description");
-      expect(mockOpikClient.promptBatchQueue.update).toHaveBeenCalledWith(
+      expect(mockOpikClient.api.prompts.updatePrompt).toHaveBeenCalledWith(
         mockPrompt.id,
-        expect.objectContaining({ description: "New description" })
+        expect.objectContaining({ description: "New description" }),
+        mockOpikClient.api.requestOptions
       );
     });
 
-    it("should update tags and enqueue update", () => {
+    it("should update tags via API", async () => {
       const newTags = ["tag1", "tag2"];
-      mockPrompt.updateProperties({ tags: newTags });
+      await mockPrompt.updateProperties({ tags: newTags });
 
       expect(mockPrompt.tags).toEqual(newTags);
       expect(Object.isFrozen(mockPrompt.tags)).toBe(true);
-      expect(mockOpikClient.promptBatchQueue.update).toHaveBeenCalledWith(
+      expect(mockOpikClient.api.prompts.updatePrompt).toHaveBeenCalledWith(
         mockPrompt.id,
-        expect.objectContaining({ tags: newTags })
+        expect.objectContaining({ tags: newTags }),
+        mockOpikClient.api.requestOptions
       );
     });
 
-    it("should support partial updates", () => {
-      mockPrompt.updateProperties({ description: "Only description" });
+    it("should support partial updates", async () => {
+      await mockPrompt.updateProperties({ description: "Only description" });
 
       expect(mockPrompt.name).toBe("test-prompt"); // unchanged
       expect(mockPrompt.description).toBe("Only description");
     });
 
-    it("should support method chaining", () => {
-      const result = mockPrompt.updateProperties({ name: "chained" });
+    it("should support method chaining", async () => {
+      const result = await mockPrompt.updateProperties({ name: "chained" });
 
       expect(result).toBe(mockPrompt);
     });
 
-    it("should update multiple properties at once", () => {
-      mockPrompt.updateProperties({
+    it("should update multiple properties at once", async () => {
+      await mockPrompt.updateProperties({
         name: "new-name",
         description: "new-desc",
         tags: ["tag1"],
@@ -315,32 +264,32 @@ describe("Prompt - Instance Methods", () => {
   });
 
   describe("delete()", () => {
-    it("should enqueue deletion", () => {
-      mockPrompt.delete();
+    it("should delete via API", async () => {
+      await mockPrompt.delete();
 
-      expect(mockOpikClient.promptBatchQueue.delete).toHaveBeenCalledWith(
-        mockPrompt.id
-      );
+      expect(mockOpikClient.deletePrompts).toHaveBeenCalledWith([
+        mockPrompt.id,
+      ]);
     });
 
-    it("should enqueue deletion without modifying prompt state", () => {
+    it("should delete without modifying prompt state", async () => {
       const nameBeforeDelete = mockPrompt.name;
       const commitBeforeDelete = mockPrompt.commit;
 
-      mockPrompt.delete();
+      await mockPrompt.delete();
 
       expect(mockPrompt.name).toBe(nameBeforeDelete);
       expect(mockPrompt.commit).toBe(commitBeforeDelete);
     });
 
-    it("should allow deletion after update", () => {
-      mockPrompt.updateProperties({ name: "updated" });
-      mockPrompt.delete();
+    it("should allow deletion after update", async () => {
+      await mockPrompt.updateProperties({ name: "updated" });
+      await mockPrompt.delete();
 
-      expect(mockOpikClient.promptBatchQueue.update).toHaveBeenCalled();
-      expect(mockOpikClient.promptBatchQueue.delete).toHaveBeenCalledWith(
-        mockPrompt.id
-      );
+      expect(mockOpikClient.api.prompts.updatePrompt).toHaveBeenCalled();
+      expect(mockOpikClient.deletePrompts).toHaveBeenCalledWith([
+        mockPrompt.id,
+      ]);
     });
   });
 });

@@ -54,7 +54,8 @@
     "lint": "eslint '**/*.{ts,tsx}'",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
-    "test": "vitest run"
+    "test": "vitest run --exclude 'tests/integration/**/*.test.ts'",
+    "test:integration:api": "vitest run tests/integration/api"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.1.9",

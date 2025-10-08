@@ -9,20 +9,16 @@ import type * as OpikApi from "../../../src/opik/rest_api/api";
 
 export function createMockOpikClient(): OpikClient {
   return {
-    promptBatchQueue: {
-      enqueue: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      flush: vi.fn().mockResolvedValue(undefined),
-    },
     api: {
       prompts: {
         getPromptVersions: vi.fn(),
         restorePromptVersion: vi.fn(),
         retrievePromptVersion: vi.fn(),
+        updatePrompt: vi.fn().mockResolvedValue(undefined),
       },
       requestOptions: {},
     },
+    deletePrompts: vi.fn().mockResolvedValue(undefined),
   } as unknown as OpikClient;
 }
 
@@ -151,3 +147,17 @@ export const invalidApiResponses = {
     createdAt: new Date(),
   } as unknown as OpikApi.PromptVersionDetail,
 };
+
+export function createMockPromptData(
+  overrides: Partial<OpikApi.PromptPublic> = {}
+): OpikApi.PromptPublic {
+  return {
+    id: "prompt-id",
+    name: "test-prompt",
+    description: undefined,
+    tags: [],
+    createdAt: new Date(),
+    lastUpdatedAt: new Date(),
+    ...overrides,
+  };
+}

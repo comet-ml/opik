@@ -22,6 +22,8 @@ export interface CreatePromptOptions {
   name: string;
   /** Template text content with placeholders */
   prompt: string;
+  /** Optional prompt ID (generated if not provided) */
+  promptId?: string;
   /** Optional description for the prompt */
   description?: string;
   /** Optional metadata for tracking and filtering */
