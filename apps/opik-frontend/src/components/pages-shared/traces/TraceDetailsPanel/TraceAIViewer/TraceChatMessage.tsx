@@ -5,7 +5,7 @@ import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { TraceAnalyzerLLMMessage } from "@/types/ai-assistant";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
+import { MessageRenderer } from "@/components/shared/MessageRenderer";
 
 type TraceChatMessageProps = {
   message: TraceAnalyzerLLMMessage;
@@ -47,11 +47,10 @@ const TraceChatMessage: React.FC<TraceChatMessageProps> = ({ message }) => {
             <Skeleton className="inline-block h-2 w-1/4" />
           </div>
         ) : (
-          <MarkdownPreview
+          <MessageRenderer
+            message={message.content}
             className={cn(message.isError && "text-destructive")}
-          >
-            {message.content}
-          </MarkdownPreview>
+          />
         )}
       </div>
     </div>
