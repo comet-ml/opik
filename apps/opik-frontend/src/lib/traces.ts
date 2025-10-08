@@ -1,11 +1,12 @@
 import md5 from "md5";
 import get from "lodash/get";
-import isNumber from "lodash/isNumber";
 import isObject from "lodash/isObject";
 import isString from "lodash/isString";
+import isNumber from "lodash/isNumber";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
 import { TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { parseArrayFromString } from "@/lib/arrayParser";
 
 export const generateTagVariant = (label: string) => {
   const hash = md5(label);
@@ -575,114 +576,21 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
             }
           } else {
             // Check if content looks like a JavaScript array representation
-            const trimmedContent = content.trim();
-            if (
-              trimmedContent.startsWith("[") &&
-              trimmedContent.endsWith("]")
-            ) {
-              try {
-                // Try to parse as JSON first (handles double quotes)
-                const parsedArray = JSON.parse(trimmedContent);
-                if (Array.isArray(parsedArray)) {
-                  // Convert array to ordered list with new format
-                  const arrayContent = parsedArray
-                    .map((item, index) => `${index + 1}. ${item}`)
-                    .join("\n");
-
-                  // Extract tool name from the message structure
-                  let toolName = "unknown_tool";
-                  if (role === "tool" && "tool_call_id" in item) {
-                    const toolCallId = (item as Record<string, unknown>)
-                      .tool_call_id;
-                    if (toolCallId && toolNames[toolCallId as string]) {
-                      toolName = toolNames[toolCallId as string];
-                    }
-                  }
-
-                  textItems.push(
-                    `**Tool call: ${toolName}**\n*Results*:\n${arrayContent}`,
-                  );
-                } else {
-                  // Not an array, treat as regular content
-                  let roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
-
-                  // Special handling for tool role - extract tool name
-                  if (role === "tool" && "tool_call_id" in item) {
-                    const toolCallId = (item as Record<string, unknown>)
-                      .tool_call_id;
-                    if (toolCallId && toolNames[toolCallId as string]) {
-                      roleHeader = `Tool call: ${
-                        toolNames[toolCallId as string]
-                      }`;
-                    }
-                  }
-
-                  textItems.push(`**${roleHeader}**:\n${content}`);
-                }
-              } catch {
-                // If JSON parsing fails, try to safely parse as JavaScript array (handles single quotes)
-                try {
-                  // Safe parsing: convert single quotes to double quotes and parse as JSON
-                  const safeContent = trimmedContent
-                    .replace(/'/g, '"') // Replace single quotes with double quotes
-                    .replace(/(\w+):/g, '"$1":'); // Add quotes around object keys if any
-
-                  const parsedArray = JSON.parse(safeContent);
-                  if (Array.isArray(parsedArray)) {
-                    // Convert array to ordered list with new format
-                    const arrayContent = parsedArray
-                      .map((item, index) => `${index + 1}. ${item}`)
-                      .join("\n");
-
-                    // Extract tool name from the message structure
-                    let toolName = "unknown_tool";
-                    if (role === "tool" && "tool_call_id" in item) {
-                      const toolCallId = (item as Record<string, unknown>)
-                        .tool_call_id;
-                      if (toolCallId && toolNames[toolCallId as string]) {
-                        toolName = toolNames[toolCallId as string];
-                      }
-                    }
-
-                    textItems.push(
-                      `**Tool call: ${toolName}**\n*Results*:\n${arrayContent}`,
-                    );
-                  } else {
-                    // Not an array, treat as regular content
-                    let roleHeader =
-                      role.charAt(0).toUpperCase() + role.slice(1);
-
-                    // Special handling for tool role - extract tool name
-                    if (role === "tool" && "tool_call_id" in item) {
-                      const toolCallId = (item as Record<string, unknown>)
-                        .tool_call_id;
-                      if (toolCallId && toolNames[toolCallId as string]) {
-                        roleHeader = `Tool call: ${
-                          toolNames[toolCallId as string]
-                        }`;
-                      }
-                    }
-
-                    textItems.push(`**${roleHeader}**:\n${content}`);
-                  }
-                } catch {
-                  // If both parsing attempts fail, treat as regular content
-                  let roleHeader = role.charAt(0).toUpperCase() + role.slice(1);
-
-                  // Special handling for tool role - extract tool name
-                  if (role === "tool" && "tool_call_id" in item) {
-                    const toolCallId = (item as Record<string, unknown>)
-                      .tool_call_id;
-                    if (toolCallId && toolNames[toolCallId as string]) {
-                      roleHeader = `Tool call: ${
-                        toolNames[toolCallId as string]
-                      }`;
-                    }
-                  }
-
-                  textItems.push(`**${roleHeader}**:\n${content}`);
+            const arrayContent = parseArrayFromString(content);
+            if (arrayContent) {
+              // Extract tool name from the message structure
+              let toolName = "unknown_tool";
+              if (role === "tool" && "tool_call_id" in item) {
+                const toolCallId = (item as Record<string, unknown>)
+                  .tool_call_id;
+                if (toolCallId && toolNames[toolCallId as string]) {
+                  toolName = toolNames[toolCallId as string];
                 }
               }
+
+              textItems.push(
+                `**Tool call: ${toolName}**\n*Results*:\n${arrayContent}`,
+              );
             } else {
               // Format with role header for non-JSON content
               let roleHeader = role.charAt(0).toUpperCase() + role.slice(1);

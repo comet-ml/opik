@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import {
   ColumnDef,
   ExpandedState,
@@ -150,9 +150,16 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   }, [tableData]);
 
   const [expanded, setExpanded] = useState<ExpandedState>(initialExpanded);
+  const isInitialRender = useRef(true);
 
   // Update expanded state when tableData changes (only when data actually changes)
   React.useEffect(() => {
+    // Skip the initial render to avoid unnecessary state update
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      return;
+    }
+
     setExpanded(initialExpanded);
   }, [initialExpanded]);
 

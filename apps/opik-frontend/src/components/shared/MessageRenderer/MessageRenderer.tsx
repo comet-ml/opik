@@ -9,6 +9,11 @@ import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview
 import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
 import { cn, toString } from "@/lib/utils";
 import { extractTextFromObject } from "@/lib/traces";
+import {
+  parseArrayFromString,
+  formatArrayAsOrderedList,
+  isArrayLikeString,
+} from "@/lib/arrayParser";
 
 export interface MessageRendererProps {
   /**
@@ -64,20 +69,10 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
     // Handle strings
     if (isString(message)) {
       // Check if the string looks like a JavaScript array representation
-      const trimmedMessage = message.trim();
-      if (trimmedMessage.startsWith("[") && trimmedMessage.endsWith("]")) {
-        try {
-          // Try to parse it as a JavaScript array
-          const parsedArray = JSON.parse(trimmedMessage);
-          if (isArray(parsedArray)) {
-            // Convert to ordered list
-            const arrayContent = parsedArray
-              .map((item, index) => `${index + 1}. ${toString(item)}`)
-              .join("\n");
-            return <MarkdownPreview>{arrayContent}</MarkdownPreview>;
-          }
-        } catch {
-          // If parsing fails, treat as regular string
+      if (isArrayLikeString(message)) {
+        const arrayContent = parseArrayFromString(message);
+        if (arrayContent) {
+          return <MarkdownPreview>{arrayContent}</MarkdownPreview>;
         }
       }
 
@@ -86,9 +81,7 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
 
     // Handle arrays - convert to ordered list
     if (isArray(message)) {
-      const arrayContent = message
-        .map((item, index) => `${index + 1}. ${toString(item)}`)
-        .join("\n");
+      const arrayContent = formatArrayAsOrderedList(message);
       return <MarkdownPreview>{arrayContent}</MarkdownPreview>;
     }
 
