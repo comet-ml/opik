@@ -38,18 +38,18 @@ type PrettifyMessageResponse = {
   renderType?: "text" | "json-table";
 };
 
-/**
- * Enhanced text extraction logic that dynamically checks the type and structure of the message.
- * This approach replaces complex framework-specific logic with a more general solution that supports multiple message formats.
- * Supported formats include: plain strings, objects with direct string fields, objects containing nested message or text fields,
- * and JSON structures. The function determines the best way to extract and prettify the message for rendering, either as text or a JSON table.
- */
 type ExtractTextResult = {
   text?: string;
   renderType?: "json-table";
   data?: object;
 };
 
+/**
+ * Enhanced text extraction logic that dynamically checks the type and structure of the message.
+ * This approach replaces complex framework-specific logic with a more general solution that supports multiple message formats.
+ * Supported formats include: plain strings, objects with direct string fields, objects containing nested message or text fields,
+ * and JSON structures. The function determines the best way to extract and prettify the message for rendering, either as text or a JSON table.
+ */
 const extractTextFromObject = (
   obj: object,
 ): ExtractTextResult | string | undefined => {
