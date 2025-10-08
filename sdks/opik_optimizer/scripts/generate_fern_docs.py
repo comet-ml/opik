@@ -467,7 +467,7 @@ def main() -> None:
             print("Creating new file...")
 
         # Write the file
-        fern_docs_path.write_text(res)
+        fern_docs_path.write_text(res, encoding='utf-8')
         print(f"✅ Documentation written to: {fern_docs_path}")
     else:
         print(res)
