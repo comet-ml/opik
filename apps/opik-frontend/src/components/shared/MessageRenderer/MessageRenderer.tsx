@@ -125,7 +125,17 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
     }
 
     // Handle other types (numbers, booleans, etc.)
-    return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
+    // Type guard to ensure we only call toString with appropriate types
+    if (
+      typeof message === "string" ||
+      typeof message === "number" ||
+      typeof message === "boolean" ||
+      message === null
+    ) {
+      return <MarkdownPreview>{toString(message)}</MarkdownPreview>;
+    }
+    // Fallback for any other unknown types
+    return <MarkdownPreview>{String(message)}</MarkdownPreview>;
   }, [message, attemptTextExtraction, customTextExtractor, fallbackContent]);
 
   return (

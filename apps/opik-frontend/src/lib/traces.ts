@@ -698,11 +698,10 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
 
 export const prettifyMessage = (
   message: object | string | undefined,
-  config?: { inputType?: string; outputType?: string },
+  config?: { inputType?: string },
 ) => {
   // If config is provided, use it for type-specific prettification
   if (config && config.inputType) {
-    
     if (config.inputType === "array" && Array.isArray(message)) {
       const extractedResult = extractTextFromArray(message);
       if (extractedResult) {
