@@ -6,6 +6,7 @@ import { ArrowRight, Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
 import { FormProvider, useForm, useFormContext } from "react-hook-form";
 import { z } from "zod";
+import isFunction from "lodash/isFunction";
 
 const CancelButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (buttonProps, ref) => {
@@ -48,19 +49,16 @@ SubmitButton.displayName = "CommentFormSubmitButton";
 
 const MAX_LENGTH_LIMIT = 5000;
 
-export type StandaloneTextareaFieldProps = Omit<TextareaProps, "ref"> & {
+export type StandaloneTextareaFieldProps = TextareaProps & {
   value?: string;
   onValueChange?: (value: string) => void;
   error?: string;
 };
 
-const StandaloneTextareaField: React.FC<StandaloneTextareaFieldProps> = ({
-  value = "",
-  onValueChange,
-  error,
-  className,
-  ...props
-}) => {
+const StandaloneTextareaField = React.forwardRef<
+  HTMLTextAreaElement,
+  StandaloneTextareaFieldProps
+>(({ value = "", onValueChange, error, className, ...props }, ref) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -69,10 +67,18 @@ const StandaloneTextareaField: React.FC<StandaloneTextareaFieldProps> = ({
     return () => unsubscribe();
   });
 
-  const callbackTextareaRef = useCallback((e: HTMLTextAreaElement | null) => {
-    textAreaRef.current = e;
-    updateTextAreaHeight(e);
-  }, []);
+  const callbackTextareaRef = useCallback(
+    (e: HTMLTextAreaElement | null) => {
+      textAreaRef.current = e;
+      if (isFunction(ref)) {
+        ref(e);
+      } else if (ref) {
+        ref.current = e;
+      }
+      updateTextAreaHeight(e);
+    },
+    [ref],
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (textAreaRef.current) {
@@ -98,7 +104,9 @@ const StandaloneTextareaField: React.FC<StandaloneTextareaFieldProps> = ({
       )}
     />
   );
-};
+});
+
+StandaloneTextareaField.displayName = "StandaloneTextareaField";
 
 type TextareaFieldProps = Omit<
   TextareaProps,
