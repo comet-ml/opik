@@ -73,6 +73,7 @@ export enum EXPLAINER_ID {
   metric_context_precision = "metric_context_precision",
   metric_context_recall = "metric_context_recall",
   trace_opik_ai = "trace_opik_ai",
+  feedback_scores_hotkeys = "feedback_scores_hotkeys",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -512,5 +513,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.trace_opik_ai,
     description:
       "Our AI assistant allows you to analyze trace and spans data (which may include personal or sensitive information) using a generative AI model via OpenAI, L.L.C.",
+  },
+  [EXPLAINER_ID.feedback_scores_hotkeys]: {
+    id: EXPLAINER_ID.feedback_scores_hotkeys,
+    description:
+      'Press "F" to jump to first component in feedback scores\nand use "Tab"/"Shift+Tab" to move between components\n\nController Types:\n\n1. Numerical Inputs (number fields):\n   • use arrow keys to adjust values\n   • or type numbers directly\n\n2. Dropdown selectors:\n   • press "Enter" to open select\n   • use arrow keys to navigate\n   • press "Enter" to select\n\n3. Toggle buttons:\n   • use arrow keys to navigate between options\n   • press "Enter" to select\n\n4. Reason Text Areas (comment fields):\n   • press "Enter" to open/close section\n   • type your reasoning',
+    type: "help",
   },
 };
