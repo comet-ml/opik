@@ -41,7 +41,7 @@ export interface MessageRendererProps {
 /**
  * A general-purpose message renderer that handles different data types:
  * - Arrays: Rendered as ordered lists (OL)
- * - Objects: Rendered as JSON using JsonView
+ * - Objects: Rendered as JSON using JsonKeyValueTable
  * - Strings: Rendered as Markdown
  * - Null/undefined: Shows fallback content
  *

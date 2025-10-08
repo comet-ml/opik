@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ColumnDef,
   ExpandedState,
@@ -126,9 +126,6 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   className,
   maxDepth = 5,
 }) => {
-  // Initialize with all items expanded - use a simple approach
-  const [expanded, setExpanded] = useState<ExpandedState>({});
-
   const tableData = useMemo(() => {
     if (!isObject(data) || isNull(data)) {
       return [];
@@ -142,6 +139,22 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
       isExpandable: isObject(value) && !isNull(value) && 0 < maxDepth,
     }));
   }, [data, maxDepth]);
+
+  // Initialize expanded state based on tableData - memoized to prevent unnecessary re-renders
+  const initialExpanded = useMemo(() => {
+    const expanded: ExpandedState = {};
+    tableData.forEach((_, index) => {
+      expanded[index.toString()] = true;
+    });
+    return expanded;
+  }, [tableData]);
+
+  const [expanded, setExpanded] = useState<ExpandedState>(initialExpanded);
+
+  // Update expanded state when tableData changes (only when data actually changes)
+  React.useEffect(() => {
+    setExpanded(initialExpanded);
+  }, [initialExpanded]);
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
@@ -225,27 +238,6 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
       return undefined;
     },
   });
-
-  // Expand all items after table is created
-  useEffect(() => {
-    const expandAll = () => {
-      const allExpanded: ExpandedState = {};
-
-      // Get all rows from the table and expand them
-      const rows = table.getRowModel().rows;
-      rows.forEach((row, index) => {
-        if (row.original.isExpandable) {
-          allExpanded[index.toString()] = true;
-        }
-      });
-
-      setExpanded(allExpanded);
-    };
-
-    // Use a small delay to ensure table is fully rendered
-    const timer = setTimeout(expandAll, 0);
-    return () => clearTimeout(timer);
-  }, [tableData, table]);
 
   if (tableData.length === 0) {
     return (
