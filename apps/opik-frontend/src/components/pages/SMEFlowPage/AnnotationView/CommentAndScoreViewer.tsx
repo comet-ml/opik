@@ -2,7 +2,6 @@ import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import FeedbackScoresEditor from "@/components/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor";
 import UserCommentForm from "@/components/pages-shared/traces/UserComment/UserCommentForm";
-import { Separator } from "@/components/ui/separator";
 import { HotkeyDisplay } from "@/components/ui/hotkey-display";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
@@ -92,9 +91,7 @@ const CommentAndScoreViewer: React.FC = () => {
         value={currentAnnotationState.comment?.text || ""}
         onValueChange={updateComment}
       />
-      <Separator orientation="horizontal" className="my-4" />
-
-      <div ref={feedbackScoresRef} className="relative">
+      <div ref={feedbackScoresRef} className="relative mt-6">
         <FeedbackScoresEditor
           key={currentItem?.id}
           feedbackScores={currentAnnotationState.scores}
