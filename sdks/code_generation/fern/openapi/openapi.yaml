@@ -324,6 +324,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/alerts/webhooks/tests:
+    post:
+      tags:
+      - Alerts
+      summary: Test alert webhook
+      description: Test alert webhook
+      operationId: testWebhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Alert_Write"
+      responses:
+        "200":
+          description: Webhook test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookTestResult"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/annotation-queues/{id}/items/add:
     post:
       tags:
@@ -5037,6 +5062,21 @@ components:
         message:
           type: string
         details:
+          type: string
+    WebhookTestResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - success
+          - failure
+        status_code:
+          type: integer
+          format: int32
+        request_body:
+          type: string
+        error_message:
           type: string
     AnnotationQueueItemIds:
       required:
