@@ -468,7 +468,7 @@ def main() -> None:
             fern_docs_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write the file
-        fern_docs_path.write_text(res, encoding='utf-8')
+        fern_docs_path.write_text(res, encoding="utf-8")
         print(f"✅ Documentation written to: {fern_docs_path}")
     else:
         print(res)
