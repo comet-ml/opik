@@ -1,7 +1,7 @@
 ---
 globs: sdks/typescript/src/**/*.ts
 description: Code structure conventions and public API boundaries for the TS SDK
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Directory map (authoritative)

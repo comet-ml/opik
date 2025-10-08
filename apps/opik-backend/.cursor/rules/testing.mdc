@@ -1,7 +1,7 @@
 ---
 description: Testing
-globs:
-alwaysApply: true
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 # Testing Guidelines
 
