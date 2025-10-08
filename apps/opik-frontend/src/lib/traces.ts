@@ -116,6 +116,74 @@ export const extractTextFromObject = (
     }
   }
 
+  // Handle LangGraph format: { messages: [{ type: "ai", content: "..." }] }
+  if (
+    "messages" in obj &&
+    Array.isArray((obj as Record<string, unknown>).messages)
+  ) {
+    const messages = (obj as Record<string, unknown>).messages as unknown[];
+
+    // Get the last AI message for output (prioritize AI messages)
+    const aiMessages: string[] = [];
+
+    for (const m of messages) {
+      if (
+        typeof m === "object" &&
+        m !== null &&
+        "type" in (m as Record<string, unknown>) &&
+        (m as Record<string, unknown>).type === "ai" &&
+        "content" in (m as Record<string, unknown>)
+      ) {
+        const messageContent = (m as Record<string, unknown>).content;
+
+        // The message can either contain a string attribute named `content`
+        if (typeof messageContent === "string" && messageContent.trim()) {
+          aiMessages.push(messageContent);
+        }
+        // Or content can be an array with text content (e.g., OpenAI Responses API)
+        else if (Array.isArray(messageContent)) {
+          const textItems = messageContent.filter(
+            (c: unknown) =>
+              typeof c === "object" &&
+              c !== null &&
+              "type" in (c as Record<string, unknown>) &&
+              (c as Record<string, unknown>).type === "text" &&
+              "text" in (c as Record<string, unknown>) &&
+              typeof (c as Record<string, unknown>).text === "string" &&
+              ((c as Record<string, unknown>).text as string).trim() !== "",
+          );
+
+          // Check that there is only one text item
+          if (textItems.length === 1) {
+            aiMessages.push(
+              (textItems[0] as Record<string, unknown>).text as string,
+            );
+          }
+        }
+      }
+    }
+
+    if (aiMessages.length > 0) {
+      return aiMessages[aiMessages.length - 1];
+    }
+
+    // Fallback: Find the first human message for input if no AI messages
+    const humanMessages = messages.filter(
+      (m: unknown) =>
+        typeof m === "object" &&
+        m !== null &&
+        "type" in (m as Record<string, unknown>) &&
+        (m as Record<string, unknown>).type === "human" &&
+        "content" in (m as Record<string, unknown>) &&
+        typeof (m as Record<string, unknown>).content === "string" &&
+        ((m as Record<string, unknown>).content as string).trim() !== "",
+    );
+
+    if (humanMessages.length > 0) {
+      return (humanMessages[0] as Record<string, unknown>).content as string;
+    }
+  }
+
   // Handle OpenAI choices format: { choices: [{ message: { content: "..." } }] }
   if (
     "choices" in obj &&
@@ -630,7 +698,7 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
 
 export const prettifyMessage = (
   message: object | string | undefined,
-  config?: { inputType?: string; outputType?: string }
+  config?: { inputType?: string; outputType?: string },
 ) => {
   // If config is provided, use it for type-specific prettification
   if (config && config.inputType) {
@@ -706,13 +774,6 @@ export const prettifyMessage = (
     }
 
     // If we can't extract text, return the original message as not prettified
-    if (isObject(message)) {
-      return {
-        message: message,
-        prettified: false,
-      } as PrettifyMessageResponse;
-    }
-
     return {
       message: message,
       prettified: false,

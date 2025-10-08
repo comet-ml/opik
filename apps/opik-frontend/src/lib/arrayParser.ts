@@ -60,8 +60,7 @@ export const parseArrayFromString = (
       // NOTE: This only replaces single quotes with double quotes.
       // It does NOT attempt to quote object keys, which may cause parsing to fail for unquoted keys.
       // For more robust parsing, consider using a library like 'json5'.
-      const safeContent = trimmedContent
-        .replace(/'/g, '"'); // Replace single quotes with double quotes
+      const safeContent = trimmedContent.replace(/'/g, '"'); // Replace single quotes with double quotes
 
       const parsedArray = JSON.parse(safeContent);
       if (isArray(parsedArray)) {
