@@ -25,15 +25,19 @@ const getProjectsList = async (
   { signal }: QueryFunctionContext,
   { workspaceName, search, sorting, size, page }: UseProjectsListParams,
 ) => {
+  const sortingResult = processSorting(sorting);
+
+  const requestParams = {
+    workspace_name: workspaceName,
+    ...sortingResult,
+    ...(search && { name: search }),
+    size,
+    page,
+  };
+
   const { data } = await api.get(PROJECTS_REST_ENDPOINT, {
     signal,
-    params: {
-      workspace_name: workspaceName,
-      ...processSorting(sorting),
-      ...(search && { name: search }),
-      size,
-      page,
-    },
+    params: requestParams,
   });
 
   return data;
