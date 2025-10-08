@@ -17,6 +17,7 @@ import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
 import { parseCompletionOutput } from "@/lib/playground";
+import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -81,6 +82,7 @@ const usePromptDatasetItemCombination = ({
   deleteAbortController,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
+  const hydrateDatasetItemData = useHydrateDatasetItemData();
 
   // the reason why we need ref here is that the value is taken in a deep callback
   // the prop is just taken as the value on the moment of creation
@@ -124,7 +126,7 @@ const usePromptDatasetItemCombination = ({
       const controller = new AbortController();
 
       const datasetItemId = datasetItem?.id || "";
-      const datasetItemData = datasetItem?.data || {};
+      const datasetItemData = await hydrateDatasetItemData(datasetItem);
       const key = `${datasetItemId}-${prompt.id}`;
 
       addAbortController(key, controller);
@@ -195,6 +197,7 @@ const usePromptDatasetItemCombination = ({
     },
 
     [
+      hydrateDatasetItemData,
       addAbortController,
       updateOutput,
       runStreaming,

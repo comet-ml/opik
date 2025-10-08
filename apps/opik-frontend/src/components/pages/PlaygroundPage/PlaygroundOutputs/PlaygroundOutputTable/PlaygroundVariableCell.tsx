@@ -1,10 +1,13 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 import isObject from "lodash/isObject";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import JsonView from "react18-json-view";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
+import { processInputData } from "@/lib/images";
+import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import { ParsedImageData } from "@/types/attachments";
 
 interface CustomMeta {
   showIndex: boolean;
@@ -21,7 +24,23 @@ const PlaygroundVariableCell: React.FunctionComponent<
 
   const { showIndex } = (custom ?? {}) as CustomMeta;
 
+  const images = useMemo(() => {
+    try {
+      return processInputData({ value }).images;
+    } catch (error) {
+      return [] as ParsedImageData[];
+    }
+  }, [value]);
+
   const getContent = () => {
+    if (images.length > 0) {
+      return (
+        <div className="max-h-80 max-w-[320px] overflow-y-auto">
+          <ImagesListWrapper images={images} />
+        </div>
+      );
+    }
+
     if (isObject(value)) {
       return (
         <div className="size-full overflow-y-auto overflow-x-hidden whitespace-normal">
@@ -34,7 +53,11 @@ const PlaygroundVariableCell: React.FunctionComponent<
       );
     }
 
-    return <div className="size-full overflow-y-auto">{value}</div>;
+    return (
+      <div className="size-full min-w-0 overflow-hidden break-words">
+        {value}
+      </div>
+    );
   };
 
   return (

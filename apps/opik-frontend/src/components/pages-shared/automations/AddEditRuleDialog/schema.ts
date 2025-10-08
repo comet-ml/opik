@@ -16,6 +16,8 @@ import {
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
+import { hasImagesInContent } from "@/lib/llm";
+import { supportsImageInput } from "@/lib/modelCapabilities";
 
 const RuleNameSchema = z
   .string({
@@ -93,6 +95,28 @@ export const FiltersSchema = z
           });
         }
       }
+
+      // Validate key for dictionary types
+      if (
+        (filter.type === COLUMN_TYPE.dictionary ||
+          filter.type === COLUMN_TYPE.numberDictionary) &&
+        (!filter.key || filter.key.trim().length === 0)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Key is required for dictionary fields",
+          path: [index, "key"],
+        });
+      }
+
+      // Add custom error if present
+      if (filter.error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: filter.error,
+          path: [index, "value"],
+        });
+      }
     });
   });
 
@@ -157,6 +181,19 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
         message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
       }),
   ),
+}).superRefine((data, ctx) => {
+  const hasImages = data.messages.some((message) =>
+    hasImagesInContent(message.content),
+  );
+
+  if (hasImages && !supportsImageInput(data.model)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
+      path: ["model"],
+    });
+  }
 });
 
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({

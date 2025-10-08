@@ -17,7 +17,6 @@ import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage"
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
 import OldHomePage from "@/components/pages/HomePage/OldHomePage";
-import ChatPage from "@/components/pages/ChatPage/ChatPage";
 import PartialPageLayout from "@/components/layout/PartialPageLayout/PartialPageLayout";
 import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
@@ -150,16 +149,6 @@ const homeRouteNew = createRoute({
   component: HomePage,
   staticData: {
     title: "Home",
-  },
-});
-
-// ----------- chat
-const chatRoute = createRoute({
-  path: "/$workspaceName/chat",
-  getParentRoute: () => workspaceGuardRoute,
-  component: ChatPage,
-  staticData: {
-    title: "Chat",
   },
 });
 
@@ -430,7 +419,6 @@ const routeTree = rootRoute.addChildren([
     baseRoute,
     homeRoute,
     homeRouteNew,
-    chatRoute,
     workspaceRoute.addChildren([
       projectsRoute.addChildren([
         projectsListRoute,

@@ -24,6 +24,8 @@ import { mustachePlugin } from "@/constants/codeMirrorPlugins";
 import { DropdownOption } from "@/types/shared";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import LLMPromptMessageActions from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import { useMessageContent } from "@/hooks/useMessageContent";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -71,6 +73,7 @@ interface LLMPromptMessageProps {
   errorText?: string;
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
+  disableImages?: boolean;
 }
 
 const LLMPromptMessage = ({
@@ -84,6 +87,7 @@ const LLMPromptMessage = ({
   onChangeMessage,
   onDuplicateMessage,
   onRemoveMessage,
+  disableImages = true,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -97,6 +101,12 @@ const LLMPromptMessage = ({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+
+  const { localText, images, setImages, handleContentChange } =
+    useMessageContent({
+      content,
+      onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
+    });
 
   return (
     <>
@@ -191,22 +201,33 @@ const LLMPromptMessage = ({
           {isLoading ? (
             <Loader className="min-h-32" />
           ) : (
-            <CodeMirror
-              onCreateEditor={(view) => {
-                editorViewRef.current = view;
-              }}
-              theme={theme}
-              value={content}
-              onChange={(c) => onChangeMessage({ content: c })}
-              placeholder="Type your message"
-              basicSetup={{
-                foldGutter: false,
-                allowMultipleSelections: false,
-                lineNumbers: false,
-                highlightActiveLine: false,
-              }}
-              extensions={[EditorView.lineWrapping, mustachePlugin]}
-            />
+            <>
+              <CodeMirror
+                onCreateEditor={(view) => {
+                  editorViewRef.current = view;
+                }}
+                theme={theme}
+                value={localText}
+                onChange={handleContentChange}
+                placeholder="Type your message"
+                basicSetup={{
+                  foldGutter: false,
+                  allowMultipleSelections: false,
+                  lineNumbers: false,
+                  highlightActiveLine: false,
+                }}
+                extensions={[EditorView.lineWrapping, mustachePlugin]}
+              />
+              {!disableImages && (
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="comet-body-s-accented">Images</div>
+                  <PromptMessageImageTags
+                    images={images}
+                    setImages={setImages}
+                  />
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
