@@ -176,9 +176,8 @@ public class AlertJob extends Job {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
-                "payloads", payloads,
+                "metadata", payloads,
                 "eventCount", eventIds.size(),
-                "payloadCount", payloads.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
                         alert.name(), eventIds.size(), eventType.getValue()));
