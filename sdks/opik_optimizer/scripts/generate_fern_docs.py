@@ -197,7 +197,7 @@ class ClassInspector:
                         docstring_char = stripped[:3]
                         in_docstring = True
                         # Check if docstring ends on same line
-                        if stripped.count(docstring_char) >= 2:
+                        if stripped.endswith(docstring_char):
                             in_docstring = False
                         continue
                 else:
