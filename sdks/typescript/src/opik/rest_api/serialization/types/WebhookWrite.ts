@@ -11,7 +11,7 @@ export const WebhookWrite: core.serialization.ObjectSchema<serializers.WebhookWr
         id: core.serialization.string().optional(),
         name: core.serialization.string().optional(),
         url: core.serialization.string(),
-        secretToken: core.serialization.property("secret_token", core.serialization.string()),
+        secretToken: core.serialization.property("secret_token", core.serialization.string().optional()),
         headers: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     });
 
@@ -20,7 +20,7 @@ export declare namespace WebhookWrite {
         id?: string | null;
         name?: string | null;
         url: string;
-        secret_token: string;
+        secret_token?: string | null;
         headers?: Record<string, string> | null;
     }
 }

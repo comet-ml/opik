@@ -12,6 +12,7 @@ from ..types.dataset_item_write import DatasetItemWrite
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
+from ..types.project_stats_public import ProjectStatsPublic
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -487,6 +488,44 @@ class DatasetsClient:
         """
         _response = self._raw_client.get_dataset_by_identifier(
             dataset_name=dataset_name, request_options=request_options
+        )
+        return _response.data
+
+    def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Experiment items stats resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.get_dataset_experiment_items_stats(id='id', experiment_ids='experiment_ids', )
+        """
+        _response = self._raw_client.get_dataset_experiment_items_stats(
+            id, experiment_ids=experiment_ids, filters=filters, request_options=request_options
         )
         return _response.data
 
@@ -1139,6 +1178,47 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.get_dataset_by_identifier(
             dataset_name=dataset_name, request_options=request_options
+        )
+        return _response.data
+
+    async def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ProjectStatsPublic:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ProjectStatsPublic
+            Experiment items stats resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.get_dataset_experiment_items_stats(id='id', experiment_ids='experiment_ids', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_dataset_experiment_items_stats(
+            id, experiment_ids=experiment_ids, filters=filters, request_options=request_options
         )
         return _response.data
 
