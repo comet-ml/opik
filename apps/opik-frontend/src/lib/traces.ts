@@ -628,7 +628,44 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
   return textItems.length > 0 ? textItems.join("\n\n") : undefined;
 };
 
-export const prettifyMessage = (message: object | string | undefined) => {
+export const prettifyMessage = (
+  message: object | string | undefined,
+  config?: { inputType?: string; outputType?: string }
+) => {
+  // If config is provided, use it for type-specific prettification
+  if (config && config.inputType) {
+    // Example: handle inputType-specific logic
+    if (config.inputType === "array" && Array.isArray(message)) {
+      const extractedResult = extractTextFromArray(message);
+      if (extractedResult) {
+        return {
+          message: extractedResult,
+          prettified: true,
+          renderType: "text",
+        } as PrettifyMessageResponse;
+      }
+    } else if (config.inputType === "object" && isObject(message)) {
+      const extractedResult = extractTextFromObject(message);
+      if (extractedResult) {
+        if (
+          typeof extractedResult === "object" &&
+          "renderType" in extractedResult
+        ) {
+          return {
+            message: extractedResult.data,
+            prettified: true,
+            renderType: extractedResult.renderType,
+          } as PrettifyMessageResponse;
+        }
+        return {
+          message: extractedResult,
+          prettified: true,
+          renderType: "text",
+        } as PrettifyMessageResponse;
+      }
+    }
+    // Fallback to default behavior if inputType does not match
+  }
   if (isString(message)) {
     return {
       message,
