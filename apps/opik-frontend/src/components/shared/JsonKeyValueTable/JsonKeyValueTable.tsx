@@ -113,7 +113,7 @@ const JsonValue: React.FC<{
     }
     return (
       <span className="comet-code italic text-muted-foreground">
-        {entries.length} propert{entries.length !== 1 ? "ies" : "y"}
+        {entries.length} {entries.length === 1 ? "property" : "properties"}
       </span>
     );
   }
