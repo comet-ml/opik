@@ -555,9 +555,9 @@ navigation:
           - page: Langflow
             path: docs/tracing/integrations/langflow.mdx
             slug: langflow
-          # - page: OpenWebUI
-          #   path: docs/tracing/integrations/openwebui.mdx
-          #   slug: openwebui
+          - page: OpenWebUI
+            path: docs/tracing/integrations/openwebui.mdx
+            slug: openwebui
       - section: Multi-Language
         skip-slug: true
         icon: fa-solid fa-globe
