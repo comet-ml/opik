@@ -72,13 +72,8 @@ const CommentAndScoreViewer: React.FC = () => {
 
   return (
     <div className="pl-4">
-      <div className="flex items-center gap-2">
-        <UserCommentForm.StandaloneTextareaField
-          ref={textareaRef}
-          placeholder="Add a comment..."
-          value={currentAnnotationState.comment?.text || ""}
-          onValueChange={updateComment}
-        />
+      <div className="flex items-center justify-between gap-1 pb-2">
+        <span className="comet-body-s-accented truncate">Comment</span>
         <TooltipWrapper
           content={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].description}
           hotkeys={[SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display]}
@@ -91,7 +86,12 @@ const CommentAndScoreViewer: React.FC = () => {
           />
         </TooltipWrapper>
       </div>
-
+      <UserCommentForm.StandaloneTextareaField
+        ref={textareaRef}
+        placeholder="Add a comment..."
+        value={currentAnnotationState.comment?.text || ""}
+        onValueChange={updateComment}
+      />
       <Separator orientation="horizontal" className="my-4" />
 
       <div ref={feedbackScoresRef} className="relative">
