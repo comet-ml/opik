@@ -8,6 +8,7 @@ import isArray from "lodash/isArray";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
 import { cn, toString } from "@/lib/utils";
+import { extractTextFromObject } from "@/lib/traces";
 
 export interface MessageRendererProps {
   /**
@@ -118,7 +119,11 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
           }
 
           // Handle string result
-          return <MarkdownPreview>{extractedText}</MarkdownPreview>;
+          const textContent =
+            typeof extractedText === "string"
+              ? extractedText
+              : JSON.stringify(extractedText, null, 2);
+          return <MarkdownPreview>{textContent}</MarkdownPreview>;
         }
       }
 
@@ -133,45 +138,6 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
   return (
     <div className={cn("message-renderer", className)}>{renderedContent}</div>
   );
-};
-
-/**
- * Simple text extraction logic that looks for common text fields in objects.
- * This is a simplified version of the complex logic in traces.ts
- */
-const extractTextFromObject = (obj: object): string | undefined => {
-  // Common text fields to check
-  const textFields = [
-    "content",
-    "text",
-    "message",
-    "response",
-    "answer",
-    "output",
-    "input",
-    "query",
-    "prompt",
-    "question",
-    "user_input",
-  ];
-
-  for (const field of textFields) {
-    const value = (obj as Record<string, unknown>)[field];
-    if (isString(value) && value.trim()) {
-      return value;
-    }
-  }
-
-  // Check if it's a single-key object with a string value
-  const keys = Object.keys(obj);
-  if (keys.length === 1) {
-    const value = (obj as Record<string, unknown>)[keys[0]];
-    if (isString(value) && value.trim()) {
-      return value;
-    }
-  }
-
-  return undefined;
 };
 
 export default MessageRenderer;

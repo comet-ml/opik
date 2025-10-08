@@ -50,7 +50,7 @@ type ExtractTextResult = {
  * Supported formats include: plain strings, objects with direct string fields, objects containing nested message or text fields,
  * and JSON structures. The function determines the best way to extract and prettify the message for rendering, either as text or a JSON table.
  */
-const extractTextFromObject = (
+export const extractTextFromObject = (
   obj: object,
 ): ExtractTextResult | string | undefined => {
   // Direct string fields
@@ -437,7 +437,7 @@ export const parseJsonForTable = (content: string): unknown | null => {
       return parsed;
     }
   } catch {
-    
+    // Ignore parsing errors
   }
   return null;
 };
