@@ -465,6 +465,7 @@ def main() -> None:
         if not fern_docs_path.exists():
             print(f"⚠️  Warning: Target file does not exist: {fern_docs_path}")
             print("Creating new file...")
+            fern_docs_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write the file
         fern_docs_path.write_text(res, encoding='utf-8')
