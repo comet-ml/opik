@@ -448,6 +448,12 @@ serviceToggles:
   # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not Alert feature is enabled
+  alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not Welcome Wizard is enabled
+  welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

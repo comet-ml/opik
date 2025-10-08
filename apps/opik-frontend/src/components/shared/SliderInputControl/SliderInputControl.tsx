@@ -20,6 +20,7 @@ interface SliderInputControlProps {
   label: string;
   tooltip?: TooltipWrapperProps["content"];
   resetDisabled?: boolean;
+  suffix?: string;
 }
 
 const SliderInputControl = ({
@@ -33,6 +34,7 @@ const SliderInputControl = ({
   label,
   tooltip,
   resetDisabled,
+  suffix,
 }: SliderInputControlProps) => {
   const sliderId = `${id}-slider`;
   const inputId = `${id}-input`;
@@ -103,7 +105,7 @@ const SliderInputControl = ({
           )}
           <Input
             id={inputId}
-            className="box-content w-[var(--input-width)] max-w-[5ch] border px-2 py-0 text-right [&:not(:focus)]:border-transparent"
+            className="box-content w-[var(--input-width)] max-w-[5ch] border px-2 py-0 text-right [&:not(:focus)]:border-transparent [&:not(:focus)]:px-0.5"
             style={
               {
                 "--input-width": `${localValue?.length}ch`,
@@ -116,6 +118,14 @@ const SliderInputControl = ({
             variant="ghost"
             max={max}
           />
+          {suffix && (
+            <label
+              htmlFor={inputId}
+              className="cursor-text text-sm text-muted-foreground"
+            >
+              {suffix}
+            </label>
+          )}
         </div>
       </div>
       <Slider

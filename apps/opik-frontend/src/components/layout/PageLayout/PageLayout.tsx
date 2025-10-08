@@ -1,17 +1,51 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Outlet } from "@tanstack/react-router";
 import SideBar from "@/components/layout/SideBar/SideBar";
 import TopBar from "@/components/layout/TopBar/TopBar";
 import { cn } from "@/lib/utils";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
+import WelcomeWizardDialog from "@/components/pages-shared/WelcomeWizard/WelcomeWizardDialog";
+import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const PageLayout = () => {
   const [expanded = true, setExpanded] =
     useLocalStorageState<boolean>("sidebar-expanded");
   const [bannerHeight, setBannerHeight] = useState(0);
+  const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
+
+  const welcomeWizardEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
+  );
+
+  const { data: wizardStatus } = useWelcomeWizardStatus({
+    enabled: welcomeWizardEnabled,
+  });
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
+
+  // Show welcome wizard if enabled and not completed
+  useEffect(() => {
+    if (
+      welcomeWizardEnabled &&
+      wizardStatus &&
+      !wizardStatus.completed &&
+      !showWelcomeWizard
+    ) {
+      // Show wizard after a small delay for better UX
+      const timer = setTimeout(() => {
+        setShowWelcomeWizard(true);
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [welcomeWizardEnabled, wizardStatus, showWelcomeWizard]);
+
+  const handleCloseWelcomeWizard = useCallback(() => {
+    setShowWelcomeWizard(false);
+  }, []);
 
   return (
     <section
@@ -38,6 +72,12 @@ const PageLayout = () => {
           <Outlet />
         </section>
       </main>
+
+      {/* Welcome Wizard Dialog */}
+      <WelcomeWizardDialog
+        open={showWelcomeWizard}
+        onClose={handleCloseWelcomeWizard}
+      />
     </section>
   );
 };
