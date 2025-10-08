@@ -316,6 +316,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
+| global.argocd | bool | `false` |  |
 | global.security.allowInsecureImages | bool | `true` |  |
 | global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
