@@ -45,7 +45,7 @@ def wrap_invoke_model_response(
             raise exception
         finally:
             if not hasattr(self, "opik_tracked_instance"):
-                return
+                return None
 
             delattr(self, "opik_tracked_instance")
 
@@ -91,9 +91,9 @@ def wrap_invoke_model_with_response_stream_response(
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> Generator[Any, None, None]:
     items: List[Dict[str, Any]] = []
+    error_info: Optional[ErrorInfoDict] = None
 
     try:
-        error_info: Optional[ErrorInfoDict] = None
         for item in stream:
             items.append(item)
 
