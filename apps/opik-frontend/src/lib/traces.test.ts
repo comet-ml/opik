@@ -375,4 +375,162 @@ describe("prettifyMessage", () => {
       renderType: "text",
     });
   });
+
+  describe("config parameter behavior", () => {
+    describe("inputType parameter", () => {
+      it("handles inputType 'array' with array message", () => {
+        const message = [
+          { content: "Array item 1" },
+          { content: "Array item 2" },
+        ];
+        const result = prettifyMessage(message, { inputType: "array" });
+        expect(result).toEqual({
+          message: "Array item 1\n\nArray item 2",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+
+      it("handles inputType 'object' with object message", () => {
+        const message = { question: "What is your name?" };
+        const result = prettifyMessage(message, { inputType: "object" });
+        expect(result).toEqual({
+          message: "What is your name?",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+
+      it("handles non-standard inputType values with array message", () => {
+        const message = [{ content: "Custom array item" }];
+        const result = prettifyMessage(message, { inputType: "custom" });
+        expect(result).toEqual({
+          message: "Custom array item",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+
+      it("handles non-standard inputType values with object message", () => {
+        const message = { query: "Custom object query" };
+        const result = prettifyMessage(message, { inputType: "custom" });
+        expect(result).toEqual({
+          message: "Custom object query",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+
+      it("falls back to default behavior when inputType doesn't match message type", () => {
+        const message = { question: "Object message" };
+        const result = prettifyMessage(message, { inputType: "array" });
+        // Should fall back to default object handling
+        expect(result).toEqual({
+          message: "Object message",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+
+      it("ignores empty string inputType", () => {
+        const message = { question: "Test message" };
+        const result = prettifyMessage(message, { inputType: "" });
+        // Should fall back to default behavior
+        expect(result).toEqual({
+          message: "Test message",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+
+      it("ignores falsy inputType values", () => {
+        const message = { question: "Test message" };
+        const result = prettifyMessage(message, {
+          inputType: null as unknown as string,
+        });
+        // Should fall back to default behavior
+        expect(result).toEqual({
+          message: "Test message",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+    });
+
+    describe("outputType parameter", () => {
+      it("overrides renderType with outputType for array input", () => {
+        const message = [{ content: "Array item" }];
+        const result = prettifyMessage(message, {
+          inputType: "array",
+          outputType: "json-table",
+        });
+        expect(result).toEqual({
+          message: "Array item",
+          prettified: true,
+          renderType: "json-table",
+        });
+      });
+
+      it("overrides renderType with outputType for object input", () => {
+        const message = { question: "Object question" };
+        const result = prettifyMessage(message, {
+          inputType: "object",
+          outputType: "json-table",
+        });
+        expect(result).toEqual({
+          message: "Object question",
+          prettified: true,
+          renderType: "json-table",
+        });
+      });
+
+      it("overrides renderType with outputType for default behavior", () => {
+        const message = { question: "Default question" };
+        const result = prettifyMessage(message, { outputType: "json-table" });
+        expect(result).toEqual({
+          message: "Default question",
+          prettified: true,
+          renderType: "json-table",
+        });
+      });
+
+      it("preserves original renderType when outputType is not specified", () => {
+        const message = { question: "Test question" };
+        const result = prettifyMessage(message, { inputType: "object" });
+        expect(result).toEqual({
+          message: "Test question",
+          prettified: true,
+          renderType: "text",
+        });
+      });
+    });
+
+    describe("combined inputType and outputType", () => {
+      it("handles both inputType and outputType together", () => {
+        const message = [{ content: "Combined test" }];
+        const result = prettifyMessage(message, {
+          inputType: "array",
+          outputType: "json-table",
+        });
+        expect(result).toEqual({
+          message: "Combined test",
+          prettified: true,
+          renderType: "json-table",
+        });
+      });
+
+      it("handles non-standard inputType with outputType", () => {
+        const message = { query: "Non-standard test" };
+        const result = prettifyMessage(message, {
+          inputType: "custom",
+          outputType: "json-table",
+        });
+        expect(result).toEqual({
+          message: "Non-standard test",
+          prettified: true,
+          renderType: "json-table",
+        });
+      });
+    });
+  });
 });

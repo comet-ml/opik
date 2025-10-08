@@ -698,40 +698,82 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
 
 export const prettifyMessage = (
   message: object | string | undefined,
-  config?: { inputType?: string },
+  config?: { inputType?: string; outputType?: string },
 ) => {
   // If config is provided, use it for type-specific prettification
   if (config && config.inputType) {
+    // Handle array input type
     if (config.inputType === "array" && Array.isArray(message)) {
       const extractedResult = extractTextFromArray(message);
       if (extractedResult) {
+        const renderType = config.outputType || "text";
         return {
           message: extractedResult,
           prettified: true,
-          renderType: "text",
+          renderType,
         } as PrettifyMessageResponse;
       }
-    } else if (config.inputType === "object" && isObject(message)) {
+    }
+    // Handle object input type
+    else if (config.inputType === "object" && isObject(message)) {
       const extractedResult = extractTextFromObject(message);
       if (extractedResult) {
         if (
           typeof extractedResult === "object" &&
           "renderType" in extractedResult
         ) {
+          const renderType = config.outputType || extractedResult.renderType;
           return {
             message: extractedResult.data,
             prettified: true,
-            renderType: extractedResult.renderType,
+            renderType,
           } as PrettifyMessageResponse;
         }
+        const renderType = config.outputType || "text";
         return {
           message: extractedResult,
           prettified: true,
-          renderType: "text",
+          renderType,
         } as PrettifyMessageResponse;
       }
     }
-    // Fallback to default behavior if inputType does not match
+    // Handle other inputType values - treat as explicit type hint
+    else if (config.inputType !== "array" && config.inputType !== "object") {
+      // For non-standard inputType values, still attempt extraction but with type awareness
+      if (Array.isArray(message)) {
+        const extractedResult = extractTextFromArray(message);
+        if (extractedResult) {
+          const renderType = config.outputType || "text";
+          return {
+            message: extractedResult,
+            prettified: true,
+            renderType,
+          } as PrettifyMessageResponse;
+        }
+      } else if (isObject(message)) {
+        const extractedResult = extractTextFromObject(message);
+        if (extractedResult) {
+          if (
+            typeof extractedResult === "object" &&
+            "renderType" in extractedResult
+          ) {
+            const renderType = config.outputType || extractedResult.renderType;
+            return {
+              message: extractedResult.data,
+              prettified: true,
+              renderType,
+            } as PrettifyMessageResponse;
+          }
+          const renderType = config.outputType || "text";
+          return {
+            message: extractedResult,
+            prettified: true,
+            renderType,
+          } as PrettifyMessageResponse;
+        }
+      }
+    }
+    // If inputType doesn't match message type, fall through to default behavior
   }
   if (isString(message)) {
     return {
@@ -757,18 +799,21 @@ export const prettifyMessage = (
         typeof extractedResult === "object" &&
         "renderType" in extractedResult
       ) {
+        // Apply outputType override if specified
+        const renderType = config?.outputType || extractedResult.renderType;
         return {
           message: extractedResult.data,
           prettified: true,
-          renderType: extractedResult.renderType,
+          renderType,
         } as PrettifyMessageResponse;
       }
 
-      // Handle string result
+      // Handle string result - apply outputType override if specified
+      const renderType = config?.outputType || "text";
       return {
         message: extractedResult,
         prettified: true,
-        renderType: "text",
+        renderType,
       } as PrettifyMessageResponse;
     }
 
