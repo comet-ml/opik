@@ -654,8 +654,8 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId) {
-        // Batch project IDs to avoid query size limits (max 1000 per batch)
-        final int BATCH_SIZE = 1000;
+        // Batch project IDs to avoid ClickHouse query size limits (max 500 per batch to stay under 256KB limit)
+        final int BATCH_SIZE = 500;
 
         if (projectIds.size() <= BATCH_SIZE) {
             // Small list - process directly
