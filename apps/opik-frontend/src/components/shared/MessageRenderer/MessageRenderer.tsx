@@ -100,22 +100,24 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
           : extractTextFromObject(message);
 
         if (extractedText) {
-          // Check if the extracted text is a JSON table marker
+          // Handle structured result from extractTextFromObject
           if (
-            typeof extractedText === "string" &&
-            extractedText.startsWith("__JSON_TABLE__:")
+            typeof extractedText === "object" &&
+            extractedText !== null &&
+            "renderType" in extractedText
           ) {
-            try {
-              const jsonData = JSON.parse(
-                extractedText.substring("__JSON_TABLE__:".length),
+            const structuredResult = extractedText as {
+              renderType: string;
+              data: unknown;
+            };
+            if (structuredResult.renderType === "json-table") {
+              return (
+                <JsonKeyValueTable data={structuredResult.data} maxDepth={3} />
               );
-              return <JsonKeyValueTable data={jsonData} maxDepth={3} />;
-            } catch {
-              // If parsing fails, fall back to regular text display
-              return <MarkdownPreview>{extractedText}</MarkdownPreview>;
             }
           }
 
+          // Handle string result
           return <MarkdownPreview>{extractedText}</MarkdownPreview>;
         }
       }

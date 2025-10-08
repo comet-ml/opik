@@ -35,13 +35,22 @@ export const traceVisible = (item: ExperimentItem) =>
 type PrettifyMessageResponse = {
   message: object | string | undefined;
   prettified: boolean;
+  renderType?: "text" | "json-table";
 };
 
 /**
  * Enhanced text extraction logic that handles various message formats.
  * This replaces the complex framework-specific logic with a more general approach.
  */
-const extractTextFromObject = (obj: object): string | undefined => {
+type ExtractTextResult = {
+  text?: string;
+  renderType?: "json-table";
+  data?: object;
+};
+
+const extractTextFromObject = (
+  obj: object,
+): ExtractTextResult | string | undefined => {
   // Direct string fields
   const directTextFields = [
     "content",
@@ -133,8 +142,11 @@ const extractTextFromObject = (obj: object): string | undefined => {
         if (shouldRenderAsJsonTable(content)) {
           const parsed = parseJsonForTable(content);
           if (parsed !== null) {
-            // Return a special marker that indicates this should be rendered as a JSON table
-            return `__JSON_TABLE__:${JSON.stringify(parsed)}`;
+            // Return a structured object that indicates this should be rendered as a JSON table
+            return {
+              renderType: "json-table",
+              data: parsed,
+            };
           }
         }
 
@@ -392,7 +404,13 @@ const extractTextFromObject = (obj: object): string | undefined => {
     }
   }
 
-  return undefined;
+  // General fallback: For any object that doesn't match specific patterns,
+  // return a structured object that indicates it should be rendered as a JSON table
+  // This makes the function more general and enables "Pretty" mode for most objects
+  return {
+    renderType: "json-table",
+    data: obj,
+  };
 };
 
 /**
@@ -595,10 +613,14 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
                   textItems.push(`**${roleHeader}**:\n${content}`);
                 }
               } catch {
-                // If JSON parsing fails, try to parse as JavaScript array (handles single quotes)
+                // If JSON parsing fails, try to safely parse as JavaScript array (handles single quotes)
                 try {
-                  // Use eval to parse JavaScript array (safer than JSON.parse for this case)
-                  const parsedArray = eval(trimmedContent);
+                  // Safe parsing: convert single quotes to double quotes and parse as JSON
+                  const safeContent = trimmedContent
+                    .replace(/'/g, '"') // Replace single quotes with double quotes
+                    .replace(/(\w+):/g, '"$1":'); // Add quotes around object keys if any
+
+                  const parsedArray = JSON.parse(safeContent);
                   if (Array.isArray(parsedArray)) {
                     // Convert array to ordered list with new format
                     const arrayContent = parsedArray
@@ -675,7 +697,14 @@ const extractTextFromArray = (arr: unknown[]): string | undefined => {
         // Use regular object extraction
         const extracted = extractTextFromObject(item);
         if (extracted) {
-          textItems.push(extracted);
+          // Handle structured result
+          if (typeof extracted === "object" && "renderType" in extracted) {
+            // For arrays, we'll convert structured results to text representation
+            textItems.push(JSON.stringify(extracted.data, null, 2));
+          } else if (typeof extracted === "string") {
+            // Handle string result
+            textItems.push(extracted);
+          }
         }
       }
     }
@@ -693,20 +722,34 @@ export const prettifyMessage = (message: object | string | undefined) => {
   }
 
   try {
-    let extractedText: string | undefined;
+    let extractedResult: string | ExtractTextResult | undefined;
 
     // Handle arrays of objects/strings
     if (Array.isArray(message)) {
-      extractedText = extractTextFromArray(message);
+      extractedResult = extractTextFromArray(message);
     } else if (isObject(message)) {
-      extractedText = extractTextFromObject(message);
+      extractedResult = extractTextFromObject(message);
     }
 
-    // If we can extract text, use it
-    if (extractedText) {
+    // If we can extract text or have a structured result, use it
+    if (extractedResult) {
+      // Handle structured result
+      if (
+        typeof extractedResult === "object" &&
+        "renderType" in extractedResult
+      ) {
+        return {
+          message: extractedResult.data,
+          prettified: true,
+          renderType: extractedResult.renderType,
+        } as PrettifyMessageResponse;
+      }
+
+      // Handle string result
       return {
-        message: extractedText,
+        message: extractedResult,
         prettified: true,
+        renderType: "text",
       } as PrettifyMessageResponse;
     }
 

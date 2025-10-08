@@ -40,6 +40,22 @@ interface JsonRowData {
   children?: JsonRowData[];
 }
 
+/**
+ * Helper function to filter out null values from object entries
+ */
+const filterNullObjectEntries = (
+  entries: [string, unknown][],
+): [string, unknown][] => {
+  return entries.filter(([, value]) => !isNull(value));
+};
+
+/**
+ * Helper function to filter out null values from arrays
+ */
+const filterNullArrayItems = (items: unknown[]): unknown[] => {
+  return items.filter((item) => !isNull(item));
+};
+
 const JsonValue: React.FC<{
   value: unknown;
   maxDepth: number;
@@ -119,14 +135,12 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
     }
 
     const entries = Object.entries(data);
-    return entries
-      .filter(([, value]) => !isNull(value)) // Filter out null values
-      .map(([key, value]) => ({
-        key,
-        value,
-        depth: 0,
-        isExpandable: isObject(value) && !isNull(value) && 0 < maxDepth,
-      }));
+    return filterNullObjectEntries(entries).map(([key, value]) => ({
+      key,
+      value,
+      depth: 0,
+      isExpandable: isObject(value) && !isNull(value) && 0 < maxDepth,
+    }));
   }, [data, maxDepth]);
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
@@ -187,27 +201,25 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
 
       const value = row.value;
       if (isArray(value)) {
-        return value
-          .filter((item) => !isNull(item)) // Filter out null values
-          .map((item, index) => ({
-            key: `Item ${index + 1}`,
-            value: item,
-            depth: row.depth + 1,
-            isExpandable:
-              isObject(item) && !isNull(item) && row.depth + 1 < maxDepth,
-          }));
+        return filterNullArrayItems(value).map((item, index) => ({
+          key: `Item ${index + 1}`,
+          value: item,
+          depth: row.depth + 1,
+          isExpandable:
+            isObject(item) && !isNull(item) && row.depth + 1 < maxDepth,
+        }));
       }
 
       if (isObject(value)) {
-        return Object.entries(value)
-          .filter(([, val]) => !isNull(val)) // Filter out null values
-          .map(([key, val]) => ({
+        return filterNullObjectEntries(Object.entries(value)).map(
+          ([key, val]) => ({
             key,
             value: val,
             depth: row.depth + 1,
             isExpandable:
               isObject(val) && !isNull(val) && row.depth + 1 < maxDepth,
-          }));
+          }),
+        );
       }
 
       return undefined;
