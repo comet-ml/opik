@@ -3,6 +3,7 @@
 # Declare variables to be passed into your templates.
 
 global:
+  argocd: false
   useHelmHooks: true
   security:
     allowInsecureImages: true
