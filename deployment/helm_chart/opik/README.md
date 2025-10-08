@@ -315,9 +315,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob.enabled | bool | `true` |  |
-| demoDataJob.useHelmHooks | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | global.security.allowInsecureImages | bool | `true` |  |
+| global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
