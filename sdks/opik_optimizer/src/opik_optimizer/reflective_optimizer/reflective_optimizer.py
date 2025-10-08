@@ -2,12 +2,35 @@ from opik.environment import get_tqdm_for_current_environment
 import os
 import logging
 
+import opik
 import litellm
 from litellm.caching import Cache
 from litellm.types.caching import LiteLLMCacheType
+from opik.evaluation.evaluation_result import EvaluationResult
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from opik.evaluation import evaluator as opik_evaluator
 
+from typing import Any, Callable, Type, TypeVar
+from types import FunctionType
+from pydantic import BaseModel
 from .. import _throttle
 from ..base_optimizer import BaseOptimizer
+from ..optimization_config import chat_prompt, mappers
+from ..optimizable_agent import OptimizableAgent
+
+from opik_optimizer.task_evaluator import _create_metric_class
+from opik_optimizer.optimization_result import OptimizationResult
+from . import reporting
+from .hierarchical_root_cause_analyzer import (
+    HierarchicalRootCauseAnalyzer,
+    HierarchicalRootCauseAnalysis,
+)
+from .types import (
+    FailureMode,
+    RootCauseAnalysis,
+    PromptMessage,
+    ImprovedPrompt,
+)
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -20,6 +43,38 @@ logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
+# Type variable for generic structured output
+T = TypeVar('T', bound=BaseModel)
+
+# Prompt template for improving prompts based on failure modes
+IMPROVE_PROMPT_TEMPLATE = """You are an expert prompt engineer. You are given a prompt and a failure mode identified during evaluation. 
+Your task is to improve the prompt to address this failure mode.
+
+CURRENT PROMPT:
+{current_prompt}
+
+FAILURE MODE TO ADDRESS:
+ - Name: {failure_mode_name}
+ - Description: {failure_mode_description}
+ - Root Cause: {failure_mode_root_cause}
+
+INSTRUCTIONS FOR IMPROVING THE PROMPT:
+
+1. **Analyze First**: Carefully review the current prompt to understand what instructions already exist.
+
+2. **Choose the Right Approach**:
+   - If relevant instructions already exist but are unclear or incomplete, UPDATE and CLARIFY them in place
+   - If the prompt is missing critical instructions needed to address this failure mode, ADD new targeted instructions
+   - If existing instructions contradict what's needed, REPLACE them with corrected versions
+
+3. **Be Surgical**: Make targeted changes that directly address the root cause. Don't add unnecessary instructions or rewrite the entire prompt.
+
+4. **Maintain Structure**: Keep the same message structure (role and content format). Only modify the content where necessary.
+
+5. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
+
+Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt."""
+
 class ReflectiveOptimizer(BaseOptimizer):
     """
     The Reflective Optimizer uses reflective prompting to improve prompts based on failure modes
@@ -27,9 +82,551 @@ class ReflectiveOptimizer(BaseOptimizer):
 
     This algorithm is best in-class and useful when you already have a complex prompt that you want
     to improve.
+    
+    Args:
+        reasoning_model: LiteLLM model name for reasoning and analysis (default: "openai/gpt-4.1")
+        num_threads: Number of parallel threads for evaluation (default: 12)
+        verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
+        seed: Random seed for reproducibility (default: 42)
+        max_parallel_batches: Maximum number of batches to process concurrently during
+            hierarchical root cause analysis (default: 5)
+        **model_kwargs: Additional arguments passed to the LLM model
     """
 
     DEFAULT_ROUNDS = 10
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self,
+        reasoning_model: str = "openai/gpt-4.1",
+        num_threads: int = 12,
+        verbose: int = 1,
+        seed: int = 42,
+        max_parallel_batches: int = 5,
+        **model_kwargs: Any):
+        super().__init__(model=reasoning_model, verbose=verbose, seed=seed, **model_kwargs)
+        self.reasoning_model = reasoning_model
+        self.num_threads = num_threads
+        self.max_parallel_batches = max_parallel_batches
+        
+        # Initialize hierarchical analyzer
+        self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
+            call_model_fn=self._call_model_async,
+            reasoning_model=self.reasoning_model,
+            seed=self.seed,
+            max_parallel_batches=self.max_parallel_batches,
+        )
+
+    def _prepare_model_params(
+        self,
+        model_kwargs: dict[str, Any],
+        response_model: Type[T] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Prepare parameters for LiteLLM call by filtering and adding monitoring.
+        
+        Args:
+            model_kwargs: Additional model parameters
+            response_model: Optional Pydantic model for structured output
+            
+        Returns:
+            Dictionary of parameters ready for litellm.completion/acompletion
+        """
+        current_model_kwargs = self.model_kwargs.copy()
+        current_model_kwargs.update(model_kwargs)
+
+        # Filter out optimizer-specific kwargs that shouldn't be passed to LiteLLM
+        filtered_call_kwargs = current_model_kwargs.copy()
+        filtered_call_kwargs.pop("n_trials", None)
+        filtered_call_kwargs.pop("n_samples", None)
+        filtered_call_kwargs.pop("n_iterations", None)
+        filtered_call_kwargs.pop("min_examples", None)
+        filtered_call_kwargs.pop("max_examples", None)
+        filtered_call_kwargs.pop("project_name", None)
+
+        final_params_for_litellm = (
+            opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
+        )
+
+        # Add structured output support if response_model is provided
+        # According to LiteLLM docs: https://docs.litellm.ai/docs/completion/json_mode
+        # Pass the Pydantic model directly to response_format
+        if response_model is not None:
+            final_params_for_litellm["response_format"] = response_model
+
+        return final_params_for_litellm
+
+    def _parse_response(
+        self,
+        response: Any,
+        response_model: Type[T] | None = None,
+    ) -> T | str:
+        """
+        Parse LiteLLM response, with optional structured output parsing.
+        
+        Args:
+            response: The response from litellm.completion/acompletion
+            response_model: Optional Pydantic model for structured output
+            
+        Returns:
+            If response_model is provided, returns an instance of that model.
+            Otherwise, returns the raw string response.
+        """
+        content = response.choices[0].message.content
+        
+        # When using structured outputs with Pydantic models, LiteLLM automatically
+        # parses the response. Parse the JSON string into the Pydantic model
+        if response_model is not None:
+            return response_model.model_validate_json(content)
+        
+        return content
+
+    @_throttle.rate_limited(_rate_limiter)
+    def _call_model(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        seed: int,
+        model_kwargs: dict[str, Any],
+        response_model: Type[T] | None = None,
+    ) -> T | str:
+        """
+        Call the LLM model with optional structured output.
+        
+        Args:
+            model: The model to use for the call
+            messages: List of message dictionaries with 'role' and 'content' keys
+            seed: Random seed for reproducibility
+            model_kwargs: Additional model parameters
+            response_model: Optional Pydantic model for structured output
+
+        Returns:
+            If response_model is provided, returns an instance of that model.
+            Otherwise, returns the raw string response.
+        """
+        self.increment_llm_counter()
+        
+        final_params_for_litellm = self._prepare_model_params(model_kwargs, response_model)
+
+        response = litellm.completion(
+            model=model,
+            messages=messages,
+            seed=seed,
+            num_retries=6,
+            **final_params_for_litellm,
+        )
+
+        return self._parse_response(response, response_model)
+    
+    @_throttle.rate_limited(_rate_limiter)
+    async def _call_model_async(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        seed: int,
+        model_kwargs: dict[str, Any],
+        response_model: Type[T] | None = None,
+    ) -> T | str:
+        """
+        Async version of _call_model using litellm.acompletion.
+        
+        Args:
+            model: The model to use for the call
+            messages: List of message dictionaries with 'role' and 'content' keys
+            seed: Random seed for reproducibility
+            model_kwargs: Additional model parameters
+            response_model: Optional Pydantic model for structured output
+
+        Returns:
+            If response_model is provided, returns an instance of that model.
+            Otherwise, returns the raw string response.
+        """
+        self.increment_llm_counter()
+        
+        final_params_for_litellm = self._prepare_model_params(model_kwargs, response_model)
+
+        response = await litellm.acompletion(
+            model=model,
+            messages=messages,
+            seed=seed,
+            num_retries=6,
+            **final_params_for_litellm,
+        )
+
+        return self._parse_response(response, response_model)
+
+    def _calculate_improvement(self, current_score: float, previous_score: float) -> float:
+        """Calculate the improvement percentage between scores."""
+        return (current_score - previous_score) / previous_score if previous_score > 0 else 0
+
+    def _evaluate_prompt(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
+        metric: Callable,
+        optimization_id: str,
+        n_samples: int | None = None,
+        experiment_config: dict | None = None,
+        **kwargs: Any,
+    ) -> EvaluationResult:
+        """
+        Args:
+            dataset: Opik Dataset to evaluate the prompt on
+            metric: Metric functions
+            use_full_dataset: Whether to use the full dataset or a subset
+            experiment_config: Optional configuration for the experiment, useful to log additional metadata
+            n_samples: Optional number of items to test in the dataset
+            optimization_id: Optional ID of the optimization
+            verbose: Controls internal logging/progress bars (0=off, 1=on).
+        Returns:
+            float: The evaluation score
+        """
+        logger.debug("Using full dataset for evaluation")
+
+        configuration_updates = self._drop_none(
+            {
+                "n_samples": n_samples
+            }
+        )
+        meta_metadata = self._drop_none(
+            {
+                "optimization_id": optimization_id,
+                "stage": "trial_evaluation"
+            }
+        )
+        experiment_config = self._prepare_experiment_config(
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            experiment_config=experiment_config,
+            configuration_updates=configuration_updates,
+            additional_metadata={"meta_prompt": meta_metadata}
+            if meta_metadata
+            else None,
+        )
+
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
+            new_prompt = prompt.copy()
+            messages = new_prompt.get_messages(dataset_item)
+            new_prompt.set_messages(messages)
+            agent = self.agent_class(prompt=new_prompt)
+
+            try:
+                logger.debug(
+                    f"Calling LLM with prompt length: {sum(len(msg['content']) for msg in messages)}"
+                )
+                raw_model_output = agent.invoke(messages)
+                logger.debug(f"LLM raw response length: {len(raw_model_output)}")
+                logger.debug(f"LLM raw output: {raw_model_output}")
+            except Exception as e:
+                logger.error(f"Error calling model with prompt: {e}")
+                logger.error(f"Failed prompt: {messages}")
+                logger.error(
+                    f"Prompt length: {sum(len(msg['content']) for msg in messages)}"
+                )
+                raise
+
+            cleaned_model_output = raw_model_output.strip()
+
+            result = {
+                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
+            }
+            return result
+
+        # Use dataset's get_items with limit for sampling
+        logger.debug(
+            f"Starting evaluation with {n_samples if n_samples else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
+        )
+        result = opik_evaluator.evaluate_optimization_trial(
+            optimization_id=optimization_id,
+            dataset=dataset,
+            task=llm_task,
+            scoring_metrics=[_create_metric_class(metric)],
+            task_threads=self.num_threads,
+            nb_samples=n_samples,
+            experiment_config=experiment_config,
+            verbose=self.verbose,
+        )
+
+        return result
+
+    def hierarchical_root_cause_analysis(
+        self, evaluation_result: EvaluationResult
+    ) -> HierarchicalRootCauseAnalysis:
+        """
+        Perform hierarchical root cause analysis on evaluation results.
+        
+        This method uses a two-stage hierarchical approach:
+        1. Split results into batches and analyze each batch
+        2. Synthesize batch analyses into unified failure modes
+        
+        Args:
+            evaluation_result: The evaluation result to analyze
+            
+        Returns:
+            HierarchicalRootCauseAnalysis containing batch analyses and overall synthesis
+        """
+        logger.debug("Performing hierarchical root cause analysis...")
+        return self._hierarchical_analyzer.analyze(evaluation_result)
+
+    def improve_prompt(self, prompt: chat_prompt.ChatPrompt, root_cause: FailureMode) -> ImprovedPrompt:
+        """Improve the prompt based on the root cause analysis."""
+        
+        improve_prompt_prompt = IMPROVE_PROMPT_TEMPLATE.format(
+            current_prompt=prompt.get_messages(),
+            failure_mode_name=root_cause.name,
+            failure_mode_description=root_cause.description,
+            failure_mode_root_cause=root_cause.root_cause,
+        )
+
+        improve_prompt_response = self._call_model(
+            model=self.reasoning_model,
+            messages=[{"role": "user", "content": improve_prompt_prompt}],
+            seed=self.seed,
+            model_kwargs={},
+            response_model=ImprovedPrompt,
+        )
+
+        return improve_prompt_response
+
+    def _generate_and_evaluate_improvement(
+        self,
+        root_cause: FailureMode,
+        best_prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
+        metric: Callable,
+        optimization_id: str,
+        n_samples: int | None,
+        attempt: int,
+        max_attempts: int,
+    ) -> tuple[chat_prompt.ChatPrompt, float]:
+        """
+        Generate and evaluate a single improvement attempt for a failure mode.
+        
+        Args:
+            root_cause: The failure mode to address
+            best_prompt: The current best prompt to improve upon
+            prompt: The original prompt (for metadata like name and tools)
+            dataset: Dataset to evaluate on
+            metric: Metric function
+            optimization_id: ID of the optimization
+            n_samples: Optional number of samples
+            attempt: Current attempt number (1-indexed)
+            max_attempts: Total number of attempts
+        
+        Returns:
+            Tuple of (improved_prompt, improved_score)
+        """
+        # Generate improvement
+        improved_prompt_response = self.improve_prompt(best_prompt, root_cause)
+        
+        # Display reasoning
+        reporting.display_improvement_reasoning(
+            failure_mode_name=root_cause.name,
+            reasoning=improved_prompt_response.reasoning,
+            verbose=self.verbose,
+        )
+        
+        # Convert to chat prompt
+        messages_as_dicts = [
+            {"role": msg.role, "content": msg.content} 
+            for msg in improved_prompt_response.messages
+        ]
+        
+        improved_chat_prompt = chat_prompt.ChatPrompt(
+            name=prompt.name,
+            messages=messages_as_dicts,
+            tools=prompt.tools,
+        )
+        
+        # Evaluate improved prompt
+        eval_message = f"Evaluating improvement for failure mode '{root_cause.name}'"
+        if max_attempts > 1:
+            eval_message += f" (attempt {attempt}/{max_attempts})"
+        eval_message += ":"
+        
+        with reporting.display_evaluation(
+            message=eval_message,
+            verbose=self.verbose
+        ) as improved_reporter:
+            improved_experiment_result = self._evaluate_prompt(
+                prompt=improved_chat_prompt,
+                dataset=dataset,
+                metric=metric,
+                optimization_id=optimization_id,
+                n_samples=n_samples,
+            )
+            
+            improved_score = sum([x.score_results[0].value for x in improved_experiment_result.test_results]) / len(improved_experiment_result.test_results)
+            improved_reporter.set_score(improved_score)
+        
+        return improved_chat_prompt, improved_score
+
+    def optimize_prompt(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: opik.Dataset,
+        metric: FunctionType, # Solution for ty type error
+        experiment_config: dict | None = None,
+        n_samples: int | None = None,
+        auto_continue: bool = False,
+        agent_class: type[OptimizableAgent] | None = None,
+        max_retries: int = 2,
+        **kwargs: Any,
+    ) -> OptimizationResult:
+        self.agent_class = self.setup_agent_class(prompt, agent_class)
+
+        optimization = self.opik_client.create_optimization(
+            dataset_name=dataset.name,
+            objective_name=getattr(metric, "__name__", str(metric)),
+            metadata={"optimizer": self.__class__.__name__},
+        )
+        logger.debug(f"Created optimization with ID: {optimization.id}")
+       
+
+        reporting.display_header(
+            algorithm=self.__class__.__name__,
+            optimization_id=optimization.id if optimization is not None else None,
+            dataset_id=dataset.id,
+            verbose=self.verbose,
+        )
+        reporting.display_configuration(
+            messages=prompt.get_messages(),
+            optimizer_config={
+                "optimizer": self.__class__.__name__,
+                "n_samples": n_samples,
+                "auto_continue": auto_continue,
+                "max_retries": max_retries,
+            },
+            verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
+        )
+    
+        # First we will evaluate the prompt on the dataset
+        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+            experiment_result = self._evaluate_prompt(
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                optimization_id=optimization.id,
+                n_samples=n_samples,
+            )
+
+            avg_scores = sum([x.score_results[0].value for x in experiment_result.test_results]) / len(experiment_result.test_results)
+            baseline_reporter.set_score(avg_scores)
+        
+        # Track baseline and best scores
+        initial_score = avg_scores
+        best_score = initial_score
+        best_prompt = prompt
+        best_messages = prompt.get_messages()
+        initial_messages = list(prompt.get_messages())  # Store copy of initial messages for diff
+        
+        # Iteration 1: Analyze and improve (structure ready for future multi-iteration support)
+        with reporting.display_optimization_iteration(iteration=1, verbose=self.verbose) as iteration_reporter:
+            # Perform hierarchical root cause analysis
+            with reporting.display_root_cause_analysis(verbose=self.verbose) as analysis_reporter:
+                hierarchical_analysis = self.hierarchical_root_cause_analysis(experiment_result)
+                analysis_reporter.set_completed(
+                    total_test_cases=hierarchical_analysis.total_test_cases,
+                    num_batches=hierarchical_analysis.num_batches,
+                )
+            
+            # Display hierarchical synthesis and failure modes
+            if self.verbose:
+                reporting.display_hierarchical_synthesis(
+                    total_test_cases=hierarchical_analysis.total_test_cases,
+                    num_batches=hierarchical_analysis.num_batches,
+                    synthesis_notes=hierarchical_analysis.synthesis_notes,
+                    verbose=self.verbose,
+                )
+            
+            reporting.display_failure_modes(
+                failure_modes=hierarchical_analysis.unified_failure_modes,
+                verbose=self.verbose,
+            )
+            
+            # Use the unified failure modes for improvement
+            root_cause_analysis = RootCauseAnalysis(
+                failure_modes=hierarchical_analysis.unified_failure_modes
+            )
+
+            # Generate improved prompt for each failure mode
+            for idx, root_cause in enumerate(root_cause_analysis.failure_modes, 1):
+                logger.debug(f"Addressing failure mode {idx}/{len(root_cause_analysis.failure_modes)}: {root_cause.name}")
+                
+                # Try multiple attempts if needed
+                max_attempts = max_retries + 1
+                improved_chat_prompt = None
+                improved_score = None
+                
+                for attempt in range(1, max_attempts + 1):
+                    # Generate and evaluate improvement
+                    improved_chat_prompt, improved_score = self._generate_and_evaluate_improvement(
+                        root_cause=root_cause,
+                        best_prompt=best_prompt,
+                        prompt=prompt,
+                        dataset=dataset,
+                        metric=metric,
+                        optimization_id=optimization.id,
+                        n_samples=n_samples,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                    )
+                    
+                    # Check if we got improvement
+                    if improved_score > best_score:
+                        logger.info(f"Improvement found for '{root_cause.name}' on attempt {attempt}")
+                        break
+                    
+                    # No improvement - should we retry?
+                    if attempt < max_attempts:
+                        reporting.display_retry_attempt(
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            failure_mode_name=root_cause.name,
+                            verbose=self.verbose,
+                        )
+                    else:
+                        logger.debug(f"No improvement after {attempt} attempts for '{root_cause.name}'")
+                
+                # Check if final result is an improvement
+                if improved_score is not None and improved_chat_prompt is not None and improved_score > best_score:
+                    improvement = self._calculate_improvement(improved_score, best_score)
+                    
+                    # Display improvement for this iteration
+                    reporting.display_iteration_improvement(
+                        improvement=improvement,
+                        current_score=improved_score,
+                        best_score=best_score,
+                        verbose=self.verbose,
+                    )
+                    
+                    # Update best
+                    best_score = improved_score
+                    best_prompt = improved_chat_prompt
+                    best_messages = improved_chat_prompt.get_messages()
+                    logger.info(f"Updated best prompt after addressing '{root_cause.name}'")
+                else:
+                    logger.debug(f"Keeping previous best prompt, no improvement from '{root_cause.name}'")
+            
+            # Mark iteration complete
+            improved_since_start = best_score > initial_score
+            iteration_reporter.iteration_complete(best_score=best_score, improved=improved_since_start)
+        
+        # Display final optimization result with diff
+        reporting.display_optimized_prompt_diff(
+            initial_messages=initial_messages,
+            optimized_messages=best_messages,
+            initial_score=initial_score,
+            best_score=best_score,
+            verbose=self.verbose,
+        )
+        
+        return OptimizationResult(
+            optimizer=self.__class__.__name__,
+            prompt=best_messages,
+            score=best_score,
+            metric_name=metric.__name__,
+            initial_prompt=prompt.get_messages(),
+            initial_score=initial_score,
+        )

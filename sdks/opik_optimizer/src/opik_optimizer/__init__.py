@@ -16,6 +16,7 @@ from .gepa_optimizer import GepaOptimizer
 from .logging_config import setup_logging
 from .meta_prompt_optimizer import MetaPromptOptimizer
 from .mipro_optimizer import MiproOptimizer
+from .reflective_optimizer import ReflectiveOptimizer
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
 
@@ -34,6 +35,7 @@ __all__ = [
     "MetaPromptOptimizer",
     "MiproOptimizer",
     "EvolutionaryOptimizer",
+    "ReflectiveOptimizer",
     "OptimizationResult",
     "OptimizableAgent",
     "setup_logging",
