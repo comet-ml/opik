@@ -1,7 +1,7 @@
 ---
 description: Documentation standards and code style guidelines for the Python SDK
 globs: sdks/python/src/opik/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK Documentation and Style Guidelines
 

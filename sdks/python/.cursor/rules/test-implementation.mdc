@@ -1,7 +1,7 @@
 ---
 description: Test fixtures, utilities, and implementation patterns for the Python SDK
 globs: sdks/python/tests/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK Test Implementation Guidelines
 

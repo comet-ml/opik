@@ -1,7 +1,7 @@
 ---
 description: General guidelines for making changes in Opik backend
 globs: **/*.java
-alwaysApply: true
+alwaysApply: false
 ---
 
 # General Development Guidelines

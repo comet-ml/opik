@@ -1,7 +1,7 @@
 ---
 description: Tech Stack
-globs:
-alwaysApply: true
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 # Opik Java Backend Technology Stack
 

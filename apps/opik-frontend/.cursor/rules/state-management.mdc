@@ -1,7 +1,7 @@
 ---
 description: Frontend state management patterns using Zustand and local storage
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # State Management Patterns

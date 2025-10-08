@@ -1,7 +1,7 @@
 ---
 description: Architecture guidelines
-globs:
-alwaysApply: true
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 
 # Architecture Guidelines

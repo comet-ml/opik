@@ -1,7 +1,7 @@
 ---
 description: Frontend accessibility guidelines and testing patterns
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # Accessibility & Testing Guidelines

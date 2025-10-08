@@ -1,7 +1,7 @@
 ---
 globs: sdks/typescript/src/**/*.ts
 description: Logging practices for the TypeScript SDK
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Logging

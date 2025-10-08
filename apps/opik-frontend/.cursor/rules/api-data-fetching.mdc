@@ -1,7 +1,7 @@
 ---
 description: Frontend API and data fetching patterns using React Query
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # API & Data Fetching Patterns

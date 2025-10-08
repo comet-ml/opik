@@ -1,7 +1,7 @@
 ---
 globs: sdks/typescript/src/**/*.ts
 description: Authoritative architecture rules for the TypeScript SDK. Keep these aligned with real code.
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Architecture overview

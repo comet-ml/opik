@@ -1,7 +1,7 @@
 ---
 description: Patterns for identifying and refactoring methods to improve code quality and maintainability
-globs:
-alwaysApply: true
+globs: sdks/python/src/opik/**/*
+alwaysApply: false
 ---
 # Method Refactoring Patterns
 

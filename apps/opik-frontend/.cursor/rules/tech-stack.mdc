@@ -1,7 +1,7 @@
 ---
 description: Frontend technology stack and project structure guidelines
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # Frontend Technology Stack & Architecture

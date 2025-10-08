@@ -1,7 +1,7 @@
 ---
 description: Error handling best practices for Opik backend
 globs: **/*.java
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Error Handling Guidelines

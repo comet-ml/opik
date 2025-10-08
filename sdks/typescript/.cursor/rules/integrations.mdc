@@ -1,7 +1,7 @@
 ---
 globs: sdks/typescript/src/opik/integrations/**/*.ts
 description: Guidance for Opik TypeScript integrations (OpenAI, LangChain, Vercel)
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Integrations

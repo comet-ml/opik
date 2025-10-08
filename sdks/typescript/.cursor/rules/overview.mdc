@@ -1,7 +1,7 @@
 ---
 globs: sdks/typescript/src/**/*.ts
 description: High-level overview of the Opik TypeScript SDK and how to navigate it
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Opik TypeScript SDK Overview

@@ -1,7 +1,7 @@
 ---
 description: Database migration script guidelines for Opik backend
 globs: **/migrations/*.sql
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Database Migration Script Guidelines

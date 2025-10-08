@@ -1,7 +1,7 @@
 ---
 description: Test structure, location, and organization guidelines for the Python SDK
 globs: sdks/python/tests/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK Test Organization Guidelines
 
