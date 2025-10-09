@@ -491,7 +491,7 @@ class ReflectiveOptimizer(BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
-        metric: FunctionType, # Solution for ty type error
+        metric: FunctionType, # Solution for type error
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
