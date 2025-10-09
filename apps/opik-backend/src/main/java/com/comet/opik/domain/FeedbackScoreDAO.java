@@ -18,7 +18,6 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -307,7 +306,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull EventBus eventBus;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
     @WithSpan
@@ -336,32 +334,35 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
-        return asyncTemplate.nonTransaction(connection -> {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
-            template.add("author", author);
+            return asyncTemplate.nonTransaction(connection -> {
 
-            var statement = connection.createStatement(template.render());
+                ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+                template.add("author", author);
 
-            bindParameters(entityType, scores, statement, author);
+                var statement = connection.createStatement(template.render());
 
-            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
-                    .flatMap(Result::getRowsUpdated)
-                    .reduce(Long::sum);
-        })
-                .doOnSuccess(cnt -> {
-                    if (cnt > 0) {
+                bindParameters(entityType, scores, statement, author);
+
+                return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(Long::sum);
+            })
+                    .doOnSuccess(cnt -> {
                         switch (entityType) {
-                            case TRACE -> publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE);
+                            case TRACE -> publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId);
                             default -> {
                                 // no-op
                             }
                         }
-                    }
-                });
+                    });
+        });
     }
 
-    private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType) {
+    private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType,
+            String workspaceId) {
         if (CollectionUtils.isEmpty(scores)) {
             return;
         }
@@ -378,7 +379,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         eventBus.post(AlertEvent.builder()
                 .eventType(eventType)
-                .workspaceId(requestContext.get().getWorkspaceId())
+                .workspaceId(workspaceId)
                 .projectId(scores.getFirst().projectId())
                 .payload(scoresWithAuthor)
                 .build());
