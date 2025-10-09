@@ -1,5 +1,5 @@
 {
-  "name": "opik-configure",
+  "name": "opik-ts",
   "version": "0.1.2",
   "homepage": "https://github.com/comet-ml/opik",
   "repository": "https://github.com/comet-ml/opik",
@@ -16,7 +16,7 @@
     "llm"
   ],
   "bin": {
-    "opik-configure": "dist/bin.js"
+    "opik-ts": "dist/bin.js"
   },
   "publishConfig": {
     "access": "public"
