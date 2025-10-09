@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Union, List
+from typing import Any
 from collections.abc import Callable
 
 import opik
@@ -15,7 +15,9 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
         def __init__(self) -> None:
             self.name = metric.__name__
 
-        def score(self, llm_output: str, **kwargs: Any) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+        def score(
+            self, llm_output: str, **kwargs: Any
+        ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
             try:
                 metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
 
@@ -124,8 +126,8 @@ def evaluate(
     if not objective_score_results:
         return 0.0
 
-    avg_score = sum([score_result_.value for score_result_ in objective_score_results]) / len(
-        objective_score_results
-    )
+    avg_score = sum(
+        [score_result_.value for score_result_ in objective_score_results]
+    ) / len(objective_score_results)
 
     return avg_score

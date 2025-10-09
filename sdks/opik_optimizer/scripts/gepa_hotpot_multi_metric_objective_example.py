@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 import opik
 import opik_optimizer
@@ -15,16 +15,19 @@ import random
 dataset = hotpot_300()
 
 
-def levenshtein_ratio(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
-def equals(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+
+def equals(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = Equals()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
-def random_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+
+def random_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     return ScoreResult(name="random_metric", value=random.random())
+
 
 prompt = ChatPrompt(
     system="Answer the question",
@@ -52,13 +55,13 @@ prompt = ChatPrompt(
 )
 
 optimizer = GepaOptimizer(
-    model="openai/gpt-4o-mini",   # task model
+    model="openai/gpt-4o-mini",  # task model
     reflection_model="openai/gpt-4o",  # reflection model
     project_name="GEPA-Hotpot",
     temperature=0.7,
     max_tokens=400,
 )
-    
+
 multi_metric_objective = opik_optimizer.MultiMetricObjective(
     weights=[0.6, 0.1, 0.3],
     metrics=[levenshtein_ratio, equals, random_metric],

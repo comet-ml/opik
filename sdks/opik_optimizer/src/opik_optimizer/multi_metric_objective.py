@@ -1,19 +1,20 @@
-from typing import Callable, Dict, Any, List, Optional
+from typing import Any
+from collections.abc import Callable
 from opik.evaluation.metrics.score_result import ScoreResult
 
 
 class MultiMetricObjective:
     def __init__(
         self,
-        metrics: List[Callable[[Dict[str, Any], str], ScoreResult]],
-        weights: Optional[List[float]] = None,
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]],
+        weights: list[float] | None = None,
         name: str = "multi_metric_objective",
     ):
         self.metrics = metrics
-        self.weights = weights if weights else [1/len(metrics)] * len(metrics)
+        self.weights = weights if weights else [1 / len(metrics)] * len(metrics)
         self.__name__ = name
-    
-    def __call__(self, dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:        
+
+    def __call__(self, dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         raw_score_results = []
         weighted_score_value = 0
 
