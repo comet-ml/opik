@@ -5,7 +5,6 @@ from tqdm import tqdm
 
 from opik.evaluation.evaluation_result import EvaluationResult
 from .types import (
-    FailureMode,
     RootCauseAnalysis,
     BatchAnalysis,
     HierarchicalRootCauseAnalysis,
