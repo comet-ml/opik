@@ -8,7 +8,8 @@ import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 
-from . import helpers, stream_wrappers
+from . import stream_wrappers
+from .. import types
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
-        helpers.ConverseStreamOutput,
+        types.ConverseStreamOutput,
         None,
     ]:
         DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
@@ -117,7 +118,7 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
             )
 
             output["stream"] = wrapped_stream
-            return cast(helpers.ConverseStreamOutput, output)
+            return cast(types.ConverseStreamOutput, output)
 
         STREAM_NOT_FOUND = None
 

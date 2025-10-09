@@ -1,7 +1,7 @@
 ---
 description: Exception handling and error management patterns for the Python SDK
 globs: sdks/python/src/opik/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK Error Handling Guidelines
 

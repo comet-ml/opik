@@ -555,9 +555,9 @@ navigation:
           - page: Langflow
             path: docs/tracing/integrations/langflow.mdx
             slug: langflow
-          # - page: OpenWebUI
-          #   path: docs/tracing/integrations/openwebui.mdx
-          #   slug: openwebui
+          - page: OpenWebUI
+            path: docs/tracing/integrations/openwebui.mdx
+            slug: openwebui
       - section: Multi-Language
         skip-slug: true
         icon: fa-solid fa-globe
@@ -695,9 +695,15 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
-          - page: Opik Configure
-            path: docs/reference/typescript-sdk/opik-configure.mdx
-            slug: opik-configure
+          - page: Opik TS
+            path: docs/reference/typescript-sdk/opik-ts.mdx
+            slug: opik-ts
+          - page: Prompts
+            path: docs/reference/typescript-sdk/prompts.mdx
+            slug: prompts
+          - page: Opik Query Language (OQL)
+            path: docs/reference/typescript-sdk/opik-query-language.mdx
+            slug: opik-query-language
           - section: Evaluation
             slug: evaluation
             contents:

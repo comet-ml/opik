@@ -15,6 +15,7 @@ export type TagListRendererProps = {
   onAddTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
   align?: "start" | "end";
+  size?: "md" | "sm";
 };
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
@@ -22,10 +23,14 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   onAddTag,
   onDeleteTag,
   align = "end",
+  size = "md",
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [newTag, setNewTag] = useState<string>("");
+
+  const tagSizeClass = size === "sm" ? "w-3" : "w-4";
+  const tagMarginClass = size === "sm" ? "mx-0" : "mx-1";
 
   const handleAddTag = () => {
     if (!newTag) return;
@@ -46,7 +51,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
 
   return (
     <div className="flex min-h-7 w-full flex-wrap items-center gap-1.5 overflow-x-hidden">
-      <Tag className="mx-1 size-4 text-muted-slate" />
+      <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
       {[...tags].sort().map((tag) => {
         return (
           <RemovableTag

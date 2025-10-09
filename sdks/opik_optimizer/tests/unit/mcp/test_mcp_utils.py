@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import tests.unit.mcp.stub_opik  # noqa: F401
+from . import stub_opik  # noqa: F401
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.evolutionary_optimizer import reporting as evo_reporting

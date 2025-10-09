@@ -1,7 +1,7 @@
 ---
 description: Frontend form handling patterns using React Hook Form and Zod
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # Form Handling Patterns
