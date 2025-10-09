@@ -36,7 +36,17 @@ const OptimizationProgressTooltip = React.forwardRef<
   }
 
   const firstItem = payload[0];
-  const allFeedbackScores = firstItem?.payload?.allFeedbackScores || [];
+  const allFeedbackScores = (
+    firstItem?.payload?.allFeedbackScores || []
+  ).sort(
+    (a: { name: string; value: number }, b: { name: string; value: number }) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
+
+  // Filter payload to only show the main objective (not secondary scores)
+  const mainObjectivePayload = payload.filter(
+    (item) => item.name === objectiveName,
+  );
 
   return (
     <Tooltip open>
@@ -54,8 +64,8 @@ const OptimizationProgressTooltip = React.forwardRef<
             )}
 
             <div className="grid gap-1.5">
-              {/* Render objective score (from payload) */}
-              {payload.map((item, idx) => {
+              {/* Render objective score (from payload) - only main objective */}
+              {mainObjectivePayload.map((item, idx) => {
                 const key = `${item.name || item.dataKey || "value"}${idx}`;
                 const itemConfig = getPayloadConfigFromPayload(
                   config,
@@ -104,34 +114,40 @@ const OptimizationProgressTooltip = React.forwardRef<
                     (
                       score: { name: string; value: number },
                       idx: number,
-                    ) => (
-                      <div
-                        key={`${score.name}-${idx}`}
-                        className="flex h-6 w-full flex-wrap items-center gap-1.5 px-2"
-                      >
+                    ) => {
+                      // Get color from config if available, otherwise use default gray
+                      const scoreColor =
+                        config[score.name]?.color || "#64748b";
+
+                      return (
                         <div
-                          className="size-2 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
-                          style={
-                            {
-                              "--color-bg": "#64748b",
-                              "--color-border": "#64748b",
-                            } as React.CSSProperties
-                          }
-                        />
-                        <div className="flex flex-1 items-center justify-between gap-2 leading-none">
-                          <div className="grid gap-1.5">
-                            <span className="comet-body-xs truncate text-muted-slate">
-                              {score.name}
+                          key={`${score.name}-${idx}`}
+                          className="flex h-6 w-full flex-wrap items-center gap-1.5 px-2"
+                        >
+                          <div
+                            className="size-2 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
+                            style={
+                              {
+                                "--color-bg": scoreColor,
+                                "--color-border": scoreColor,
+                              } as React.CSSProperties
+                            }
+                          />
+                          <div className="flex flex-1 items-center justify-between gap-2 leading-none">
+                            <div className="grid gap-1.5">
+                              <span className="comet-body-xs truncate text-muted-slate">
+                                {score.name}
+                              </span>
+                            </div>
+                            <span className="comet-body-xs">
+                              {typeof score.value === "number"
+                                ? score.value.toLocaleString()
+                                : score.value}
                             </span>
                           </div>
-                          <span className="comet-body-xs">
-                            {typeof score.value === "number"
-                              ? score.value.toLocaleString()
-                              : score.value}
-                          </span>
                         </div>
-                      </div>
-                    ),
+                      );
+                    },
                   )}
                 </>
               )}

@@ -24,7 +24,7 @@ const OptimizationProgressChartContainer: React.FC<
   const chartData = useMemo(() => {
     const retVal: ChartData = {
       data: [],
-      line: objectiveName,
+      objectiveName,
     };
 
     experiments
