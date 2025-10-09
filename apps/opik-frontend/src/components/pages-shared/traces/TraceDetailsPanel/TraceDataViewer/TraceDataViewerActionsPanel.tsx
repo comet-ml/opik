@@ -24,9 +24,16 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
   const annotationCount = data.feedback_scores?.length;
   const commentsCount = data.comments?.length;
 
+  const isSpan = "span_id" in data;
+  const dataType = isSpan ? "spans" : "traces";
+
   return (
     <>
-      <AddToDropdown rows={rows} />
+      <AddToDropdown
+        getDataForExport={async () => rows}
+        selectedRows={rows}
+        dataType={dataType}
+      />
 
       <DetailsActionSectionToggle
         activeSection={activeSection}
