@@ -110,7 +110,7 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
 
 @contextmanager
 def display_evaluation(
-    message: str = "First we will establish the baseline performance:", 
+    message: str = "First we will establish the baseline performance:",
     verbose: int = 1,
     indent: str = "> "
 ) -> Any:
