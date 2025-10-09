@@ -992,6 +992,7 @@ class AlertResourceTest {
                     .build();
             alert = alert.toBuilder()
                     .webhook(webhook)
+                    .enabled(true)
                     .triggers(List.of(AlertTrigger.builder()
                             .eventType(PROMPT_CREATED)
                             .build()))
