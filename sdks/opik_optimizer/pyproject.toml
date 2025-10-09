@@ -16,7 +16,7 @@ dependencies = [
     "gepa>=0.0.7",
     "ujson",
     "hf_xet",
-    "litellm",
+    "litellm<=1.75.6",
     "mcp>=1.0.0",
     "opik>=1.7.17",
     "optuna",
