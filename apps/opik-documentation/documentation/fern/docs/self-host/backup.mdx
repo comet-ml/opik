@@ -256,12 +256,12 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: clickhouse-backup-tool-job
-spec:
+spec :
   schedule: "0 2 * * *" # Daily at 2 AM
   jobTemplate:
-    spec:
+    spec :
       template:
-        spec:
+        spec :
           containers:
             - name: backup-tool
               image: altinity/clickhouse-backup:2.6.23

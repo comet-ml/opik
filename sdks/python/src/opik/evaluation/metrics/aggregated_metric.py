@@ -8,14 +8,43 @@ from . import arguments_helpers, arguments_validator, base_metric, score_result
 class AggregatedMetric(
     base_metric.BaseMetric, arguments_validator.ScoreArgumentsValidator
 ):
-    """A metric that aggregates results obtained from a list of provided metrics using specified aggregation function.
+    """
+    Combine the output of multiple metrics into a single aggregated ``ScoreResult``.
+
+    Each metric in ``metrics`` is executed with the provided scoring kwargs, then the
+    ``aggregator`` callback decides how to merge the individual results. This is
+    handy for building ensembles such as min/max, weighted averages, or custom
+    pass/fail checks without re-implementing the metrics themselves.
 
     Args:
-        name: The name of the metric.
-        metrics: A list of concrete metric instances that inherit the `opik.evaluation.base_metric.BaseMetric`.
-        aggregator: The aggregation function to use for evaluation.
-        track: Whether to track the metric. Defaults to True.
-        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
+        name: Display name for the aggregated metric result.
+        metrics: Ordered list of metric instances that should be executed.
+        aggregator: Callable receiving the list of ``ScoreResult`` objects and
+            returning the final aggregated ``ScoreResult``.
+        track: Whether to automatically track the metric in Opik. Defaults to
+            ``True``.
+        project_name: Optional tracking project used when no parent context exists.
+
+    Example:
+        >>> from opik.evaluation.metrics import AggregatedMetric, Contains, RegexMatch
+        >>> metrics = [Contains(track=False), RegexMatch(pattern=r"\\d+", track=False)]
+        >>> from opik.evaluation.metrics import score_result
+        >>> def combine(results):
+        ...     score = sum(result.value for result in results) / len(results)
+        ...     return score_result.ScoreResult(
+        ...         name="combined_contains_regex",
+        ...         value=score,
+        ...         reason="Average of contains and regex checks",
+        ...     )
+        >>> metric = AggregatedMetric(
+        ...     name="combined_contains_regex",
+        ...     metrics=metrics,
+        ...     aggregator=combine,
+        ... )
+        >>> response = "Order number 12345 confirmed"
+        >>> result = metric.score(output=response, reference="order")
+        >>> float(result.value)  # doctest: +SKIP
+        1.0
     """
 
     def __init__(
