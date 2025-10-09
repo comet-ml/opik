@@ -21,6 +21,7 @@ type Args = {
   forceInstall?: boolean;
   installDir?: string;
   default?: boolean;
+  useLocal?: boolean;
 };
 
 export async function runWizard(argv: Args) {
@@ -52,6 +53,7 @@ export async function runWizard(argv: Args) {
     forceInstall: finalArgs.forceInstall ?? false,
     installDir: resolvedInstallDir,
     default: finalArgs.default ?? false,
+    useLocal: finalArgs.useLocal ?? false,
   };
 
   analytics.setTag('debug', wizardOptions.debug);

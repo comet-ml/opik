@@ -70,7 +70,7 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
 
   debug('Getting project data');
   const { projectApiKey, host, workspaceName, projectName, deploymentType } =
-    await getOrAskForProjectData();
+    await getOrAskForProjectData({ useLocal: options.useLocal });
   debug(
     `Project data obtained: deploymentType=${deploymentType}, workspace=${workspaceName}, project=${projectName}`,
   );
