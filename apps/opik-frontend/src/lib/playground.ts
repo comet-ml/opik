@@ -8,6 +8,7 @@ import {
   DEFAULT_VERTEX_AI_CONFIGS,
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
+import { getDefaultTemperatureForModel } from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
   LLMGeminiConfigsType,
@@ -28,10 +29,11 @@ import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming
 
 export const getDefaultConfigByProvider = (
   provider?: PROVIDER_TYPE | "",
+  model?: PROVIDER_MODEL_TYPE | "",
 ): LLMPromptConfigsType => {
   if (provider === PROVIDER_TYPE.OPEN_AI) {
     return {
-      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
+      temperature: getDefaultTemperatureForModel(model),
       maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
@@ -113,7 +115,7 @@ export const generateDefaultPrompt = ({
     messages: [generateDefaultLLMPromptMessage()],
     model: modelByDefault,
     provider,
-    configs: getDefaultConfigByProvider(provider),
+    configs: getDefaultConfigByProvider(provider, modelByDefault),
     ...initPrompt,
     id: generateRandomString(),
   };
