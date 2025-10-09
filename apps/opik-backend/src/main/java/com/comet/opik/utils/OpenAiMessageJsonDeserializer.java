@@ -12,10 +12,10 @@ import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.chat.SystemMessage;
 import dev.langchain4j.model.openai.internal.chat.ToolMessage;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
-import java.util.Locale;
 
 /**
  * The Message interface of openai4j has not appropriate deserialization support for all its polymorphic implementors
@@ -23,6 +23,7 @@ import java.util.Locale;
  * As we can't annotate them Message interface with JsonTypeInfo and JsonSubTypes, solving this issue by creating
  * a custom deserializer.
  */
+@Slf4j
 public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
 
     public static final OpenAiMessageJsonDeserializer INSTANCE = new OpenAiMessageJsonDeserializer();
@@ -40,15 +41,15 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
         };
     }
 
-    private UserMessage deserializeUserMessage(JsonNode jsonNode) throws IOException {
+    private UserMessage deserializeUserMessage(JsonNode jsonNode) {
         var builder = UserMessage.builder();
 
-        JsonNode nameNode = jsonNode.get("name");
+        var nameNode = jsonNode.get("name");
         if (nameNode != null && !nameNode.isNull()) {
             builder.name(nameNode.asText());
         }
 
-        JsonNode contentNode = jsonNode.get("content");
+        var contentNode = jsonNode.get("content");
 
         if (contentNode == null || contentNode.isNull()) {
             return builder.build();
@@ -60,18 +61,14 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
         }
 
         if (contentNode.isArray()) {
-            for (JsonNode partNode : contentNode) {
-                String type = partNode.path("type").asText();
-
+            for (var partNode : contentNode) {
+                var type = partNode.path("type").asText();
                 switch (type) {
                     case "text", "input_text" -> builder.addText(partNode.path("text").asText(""));
                     case "image_url" -> handleImageUrlPart(builder, partNode.path("image_url"));
-                    default -> {
-                        // unsupported content type - skip
-                    }
+                    default -> log.warn("Skipping part of user message due to unknown type: '{}", type);
                 }
             }
-
             return builder.build();
         }
 
@@ -84,12 +81,12 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
             return;
         }
 
-        String url = imageUrlNode.path("url").asText(null);
+        var url = imageUrlNode.path("url").asText(null);
         if (StringUtils.isBlank(url)) {
             return;
         }
 
-        String detailText = imageUrlNode.path("detail").asText(null);
+        var detailText = imageUrlNode.path("detail").asText(null);
 
         if (StringUtils.isBlank(detailText)) {
             builder.addImageUrl(url);
@@ -97,9 +94,10 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
         }
 
         try {
-            var detail = ImageDetail.valueOf(detailText.toUpperCase(Locale.ENGLISH));
+            var detail = ImageDetail.valueOf(detailText.toUpperCase());
             builder.addImageUrl(url, detail);
         } catch (IllegalArgumentException exception) {
+            log.warn("Error adding image with url '{}', detail: '{}'", url, detailText);
             builder.addImageUrl(url);
         }
     }

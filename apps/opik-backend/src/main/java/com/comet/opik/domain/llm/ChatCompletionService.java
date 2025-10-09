@@ -45,8 +45,9 @@ public class ChatCompletionService {
         this.retryPolicy = newRetryPolicy();
     }
 
-    public ChatCompletionResponse create(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        request = MessageContentNormalizer.normalizeRequest(request);
+    public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
+        // must be final or effectively final for lambda
+        var request = MessageContentNormalizer.normalizeRequest(rawRequest);
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
         llmProviderClient.validateRequest(request);
@@ -54,9 +55,7 @@ public class ChatCompletionService {
         ChatCompletionResponse chatCompletionResponse;
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-            ChatCompletionRequest finalRequest = request;
-            chatCompletionResponse = retryPolicy.withRetry(
-                    () -> llmProviderClient.generate(finalRequest, workspaceId));
+            chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
         } catch (RuntimeException runtimeException) {
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
@@ -72,13 +71,12 @@ public class ChatCompletionService {
     }
 
     public void createAndStreamResponse(
-            @NonNull ChatCompletionRequest request,
+            @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        request = MessageContentNormalizer.normalizeRequest(request);
+        var request = MessageContentNormalizer.normalizeRequest(rawRequest);
 
-        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
-                request.model());
+        log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
 

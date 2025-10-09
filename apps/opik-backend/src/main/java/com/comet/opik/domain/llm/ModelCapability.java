@@ -1,9 +1,12 @@
 package com.comet.opik.domain.llm;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import lombok.NonNull;
+import lombok.Builder;
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record ModelCapability(@NonNull String name, @NonNull String litellmProvider, boolean supportsVision) {
+@JsonIgnoreProperties(ignoreUnknown = true)
+@Builder(toBuilder = true)
+public record ModelCapability(String name, String litellmProvider, boolean supportsVision) {
 }

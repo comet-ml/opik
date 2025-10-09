@@ -1,9 +1,7 @@
 package com.comet.opik.domain.llm;
 
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
-import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest.Builder;
 import dev.langchain4j.model.openai.internal.chat.Content;
-import dev.langchain4j.model.openai.internal.chat.ContentType;
 import dev.langchain4j.model.openai.internal.chat.ImageUrl;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
@@ -11,10 +9,10 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.tika.utils.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 @Slf4j
 @UtilityClass
@@ -23,13 +21,12 @@ public class MessageContentNormalizer {
     public static final String IMAGE_PLACEHOLDER_START = "<<<image>>>";
     public static final String IMAGE_PLACEHOLDER_END = "<<</image>>>";
 
-    public static ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request) {
+    public ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request) {
         boolean allowStructuredContent = ModelCapabilities.supportsVision(request.model());
         return normalizeRequest(request, allowStructuredContent);
     }
 
-    static ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request,
-            boolean allowStructuredContent) {
+    private ChatCompletionRequest normalizeRequest(ChatCompletionRequest request, boolean allowStructuredContent) {
         if (allowStructuredContent) {
             return request;
         }
@@ -38,7 +35,7 @@ public class MessageContentNormalizer {
             return request;
         }
 
-        boolean needsNormalization = request.messages().stream()
+        var needsNormalization = request.messages().stream()
                 .anyMatch(message -> message instanceof UserMessage userMessage
                         && !(userMessage.content() instanceof String));
 
@@ -46,8 +43,8 @@ public class MessageContentNormalizer {
             return request;
         }
 
-        List<Message> normalizedMessages = new ArrayList<>(request.messages().size());
-        for (Message message : request.messages()) {
+        var normalizedMessages = new ArrayList<Message>(request.messages().size());
+        for (var message : request.messages()) {
             if (message instanceof UserMessage userMessage) {
                 normalizedMessages.add(normalizeUserMessage(userMessage));
             } else {
@@ -55,7 +52,7 @@ public class MessageContentNormalizer {
             }
         }
 
-        Builder builder = ChatCompletionRequest.builder().from(request);
+        var builder = ChatCompletionRequest.builder().from(request);
         builder.messages(normalizedMessages);
         return builder.build();
     }
@@ -66,8 +63,8 @@ public class MessageContentNormalizer {
         }
 
         if (rawContent instanceof List<?> list) {
-            StringBuilder builder = new StringBuilder();
-            for (Object item : list) {
+            var builder = new StringBuilder();
+            for (var item : list) {
                 if (item instanceof Content content) {
                     builder.append(renderContent(content));
                 }
@@ -78,9 +75,9 @@ public class MessageContentNormalizer {
         return String.valueOf(rawContent);
     }
 
-    private static Message normalizeUserMessage(@NonNull UserMessage userMessage) {
-        String flattened = flattenContent(userMessage.content());
-        UserMessage.Builder builder = UserMessage.builder();
+    private Message normalizeUserMessage(UserMessage userMessage) {
+        var flattened = flattenContent(userMessage.content());
+        var builder = UserMessage.builder();
 
         if (userMessage.name() != null) {
             builder.name(userMessage.name());
@@ -90,25 +87,25 @@ public class MessageContentNormalizer {
         return builder.build();
     }
 
-    private static String renderContent(@NonNull Content content) {
-        ContentType type = content.type();
+    private String renderContent(Content content) {
+        var type = content.type();
         if (type == null) {
             return "";
         }
 
-        String normalized = type.name().toLowerCase(Locale.getDefault());
+        var normalized = type.name().toLowerCase();
         return switch (normalized) {
-            case "text" -> content.text() == null ? "" : content.text();
+            case "text" -> StringUtils.isBlank(content.text()) ? "" : content.text();
             case "image_url" -> renderImagePlaceholder(content.imageUrl());
             default -> {
-                log.debug("Skipping unknown content type during normalization: {}", normalized);
+                log.warn("Skipping unknown content type during normalization: '{}'", normalized);
                 yield "";
             }
         };
     }
 
-    private static String renderImagePlaceholder(ImageUrl imageUrl) {
-        if (imageUrl == null || imageUrl.getUrl() == null || imageUrl.getUrl().isBlank()) {
+    private String renderImagePlaceholder(ImageUrl imageUrl) {
+        if (imageUrl == null || StringUtils.isBlank(imageUrl.getUrl())) {
             return "";
         }
 

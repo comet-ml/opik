@@ -27,6 +27,7 @@ import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.StringEscapeUtils;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -69,7 +70,7 @@ public class OnlineScoringEngine {
      * Trace variables and with the proper structured output format.
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
-     * @param trace the sampled Trace to be scored
+     * @param trace         the sampled Trace to be scored
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
@@ -85,7 +86,7 @@ public class OnlineScoringEngine {
      * Trace variables and with the proper structured output format.
      *
      * @param evaluatorCode the LLM-as-Judge 'code'
-     * @param traces the sampled traces from the trace threads to be scored
+     * @param traces        the sampled traces from the trace threads to be scored
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareThreadLlmRequest(
@@ -219,27 +220,27 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    private static UserMessage buildUserMessage(String content) {
-        Matcher matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
-        boolean foundAny = false;
+    private UserMessage buildUserMessage(String content) {
+        var matcher = IMAGE_PLACEHOLDER_PATTERN.matcher(content);
+        var foundAny = false;
 
-        UserMessage.Builder builder = UserMessage.builder();
-        int lastIndex = 0;
+        var builder = UserMessage.builder();
+        var lastIndex = 0;
 
         while (matcher.find()) {
             foundAny = true;
 
             if (matcher.start() > lastIndex) {
-                String textSegment = content.substring(lastIndex, matcher.start());
+                var textSegment = content.substring(lastIndex, matcher.start());
                 appendTextContent(builder, textSegment);
             }
 
-            String url = matcher.group(1).trim();
+            var url = matcher.group(1).trim();
             if (!url.isEmpty()) {
                 // Unescape HTML entities for backward compatibility with templates using {{variable}}
                 // RECOMMENDED: Use {{{variable}}} (triple braces) or {{&variable}} in Mustache templates
                 // to prevent HTML escaping of URLs in the first place
-                String unescapedUrl = unescapeHtmlEntities(url);
+                var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
                 builder.addContent(ImageContent.from(unescapedUrl));
             }
 
@@ -251,47 +252,17 @@ public class OnlineScoringEngine {
         }
 
         if (lastIndex < content.length()) {
-            String trailingText = content.substring(lastIndex);
+            var trailingText = content.substring(lastIndex);
             appendTextContent(builder, trailingText);
         }
 
         return builder.build();
     }
 
-    private static void appendTextContent(UserMessage.Builder builder, String textSegment) {
+    private void appendTextContent(UserMessage.Builder builder, String textSegment) {
         if (StringUtils.isNotBlank(textSegment)) {
             builder.addContent(TextContent.from(textSegment));
         }
-    }
-
-    /**
-     * Unescapes common HTML entities that may be present in URLs due to Mustache template rendering.
-     *
-     * <p>This method provides backward compatibility for templates using {{variable}} syntax, which causes
-     * Mustache to HTML-escape special characters (&, =, etc.) in URLs.
-     *
-     * <p><strong>RECOMMENDED APPROACH:</strong> Use Mustache's unescaped output syntax in templates:
-     * <ul>
-     *   <li>{{{variable}}} - Triple braces (unescaped output)</li>
-     *   <li>{{&variable}} - Ampersand prefix (unescaped output)</li>
-     * </ul>
-     *
-     * <p>Example template with proper unescaped syntax:
-     * <pre>{@code
-     * <<<image>>>{{{trace.input.image_url}}}<<</image>>>
-     * }</pre>
-     *
-     * @param text the text containing HTML entities
-     * @return the text with HTML entities unescaped
-     */
-    private static String unescapeHtmlEntities(String text) {
-        return text
-                .replace("&amp;", "&")
-                .replace("&#61;", "=")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">");
     }
 
     private static String extractFromJson(JsonNode json, String path) {

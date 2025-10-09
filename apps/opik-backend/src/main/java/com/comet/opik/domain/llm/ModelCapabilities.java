@@ -4,95 +4,87 @@ import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
+import lombok.experimental.UtilityClass;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
-@Slf4j
-public final class ModelCapabilities {
+@UtilityClass
+public class ModelCapabilities {
 
-    private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = buildNormalizedIndex(
-            loadCapabilities());
+    private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 
-    private ModelCapabilities() {
+    public boolean supportsVision(String modelName) {
+        return find(modelName).map(ModelCapability::supportsVision).orElse(false);
     }
 
-    public static Optional<ModelCapability> find(String modelName) {
-        if (modelName == null || modelName.isBlank()) {
+    private Optional<ModelCapability> find(String modelName) {
+        if (StringUtils.isBlank(modelName)) {
             return Optional.empty();
         }
 
-        for (String candidate : candidateKeys(modelName)) {
-            Optional<ModelCapability> found = Optional.ofNullable(CAPABILITIES_BY_NORMALIZED_NAME.get(candidate));
-            if (found.isPresent()) {
-                return found;
+        for (var candidate : candidateKeys(modelName)) {
+            var found = CAPABILITIES_BY_NORMALIZED_NAME.get(candidate);
+            if (found != null) {
+                return Optional.of(found);
             }
         }
         return Optional.empty();
     }
 
-    public static boolean supportsVision(String modelName) {
-        return find(modelName).map(ModelCapability::supportsVision).orElse(false);
-    }
-
-    private static Map<String, ModelCapability> loadCapabilities() {
+    private Map<String, ModelCapability> loadCapabilities() {
         try {
             Map<String, ModelCostData> rawData = JsonUtils.readJsonFile(CostService.MODEL_PRICES_FILE,
                     new TypeReference<>() {
                     });
             if (rawData.isEmpty()) {
                 throw new IllegalStateException(
-                        "Model prices file '" + CostService.MODEL_PRICES_FILE + "' did not contain any entries");
+                        "No entries found in model prices file '%s'".formatted(CostService.MODEL_PRICES_FILE));
             }
 
-            Map<String, ModelCapability> capabilities = new HashMap<>();
+            var capabilities = new HashMap<String, ModelCapability>();
             rawData.forEach((modelName, modelData) -> {
-                if (modelName == null || modelName.isBlank()) {
+                if (StringUtils.isBlank(modelName)) {
                     return;
                 }
 
-                String canonicalName = modelName.trim();
-                boolean supportsVision = Boolean.TRUE.equals(modelData.supportsVision());
-                String provider = Optional.ofNullable(modelData.litellmProvider()).orElse("");
-
-                capabilities.put(canonicalName, new ModelCapability(canonicalName, provider, supportsVision));
+                var normalizedName = normalize(modelName);
+                var canonicalName = modelName.trim();
+                capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
+                        .name(canonicalName)
+                        .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
+                        .supportsVision(modelData.supportsVision())
+                        .build());
             });
 
             return Collections.unmodifiableMap(capabilities);
         } catch (IOException exception) {
-            throw new IllegalStateException(
-                    "Failed to load model capabilities from '" + CostService.MODEL_PRICES_FILE + "'", exception);
+            throw new UncheckedIOException(
+                    "Failed to load model capabilities from file '%s'".formatted(CostService.MODEL_PRICES_FILE),
+                    exception);
         }
     }
 
-    private static Map<String, ModelCapability> buildNormalizedIndex(
-            @NonNull Map<String, ModelCapability> capabilities) {
-        Map<String, ModelCapability> normalized = new HashMap<>();
-        capabilities.forEach((name, capability) -> normalized.putIfAbsent(normalize(name), capability));
-        return Collections.unmodifiableMap(normalized);
-    }
-
-    private static List<String> candidateKeys(@NonNull String modelName) {
-        Set<String> candidates = new LinkedHashSet<>();
-        String normalized = normalize(modelName);
+    private List<String> candidateKeys(String modelName) {
+        var candidates = new HashSet<String>();
+        var normalized = normalize(modelName);
         candidates.add(normalized);
 
-        int slashIndex = normalized.lastIndexOf('/') + 1;
+        var slashIndex = normalized.lastIndexOf('/') + 1;
         if (slashIndex > 0 && slashIndex < normalized.length()) {
             candidates.add(normalized.substring(slashIndex));
         }
 
-        int colonIndex = normalized.indexOf(':');
+        var colonIndex = normalized.indexOf(':');
         if (colonIndex > 0) {
             candidates.add(normalized.substring(0, colonIndex));
 
@@ -104,7 +96,7 @@ public final class ModelCapabilities {
         return new ArrayList<>(candidates);
     }
 
-    private static String normalize(@NonNull String modelName) {
-        return modelName.trim().toLowerCase(Locale.getDefault());
+    private String normalize(String modelName) {
+        return modelName.trim().toLowerCase();
     }
 }

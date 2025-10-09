@@ -102,8 +102,8 @@ interface LlmProviderAnthropicMapper {
     }
 
     default AnthropicMessageContent toAnthropicMessageContent(@NonNull Object rawContent) {
-        String flattened = MessageContentNormalizer.flattenContent(rawContent);
-        return new AnthropicTextContent(flattened);
+        var content = MessageContentNormalizer.flattenContent(rawContent);
+        return new AnthropicTextContent(content);
     }
 
     default AnthropicTextContent mapToSystemMessage(@NonNull Message message) {
