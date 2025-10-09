@@ -7,20 +7,18 @@ import SMEFlowLayout from "../SMEFlowLayout";
 import ReturnToAnnotationQueueButton from "../ReturnToAnnotationQueueButton";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { HotkeyDisplay } from "@/components/ui/hotkey-display";
 import CommentAndScoreViewer from "@/components/pages/SMEFlowPage/AnnotationView/CommentAndScoreViewer";
 import ValidationAlert from "./ValidationAlert";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useSMEFlow } from "../SMEFlowContext";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
 import ThreadDataViewer from "./ThreadDataViewer";
+import { SME_ACTION, SME_HOTKEYS } from "../hotkeys";
 
 interface AnnotationViewProps {
   header: React.ReactNode;
 }
-
-const LEFT_HOTKEYS = ["←"];
-const RIGHT_HOTKEYS = ["→"];
-const ENTER_HOTKEYS = ["Enter"];
 
 const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   header,
@@ -40,7 +38,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   const isFirstItem = currentIndex === 0;
 
   useHotkeys(
-    "ArrowLeft",
+    SME_HOTKEYS[SME_ACTION.PREVIOUS].key,
     (keyboardEvent: KeyboardEvent) => {
       keyboardEvent.preventDefault();
       if (!isFirstItem) {
@@ -51,7 +49,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   );
 
   useHotkeys(
-    "ArrowRight",
+    SME_HOTKEYS[SME_ACTION.NEXT].key,
     (keyboardEvent: KeyboardEvent) => {
       keyboardEvent.preventDefault();
       if (!isLastItem) {
@@ -62,7 +60,7 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
   );
 
   useHotkeys(
-    "Enter",
+    SME_HOTKEYS[SME_ACTION.DONE].key,
     (keyboardEvent: KeyboardEvent) => {
       keyboardEvent.preventDefault();
       if (validationState.canSubmit) {
@@ -84,7 +82,10 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
             <div className="comet-body-s flex items-center text-light-slate">
               {currentIndex + 1} of {queueItems.length}
             </div>
-            <TooltipWrapper content="Previous item" hotkeys={LEFT_HOTKEYS}>
+            <TooltipWrapper
+              content="Previous item"
+              hotkeys={[SME_HOTKEYS[SME_ACTION.PREVIOUS].display]}
+            >
               <Button
                 variant="outline"
                 onClick={handlePrevious}
@@ -92,27 +93,47 @@ const AnnotationView: React.FunctionComponent<AnnotationViewProps> = ({
               >
                 <ChevronLeft className="mr-2 size-4" />
                 Previous
+                <HotkeyDisplay
+                  hotkey={SME_HOTKEYS[SME_ACTION.PREVIOUS].display}
+                  variant="outline"
+                  size="sm"
+                  className="ml-2"
+                />
               </Button>
             </TooltipWrapper>
-            <TooltipWrapper content="Skip to next item" hotkeys={RIGHT_HOTKEYS}>
+            <TooltipWrapper
+              content="Next item"
+              hotkeys={[SME_HOTKEYS[SME_ACTION.NEXT].display]}
+            >
               <Button
                 variant="outline"
                 onClick={handleNext}
                 disabled={isLastItem}
               >
-                Skip
+                <HotkeyDisplay
+                  hotkey={SME_HOTKEYS[SME_ACTION.NEXT].display}
+                  variant="outline"
+                  size="sm"
+                  className="mr-2"
+                />
+                Next
                 <ChevronRight className="ml-2 size-4" />
               </Button>
             </TooltipWrapper>
             <TooltipWrapper
               content="Submit and continue"
-              hotkeys={ENTER_HOTKEYS}
+              hotkeys={[SME_HOTKEYS[SME_ACTION.DONE].display]}
             >
               <Button
                 onClick={handleSubmit}
                 disabled={!validationState.canSubmit}
               >
                 {isLastUnprocessedItem ? "Submit & Complete" : "Submit + Next"}
+                <HotkeyDisplay
+                  hotkey={SME_HOTKEYS[SME_ACTION.DONE].display}
+                  size="sm"
+                  className="ml-2"
+                />
               </Button>
             </TooltipWrapper>
           </div>

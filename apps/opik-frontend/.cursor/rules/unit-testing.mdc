@@ -1,7 +1,7 @@
 ---
 description: Unit testing guidelines and patterns for complex cases using Vitest
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # Unit Testing Guidelines

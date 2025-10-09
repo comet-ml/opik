@@ -74,7 +74,7 @@ Make your desired code changes, additions, or bug fixes within the `sdks/python`
 
 ### 5. Test Your Changes
 
-Testing is crucial. For most SDK contributions, you should run the end-to-end (e2e) tests:
+Testing is crucial. For most SDK contributions, you should run the unit and the end-to-end (e2e) tests:
 
 ```bash
 cd sdks/python # Ensure you are in this directory
@@ -85,15 +85,18 @@ pip install -r tests/test_requirements.txt
 # Install pre-commit for linting checks (optional but good practice)
 pip install pre-commit
 
+# Run unit tests
+python3 -m pytest -vv tests/unit/
+
 # Run e2e tests
-pytest tests/e2e
+python3 -m pytest -vv tests/e2e/
 ```
 
 If you're making changes to specific integrations (e.g., OpenAI, Anthropic):
 
 1. Install the integration-specific requirements: `pip install -r tests/integrations/openai/requirements.txt` (example for OpenAI).
 2. Configure any necessary API keys for the integration as environment variables or per your test setup.
-3. Run the specific integration tests: `pytest tests/integrations/openai` (example for OpenAI).
+3. Run the specific integration tests: `python3 -m pytest tests/integrations/openai/` (example for OpenAI).
 
 ### 6. Run Linters
 

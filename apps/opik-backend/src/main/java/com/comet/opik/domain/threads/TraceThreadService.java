@@ -1,6 +1,5 @@
 package com.comet.opik.domain.threads;
 
-import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
@@ -107,8 +106,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     Instant lastUpdatedAt = threadIdAndLastUpdateAt.getValue();
 
                     return traceThreadIdService.getOrCreateTraceThreadId(workspaceId, projectId, threadId)
-                            .flatMap(traceThreadId -> mapToModelWithExecutionData(traceThreadId, userName,
-                                    lastUpdatedAt, projectId));
+                            .map(traceThreadId -> mapToModel(traceThreadId, userName, lastUpdatedAt));
                 }));
     }
 
@@ -173,45 +171,9 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 LOCK_DURATION);
     }
 
-    private Mono<TraceThreadModel> mapToModelWithExecutionData(TraceThreadIdModel traceThread, String userName,
-            Instant lastUpdatedAt, UUID projectId) {
-        // Fetch execution time data reactively from TraceService
-        return traceService.getThreadById(traceThread.projectId(), traceThread.threadId())
-                .map(enrichedThread -> {
-                    log.info("Found execution time data for thread '{}' - duration: '{}' ms",
-                            traceThread.threadId(), enrichedThread.duration());
-
-                    return TraceThreadModel.builder()
-                            .id(traceThread.id())
-                            .projectId(traceThread.projectId())
-                            .threadId(traceThread.threadId())
-                            .status(TraceThreadStatus.ACTIVE)
-                            .createdBy(traceThread.createdBy())
-                            .lastUpdatedBy(userName)
-                            .createdAt(traceThread.createdAt())
-                            .lastUpdatedAt(lastUpdatedAt)
-                            .tags(Set.of())
-                            .sampling(Map.of())
-                            .scoredAt(null)
-                            .startTime(enrichedThread.startTime())
-                            .endTime(enrichedThread.endTime())
-                            .duration(enrichedThread.duration())
-                            .firstMessage(enrichedThread.firstMessage() != null
-                                    ? enrichedThread.firstMessage().toString()
-                                    : null)
-                            .lastMessage(enrichedThread.lastMessage() != null
-                                    ? enrichedThread.lastMessage().toString()
-                                    : null)
-                            .numberOfMessages(enrichedThread.numberOfMessages())
-                            .feedbackScores(enrichedThread.feedbackScores() != null
-                                    ? enrichedThread.feedbackScores().stream()
-                                            .collect(Collectors.toMap(FeedbackScore::name,
-                                                    score -> score.value().intValue()))
-                                    : Map.of())
-                            .build();
-                })
-                .onErrorReturn(TraceThreadMapper.INSTANCE.mapFromThreadIdModel(traceThread, userName,
-                        TraceThreadStatus.ACTIVE, lastUpdatedAt));
+    private TraceThreadModel mapToModel(TraceThreadIdModel traceThread, String userName, Instant lastUpdatedAt) {
+        return TraceThreadMapper.INSTANCE.mapFromThreadIdModel(traceThread, userName, TraceThreadStatus.ACTIVE,
+                lastUpdatedAt);
     }
 
     private Mono<Void> saveTraceThreads(UUID projectId, List<TraceThreadModel> traceThreads) {
@@ -276,15 +238,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
     private Mono<Map.Entry<Long, List<TraceThreadModel>>> saveThreads(List<TraceThreadModel> traceThreads,
             List<TraceThreadModel> existingThreads) {
 
-        log.info("saveThreads - Input threads count: {}, Existing threads count: {}", traceThreads.size(),
-                existingThreads.size());
-
-        // Debug log the input thread data
-        for (TraceThreadModel inputThread : traceThreads) {
-            log.info("Input thread '{}' - duration: '{}', startTime: '{}', endTime: '{}'",
-                    inputThread.id(), inputThread.duration(), inputThread.startTime(), inputThread.endTime());
-        }
-
         Map<UUID, TraceThreadModel> threadModelMap = existingThreads.stream()
                 .collect(Collectors.toMap(TraceThreadModel::id, Function.identity()));
 
@@ -293,27 +246,11 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     TraceThreadModel existingThread = threadModelMap.get(thread.id());
 
                     if (existingThread != null) {
-                        // Update existing thread with new values, preserving execution time data from input thread
+                        // Update existing thread with new values
                         return existingThread.toBuilder()
                                 .status(thread.status())
                                 .lastUpdatedBy(thread.lastUpdatedBy())
                                 .lastUpdatedAt(thread.lastUpdatedAt())
-                                .startTime(thread.startTime() != null ? thread.startTime() : existingThread.startTime())
-                                .endTime(thread.endTime() != null ? thread.endTime() : existingThread.endTime())
-                                .duration(thread.duration() != null ? thread.duration() : existingThread.duration())
-                                .feedbackScores(thread.feedbackScores() != null
-                                        ? thread.feedbackScores()
-                                        : existingThread.feedbackScores())
-                                .firstMessage(thread.firstMessage() != null
-                                        ? thread.firstMessage()
-                                        : existingThread.firstMessage())
-                                .lastMessage(thread.lastMessage() != null
-                                        ? thread.lastMessage()
-                                        : existingThread.lastMessage())
-                                .numberOfMessages(thread.numberOfMessages() != null
-                                        ? thread.numberOfMessages()
-                                        : existingThread.numberOfMessages())
-                                .tags(thread.tags() != null ? thread.tags() : existingThread.tags())
                                 .scoredAt(null) // Reset scoredAt to null for reopened threads
                                 .build();
                     }
@@ -510,10 +447,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
         log.warn("Creating a new thread with id '{}' for threadId '{}' and projectId: '{}'",
                 traceThread.threadModelId(), threadId, projectId);
 
-        // Debug logging to see what execution time data is available
-        log.info("TraceThread DTO data - startTime: '{}', endTime: '{}', duration: '{}' ms",
-                traceThread.startTime(), traceThread.endTime(), traceThread.duration());
-
         List<TraceThreadModel> traceThreads = List.of(TraceThreadModel.builder()
                 .projectId(projectId)
                 .threadId(threadId)
@@ -523,19 +456,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .lastUpdatedBy(userName)
                 .createdAt(traceThread.createdAt())
                 .lastUpdatedAt(Instant.now())
-                .startTime(traceThread.startTime())
-                .endTime(traceThread.endTime())
-                .duration(traceThread.duration())
-                .feedbackScores(traceThread.feedbackScores() != null
-                        ? traceThread.feedbackScores().stream()
-                                .collect(Collectors.toMap(FeedbackScore::name, score -> score.value().intValue()))
-                        : Map.of())
-                .firstMessage(traceThread.firstMessage() != null ? traceThread.firstMessage().toString() : null)
-                .lastMessage(traceThread.lastMessage() != null ? traceThread.lastMessage().toString() : null)
-                .numberOfMessages(traceThread.numberOfMessages())
-                .tags(traceThread.tags())
-                .sampling(Map.of())
-                .scoredAt(null)
                 .build());
 
         return traceThreadDAO

@@ -1,7 +1,7 @@
 ---
 description: Logging guidelines for Opik backend
 globs: **/*.java
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Logging Guidelines

@@ -53,7 +53,7 @@ public class WebhookHttpClient {
      * @param event The webhook event to send
      * @return A Mono that completes when the webhook is successfully sent or fails permanently
      */
-    public Mono<Void> sendWebhook(@NonNull WebhookEvent<?> event) {
+    public Mono<Response> sendWebhook(@NonNull WebhookEvent<?> event) {
         log.info("Sending webhook event '{}' to URL: '{}'", event.getId(), event.getUrl());
 
         return Mono.deferContextual(ctx -> performWebhookRequest(event)
@@ -65,8 +65,7 @@ public class WebhookHttpClient {
                 .retryWhen(createRetrySpec(event.getMaxRetries()))
                 .doOnError(throwable -> logError(event,
                         ctx.get(RequestContext.WORKSPACE_ID),
-                        "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable))
-                .then());
+                        "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable)));
     }
 
     private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {
