@@ -15,6 +15,7 @@ import java.util.UUID;
 public record AutomationRuleEvaluatorCriteria(
         AutomationRuleEvaluatorType type,
         String id,
+        String name,
         Set<UUID> ids,
         List<? extends Filter> filters) {
 

@@ -56,6 +56,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
+            <if(name)> AND rule.name like concat('%', :name, '%') <endif>
             <if(filters)> AND <filters> <endif>
             <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
             <if(limit)> LIMIT :limit <endif>
@@ -69,6 +70,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
             @Define("id") @Bind("id") String id,
+            @Define("name") @Bind("name") String name,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping,
@@ -79,7 +81,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
         return find(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
-                sortingFields, filters, filterMapping, offset, limit);
+                criteria.name(), sortingFields, filters, filterMapping, offset, limit);
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
@@ -97,6 +99,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
+            <if(name)> AND rule.name like concat('%', :name, '%') <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -106,12 +109,14 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             @Bind("action") AutomationRule.AutomationRuleAction action,
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-            @Define("id") @Bind("id") String id);
+            @Define("id") @Bind("id") String id,
+            @Define("name") @Bind("name") String name);
 
     default long findCount(String workspaceId,
             UUID projectId,
             AutomationRuleEvaluatorCriteria criteria) {
-        return findCount(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.id());
+        return findCount(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
+                criteria.name());
     }
 
     @SqlUpdate("""

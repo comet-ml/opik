@@ -61,8 +61,8 @@ public interface AutomationRuleEvaluatorService {
     void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluatorPage find(UUID projectId, @NonNull String workspaceId,
-            String id, List<? extends Filter> filters, String sortingFieldsSql, List<String> sortableBy, int page,
-            int size);
+            String id, String name, List<? extends Filter> filters, String sortingFieldsSql, List<String> sortableBy,
+            int page, int size);
 
     <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId);
 
@@ -290,13 +290,15 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     public AutomationRuleEvaluatorPage find(UUID projectId,
             @NonNull String workspaceId,
             String id,
+            String name,
             List<? extends Filter> filters,
             String sortingFieldsSql,
             List<String> sortableBy,
             int pageNum, int size) {
 
-        log.debug("Finding AutomationRuleEvaluators with id pattern '{}' in projectId '{}' and workspaceId '{}'",
-                id, projectId, workspaceId);
+        log.debug(
+                "Finding AutomationRuleEvaluators with id pattern '{}', name pattern '{}' in projectId '{}' and workspaceId '{}'",
+                id, name, projectId, workspaceId);
 
         String filtersSQL = Optional.ofNullable(filters)
                 .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.AUTOMATION_RULE_EVALUATOR))
@@ -310,6 +312,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder()
                     .id(id)
+                    .name(name)
                     .filters(filters)
                     .build();
             var total = dao.findCount(workspaceId, projectId, criteria);

@@ -75,6 +75,7 @@ public class AutomationRuleEvaluatorsResource {
     @JsonView(View.Public.class)
     public Response find(@QueryParam("project_id") UUID projectId,
             @QueryParam("id") String id,
+            @QueryParam("name") String name,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -89,7 +90,7 @@ public class AutomationRuleEvaluatorsResource {
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields, sortingFactory.getFieldMapping());
         List<String> sortableBy = sortingFactory.getSortableFields();
 
-        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(projectId, workspaceId, id, queryFilters,
+        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(projectId, workspaceId, id, name, queryFilters,
                 sortingFieldsSql, sortableBy, page, size);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 evaluatorPage.size(), projectId, workspaceId, page, evaluatorPage.total());
