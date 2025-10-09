@@ -72,11 +72,11 @@ public class SpanService {
         return findProjectAndVerifyVisibility(searchCriteria)
                 .flatMap(resolvedCriteria -> spanDAO.find(page, size, resolvedCriteria)
                         .flatMap(spanPage -> {
-                            // If truncate=false, reinject attachments into all spans
-                            if (!resolvedCriteria.truncate()) {
+                            // If stripAttachments=false, reinject attachments into all spans
+                            if (!resolvedCriteria.stripAttachments()) {
                                 return Flux.fromIterable(spanPage.content())
                                         .concatMap(span -> attachmentReinjectorService.reinjectAttachments(span,
-                                                resolvedCriteria.truncate()))
+                                                !resolvedCriteria.stripAttachments()))
                                         .collectList()
                                         .map(reinjectedSpans -> spanPage.toBuilder()
                                                 .content(reinjectedSpans)
@@ -98,7 +98,7 @@ public class SpanService {
     }
 
     @WithSpan
-    public Mono<Span> getById(@NonNull UUID id, boolean truncate) {
+    public Mono<Span> getById(@NonNull UUID id, boolean stripAttachments) {
         return Mono.deferContextual(ctx -> spanDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
                 .flatMap(span -> {
@@ -107,7 +107,7 @@ public class SpanService {
                             .projectName(project.name())
                             .build());
                 }))
-                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, truncate));
+                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, !stripAttachments));
     }
 
     @WithSpan
@@ -394,14 +394,10 @@ public class SpanService {
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(resolvedCriteria -> spanDAO.search(limit, resolvedCriteria)
-                        .concatMap(span -> {
-                            // If truncate=false, reinject attachments
-                            if (!resolvedCriteria.truncate()) {
-                                return attachmentReinjectorService.reinjectAttachments(span,
-                                        resolvedCriteria.truncate());
-                            }
-                            return Mono.just(span);
-                        }));
+                        .concatMap(span ->
+                        // If stripAttachments=false, reinject attachments
+                        attachmentReinjectorService.reinjectAttachments(span,
+                                !resolvedCriteria.stripAttachments())));
     }
 
     @WithSpan
