@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMap;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -17,6 +18,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -54,7 +56,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(name)> AND rule.name like concat('%', :name, '%') <endif>
-            ORDER by rule.id DESC
+            <if(filters)> AND <filters> <endif>
+            <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
             <if(limit)> LIMIT :limit <endif>
             <if(offset)> OFFSET :offset <endif>
             """)
@@ -66,18 +69,22 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
             @Define("name") @Bind("name") String name,
+            @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping,
             @Define("offset") @Bind("offset") Integer offset,
             @Define("limit") @Bind("limit") Integer limit);
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
-            AutomationRuleEvaluatorCriteria criteria, Integer offset, Integer limit) {
-        return find(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.name(), offset,
-                limit);
+            AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
+            Map<String, Object> filterMapping, Integer offset, Integer limit) {
+        return find(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.name(),
+                sortingFields, filters, filterMapping, offset, limit);
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
             AutomationRuleEvaluatorCriteria criteria) {
-        return find(workspaceId, projectId, criteria, null, null);
+        return find(workspaceId, projectId, criteria, null, null, Map.of(), null, null);
     }
 
     @SqlQuery("""
