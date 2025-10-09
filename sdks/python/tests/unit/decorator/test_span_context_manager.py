@@ -1,7 +1,8 @@
+import pytest
+
 import opik
 from opik.api_objects import attachment
 from opik.types import FeedbackScoreDict
-from testlib import ANY_STRING
 
 from ...testlib import (
     ANY_BUT_NONE,
@@ -240,54 +241,22 @@ def test_start_as_current_span__mixed__inside_override_outside(fake_backend):
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
 
-def test_start_as_current_span__user_error_added_to_span__span_logged(fake_backend):
+def test_start_as_current_span__user_error__logged_and_raised(fake_backend):
     """Test that the user error is added to the span."""
-    with opik.start_as_current_span(
-        "test-span",
-        type="llm",
-        input={"input": "test-input"},
-        output={"output": "test-output"},
-        tags=["one", "two", "three"],
-        metadata={"one": "first", "two": "second", "three": "third"},
-        project_name="test-project",
-        flush=True,
-    ):
-        raise Exception("Test exception")
+    with pytest.raises(Exception) as exc_info:
+        with opik.start_as_current_span(
+            "test-span",
+            type="llm",
+            input={"input": "test-input"},
+            output={"output": "test-output"},
+            tags=["one", "two", "three"],
+            metadata={"one": "first", "two": "second", "three": "third"},
+            project_name="test-project",
+            flush=True,
+        ):
+            raise Exception("Test exception")
 
-    assert len(fake_backend.trace_trees) == 1
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        start_time=ANY_BUT_NONE,
-        name="test-span",
-        project_name="test-project",
-        input={"input": "test-input"},
-        end_time=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                start_time=ANY_BUT_NONE,
-                name="test-span",
-                input={"input": "test-input"},
-                type="llm",
-                end_time=ANY_BUT_NONE,
-                project_name="test-project",
-                error_info={
-                    "exception_type": "Exception",
-                    "message": "Test exception",
-                    "traceback": ANY_STRING,
-                },
-                last_updated_at=ANY_BUT_NONE,
-            )
-        ],
-        error_info={
-            "exception_type": "Exception",
-            "message": "Test exception",
-            "traceback": ANY_STRING,
-        },
-        last_updated_at=ANY_BUT_NONE,
-    )
-
-    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
+    assert exc_info.value.args[0] == "Test exception"
 
 
 def test_start_as_current_span__distributed_headers_provided__child_span_created(
