@@ -52,15 +52,7 @@ const transformMessageIntoProviderMessage = (
 
   return {
     role: message.role,
-    content: mustache.render(
-      message.content,
-      serializedDatasetItem,
-      {},
-      {
-        // avoid escaping of a mustache
-        escape: (val: string) => val,
-      },
-    ),
+    content: mustache.render(message.content, serializedDatasetItem),
   };
 };
 

@@ -19,7 +19,8 @@ export const mustachePlugin = ViewPlugin.fromClass(
       const widgets = [];
       for (const { from, to } of view.visibleRanges) {
         const text = view.state.doc.sliceString(from, to);
-        const regex = /{{(.*?)}}/g;
+        // Match {{var}}, {{&var}}, and {{{var}}}
+        const regex = /\{\{\{(.*?)\}\}\}|\{\{&(.*?)\}\}|\{\{(.*?)\}\}/g;
         let match;
         while ((match = regex.exec(text)) !== null) {
           const start = from + match.index;
