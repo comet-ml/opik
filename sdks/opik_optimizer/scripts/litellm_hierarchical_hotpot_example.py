@@ -12,8 +12,6 @@ ScoreResult with detailed 'reason' fields for effective root cause analysis.
 """
 
 from typing import Any
-import os
-import sys
 import json
 
 import opik  # noqa: E402
@@ -109,12 +107,14 @@ Return your evaluation as JSON with 'is_correct' and 'reason' fields."""
             formatted_response = json.loads(response)
 
             # Convert boolean to float score (1.0 or 0.0)
-            score_value = 1.0 if formatted_response['is_correct'] else 0.0
+            score_value = 1.0 if formatted_response["is_correct"] else 0.0
 
             return score_result.ScoreResult(
                 name=self.name,
                 value=score_value,
-                reason=formatted_response['reason'],  # Critical for root cause analysis!
+                reason=formatted_response[
+                    "reason"
+                ],  # Critical for root cause analysis!
             )
         except Exception as e:
             # Fallback in case of LLM errors
