@@ -1,7 +1,7 @@
 ---
 description: Test naming conventions and performance guidelines for the Python SDK
 globs: sdks/python/tests/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK Test Best Practices Guidelines
 
