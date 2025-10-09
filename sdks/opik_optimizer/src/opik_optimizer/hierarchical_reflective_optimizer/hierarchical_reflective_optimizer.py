@@ -31,6 +31,7 @@ from .types import (
     PromptMessage,
     ImprovedPrompt,
 )
+from .prompts import IMPROVE_PROMPT_TEMPLATE
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -45,35 +46,6 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 # Type variable for generic structured output
 T = TypeVar('T', bound=BaseModel)
-
-# Prompt template for improving prompts based on failure modes
-IMPROVE_PROMPT_TEMPLATE = """You are an expert prompt engineer. You are given a prompt and a failure mode identified during evaluation. 
-Your task is to improve the prompt to address this failure mode.
-
-CURRENT PROMPT:
-{current_prompt}
-
-FAILURE MODE TO ADDRESS:
- - Name: {failure_mode_name}
- - Description: {failure_mode_description}
- - Root Cause: {failure_mode_root_cause}
-
-INSTRUCTIONS FOR IMPROVING THE PROMPT:
-
-1. **Analyze First**: Carefully review the current prompt to understand what instructions already exist.
-
-2. **Choose the Right Approach**:
-   - If relevant instructions already exist but are unclear or incomplete, UPDATE and CLARIFY them in place
-   - If the prompt is missing critical instructions needed to address this failure mode, ADD new targeted instructions
-   - If existing instructions contradict what's needed, REPLACE them with corrected versions
-
-3. **Be Surgical**: Make targeted changes that directly address the root cause. Don't add unnecessary instructions or rewrite the entire prompt.
-
-4. **Maintain Structure**: Keep the same message structure (role and content format). Only modify the content where necessary.
-
-5. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
-
-Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt."""
 
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
     """
@@ -91,6 +63,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         seed: Random seed for reproducibility (default: 42)
         max_parallel_batches: Maximum number of batches to process concurrently during
             hierarchical root cause analysis (default: 5)
+        batch_size: Number of test cases per batch for root cause analysis (default: 25)
         **model_kwargs: Additional arguments passed to the LLM model
     """
 
@@ -102,18 +75,21 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         max_parallel_batches: int = 5,
+        batch_size: int = 25,
         **model_kwargs: Any):
         super().__init__(model=reasoning_model, verbose=verbose, seed=seed, **model_kwargs)
         self.reasoning_model = reasoning_model
         self.num_threads = num_threads
         self.max_parallel_batches = max_parallel_batches
-        
+        self.batch_size = batch_size
+
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
             call_model_fn=self._call_model_async,
             reasoning_model=self.reasoning_model,
             seed=self.seed,
             max_parallel_batches=self.max_parallel_batches,
+            batch_size=self.batch_size,
             verbose=self.verbose,
         )
 
@@ -430,6 +406,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self,
         root_cause: FailureMode,
         best_prompt: chat_prompt.ChatPrompt,
+        best_score: float,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
         metric: Callable,
@@ -440,10 +417,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     ) -> tuple[chat_prompt.ChatPrompt, float]:
         """
         Generate and evaluate a single improvement attempt for a failure mode.
-        
+
         Args:
             root_cause: The failure mode to address
             best_prompt: The current best prompt to improve upon
+            best_score: The current best score (for comparison)
             prompt: The original prompt (for metadata like name and tools)
             dataset: Dataset to evaluate on
             metric: Metric function
@@ -451,7 +429,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             n_samples: Optional number of samples
             attempt: Current attempt number (1-indexed)
             max_attempts: Total number of attempts
-        
+
         Returns:
             Tuple of (improved_prompt, improved_score)
         """
@@ -484,11 +462,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         if max_attempts > 1:
             eval_message += f" (attempt {attempt}/{max_attempts})"
         eval_message += ":"
-        
+
         with reporting.display_evaluation(
             message=eval_message,
             verbose=self.verbose,
-            indent="│   "
+            indent="│   ",
+            baseline_score=best_score  # Pass baseline for comparison
         ) as improved_reporter:
             improved_experiment_result = self._evaluate_prompt(
                 prompt=improved_chat_prompt,
@@ -613,6 +592,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     improved_chat_prompt, improved_score = self._generate_and_evaluate_improvement(
                         root_cause=root_cause,
                         best_prompt=best_prompt,
+                        best_score=best_score,
                         prompt=prompt,
                         dataset=dataset,
                         metric=metric,

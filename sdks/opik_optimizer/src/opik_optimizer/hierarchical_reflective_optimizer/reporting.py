@@ -112,14 +112,16 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
 def display_evaluation(
     message: str = "First we will establish the baseline performance:",
     verbose: int = 1,
-    indent: str = "> "
+    indent: str = "> ",
+    baseline_score: float | None = None
 ) -> Any:
     """Context manager to display messages during an evaluation phase.
-    
+
     Args:
         message: Message to display
         verbose: Verbosity level
         indent: Prefix for the message (default "> " for top-level, "│   " for nested)
+        baseline_score: If provided, shows score comparison instead of "Baseline score"
     """
     # Entry point
     if verbose >= 1:
@@ -131,9 +133,39 @@ def display_evaluation(
             if verbose >= 1:
                 # Adjust score indentation based on indent style
                 score_indent = "  " if indent == "> " else "│   "
-                console.print(
-                    Text(f"\r{score_indent}Baseline score was: {s:.4f}.\n", style="green")
-                )
+
+                if baseline_score is None:
+                    # This is the baseline evaluation
+                    console.print(
+                        Text(f"\r{score_indent}Baseline score was: {s:.4f}.", style="green")
+                    )
+                    console.print(Text("│"))
+                else:
+                    # This is an improved prompt evaluation - show comparison
+                    if s > baseline_score:
+                        improvement_pct = ((s - baseline_score) / baseline_score * 100) if baseline_score > 0 else 0
+                        console.print(
+                            Text(
+                                f"\r{score_indent}Score for updated prompt: {s:.4f} (+{improvement_pct:.1f}%)",
+                                style="green bold"
+                            )
+                        )
+                    elif s < baseline_score:
+                        decline_pct = ((baseline_score - s) / baseline_score * 100) if baseline_score > 0 else 0
+                        console.print(
+                            Text(
+                                f"\r{score_indent}Score for updated prompt: {s:.4f} (-{decline_pct:.1f}%)",
+                                style="red"
+                            )
+                        )
+                    else:
+                        console.print(
+                            Text(
+                                f"\r{score_indent}Score for updated prompt: {s:.4f} (no change)",
+                                style="yellow"
+                            )
+                        )
+                    console.print(Text("│"))
 
     # Use our log suppression context manager and yield the reporter
     # Adjust progress bar indentation based on indent style

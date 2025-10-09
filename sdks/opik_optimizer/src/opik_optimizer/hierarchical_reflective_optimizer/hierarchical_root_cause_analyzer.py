@@ -11,99 +11,57 @@ from .types import (
     HierarchicalRootCauseAnalysis,
 )
 from . import reporting
+from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE = 25
 MAX_PARALLEL_BATCHES = 5
-
-# Prompt templates
-BATCH_ANALYSIS_PROMPT = """You are analyzing evaluation results to identify failure patterns.
-
-TEST RESULTS:
-{formatted_batch}
-
-Think through the failures systematically:
-
-1. IDENTIFY: List all distinct types of failures you observe in the test results
-2. GROUP: Which failures share similar characteristics or root causes?
-3. FREQUENCY: Which patterns appear multiple times across different test cases?
-4. PRIORITIZE: Which failures are most critical to address?
-
-Then, for each distinct failure pattern provide:
-1. A clear, descriptive name that captures the essence of the failure
-2. A comprehensive description of what is failing
-3. The underlying root cause explaining why this failure occurs
-
-Focus on patterns that appear multiple times. Be specific about what is failing and why.
-Provide a list of failure modes, each with a name, description, and root cause."""
-
-SYNTHESIS_PROMPT = """You are synthesizing root cause analyses from multiple batches of evaluation results.
-
-BATCH ANALYSES:
-
-{batch_summaries}
-
-Your task is to synthesize these batch-level analyses into a unified root cause analysis.
-
-1. MERGE similar failure modes across batches:
-   - If multiple batches identify the same or very similar failure pattern, combine them into one unified failure mode
-   - Create a comprehensive description that captures the pattern across all relevant batches
-   - Identify the core root cause
-
-2. PRIORITIZE the most critical failure modes:
-   - Focus on patterns that appear in multiple batches
-   - Consider the severity and frequency of each failure
-   - Eliminate one-off or minor issues unless they're particularly impactful
-
-3. PROVIDE SYNTHESIS NOTES:
-   - Briefly explain which batch-level patterns were merged and why
-   - Note any cross-batch trends or patterns
-   - Highlight the most critical areas for improvement
-
-Provide:
-1. A unified list of failure modes (name, description, root cause)
-2. Synthesis notes explaining your analysis process and key findings"""
+DEFAULT_BATCH_SIZE = 25
 
 
 class HierarchicalRootCauseAnalyzer:
     """
     Performs hierarchical root cause analysis on evaluation results.
-    
+
     This analyzer splits large evaluation datasets into manageable batches,
-    performs root cause analysis on each batch in parallel (up to 5 batches 
-    concurrently by default), then combines and summarizes the results to 
+    performs root cause analysis on each batch in parallel (up to 5 batches
+    concurrently by default), then combines and summarizes the results to
     identify the most important failure patterns.
-    
+
     Args:
         call_model_fn: Function to call the LLM (should match signature of ReflectiveOptimizer._call_model)
         reasoning_model: Name of the reasoning model to use
         seed: Random seed for reproducibility
         max_parallel_batches: Maximum number of batches to process concurrently (default: 5)
+        batch_size: Number of test cases per batch for analysis (default: 25)
+        verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
     """
-    
+
     def __init__(
-        self, 
-        call_model_fn, 
-        reasoning_model: str, 
+        self,
+        call_model_fn,
+        reasoning_model: str,
         seed: int,
         max_parallel_batches: int = MAX_PARALLEL_BATCHES,
+        batch_size: int = DEFAULT_BATCH_SIZE,
         verbose: int = 1,
     ):
         """
         Initialize the hierarchical root cause analyzer.
-        
+
         Args:
             call_model_fn: Function to call the LLM (should match signature of ReflectiveOptimizer._call_model)
             reasoning_model: Name of the reasoning model to use
             seed: Random seed for reproducibility
             max_parallel_batches: Maximum number of batches to process concurrently (default: 5)
+            batch_size: Number of test cases per batch for analysis (default: 25)
             verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
         """
         self.call_model_fn = call_model_fn
         self.reasoning_model = reasoning_model
         self.seed = seed
         self.max_parallel_batches = max_parallel_batches
+        self.batch_size = batch_size
         self.verbose = verbose
     
     def _format_test_results_batch(
@@ -312,8 +270,8 @@ Scores:
         # Prepare batch tasks
         batch_tasks = []
         batch_number = 1
-        for batch_start in range(0, num_test_results, BATCH_SIZE):
-            batch_end = min(batch_start + BATCH_SIZE, num_test_results)
+        for batch_start in range(0, num_test_results, self.batch_size):
+            batch_end = min(batch_start + self.batch_size, num_test_results)
             task = self._analyze_batch_async(
                 evaluation_result=evaluation_result,
                 batch_number=batch_number,
