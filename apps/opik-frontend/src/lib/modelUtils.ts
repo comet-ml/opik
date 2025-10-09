@@ -8,9 +8,7 @@ import { REASONING_MODELS } from "@/constants/llm";
  * @param model - The model type to check
  * @returns true if the model is a reasoning model, false otherwise
  */
-export const isReasoningModel = (
-  model?: PROVIDER_MODEL_TYPE | "",
-): boolean => {
+export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   return Boolean(
     model && REASONING_MODELS.includes(model as PROVIDER_MODEL_TYPE),
   );
@@ -28,4 +26,3 @@ export const getDefaultTemperatureForModel = (
 ): number => {
   return isReasoningModel(model) ? 1 : 0;
 };
-

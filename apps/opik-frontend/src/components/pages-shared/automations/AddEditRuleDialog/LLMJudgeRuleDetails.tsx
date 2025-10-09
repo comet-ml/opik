@@ -36,10 +36,7 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import {
-  getDefaultTemperatureForModel,
-  isReasoningModel,
-} from "@/lib/modelUtils";
+import { isReasoningModel } from "@/lib/modelUtils";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
