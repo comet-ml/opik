@@ -327,7 +327,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           </TooltipWrapper>
           {!isUndefined(thread?.total_estimated_cost) && (
             <TooltipWrapper
-              content={`Estimated cost ${formatCost(thread?.total_estimated_cost)}`}
+              content={`Estimated cost ${formatCost(
+                thread?.total_estimated_cost,
+              )}`}
             >
               <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
                 <Coins className="size-4 shrink-0" />
