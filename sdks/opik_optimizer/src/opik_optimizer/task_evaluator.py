@@ -112,15 +112,20 @@ def evaluate(
     if not result.test_results:
         return 0.0
 
-    # We may allow score aggregation customization.
-    score_results: list[score_result.ScoreResult] = [
-        test_result.score_results[0] for test_result in result.test_results
-    ]
-    if not score_results:
+    # Filter score results to only include the objective metric
+    objective_metric_name = metric.__name__
+    objective_score_results: list[score_result.ScoreResult] = []
+    for test_result in result.test_results:
+        for score_result_ in test_result.score_results:
+            if score_result_.name == objective_metric_name:
+                objective_score_results.append(score_result_)
+                break
+
+    if not objective_score_results:
         return 0.0
 
-    avg_score = sum([score_result_.value for score_result_ in score_results]) / len(
-        score_results
+    avg_score = sum([score_result_.value for score_result_ in objective_score_results]) / len(
+        objective_score_results
     )
 
     return avg_score
