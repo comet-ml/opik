@@ -284,7 +284,7 @@ const OptimizationProgressChartContent: React.FC<
             fill="url(#area)"
             dot={renderMainDot}
             activeDot={{ strokeWidth: 2, stroke: "white" }}
-            strokeWidth={1.5}
+            strokeWidth={2.5}
             strokeOpacity={1}
             animationDuration={100}
             connectNulls={false}
@@ -304,8 +304,8 @@ const OptimizationProgressChartContent: React.FC<
                 fill="transparent"
                 dot={renderSecondaryDot}
                 activeDot={{ strokeWidth: 1.5, stroke: "white", r: 5 }}
-                strokeWidth={1.2}
-                strokeOpacity={0.65}
+                strokeWidth={1.0}
+                strokeOpacity={0.5}
                 animationDuration={100}
                 connectNulls={false}
               />
