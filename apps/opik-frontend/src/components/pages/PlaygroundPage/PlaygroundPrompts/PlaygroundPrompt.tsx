@@ -270,6 +270,18 @@ const PlaygroundPrompt = ({
         onAddMessage={handleAddMessage}
         hint={hintMessage}
         hidePromptActions={false}
+        improvePromptConfig={{
+          enabled: true,
+          model,
+          configs,
+          workspaceName,
+          onAccept: (messageId, improvedContent) => {
+            const updatedMessages = messages.map((msg) =>
+              msg.id === messageId ? { ...msg, content: improvedContent } : msg,
+            );
+            updatePrompt(promptId, { messages: updatedMessages });
+          },
+        }}
       />
     </div>
   );
