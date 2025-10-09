@@ -1,0 +1,101 @@
+import logging
+from contextlib import contextmanager
+from typing import Optional, Dict, Any, List, Iterator
+
+from opik.api_objects import span, opik_client
+from .. import arguments_helpers, base_track_decorator, error_info_collector
+from opik.types import SpanType
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+@contextmanager
+def start_as_current_span(
+    name: str,
+    type: SpanType = "general",
+    input: Optional[Dict[str, Any]] = None,
+    output: Optional[Dict[str, Any]] = None,
+    tags: Optional[List[str]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    project_name: Optional[str] = None,
+    model: Optional[str] = None,
+    provider: Optional[str] = None,
+    flush: bool = False,
+    **kwargs: Dict[str, Any],
+) -> Iterator[span.SpanData]:
+    """
+    A context manager for starting and managing a span and parent trace.
+
+    This function creates a span and parent trace (if missing) with input parameters, processes outputs,
+    handles errors, and ensures the span/trace data is saved and flushed at the end of its lifecycle.
+    It integrates distributed tracing headers and allows additional metadata, tags, and other
+    contextual information to be provided.
+
+    Args:
+        name: The name of the span to create.
+        type: The type of the span. Defaults to "general".
+        input: A dictionary representing the input data associated with the span.
+        output: A dictionary for providing the output associated with the span.
+        tags: A list of tags to associate with the span.
+        metadata: A dictionary of additional metadata to attach to the span or trace.
+        project_name: The name of the project associated with this span.
+        model: The model name related to the span or trace.
+        provider: The provider responsible for the span or trace.
+        flush: Whether to flush the client data after the span is created and processed.
+        **kwargs (Dict[str, Any]): Additional parameters that may be passed to the
+            context manager.
+
+    Yields:
+        An iterator that provides the span data within the context of the span manager lifecycle.
+    """
+    start_span_parameters = arguments_helpers.StartSpanParameters(
+        name=name,
+        input=input,
+        type=type,
+        tags=tags,
+        metadata=metadata,
+        project_name=project_name,
+        model=model,
+        provider=provider,
+    )
+    distributed_headers = arguments_helpers.extract_distributed_trace_headers(kwargs)
+
+    # create span/trace with input parameters
+    span_creation_result = base_track_decorator.add_start_candidates(
+        start_span_parameters=start_span_parameters,
+        opik_distributed_trace_headers=distributed_headers,
+        opik_args_data=None,
+    )
+
+    try:
+        yield span_creation_result.span_data
+
+        # process output
+        output = span_creation_result.span_data.output or output
+        end_arguments = arguments_helpers.EndSpanParameters(output=output)
+    except Exception as exception:
+        LOGGER.error(
+            "Error in user script while executing span context manager: %s",
+            str(exception),
+            exc_info=True,
+        )
+        error_info = error_info_collector.collect(exception)
+        end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
+
+    # save span/trace data at the end of the context manager
+    client = opik_client.get_client_cached()
+
+    span_creation_result.span_data.init_end_time().update(
+        **end_arguments.to_kwargs(),
+    )
+    client.span(**span_creation_result.span_data.as_parameters)
+
+    if span_creation_result.trace_data is not None:
+        span_creation_result.trace_data.init_end_time().update(
+            **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+        )
+        client.trace(**span_creation_result.trace_data.as_parameters)
+
+    if flush:
+        client.flush()
