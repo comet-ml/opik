@@ -63,6 +63,7 @@ def start_as_current_span(
         start_span_parameters=start_span_parameters,
         opik_distributed_trace_headers=distributed_headers,
         opik_args_data=None,
+        tracing_active=True,
     )
 
     try:
