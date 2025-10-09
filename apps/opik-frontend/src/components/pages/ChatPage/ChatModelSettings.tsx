@@ -45,7 +45,7 @@ const ChatModelSettings: React.FC<ChatModelSettingsProps> = ({
         updateChat({
           model: newModel,
           provider: newProvider,
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         });
       }
     }
@@ -64,7 +64,7 @@ const ChatModelSettings: React.FC<ChatModelSettingsProps> = ({
         model: newModel,
         provider: newProvider,
         ...(newProvider !== provider && {
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         }),
       });
     },
@@ -80,7 +80,7 @@ const ChatModelSettings: React.FC<ChatModelSettingsProps> = ({
         updateChat({
           model: newModel,
           provider: newProvider,
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         });
       }
     },
