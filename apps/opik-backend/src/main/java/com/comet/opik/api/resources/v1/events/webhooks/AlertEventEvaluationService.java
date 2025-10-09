@@ -41,7 +41,7 @@ public class AlertEventEvaluationService {
 
     private boolean isValidForAlert(AlertEvent alertEvent, List<AlertTrigger> triggers) {
         return switch (alertEvent.eventType()) {
-            case PROMPT_CREATED -> true;
+            case PROMPT_CREATED, PROMPT_COMMITTED, PROMPT_DELETED -> true;
             // TODO: implement evaluation for all event types
             default -> false;
         };
