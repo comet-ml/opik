@@ -4,9 +4,7 @@ from typing import Optional, Dict, Any, List, Generator
 
 from opik.api_objects import span, opik_client
 from opik.types import SpanType
-
-from .. import arguments_helpers, base_track_decorator, error_info_collector
-
+from .. import arguments_helpers, base_track_decorator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -85,8 +83,7 @@ def start_as_current_span(
             str(exception),
             exc_info=True,
         )
-        error_info = error_info_collector.collect(exception)
-        end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
+        raise
 
     # save span/trace data at the end of the context manager
     client = opik_client.get_client_cached()
