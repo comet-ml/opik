@@ -75,14 +75,15 @@ INSTRUCTIONS FOR IMPROVING THE PROMPT:
 
 Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt."""
 
-class ReflectiveOptimizer(BaseOptimizer):
+class HierarchicalReflectiveOptimizer(BaseOptimizer):
     """
-    The Reflective Optimizer uses reflective prompting to improve prompts based on failure modes
-    identified during the evaluation process.
+    The Hierarchical Reflective Optimizer uses hierarchical root cause analysis to improve prompts
+    based on failure modes identified during the evaluation process.
 
-    This algorithm is best in-class and useful when you already have a complex prompt that you want
-    to improve.
-    
+    This algorithm uses a two-stage hierarchical approach: analyzing failures in batches and then
+    synthesizing findings to identify unified failure modes. It's best suited when you have a
+    complex prompt that you want to systematically refine based on understanding why it fails.
+
     Args:
         reasoning_model: LiteLLM model name for reasoning and analysis (default: "openai/gpt-4.1")
         num_threads: Number of parallel threads for evaluation (default: 12)
@@ -253,6 +254,21 @@ class ReflectiveOptimizer(BaseOptimizer):
         )
 
         return self._parse_response(response, response_model)
+
+    def get_optimizer_metadata(self) -> dict[str, Any]:
+        """
+        Get metadata about the optimizer configuration.
+
+        Returns:
+            Dictionary containing optimizer-specific configuration
+        """
+        return {
+            "reasoning_model": self.reasoning_model,
+            "num_threads": self.num_threads,
+            "max_parallel_batches": self.max_parallel_batches,
+            "seed": self.seed,
+            "verbose": self.verbose,
+        }
 
     def _calculate_improvement(self, current_score: float, previous_score: float) -> float:
         """Calculate the improvement percentage between scores."""
@@ -499,6 +515,13 @@ class ReflectiveOptimizer(BaseOptimizer):
         max_retries: int = 2,
         **kwargs: Any,
     ) -> OptimizationResult:
+        # Reset counters at the start of optimization
+        self.reset_counters()
+
+        # Configure prompt model if not set
+        self.configure_prompt_model(prompt)
+
+        # Setup agent class
         self.agent_class = self.setup_agent_class(prompt, agent_class)
 
         optimization = self.opik_client.create_optimization(
@@ -647,7 +670,26 @@ class ReflectiveOptimizer(BaseOptimizer):
             best_score=best_score,
             verbose=self.verbose,
         )
-        
+
+        # Prepare details for the result
+        details = {
+            "reasoning_model": self.reasoning_model,
+            "num_threads": self.num_threads,
+            "max_parallel_batches": self.max_parallel_batches,
+            "max_retries": max_retries,
+            "n_samples": n_samples,
+            "auto_continue": auto_continue,
+        }
+
+        # Extract tool prompts if tools exist
+        tool_prompts = None
+        if final_tools := getattr(best_prompt, "tools", None):
+            tool_prompts = {
+                tool.get("function", {}).get("name", f"tool_{idx}"):
+                tool.get("function", {}).get("description", "")
+                for idx, tool in enumerate(final_tools)
+            }
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
             prompt=best_messages,
@@ -655,4 +697,10 @@ class ReflectiveOptimizer(BaseOptimizer):
             metric_name=metric.__name__,
             initial_prompt=prompt.get_messages(),
             initial_score=initial_score,
+            details=details,
+            llm_calls=self.llm_call_counter,
+            tool_calls=self.tool_call_counter,
+            optimization_id=optimization.id,
+            dataset_id=dataset.id,
+            tool_prompts=tool_prompts,
         )
