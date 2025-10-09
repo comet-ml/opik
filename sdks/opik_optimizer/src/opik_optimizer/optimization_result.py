@@ -8,6 +8,13 @@ import rich
 from .reporting_utils import get_console, get_link_text, get_optimization_run_url_by_id
 
 
+def _format_float(value: Any, digits: int = 6) -> str:
+    """Format float values with specified precision."""
+    if isinstance(value, float):
+        return f"{value:.{digits}f}"
+    return str(value)
+
+
 class OptimizationResult(pydantic.BaseModel):
     """Result oan optimization run."""
 
@@ -43,6 +50,50 @@ class OptimizationResult(pydantic.BaseModel):
 
     def model_dump(self, *kargs: Any, **kwargs: Any) -> dict[str, Any]:
         return super().model_dump(*kargs, **kwargs)
+
+    def get_optimized_model_kwargs(self) -> dict[str, Any]:
+        """
+        Extract optimized model_kwargs for use in other optimizers.
+
+        Returns:
+            Dictionary of optimized model kwargs, empty dict if not available
+        """
+        return self.details.get("optimized_model_kwargs", {})
+
+    def get_optimized_model(self) -> str | None:
+        """
+        Extract optimized model name.
+
+        Returns:
+            Model name string if available, None otherwise
+        """
+        return self.details.get("optimized_model")
+
+    def get_optimized_parameters(self) -> dict[str, Any]:
+        """
+        Extract optimized parameter values.
+
+        Returns:
+            Dictionary of optimized parameters, empty dict if not available
+        """
+        return self.details.get("optimized_parameters", {})
+
+    def apply_to_prompt(self, prompt: Any) -> Any:
+        """
+        Apply optimized parameters to a prompt.
+
+        Args:
+            prompt: ChatPrompt instance to apply optimizations to
+
+        Returns:
+            New ChatPrompt instance with optimized parameters applied
+        """
+        prompt_copy = prompt.copy()
+        if "optimized_model_kwargs" in self.details:
+            prompt_copy.model_kwargs = self.details["optimized_model_kwargs"]
+        if "optimized_model" in self.details:
+            prompt_copy.model = self.details["optimized_model"]
+        return prompt_copy
 
     def _calculate_improvement_str(self) -> str:
         """Helper to calculate improvement percentage string."""
@@ -113,12 +164,97 @@ class OptimizationResult(pydantic.BaseModel):
             f"Final Best Score: {final_score_str}",
             f"Total Improvement:{improvement_str.rjust(max(0, 18 - len('Total Improvement:')))}",
             f"Rounds Completed: {rounds_ran}",
-            "\nFINAL OPTIMIZED PROMPT / STRUCTURE:",
-            "--------------------------------------------------------------------------------",
-            f"{final_prompt_display}",
-            "--------------------------------------------------------------------------------",
-            f"{separator}",
         ]
+
+        optimized_params = self.details.get("optimized_parameters") or {}
+        parameter_importance = self.details.get("parameter_importance") or {}
+        search_ranges = self.details.get("search_ranges") or {}
+        precision = self.details.get("parameter_precision", 6)
+
+        if optimized_params:
+
+            def _format_range(desc: dict[str, Any]) -> str:
+                if "min" in desc and "max" in desc:
+                    step_str = (
+                        f", step={_format_float(desc['step'], precision)}"
+                        if desc.get("step") is not None
+                        else ""
+                    )
+                    return f"[{_format_float(desc['min'], precision)}, {_format_float(desc['max'], precision)}{step_str}]"
+                if desc.get("choices"):
+                    return f"choices={desc['choices']}"
+                return str(desc)
+
+            rows = []
+            stage_order = [
+                record.get("stage")
+                for record in self.details.get("search_stages", [])
+                if record.get("stage") in search_ranges
+            ]
+            if not stage_order:
+                stage_order = sorted(search_ranges)
+
+            for name in sorted(optimized_params):
+                contribution = parameter_importance.get(name)
+                stage_ranges = []
+                for stage in stage_order:
+                    params = search_ranges.get(stage) or {}
+                    if name in params:
+                        stage_ranges.append(f"{stage}: {_format_range(params[name])}")
+                if not stage_ranges:
+                    for stage, params in search_ranges.items():
+                        if name in params:
+                            stage_ranges.append(
+                                f"{stage}: {_format_range(params[name])}"
+                            )
+                joined_ranges = "\n".join(stage_ranges) if stage_ranges else "N/A"
+                rows.append(
+                    {
+                        "parameter": name,
+                        "value": optimized_params[name],
+                        "contribution": contribution,
+                        "ranges": joined_ranges,
+                    }
+                )
+
+            if rows:
+                output.append("Parameter Summary:")
+                # Compute overall improvement fraction for gain calculation
+                total_improvement = None
+                if isinstance(self.initial_score, (int, float)) and isinstance(
+                    self.score, (int, float)
+                ):
+                    if self.initial_score != 0:
+                        total_improvement = (self.score - self.initial_score) / abs(
+                            self.initial_score
+                        )
+                    else:
+                        total_improvement = self.score
+                for row in rows:
+                    value_str = _format_float(row["value"], precision)
+                    contrib_val = row["contribution"]
+                    if contrib_val is not None:
+                        contrib_percent = contrib_val * 100
+                        gain_str = ""
+                        if total_improvement is not None:
+                            gain_value = contrib_val * total_improvement * 100
+                            gain_str = f" ({gain_value:+.2f}%)"
+                        contrib_str = f"{contrib_percent:.1f}%{gain_str}"
+                    else:
+                        contrib_str = "N/A"
+                    output.append(
+                        f"- {row['parameter']}: value={value_str}, contribution={contrib_str}, ranges=\n  {row['ranges']}"
+                    )
+
+        output.extend(
+            [
+                "\nFINAL OPTIMIZED PROMPT / STRUCTURE:",
+                "--------------------------------------------------------------------------------",
+                f"{final_prompt_display}",
+                "--------------------------------------------------------------------------------",
+                f"{separator}",
+            ]
+        )
         return "\n".join(output)
 
     def __rich__(self) -> rich.panel.Panel:
@@ -159,6 +295,11 @@ class OptimizationResult(pydantic.BaseModel):
             ),
         )
 
+        optimized_params = self.details.get("optimized_parameters") or {}
+        parameter_importance = self.details.get("parameter_importance") or {}
+        search_ranges = self.details.get("search_ranges") or {}
+        precision = self.details.get("parameter_precision", 6)
+
         # Display Chat Structure if available
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
@@ -190,7 +331,87 @@ class OptimizationResult(pydantic.BaseModel):
             prompt_renderable, title=panel_title, border_style="blue", padding=(1, 2)
         )
 
-        content_group = rich.console.Group(table, "\n", prompt_panel)
+        renderables: list[rich.console.RenderableType] = [table, "\n"]
+
+        if optimized_params:
+            summary_table = rich.table.Table(
+                title="Parameter Summary", show_header=True, title_style="bold"
+            )
+            summary_table.add_column("Parameter", justify="left", style="cyan")
+            summary_table.add_column("Value", justify="left")
+            summary_table.add_column("Importance", justify="left", style="magenta")
+            summary_table.add_column("Gain", justify="left", style="dim")
+            summary_table.add_column("Ranges", justify="left")
+
+            stage_order = [
+                record.get("stage")
+                for record in self.details.get("search_stages", [])
+                if record.get("stage") in search_ranges
+            ]
+            if not stage_order:
+                stage_order = sorted(search_ranges)
+
+            def _format_range(desc: dict[str, Any]) -> str:
+                if "min" in desc and "max" in desc:
+                    step_str = (
+                        f", step={_format_float(desc['step'], precision)}"
+                        if desc.get("step") is not None
+                        else ""
+                    )
+                    return f"[{_format_float(desc['min'], precision)}, {_format_float(desc['max'], precision)}{step_str}]"
+                if desc.get("choices"):
+                    return ",".join(map(str, desc["choices"]))
+                return str(desc)
+
+            total_improvement = None
+            if isinstance(self.initial_score, (int, float)) and isinstance(
+                self.score, (int, float)
+            ):
+                if self.initial_score != 0:
+                    total_improvement = (self.score - self.initial_score) / abs(
+                        self.initial_score
+                    )
+                else:
+                    total_improvement = self.score
+
+            for name in sorted(optimized_params):
+                value_str = _format_float(optimized_params[name], precision)
+                contrib_val = parameter_importance.get(name)
+                if contrib_val is not None:
+                    contrib_str = f"{contrib_val:.1%}"
+                    gain_str = (
+                        f"{contrib_val * total_improvement:+.2%}"
+                        if total_improvement is not None
+                        else "N/A"
+                    )
+                else:
+                    contrib_str = "N/A"
+                    gain_str = "N/A"
+                ranges_parts = []
+                for stage in stage_order:
+                    params = search_ranges.get(stage) or {}
+                    if name in params:
+                        ranges_parts.append(f"{stage}: {_format_range(params[name])}")
+                if not ranges_parts:
+                    for stage, params in search_ranges.items():
+                        if name in params:
+                            ranges_parts.append(
+                                f"{stage}: {_format_range(params[name])}"
+                            )
+
+                summary_table.add_row(
+                    name,
+                    value_str,
+                    contrib_str,
+                    gain_str,
+                    "\n".join(ranges_parts) if ranges_parts else "N/A",
+                )
+
+            renderables.extend([summary_table, "\n"])
+
+        renderables.append(prompt_panel)
+
+        content_group = rich.console.Group(*renderables)
 
         return rich.panel.Panel(
             content_group,

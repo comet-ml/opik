@@ -328,12 +328,9 @@ navigation:
           - section: Frameworks
             skip-slug: true
             contents:
-              - page: Agno
-                path: docs/tracing/integrations/agno.mdx
-                slug: agno
               - page: BeeAI
-                path: docs/tracing/integrations/beeai.mdx
-                slug: beeai
+                path: docs/tracing/integrations/beeai-typescript.mdx
+                slug: beeai-typescript
               - page: LangChain
                 path: docs/tracing/integrations/langchainjs.mdx
                 slug: langchainjs
@@ -368,6 +365,12 @@ navigation:
               - page: AG2
                 path: docs/tracing/integrations/ag2.mdx
                 slug: ag2
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
+              - page: BeeAI
+                path: docs/tracing/integrations/beeai.mdx
+                slug: beeai
               - page: Autogen
                 path: docs/tracing/integrations/autogen.mdx
                 slug: autogen
@@ -398,7 +401,7 @@ navigation:
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
                 slug: llama_index
-              - page: Microsoft Agent Framework (Python)
+              - page: Microsoft Agent Framework
                 path: docs/tracing/integrations/microsoft-agent-framework.mdx
                 slug: microsoft-agent-framework
               - page: OpenAI Agents
@@ -526,7 +529,7 @@ navigation:
           - section: Frameworks
             skip-slug: true
             contents:
-              - page: Microsoft Agent Framework (.NET)
+              - page: Microsoft Agent Framework
                 path: docs/tracing/integrations/microsoft-agent-framework-dotnet.mdx
                 slug: microsoft-agent-framework-dotnet
       - section: Ruby
@@ -549,12 +552,12 @@ navigation:
           - page: Flowise
             path: docs/tracing/integrations/flowise.mdx
             slug: flowise
-          # - page: Langflow
-          #   path: docs/tracing/integrations/langflow.mdx
-          #   slug: langflow
-          # - page: OpenWebUI
-          #   path: docs/tracing/integrations/openwebui.mdx
-          #   slug: openwebui
+          - page: Langflow
+            path: docs/tracing/integrations/langflow.mdx
+            slug: langflow
+          - page: OpenWebUI
+            path: docs/tracing/integrations/openwebui.mdx
+            slug: openwebui
       - section: Multi-Language
         skip-slug: true
         icon: fa-solid fa-globe
