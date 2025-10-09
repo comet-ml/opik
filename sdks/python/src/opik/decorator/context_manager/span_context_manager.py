@@ -1,10 +1,11 @@
 import logging
 from contextlib import contextmanager
-from typing import Optional, Dict, Any, List, Iterator
+from typing import Optional, Dict, Any, List, Generator
 
 from opik.api_objects import span, opik_client
-from .. import arguments_helpers, base_track_decorator, error_info_collector
 from opik.types import SpanType
+
+from .. import arguments_helpers, base_track_decorator, error_info_collector
 
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ def start_as_current_span(
     provider: Optional[str] = None,
     flush: bool = False,
     **kwargs: Dict[str, Any],
-) -> Iterator[span.SpanData]:
+) -> Generator[span.SpanData, Any, None]:
     """
     A context manager for starting and managing a span and parent trace.
 
@@ -53,8 +54,6 @@ def start_as_current_span(
         name=name,
         input=input,
         type=type,
-        tags=tags,
-        metadata=metadata,
         project_name=project_name,
         model=model,
         provider=provider,
@@ -71,12 +70,18 @@ def start_as_current_span(
     try:
         yield span_creation_result.span_data
 
-        # process output
-        output = span_creation_result.span_data.output or output
-        end_arguments = arguments_helpers.EndSpanParameters(output=output)
+        # fill end arguments
+        end_arguments = arguments_helpers.EndSpanParameters(
+            input=span_creation_result.span_data.input or input,
+            output=span_creation_result.span_data.output or output,
+            tags=span_creation_result.span_data.tags or tags,
+            metadata=span_creation_result.span_data.metadata or metadata,
+            provider=span_creation_result.span_data.provider or provider,
+            model=span_creation_result.span_data.model or model,
+        )
     except Exception as exception:
         LOGGER.error(
-            "Error in user script while executing span context manager: %s",
+            "Error in user's script while executing span context manager: %s",
             str(exception),
             exc_info=True,
         )
