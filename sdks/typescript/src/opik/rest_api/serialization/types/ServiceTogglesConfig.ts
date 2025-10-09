@@ -15,6 +15,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     guardrailsEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
+    welcomeWizardEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -24,5 +25,6 @@ export declare namespace ServiceTogglesConfig {
         guardrailsEnabled: boolean;
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
+        welcomeWizardEnabled: boolean;
     }
 }

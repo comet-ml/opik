@@ -72,6 +72,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
+- name: Welcome Wizard
+  description: Welcome wizard tracking resources
 - name: Workspaces
   description: Workspace related resources
 - name: Redirect
@@ -4257,6 +4259,34 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/welcome-wizard:
+    get:
+      tags:
+      - Welcome Wizard
+      summary: Get welcome wizard tracking status
+      description: Get welcome wizard tracking status for the current workspace
+      operationId: getWelcomeWizardStatus
+      responses:
+        "200":
+          description: Welcome wizard tracking status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WelcomeWizardTracking"
+    post:
+      tags:
+      - Welcome Wizard
+      summary: Submit welcome wizard
+      description: Submit welcome wizard with user information
+      operationId: submitWelcomeWizard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WelcomeWizardSubmission"
+      responses:
+        "204":
+          description: Welcome wizard submitted successfully
   /v1/private/workspaces/costs/summaries:
     post:
       tags:
@@ -10486,6 +10516,7 @@ components:
       - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
+      - welcomeWizardEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
@@ -10497,6 +10528,8 @@ components:
         opikAIEnabled:
           type: boolean
         alertsEnabled:
+          type: boolean
+        welcomeWizardEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -11498,6 +11531,35 @@ components:
           type: array
           items:
             type: string
+    WelcomeWizardTracking:
+      type: object
+      properties:
+        completed:
+          type: boolean
+          description: Whether the welcome wizard has been completed
+    WelcomeWizardSubmission:
+      type: object
+      properties:
+        role:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: Optional user role
+        integrations:
+          type: array
+          description: List of integrations the user selected
+          items:
+            type: string
+            description: List of integrations the user selected
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional user email
+          format: email
+        join_beta_program:
+          type: boolean
+          description: Whether user wants to join beta programs
     Result:
       type: object
       properties:

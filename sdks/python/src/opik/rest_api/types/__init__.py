@@ -401,6 +401,7 @@ from .webhook_public import WebhookPublic
 from .webhook_test_result import WebhookTestResult
 from .webhook_test_result_status import WebhookTestResultStatus
 from .webhook_write import WebhookWrite
+from .welcome_wizard_tracking import WelcomeWizardTracking
 from .workspace_configuration import WorkspaceConfiguration
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
@@ -784,6 +785,7 @@ __all__ = [
     "WebhookTestResult",
     "WebhookTestResultStatus",
     "WebhookWrite",
+    "WelcomeWizardTracking",
     "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
