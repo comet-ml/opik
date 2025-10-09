@@ -1,12 +1,16 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.events.webhooks.AlertEvent;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.TemplateUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -14,6 +18,7 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +34,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertEventType.TRACE_FEEDBACK_SCORE;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -300,6 +306,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull EventBus eventBus;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     @Override
     @WithSpan
@@ -340,8 +348,40 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
                     .flatMap(Result::getRowsUpdated)
                     .reduce(Long::sum);
-        });
+        })
+                .doOnSuccess(cnt -> {
+                    if (cnt > 0) {
+                        switch (entityType) {
+                            case TRACE -> publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE);
+                            default -> {
+                                // no-op
+                            }
+                        }
+                    }
+                });
+    }
 
+    private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType) {
+        if (CollectionUtils.isEmpty(scores)) {
+            return;
+        }
+
+        var scoresWithAuthor = scores.stream()
+                .map(item -> switch (item) {
+                    case FeedbackScoreItem.FeedbackScoreBatchItem tracingItem -> tracingItem.toBuilder()
+                            .author(author)
+                            .build();
+                    case FeedbackScoreBatchItemThread threadItem -> threadItem.toBuilder()
+                            .author(author)
+                            .build();
+                }).toList();
+
+        eventBus.post(AlertEvent.builder()
+                .eventType(eventType)
+                .workspaceId(requestContext.get().getWorkspaceId())
+                .projectId(scores.getFirst().projectId())
+                .payload(scoresWithAuthor)
+                .build());
     }
 
     @Override
