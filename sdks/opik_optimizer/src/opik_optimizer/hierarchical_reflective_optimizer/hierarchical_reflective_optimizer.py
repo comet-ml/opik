@@ -341,39 +341,39 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         return result
 
-    def hierarchical_root_cause_analysis(
+    def _hierarchical_root_cause_analysis(
         self, evaluation_result: EvaluationResult
     ) -> HierarchicalRootCauseAnalysis:
         """
         Perform hierarchical root cause analysis on evaluation results.
-        
+
         This method uses a two-stage hierarchical approach:
         1. Split results into batches and analyze each batch
         2. Synthesize batch analyses into unified failure modes
-        
+
         Args:
             evaluation_result: The evaluation result to analyze
-            
+
         Returns:
             HierarchicalRootCauseAnalysis containing batch analyses and overall synthesis
         """
         logger.debug("Performing hierarchical root cause analysis...")
         return self._hierarchical_analyzer.analyze(evaluation_result)
 
-    def improve_prompt(
-        self, 
-        prompt: chat_prompt.ChatPrompt, 
+    def _improve_prompt(
+        self,
+        prompt: chat_prompt.ChatPrompt,
         root_cause: FailureMode,
         attempt: int = 1
     ) -> ImprovedPrompt:
         """
         Improve the prompt based on the root cause analysis.
-        
+
         Args:
             prompt: Current prompt to improve
             root_cause: The failure mode to address
             attempt: Attempt number (1-indexed). Used to vary seed for retries.
-        
+
         Returns:
             ImprovedPrompt with reasoning and improved messages
         """
@@ -438,7 +438,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             failure_mode_name=root_cause.name,
             verbose=self.verbose
         ) as improvement_reporter:
-            improved_prompt_response = self.improve_prompt(
+            improved_prompt_response = self._improve_prompt(
                 prompt=best_prompt,
                 root_cause=root_cause,
                 attempt=attempt
@@ -553,7 +553,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         with reporting.display_optimization_iteration(iteration=1, verbose=self.verbose) as iteration_reporter:
             # Perform hierarchical root cause analysis
             with reporting.display_root_cause_analysis(verbose=self.verbose) as analysis_reporter:
-                hierarchical_analysis = self.hierarchical_root_cause_analysis(experiment_result)
+                hierarchical_analysis = self._hierarchical_root_cause_analysis(experiment_result)
                 analysis_reporter.set_completed(
                     total_test_cases=hierarchical_analysis.total_test_cases,
                     num_batches=hierarchical_analysis.num_batches,
