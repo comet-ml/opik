@@ -18,7 +18,7 @@ from .meta_prompt_optimizer import MetaPromptOptimizer
 from .mipro_optimizer import MiproOptimizer
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
-from .multi_objective_metric import MultiMetricObjective
+from .multi_metric_objective import MultiMetricObjective
 from .parameter_optimizer import (
     ParameterOptimizer,
     ParameterSearchSpace,

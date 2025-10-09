@@ -5,7 +5,7 @@ from collections.abc import Callable
 import opik
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics import base_metric, score_result
-from . import multi_objective_metric
+from . import multi_metric_objective
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
             try:
                 metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
 
-                if isinstance(metric, multi_objective_metric.MultiMetricObjective):
+                if isinstance(metric, multi_metric_objective.MultiMetricObjective):
                     return [metric_val, *metric_val.metadata["raw_score_results"]]
 
                 if isinstance(metric_val, score_result.ScoreResult):
