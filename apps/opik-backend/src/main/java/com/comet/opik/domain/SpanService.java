@@ -72,11 +72,11 @@ public class SpanService {
         return findProjectAndVerifyVisibility(searchCriteria)
                 .flatMap(resolvedCriteria -> spanDAO.find(page, size, resolvedCriteria)
                         .flatMap(spanPage -> {
-                            // If truncate=false, reinject attachments into all spans
-                            if (!resolvedCriteria.truncate()) {
+                            // If stripAttachments=false, reinject attachments into all spans
+                            if (!resolvedCriteria.stripAttachments()) {
                                 return Flux.fromIterable(spanPage.content())
                                         .concatMap(span -> attachmentReinjectorService.reinjectAttachments(span,
-                                                resolvedCriteria.truncate()))
+                                                !resolvedCriteria.stripAttachments()))
                                         .collectList()
                                         .map(reinjectedSpans -> spanPage.toBuilder()
                                                 .content(reinjectedSpans)
@@ -98,7 +98,7 @@ public class SpanService {
     }
 
     @WithSpan
-    public Mono<Span> getById(@NonNull UUID id, boolean truncate) {
+    public Mono<Span> getById(@NonNull UUID id, boolean stripAttachments) {
         return Mono.deferContextual(ctx -> spanDAO.getById(id)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Span", id))))
                 .flatMap(span -> {
@@ -107,7 +107,7 @@ public class SpanService {
                             .projectName(project.name())
                             .build());
                 }))
-                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, truncate));
+                .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, !stripAttachments));
     }
 
     @WithSpan
@@ -148,7 +148,7 @@ public class SpanService {
 
             // Strip attachments from the span with the generated ID and project ID
             Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
-            return attachmentStripperService.stripAttachmentsFromSpan(spanWithId, workspaceId, userName, projectName)
+            return attachmentStripperService.stripAttachments(spanWithId, workspaceId, userName, projectName)
                     .flatMap(processedSpan -> {
                         log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
                                 processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
@@ -189,7 +189,7 @@ public class SpanService {
                     String projectName = project.name();
 
                     // Strip attachments OUTSIDE the database transaction
-                    return attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                    return attachmentStripperService.stripAttachments(
                             spanUpdate, id, workspaceId, userName, projectName)
                             .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
                 }));
@@ -251,7 +251,7 @@ public class SpanService {
             return attachmentService.getAttachmentInfoByEntity(id, SPAN, existingSpan.projectId())
                     .flatMap(existingAttachments ->
             // Step 2: Strip attachments OUTSIDE the database transaction
-            attachmentStripperService.stripAttachmentsFromSpanUpdate(
+            attachmentStripperService.stripAttachments(
                     spanUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate ->
             // Step 3: Update the span in database transaction
@@ -329,7 +329,7 @@ public class SpanService {
             return Flux.fromIterable(spans)
                     .flatMap(span -> {
                         String projectName = WorkspaceUtils.getProjectName(span.projectName());
-                        return attachmentStripperService.stripAttachmentsFromSpan(span, workspaceId, userName,
+                        return attachmentStripperService.stripAttachments(span, workspaceId, userName,
                                 projectName);
                     })
                     .collectList();
@@ -394,14 +394,10 @@ public class SpanService {
     public Flux<Span> search(int limit, @NonNull SpanSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(resolvedCriteria -> spanDAO.search(limit, resolvedCriteria)
-                        .concatMap(span -> {
-                            // If truncate=false, reinject attachments
-                            if (!resolvedCriteria.truncate()) {
-                                return attachmentReinjectorService.reinjectAttachments(span,
-                                        resolvedCriteria.truncate());
-                            }
-                            return Mono.just(span);
-                        }));
+                        .concatMap(span ->
+                        // If stripAttachments=false, reinject attachments
+                        attachmentReinjectorService.reinjectAttachments(span,
+                                !resolvedCriteria.stripAttachments())));
     }
 
     @WithSpan

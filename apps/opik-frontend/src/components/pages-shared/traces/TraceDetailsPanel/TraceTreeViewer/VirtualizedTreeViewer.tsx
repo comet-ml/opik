@@ -24,7 +24,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { GuardrailResult } from "@/types/guardrails";
 import get from "lodash/get";
-import { formatDuration } from "@/lib/date";
+import { formatDate, formatDuration } from "@/lib/date";
 import isNumber from "lodash/isNumber";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
@@ -180,6 +180,22 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
     const guardrailStatus = get(node.data?.output, "guardrail_result", null);
 
     const duration = formatDuration(node.data.duration);
+    const start_time = node.data.start_time
+      ? formatDate(node.data.start_time, { includeSeconds: true })
+      : "";
+    const end_time = node.data.end_time
+      ? formatDate(node.data.end_time, { includeSeconds: true })
+      : "";
+
+    const durationTooltip = (
+      <div>
+        Duration in seconds: {duration}
+        <p>
+          {start_time} {end_time ? ` - ${end_time}` : ""}
+        </p>
+      </div>
+    );
+
     const {
       tokens,
       comments,
@@ -209,7 +225,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           </TooltipWrapper>
         )}
         {config[TREE_DATABLOCK_TYPE.DURATION] && (
-          <TooltipWrapper content={`Duration in seconds: ${duration}`}>
+          <TooltipWrapper content={durationTooltip}>
             <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
               <Clock className="size-3 shrink-0" /> {duration}
             </div>

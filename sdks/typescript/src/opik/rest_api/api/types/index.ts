@@ -339,6 +339,7 @@ export * from "./FeedbackScoreBatchItemThreadSource";
 export * from "./FeedbackScoreBatchItemThread";
 export * from "./TraceThreadFilterOperator";
 export * from "./TraceThreadFilter";
+export * from "./WelcomeWizardTracking";
 export * from "./Result";
 export * from "./WorkspaceMetricsSummaryRequest";
 export * from "./DataPointDouble";
