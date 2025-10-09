@@ -1,9 +1,9 @@
 ---
-title: Opik Configure - Interactive Setup Tool
+title: Opik TS - Interactive Setup Tool
 description: A guided CLI tool for quickly integrating Opik SDK into your Node.js/TypeScript projects with automatic configuration and setup.
 ---
 
-The Opik Configure is an interactive command-line tool that streamlines the process of adding Opik observability to your Node.js and TypeScript applications. It automatically detects your project setup, installs dependencies, and configures tracing for your LLM integrations.
+The Opik TS is an interactive command-line tool that streamlines the process of adding Opik observability to your Node.js and TypeScript applications. It automatically detects your project setup, installs dependencies, and configures tracing for your LLM integrations.
 
 ## Features
 
@@ -18,7 +18,7 @@ The Opik Configure is an interactive command-line tool that streamlines the proc
 Run the CLI in your project directory:
 
 ```bash
-npx opik-configure
+npx opik-ts configure
 ```
 
 The CLI will guide you through:
@@ -42,40 +42,49 @@ The CLI will guide you through:
 
 The CLI supports several command-line options for customization:
 
-| Option            | Type    | Default           | Description                                                    | Environment Variable           |
-| ----------------- | ------- | ----------------- | -------------------------------------------------------------- | ------------------------------ |
-| `--help`          | boolean | -                 | Display help information                                       | -                              |
-| `--version`       | boolean | -                 | Show version number                                            | -                              |
-| `--debug`         | boolean | `false`           | Enable verbose logging for troubleshooting                     | `OPIK_CONFIGURE_DEBUG`         |
-| `--default`       | boolean | `true`            | Use default options for all prompts (non-interactive)          | `OPIK_CONFIGURE_DEFAULT`       |
-| `--force-install` | boolean | `false`           | Force package installation even if peer dependency checks fail | `OPIK_CONFIGURE_FORCE_INSTALL` |
-| `--install-dir`   | string  | current directory | Specify custom installation directory                          | `OPIK_CONFIGURE_INSTALL_DIR`   |
+| Option            | Type    | Default           | Description                                                    | Environment Variable    |
+| ----------------- | ------- | ----------------- | -------------------------------------------------------------- | ----------------------- |
+| `--help`          | boolean | -                 | Display help information                                       | -                       |
+| `--version`       | boolean | -                 | Show version number                                            | -                       |
+| `--debug`         | boolean | `false`           | Enable verbose logging for troubleshooting                     | `OPIK_TS_DEBUG`         |
+| `--default`       | boolean | `true`            | Use default options for all prompts (non-interactive)          | `OPIK_TS_DEFAULT`       |
+| `--force-install` | boolean | `false`           | Force package installation even if peer dependency checks fail | `OPIK_TS_FORCE_INSTALL` |
+| `--install-dir`   | string  | current directory | Specify custom installation directory                          | `OPIK_TS_INSTALL_DIR`   |
+| `--use-local`     | boolean | `false`           | Skip deployment selection and configure for local development  | `OPIK_TS_USE_LOCAL`     |
 
 ### Examples
 
 **Verbose debugging mode:**
 
 ```bash
-npx opik-configure --debug
+npx opik-ts configure --debug
 ```
 
 **Non-interactive mode with defaults:**
 
 ```bash
-npx opik-configure --default
+npx opik-ts configure --default
 ```
 
 **Install in a specific directory:**
 
 ```bash
-npx opik-configure --install-dir=./my-app
+npx opik-ts configure --install-dir=./my-app
 ```
 
 **Force installation (skip peer dependency checks):**
 
 ```bash
-npx opik-configure --force-install
+npx opik-ts configure --force-install
 ```
+
+**Local development setup:**
+
+```bash
+npx opik-ts configure --use-local
+```
+
+This will skip the deployment selection step and automatically configure your environment for local development (localhost:5173).
 
 ## Environment Configuration
 
@@ -104,7 +113,7 @@ If you encounter permission errors during installation:
 
 ```bash
 # Use --force-install to bypass peer dependency checks
-npx opik-configure --force-install
+npx opik-ts configure --force-install
 ```
 
 ### Package Manager Issues
@@ -112,7 +121,7 @@ npx opik-configure --force-install
 If the CLI fails to detect your package manager:
 
 1. Ensure you have a `package.json` in your project directory
-2. Try running the CLI with debug mode: `npx opik-configure --debug`
+2. Try running the CLI with debug mode: `npx opik-ts configure --debug`
 3. Manually specify your package manager by selecting it from the prompts
 
 ### Environment Variable Setup
@@ -139,7 +148,7 @@ If traces aren't appearing in Opik:
 Enable verbose logging to troubleshoot issues:
 
 ```bash
-npx opik-configure --debug
+npx opik-ts configure --debug
 ```
 
 This will show detailed information about:
@@ -155,7 +164,7 @@ For automated deployments, use the non-interactive mode:
 
 ```bash
 # In your CI/CD pipeline
-npx opik-configure --default --force-install
+npx opik-ts configure --default --force-install
 ```
 
 Set environment variables beforehand:
@@ -163,7 +172,7 @@ Set environment variables beforehand:
 ```bash
 export OPIK_API_KEY="your-api-key"
 export OPENAI_API_KEY="your-openai-key"
-npx opik-configure --default
+npx opik-ts configure --default
 ```
 
 ## Next Steps

@@ -695,9 +695,9 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
-          - page: Opik Configure
-            path: docs/reference/typescript-sdk/opik-configure.mdx
-            slug: opik-configure
+          - page: Opik TS
+            path: docs/reference/typescript-sdk/opik-ts.mdx
+            slug: opik-ts
           - section: Evaluation
             slug: evaluation
             contents:
