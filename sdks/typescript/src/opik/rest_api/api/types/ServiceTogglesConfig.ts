@@ -8,4 +8,5 @@ export interface ServiceTogglesConfig {
     guardrailsEnabled: boolean;
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
+    welcomeWizardEnabled: boolean;
 }
