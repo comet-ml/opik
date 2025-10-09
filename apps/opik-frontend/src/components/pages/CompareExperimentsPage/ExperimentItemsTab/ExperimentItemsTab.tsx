@@ -247,7 +247,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
   );
 
-  // Hook for fetching non-truncated data for export
   const { refetch: refetchExportData } = useCompareExperimentsList(
     {
       workspaceName,
