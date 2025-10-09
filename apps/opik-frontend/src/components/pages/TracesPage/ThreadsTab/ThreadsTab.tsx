@@ -430,9 +430,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     const allRows = result.data.content;
     const selectedIds = Object.keys(rowSelection);
 
-    return selectedIds.length > 0
-      ? allRows.filter((row) => selectedIds.includes(row.id))
-      : allRows;
+    return allRows.filter((row) => selectedIds.includes(row.id));
   }, [refetchExportData, rowSelection]);
 
   const handleRowClick = useCallback(
