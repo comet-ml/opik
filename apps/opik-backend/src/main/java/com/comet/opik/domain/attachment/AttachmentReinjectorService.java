@@ -50,8 +50,8 @@ public class AttachmentReinjectorService {
      * Only processes if truncate=false.
      */
     @WithSpan
-    public Mono<Trace> reinjectAttachments(@NonNull Trace trace, boolean truncate) {
-        if (truncate) {
+    public Mono<Trace> reinjectAttachments(@NonNull Trace trace, boolean reinjectAttachments) {
+        if (!reinjectAttachments) {
             return Mono.just(trace);
         }
 
@@ -96,8 +96,8 @@ public class AttachmentReinjectorService {
      * Only processes if truncate=false.
      */
     @WithSpan
-    public Mono<Span> reinjectAttachments(@NonNull Span span, boolean truncate) {
-        if (truncate) {
+    public Mono<Span> reinjectAttachments(@NonNull Span span, boolean reinjectAttachments) {
+        if (!reinjectAttachments) {
             return Mono.just(span);
         }
 

@@ -7451,7 +7451,7 @@ class TracesResourceTest {
 
             // Then the trace should have attachments stripped and replaced with references
             // Wait for async processing and attachment stripping
-            // Use truncate=true to get attachment references instead of re-injected full base64 data
+            // Use strip_attachments=true to get attachment references instead of re-injected full base64 data
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
                 assertThat(retrievedTrace).isNotNull();
@@ -7557,7 +7557,7 @@ class TracesResourceTest {
             assertThat(attachmentPage).isNotNull();
             assertThat(attachmentPage.content()).hasSize(2); // Should have exactly 2, not duplicates
 
-            // Test 1: Fetch with truncate=true (default behavior) - should show references
+            // Test 1: Fetch with strip_attachments=true - should show references
             Trace truncatedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
             assertThat(truncatedTrace).isNotNull();
 
@@ -7979,7 +7979,7 @@ class TracesResourceTest {
             // Wait for async processing and attachment stripping
             var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
 
-            // Use truncate=true to get attachment references instead of re-injected full base64 data
+            // Use strip_attachments=true to get attachment references instead of re-injected full base64 data
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 // Ensure all traces can be retrieved successfully before proceeding with assertions
                 for (var originalTrace : traces) {

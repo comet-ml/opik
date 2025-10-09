@@ -5360,7 +5360,7 @@ class SpansResourceTest {
             // Then the span should have attachments stripped and replaced with references
             // Wait for async processing and attachment stripping
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                // Use truncate=true to get attachment references instead of reinjected base64
+                // Use strip_attachments=true to get attachment references instead of reinjected base64
                 Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
                 assertThat(retrievedSpan).isNotNull();
 
@@ -5381,35 +5381,52 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("when span is fetched with truncate flag, then attachments are handled accordingly")
-        void getById__whenFetchedWithTruncateFlag__thenAttachmentsAreHandledAccordingly() throws Exception {
-            // Given a span with base64 encoded attachments in its input
+        @DisplayName("when span is fetched with different truncate and strip_attachments flags, then response varies accordingly")
+        void getByList__whenFetchedWithDifferentFlags__thenResponseVariesAccordingly() throws Exception {
+            // Given a span with a large text payload (20k chars) plus base64 encoded attachments at the end
             String base64Png = AttachmentPayloadUtilsTest.createLargePngBase64();
             String base64Gif = AttachmentPayloadUtilsTest.createLargeGifBase64();
 
+            // Create a 20k character text payload
+            StringBuilder largeTextBuilder = new StringBuilder();
+            String loremIpsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. ";
+            while (largeTextBuilder.length() < 20000) {
+                largeTextBuilder.append(loremIpsum);
+            }
+            String largeText = largeTextBuilder.toString();
+
+            // Create input JSON with large text + attachments at the end
             String originalInputJson = String.format(
-                    "{\"message\": \"Images attached:\", " +
+                    "{\"message\": \"%s\", " +
                             "\"png_data\": \"%s\", " +
                             "\"gif_data\": \"%s\"}",
-                    base64Png, base64Gif);
+                    largeText, base64Png, base64Gif);
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree("{\"request\": \"process data\"}"))
+                    .output(JsonUtils.readTree("{\"result\": \"done\"}"))
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
             var span = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
                     .input(JsonUtils.readTree(originalInputJson))
                     .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
                     .metadata(JsonUtils.readTree("{}"))
                     .build();
 
             // When creating the span
-            spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
-            assertThat(span.id()).isNotNull();
+            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            assertThat(spanId).isNotNull();
 
             // Wait for async attachment stripping - verify attachments are stored and replaced with references
             Awaitility.await()
                     .pollInterval(500, TimeUnit.MILLISECONDS)
                     .atMost(30, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        Span retrievedSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY, true);
+                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
                         assertThat(retrievedSpan).isNotNull();
 
                         String inputString = retrievedSpan.input().toString();
@@ -5435,35 +5452,73 @@ class SpansResourceTest {
             assertThat(attachmentPage).isNotNull();
             assertThat(attachmentPage.content()).hasSize(2); // Should have exactly 2, not duplicates
 
-            // Test 1: Fetch with truncate=true (explicitly set; default is truncate=false) - should show references
-            Span truncatedSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY, true);
-            assertThat(truncatedSpan).isNotNull();
+            // Test 1: truncate=true && strip_attachments=true -> checks if the input/output is much smaller than the text sent (character limit applies)
+            // Note: When truncate=true, the truncation can cut off attachment references if they appear late in the JSON
+            // For this test with 20k Lorem ipsum text followed by attachment fields, the references are beyond the 10KB truncation threshold
+            Span.SpanPage truncatedPage = spanResourceClient.getByTraceIdAndProject(traceId, DEFAULT_PROJECT,
+                    TEST_WORKSPACE, API_KEY, true, true);
+            assertThat(truncatedPage).isNotNull();
+            assertThat(truncatedPage.content()).isNotEmpty();
+            Span truncatedSpan = truncatedPage.content().get(0);
 
             JsonNode truncatedInput = truncatedSpan.input();
             assertThat(truncatedInput).isNotNull();
             String truncatedInputString = truncatedInput.toString();
 
-            // Verify the base64 data is replaced by attachment references (with timestamps)
-            assertThat(truncatedInputString).containsPattern("\\[input-attachment-1-\\d+\\.png\\]");
-            assertThat(truncatedInputString).containsPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+            // Verify text is truncated (much smaller than 20k chars)
+            assertThat(truncatedInputString.length()).isLessThan(12000); // Should be truncated
+            // Verify base64 data is not in the truncated response (either stripped or cut off by truncation)
             assertThat(truncatedInputString).doesNotContain(base64Png);
             assertThat(truncatedInputString).doesNotContain(base64Gif);
+            // Note: We can't reliably test for attachment references here because truncation may cut them off
 
-            // Test 2: Fetch with truncate=false - should show original base64 data
-            Span fullSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY, false);
-            assertThat(fullSpan).isNotNull();
+            // Test 2: truncate=false && strip_attachments=true -> checks if we have the full text, but stripped attachments
+            Span.SpanPage strippedPage = spanResourceClient.getByTraceIdAndProject(traceId, DEFAULT_PROJECT,
+                    TEST_WORKSPACE, API_KEY, false, true);
+            assertThat(strippedPage).isNotNull();
+            assertThat(strippedPage.content()).isNotEmpty();
+            Span strippedSpan = strippedPage.content().get(0);
 
-            JsonNode fullInput = fullSpan.input();
-            assertThat(fullInput).isNotNull();
-            String fullInputString = fullInput.toString();
+            JsonNode strippedInput = strippedSpan.input();
+            assertThat(strippedInput).isNotNull();
+            String strippedInputString = strippedInput.toString();
 
-            // Verify the base64 data is restored (whitespace formatting may differ due to Jackson read/write)
-            assertThat(fullInputString).contains(base64Png);
-            assertThat(fullInputString).contains(base64Gif);
-            assertThat(fullInputString).contains("Images attached:");
-            // Should not contain attachment references
-            assertThat(fullInputString).doesNotContainPattern("\\[input-attachment-1-\\d+\\.png\\]");
-            assertThat(fullInputString).doesNotContainPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+            // Verify full text (NOT truncated) AND attachments are still references
+            assertThat(strippedInputString).contains(largeText); // Full text preserved
+            assertThat(strippedInputString).containsPattern("\\[input-attachment-1-\\d+\\.png\\]");
+            assertThat(strippedInputString).containsPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+            assertThat(strippedInputString).doesNotContain(base64Png);
+            assertThat(strippedInputString).doesNotContain(base64Gif);
+
+            // Test 3: truncate=false && strip_attachments=false -> verifies attachment reinjection
+            // Wait for MinIO uploads to complete by checking attachment availability
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Span.SpanPage fullPageCheck = spanResourceClient.getByTraceIdAndProject(traceId,
+                                DEFAULT_PROJECT,
+                                TEST_WORKSPACE, API_KEY, false, false);
+                        assertThat(fullPageCheck).isNotNull();
+                        assertThat(fullPageCheck.content()).isNotEmpty();
+                        Span fullSpanCheck = fullPageCheck.content().get(0);
+
+                        JsonNode fullInputCheck = fullSpanCheck.input();
+                        assertThat(fullInputCheck).isNotNull();
+                        String fullInputStringCheck = fullInputCheck.toString();
+
+                        // Verify full text is preserved (NOT truncated)
+                        assertThat(fullInputStringCheck).contains(largeText); // Full 20k+ char text preserved
+                        assertThat(fullInputStringCheck.length()).isGreaterThan(20000); // Much larger than truncation threshold
+
+                        // Verify the base64 data is reinjected (whitespace formatting may differ due to Jackson read/write)
+                        assertThat(fullInputStringCheck).contains(base64Png);
+                        assertThat(fullInputStringCheck).contains(base64Gif);
+
+                        // Should not contain attachment references when reinjection succeeds
+                        assertThat(fullInputStringCheck).doesNotContainPattern("\\[input-attachment-1-\\d+\\.png\\]");
+                        assertThat(fullInputStringCheck).doesNotContainPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+                    });
         }
     }
 

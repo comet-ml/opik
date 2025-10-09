@@ -17,5 +17,6 @@ public record TraceSearchCriteria(
         List<SortingField> sortingFields,
         UUID lastReceivedId,
         boolean truncate,
+        boolean stripAttachments,
         Set<Trace.TraceField> exclude) {
 }

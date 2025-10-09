@@ -79,7 +79,7 @@ public interface TraceService {
 
     Mono<Trace> get(UUID id);
 
-    Mono<Trace> get(UUID id, boolean truncate);
+    Mono<Trace> get(UUID id, boolean stripAttachments);
 
     Mono<TraceDetails> getTraceDetailsById(UUID id);
 
@@ -407,12 +407,11 @@ class TraceServiceImpl implements TraceService {
         return get(id, false);
     }
 
-    @Override
     @WithSpan
-    public Mono<Trace> get(@NonNull UUID id, boolean truncate) {
+    public Mono<Trace> get(@NonNull UUID id, boolean stripAttachments) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))))
-                .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, truncate));
+                .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, !stripAttachments));
     }
 
     @Override
@@ -455,11 +454,12 @@ class TraceServiceImpl implements TraceService {
                 .flatMap(resolvedCriteria -> template
                         .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection))
                         .flatMap(tracePage -> {
-                            // If truncate=false, reinject attachments into all traces
-                            if (!resolvedCriteria.truncate()) {
+                            // If stripAttachments=false, reinject attachments into all traces
+                            var reinjectAttachments = !resolvedCriteria.stripAttachments();
+                            if (reinjectAttachments) {
                                 return Flux.fromIterable(tracePage.content())
                                         .concatMap(trace -> attachmentReinjectorService
-                                                .reinjectAttachments(trace, resolvedCriteria.truncate()))
+                                                .reinjectAttachments(trace, reinjectAttachments))
                                         .collectList()
                                         .map(reinjectedTraces -> tracePage.toBuilder()
                                                 .content(reinjectedTraces)
@@ -581,14 +581,8 @@ class TraceServiceImpl implements TraceService {
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.search(limit, it)
-                        .concatMap(trace -> {
-                            // If truncate=false, reinject attachments
-                            if (!it.truncate()) {
-                                return attachmentReinjectorService.reinjectAttachments(trace,
-                                        it.truncate());
-                            }
-                            return Mono.just(trace);
-                        }));
+                        .concatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace,
+                                !it.stripAttachments())));
     }
 
     @Override

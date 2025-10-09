@@ -22,7 +22,8 @@ public record TraceThreadSearchStreamRequest(
         List<TraceThreadFilter> filters,
         UUID lastRetrievedThreadModelId,
         @Schema(description = "Max number of trace thread to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
-        @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate) {
+        @Schema(description = "Truncate input, output and metadata to slim payloads", defaultValue = "true") @DefaultValue("true") boolean truncate,
+        @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments", defaultValue = "false") @DefaultValue("false") boolean stripAttachments) {
 
     public Integer limit() {
         return limit == null ? 500 : limit;

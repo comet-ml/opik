@@ -190,10 +190,10 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return getById(id, workspaceName, apiKey, false);
     }
 
-    public Trace getById(UUID id, String workspaceName, String apiKey, boolean truncate) {
+    public Trace getById(UUID id, String workspaceName, String apiKey, boolean stripAttachments) {
         var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
-                .queryParam("truncate", truncate)
+                .queryParam("strip_attachments", stripAttachments)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
