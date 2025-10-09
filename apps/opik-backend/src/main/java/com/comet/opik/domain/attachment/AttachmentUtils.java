@@ -227,4 +227,49 @@ public class AttachmentUtils {
         }
         return false;
     }
+
+    /**
+     * Parses a MIME type string into category and subtype components.
+     *
+     * @param mimeType the MIME type string (e.g., "image/png", "application/pdf")
+     * @return a String array where [0] is the category and [1] is the subtype
+     *         Returns ["unknown", "unknown"] if the MIME type is null, empty, or malformed
+     */
+    public static String[] parseMimeType(String mimeType) {
+        if (mimeType == null || mimeType.isEmpty()) {
+            return new String[]{"unknown", "unknown"};
+        }
+
+        String[] parts = mimeType.split("/", 2);
+        if (parts.length != 2) {
+            return new String[]{"unknown", "unknown"};
+        }
+
+        return parts;
+    }
+
+    /**
+     * Calculates the decoded byte size from a base64 string.
+     * Uses the base64 encoding ratio: 4 base64 chars = 3 bytes of data.
+     * Accounts for padding characters (=) at the end.
+     *
+     * @param base64String the base64-encoded string
+     * @return the estimated decoded size in bytes
+     */
+    public static long calculateBase64DecodedSize(String base64String) {
+        if (base64String == null || base64String.isEmpty()) {
+            return 0;
+        }
+
+        long base64Length = base64String.length();
+        long paddingCount = 0;
+
+        if (base64String.endsWith("==")) {
+            paddingCount = 2;
+        } else if (base64String.endsWith("=")) {
+            paddingCount = 1;
+        }
+
+        return (base64Length * 3) / 4 - paddingCount;
+    }
 }

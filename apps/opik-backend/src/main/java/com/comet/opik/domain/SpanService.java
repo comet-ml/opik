@@ -148,7 +148,7 @@ public class SpanService {
 
             // Strip attachments from the span with the generated ID and project ID
             Span spanWithId = span.toBuilder().id(id).projectId(project.id()).build();
-            return attachmentStripperService.stripAttachmentsFromSpan(spanWithId, workspaceId, userName, projectName)
+            return attachmentStripperService.stripAttachments(spanWithId, workspaceId, userName, projectName)
                     .flatMap(processedSpan -> {
                         log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
                                 processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
@@ -189,7 +189,7 @@ public class SpanService {
                     String projectName = project.name();
 
                     // Strip attachments OUTSIDE the database transaction
-                    return attachmentStripperService.stripAttachmentsFromSpanUpdate(
+                    return attachmentStripperService.stripAttachments(
                             spanUpdate, id, workspaceId, userName, projectName)
                             .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
                 }));
@@ -251,7 +251,7 @@ public class SpanService {
             return attachmentService.getAttachmentInfoByEntity(id, SPAN, existingSpan.projectId())
                     .flatMap(existingAttachments ->
             // Step 2: Strip attachments OUTSIDE the database transaction
-            attachmentStripperService.stripAttachmentsFromSpanUpdate(
+            attachmentStripperService.stripAttachments(
                     spanUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate ->
             // Step 3: Update the span in database transaction
@@ -329,7 +329,7 @@ public class SpanService {
             return Flux.fromIterable(spans)
                     .flatMap(span -> {
                         String projectName = WorkspaceUtils.getProjectName(span.projectName());
-                        return attachmentStripperService.stripAttachmentsFromSpan(span, workspaceId, userName,
+                        return attachmentStripperService.stripAttachments(span, workspaceId, userName,
                                 projectName);
                     })
                     .collectList();
