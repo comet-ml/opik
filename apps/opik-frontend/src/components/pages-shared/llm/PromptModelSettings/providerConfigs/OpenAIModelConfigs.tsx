@@ -7,7 +7,8 @@ import {
   PROVIDER_MODEL_TYPE,
   ReasoningEffort,
 } from "@/types/providers";
-import { DEFAULT_OPEN_AI_CONFIGS, REASONING_MODELS } from "@/constants/llm";
+import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
+import { isReasoningModel } from "@/lib/modelUtils";
 import isUndefined from "lodash/isUndefined";
 import {
   Select,
@@ -31,8 +32,7 @@ const OpenAIModelConfigs = ({
   onChange,
 }: OpenAIModelSettingsProps) => {
   // Reasoning models (GPT-5, O1, O3, O4-mini) require temperature = 1.0
-  const isReasoningModel =
-    model && REASONING_MODELS.includes(model as PROVIDER_MODEL_TYPE);
+  const isReasoning = isReasoningModel(model);
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -41,17 +41,15 @@ const OpenAIModelConfigs = ({
           value={configs.temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
-          min={isReasoningModel ? 1 : 0}
+          min={isReasoning ? 1 : 0}
           max={1}
           step={0.01}
-          defaultValue={
-            isReasoningModel ? 1 : DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE
-          }
+          defaultValue={isReasoning ? 1 : DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE}
           label="Temperature"
           tooltip={
             <PromptModelSettingsTooltipContent
               text={
-                isReasoningModel
+                isReasoning
                   ? "Reasoning models require temperature = 1.0. This setting controls randomness in completions."
                   : "Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive."
               }
@@ -124,7 +122,7 @@ const OpenAIModelConfigs = ({
         />
       )}
 
-      {isReasoningModel && (
+      {isReasoning && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="reasoningEffort" className="text-sm font-medium">
