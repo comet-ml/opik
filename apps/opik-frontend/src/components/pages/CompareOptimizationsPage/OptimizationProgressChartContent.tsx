@@ -4,9 +4,8 @@ import { Dot, XAxis, CartesianGrid, YAxis, AreaChart, Area } from "recharts";
 import { LineDot } from "recharts/types/cartesian/Line";
 import debounce from "lodash/debounce";
 
-import ChartTooltipContent, {
-  ChartTooltipRenderHeaderArguments,
-} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderHeaderArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import OptimizationProgressTooltip from "./OptimizationProgressTooltip";
 import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
 import {
   ChartContainer,
@@ -21,6 +20,7 @@ export type DataRecord = {
   entityName: string;
   createdDate: string;
   value: number | null;
+  allFeedbackScores?: { name: string; value: number }[];
 };
 
 export type ChartData = {
@@ -198,7 +198,12 @@ const OptimizationProgressChartContent: React.FC<
           />
           <ChartTooltip
             isAnimationActive={false}
-            content={<ChartTooltipContent renderHeader={renderHeader} />}
+            content={
+              <OptimizationProgressTooltip
+                objectiveName={line}
+                renderHeader={renderHeader}
+              />
+            }
           />
           <ChartLegend
             content={
