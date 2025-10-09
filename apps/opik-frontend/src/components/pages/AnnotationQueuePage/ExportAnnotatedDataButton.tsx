@@ -110,6 +110,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       sorting: [],
       filters: annotationQueueFilter,
       search: "",
+      truncate: false,
     },
     {
       enabled:
