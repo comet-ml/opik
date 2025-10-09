@@ -72,7 +72,7 @@ const HomePageChart: React.FC<MetricOverviewChartProps> = ({
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
         <div className="comet-body-xs mb-1 text-light-slate">
-          {formatDate(payload?.[0]?.payload?.date, true)} UTC
+          {formatDate(payload?.[0]?.payload?.date, { utc: true })} UTC
         </div>
       );
     },

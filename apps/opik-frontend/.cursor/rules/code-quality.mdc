@@ -1,7 +1,7 @@
 ---
 description: Frontend code quality standards, TypeScript patterns, and naming conventions
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # Frontend Code Quality Standards

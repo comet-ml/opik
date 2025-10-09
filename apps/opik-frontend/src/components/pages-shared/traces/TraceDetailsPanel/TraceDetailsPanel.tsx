@@ -89,7 +89,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
       traceId,
-      truncate: false, // Disabled for now: Get truncated trace, attachments fetched separately
+      stripAttachments: true, // Keep attachments stripped - frontend fetches them separately
     },
     {
       placeholderData: keepPreviousData,
@@ -108,7 +108,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       projectId,
       page: 1,
       size: MAX_SPANS_LOAD_SIZE,
-      truncate: false, // Disabled for now: Get truncated spans, attachments fetched separately
+      stripAttachments: true, // Keep attachments stripped - frontend fetches them separately
     },
     {
       placeholderData: keepPreviousData,
