@@ -1,10 +1,5 @@
-from typing import Callable, Dict, Any, List, TypedDict, Optional
+from typing import Callable, Dict, Any, List, Optional
 from opik.evaluation.metrics.score_result import ScoreResult
-
-
-class WeightedMetricTypedDict(TypedDict):
-    metric: Callable[[Dict[str, Any], str], ScoreResult]
-    weight: float
 
 
 class MultiMetricObjective:
