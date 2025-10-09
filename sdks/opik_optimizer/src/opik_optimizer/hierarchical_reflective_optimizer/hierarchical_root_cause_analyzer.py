@@ -15,9 +15,6 @@ from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
 
 logger = logging.getLogger(__name__)
 
-MAX_PARALLEL_BATCHES = 5
-DEFAULT_BATCH_SIZE = 25
-
 
 class HierarchicalRootCauseAnalyzer:
     """
@@ -42,8 +39,8 @@ class HierarchicalRootCauseAnalyzer:
         call_model_fn,
         reasoning_model: str,
         seed: int,
-        max_parallel_batches: int = MAX_PARALLEL_BATCHES,
-        batch_size: int = DEFAULT_BATCH_SIZE,
+        max_parallel_batches,
+        batch_size,
         verbose: int = 1,
     ):
         """

@@ -5,12 +5,6 @@ from unittest.mock import Mock, AsyncMock, patch
 from typing import Any
 
 from opik_optimizer.hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
-from opik_optimizer.hierarchical_reflective_optimizer.types import (
-    FailureMode,
-    ImprovedPrompt,
-    PromptMessage,
-    HierarchicalRootCauseAnalysis,
-)
 from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
 
 

@@ -21,15 +21,11 @@ from ..optimizable_agent import OptimizableAgent
 from opik_optimizer.task_evaluator import _create_metric_class
 from opik_optimizer.optimization_result import OptimizationResult
 from . import reporting
-from .hierarchical_root_cause_analyzer import (
-    HierarchicalRootCauseAnalyzer,
-    HierarchicalRootCauseAnalysis,
-)
+from .hierarchical_root_cause_analyzer import HierarchicalRootCauseAnalyzer
 from .types import (
     FailureMode,
-    RootCauseAnalysis,
-    PromptMessage,
     ImprovedPrompt,
+    HierarchicalRootCauseAnalysis,
 )
 from .prompts import IMPROVE_PROMPT_TEMPLATE
 
@@ -573,14 +569,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 verbose=self.verbose,
             )
             
-            # Use the unified failure modes for improvement
-            root_cause_analysis = RootCauseAnalysis(
-                failure_modes=hierarchical_analysis.unified_failure_modes
-            )
-
             # Generate improved prompt for each failure mode
-            for idx, root_cause in enumerate(root_cause_analysis.failure_modes, 1):
-                logger.debug(f"Addressing failure mode {idx}/{len(root_cause_analysis.failure_modes)}: {root_cause.name}")
+            for idx, root_cause in enumerate(hierarchical_analysis.unified_failure_modes, 1):
+                logger.debug(f"Addressing failure mode {idx}/{len(hierarchical_analysis.unified_failure_modes)}: {root_cause.name}")
                 
                 # Try multiple attempts if needed
                 max_attempts = max_retries + 1
