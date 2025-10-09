@@ -373,7 +373,10 @@ from .types import (
     ValueEntrySource,
     Webhook,
     WebhookPublic,
+    WebhookTestResult,
+    WebhookTestResultStatus,
     WebhookWrite,
+    WelcomeWizardTracking,
     WorkspaceConfiguration,
     WorkspaceMetricRequest,
     WorkspaceMetricResponse,
@@ -413,6 +416,7 @@ from . import (
     spans,
     system_usage,
     traces,
+    welcome_wizard,
     workspaces,
 )
 from .attachments import (
@@ -847,7 +851,10 @@ __all__ = [
     "ValueEntrySource",
     "Webhook",
     "WebhookPublic",
+    "WebhookTestResult",
+    "WebhookTestResultStatus",
     "WebhookWrite",
+    "WelcomeWizardTracking",
     "WorkspaceConfiguration",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
@@ -876,5 +883,6 @@ __all__ = [
     "spans",
     "system_usage",
     "traces",
+    "welcome_wizard",
     "workspaces",
 ]

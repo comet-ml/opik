@@ -25,6 +25,7 @@ import { Prompts } from "./api/resources/prompts/client/Client";
 import { ServiceToggles } from "./api/resources/serviceToggles/client/Client";
 import { Spans } from "./api/resources/spans/client/Client";
 import { Traces } from "./api/resources/traces/client/Client";
+import { WelcomeWizard } from "./api/resources/welcomeWizard/client/Client";
 import { Workspaces } from "./api/resources/workspaces/client/Client";
 import { Redirect } from "./api/resources/redirect/client/Client";
 
@@ -75,6 +76,7 @@ export class OpikApiClient {
     protected _serviceToggles: ServiceToggles | undefined;
     protected _spans: Spans | undefined;
     protected _traces: Traces | undefined;
+    protected _welcomeWizard: WelcomeWizard | undefined;
     protected _workspaces: Workspaces | undefined;
     protected _redirect: Redirect | undefined;
 
@@ -154,6 +156,10 @@ export class OpikApiClient {
 
     public get traces(): Traces {
         return (this._traces ??= new Traces(this._options));
+    }
+
+    public get welcomeWizard(): WelcomeWizard {
+        return (this._welcomeWizard ??= new WelcomeWizard(this._options));
     }
 
     public get workspaces(): Workspaces {
