@@ -16,6 +16,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
@@ -55,6 +56,8 @@ public interface AlertService {
     Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     Alert getById(UUID id);
+
+    List<Alert> findAllByWorkspaceAndEventType(String workspaceId, AlertEventType eventType);
 
     Alert getByIdAndWorkspace(UUID id, String workspaceId);
 
@@ -156,6 +159,17 @@ class AlertServiceImpl implements AlertService {
     public Alert getById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return getByIdAndWorkspace(id, workspaceId);
+    }
+
+    @Override
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventType", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspaceAndEventType(@NonNull String workspaceId, @NonNull AlertEventType eventType) {
+        log.info("Fetching all enabled alerts for workspace '{}', eventType '{}'", workspaceId, eventType);
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+
+            return alertDAO.findByWorkspaceAndEventType(workspaceId, eventType.getValue());
+        });
     }
 
     @Override

@@ -1,6 +1,6 @@
 {
-  "name": "opik-configure",
-  "version": "0.1.2",
+  "name": "opik-ts",
+  "version": "0.1.3",
   "homepage": "https://github.com/comet-ml/opik",
   "repository": "https://github.com/comet-ml/opik",
   "description": "The Opik configure tool helps you to configure your Node.js project with Opik SDK",
@@ -16,7 +16,7 @@
     "llm"
   ],
   "bin": {
-    "opik-configure": "dist/bin.js"
+    "opik-ts": "dist/bin.js"
   },
   "publishConfig": {
     "access": "public"
