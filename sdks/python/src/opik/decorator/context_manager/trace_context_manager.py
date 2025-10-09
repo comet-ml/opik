@@ -18,6 +18,28 @@ def start_as_current_trace(
     thread_id: Optional[str] = None,
     flush: bool = False,
 ) -> Generator[trace.TraceData, Any, None]:
+    """
+    Starts a trace context manager to collect and manage tracing data during the
+    execution of a code block. This function initializes a trace, allows for
+    modifications within the context, and finishes the trace, sending data to the
+    Opik tracing infrastructure.
+
+    Args:
+        name: The name of the trace for identification purposes.
+        input: Optional input data associated with the trace.
+        output: Optional output data expected or associated with the trace.
+        tags: Optional list of string tags for labeling or describing the trace.
+        metadata: Optional dictionary containing additional information about the
+            trace.
+        project_name: Optional name of the project under which the trace belongs.
+        thread_id: Optional thread identifier to associate the trace with a
+            specific thread.
+        flush: A boolean indicating whether to flush the trace data immediately
+            after finishing the trace context.
+
+    Yields:
+        Provides the initialized trace data for manipulation during execution in the context.
+    """
     trace_data = trace.TraceData(
         id=helpers.generate_id(),
         start_time=datetime_helpers.local_timestamp(),
