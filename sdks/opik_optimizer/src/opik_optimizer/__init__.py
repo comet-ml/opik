@@ -18,6 +18,7 @@ from .meta_prompt_optimizer import MetaPromptOptimizer
 from .mipro_optimizer import MiproOptimizer
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
+from .multi_objective_metric import MultiMetricObjective
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
@@ -39,4 +40,5 @@ __all__ = [
     "setup_logging",
     "datasets",
     "TaskConfig",
+    "MultiMetricObjective",
 ]

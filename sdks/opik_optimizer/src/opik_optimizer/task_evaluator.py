@@ -1,10 +1,11 @@
 import logging
-from typing import Any
+from typing import Any, Union, List
 from collections.abc import Callable
 
 import opik
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics import base_metric, score_result
+from . import multi_objective_metric
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,13 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
         def __init__(self) -> None:
             self.name = metric.__name__
 
-        def score(self, llm_output: str, **kwargs: Any) -> score_result.ScoreResult:
+        def score(self, llm_output: str, **kwargs: Any) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
             try:
                 metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
+
+                if isinstance(metric, multi_objective_metric.MultiMetricObjective):
+                    return [metric_val, *metric_val.metadata["raw_score_results"]]
+
                 if isinstance(metric_val, score_result.ScoreResult):
                     return score_result.ScoreResult(
                         name=self.name,
