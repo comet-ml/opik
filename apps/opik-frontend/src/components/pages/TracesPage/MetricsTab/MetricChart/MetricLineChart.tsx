@@ -72,7 +72,7 @@ const MetricLineChart = ({
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
         <div className="comet-body-xs mb-1 text-light-slate">
-          {formatDate(payload?.[0]?.payload?.time, true)} UTC
+          {formatDate(payload?.[0]?.payload?.time, { utc: true })} UTC
         </div>
       );
     },

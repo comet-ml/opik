@@ -24,7 +24,7 @@ import TagList from "../TagList/TagList";
 import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
 import AgentGraphTab from "./AgentGraphTab";
-import { formatDuration } from "@/lib/date";
+import { formatDuration, formatDate } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
@@ -98,9 +98,25 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
 
   const duration = formatDuration(data.duration);
+  const start_time = data.start_time
+    ? formatDate(data.start_time, { includeSeconds: true })
+    : "";
+  const end_time = data.end_time
+    ? formatDate(data.end_time, { includeSeconds: true })
+    : "";
   const estimatedCost = data.total_estimated_cost;
   const model = get(data, "model", null);
   const provider = get(data, "provider", null);
+
+  const durationTooltip = (
+    <div>
+      Duration in seconds: {duration}
+      <p>
+        {start_time}
+        {end_time ? ` - ${end_time}` : ""}
+      </p>
+    </div>
+  );
 
   return (
     <div className="size-full max-w-full overflow-auto">
@@ -133,7 +149,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
           />
           <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
-            <TooltipWrapper content={`Duration in seconds: ${duration}`}>
+            <TooltipWrapper content={durationTooltip}>
               <div
                 className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
                 data-testid="data-viewer-duration"
