@@ -57,7 +57,7 @@ public interface AlertService {
 
     Alert getById(UUID id);
 
-    List<Alert> findAllByWorkspace(String workspaceId);
+    List<Alert> findAllByWorkspaceAndEventType(String workspaceId, AlertEventType eventType);
 
     Alert getByIdAndWorkspace(UUID id, String workspaceId);
 
@@ -162,14 +162,13 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId", returnType = Alert.class, wrapperType = List.class)
-    public List<Alert> findAllByWorkspace(@NonNull String workspaceId) {
-        log.info("Fetching all alerts for workspace '{}'", workspaceId);
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventType", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspaceAndEventType(@NonNull String workspaceId, @NonNull AlertEventType eventType) {
+        log.info("Fetching all enabled alerts for workspace '{}', eventType '{}'", workspaceId, eventType);
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 
-            return alertDAO.find(workspaceId, 0, 1000, null, null,
-                    Map.of());
+            return alertDAO.findByWorkspaceAndEventType(workspaceId, eventType.getValue());
         });
     }
 

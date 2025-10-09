@@ -532,3 +532,19 @@ webhook:
   # Default: 5s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: ${WEBHOOK_CONNECTION_TIMEOUT:-5s}
+  debouncing:
+    # Default: true
+    # Description: Whether or not webhook event debouncing is enabled
+    enabled: ${WEBHOOK_DEBOUNCING_ENABLED:-true}
+    # Default: 60s
+    # Description: Period for events aggregation before sending to webhook endpoint
+    windowSize: ${WEBHOOK_DEBOUNCING_WINDOW_SIZE:-60s}
+    # Default: 3m
+    # Description: Time-to-live for debouncing buckets in Redis
+    bucketTtl: ${WEBHOOK_DEBOUNCING_BUCKET_TTL:-3m}
+    # Default: 4s
+    # Description: Timeout for alert job execution
+    alertJobTimeout: ${WEBHOOK_DEBOUNCING_ALERT_JOB_TIMEOUT:-4s}
+    # Default: 100ms
+    # Description: Maximum time to wait for acquiring alert job lock
+    alertJobLockWaitTimeout: ${WEBHOOK_DEBOUNCING_ALERT_JOB_LOCK_WAIT_TIMEOUT:-100ms}

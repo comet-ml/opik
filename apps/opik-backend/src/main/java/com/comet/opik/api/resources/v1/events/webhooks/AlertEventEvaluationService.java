@@ -10,7 +10,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 
@@ -25,23 +24,15 @@ public class AlertEventEvaluationService {
 
     public void evaluateAlertEvent(@NonNull AlertEvent alertEvent) {
         log.debug("Evaluating alert event {}", alertEvent);
-        alertService.findAllByWorkspace(alertEvent.getWorkspaceId())
-                .stream()
-                .filter(alert -> {
-                    var triggers = alert.triggers();
-                    if (CollectionUtils.isNotEmpty(triggers)) {
-                        return triggers.stream().anyMatch(trigger -> trigger.eventType() == alertEvent.getEventType());
-                    }
-                    return false;
-                })
+        alertService.findAllByWorkspaceAndEventType(alertEvent.workspaceId(), alertEvent.eventType())
                 .forEach(alert -> {
                     if (isValidForAlert(alertEvent, alert.triggers())) {
                         log.debug("Alert {} matches event {}", alert.id(), alertEvent);
 
                         String eventId = idGenerator.generateId().toString();
                         alertBucketService
-                                .addEventToBucket(alert.id(), alertEvent.getWorkspaceId(), alertEvent.getEventType(),
-                                        eventId, JsonUtils.writeValueAsString(alertEvent.getPayload()))
+                                .addEventToBucket(alert.id(), alertEvent.workspaceId(), alertEvent.eventType(),
+                                        eventId, JsonUtils.writeValueAsString(alertEvent.payload()))
                                 .block();
                     }
                 });
@@ -49,7 +40,7 @@ public class AlertEventEvaluationService {
     }
 
     private boolean isValidForAlert(AlertEvent alertEvent, List<AlertTrigger> triggers) {
-        return switch (alertEvent.getEventType()) {
+        return switch (alertEvent.eventType()) {
             case PROMPT_CREATED -> true;
             // TODO: implement evaluation for all event types
             default -> false;

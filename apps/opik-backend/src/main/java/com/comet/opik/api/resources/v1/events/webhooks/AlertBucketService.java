@@ -288,8 +288,9 @@ public class AlertBucketService {
      * Data class to hold complete bucket information.
      */
     @Builder
-    public record BucketData(Set<String> eventIds, Set<String> payloads, long firstSeen, long windowSize,
-            String workspaceId) {
+    public record BucketData(@NonNull Set<String> eventIds, @NonNull Set<String> payloads, long firstSeen,
+            long windowSize,
+            @NonNull String workspaceId) {
     }
 
     /**
