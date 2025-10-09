@@ -10,7 +10,10 @@ import { REASONING_MODELS } from "@/constants/llm";
  */
 export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   return Boolean(
-    model && REASONING_MODELS.includes(model as PROVIDER_MODEL_TYPE),
+    model &&
+      (REASONING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
+        model as PROVIDER_MODEL_TYPE,
+      ),
   );
 };
 

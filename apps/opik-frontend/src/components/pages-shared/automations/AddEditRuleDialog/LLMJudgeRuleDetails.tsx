@@ -103,29 +103,23 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   );
 
   // Auto-adjust temperature for reasoning models
+  const model = form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE | "";
+  const config = form.watch("llmJudgeDetails.config");
+
   useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "llmJudgeDetails.model") {
-        const model = value.llmJudgeDetails?.model as PROVIDER_MODEL_TYPE | "";
-        const config = value.llmJudgeDetails?.config;
-
-        // When a reasoning model is selected, ensure temperature is at least 1.0
-        if (
-          isReasoningModel(model) &&
-          config &&
-          typeof config.temperature === "number" &&
-          config.temperature < 1
-        ) {
-          form.setValue("llmJudgeDetails.config", {
-            ...config,
-            temperature: 1.0,
-          });
-        }
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [form]);
+    // When a reasoning model is selected, ensure temperature is at least 1.0
+    if (
+      isReasoningModel(model) &&
+      config &&
+      typeof config.temperature === "number" &&
+      config.temperature < 1
+    ) {
+      form.setValue("llmJudgeDetails.config", {
+        ...config,
+        temperature: 1.0,
+      });
+    }
+  }, [model, config, form]);
 
   return (
     <>
