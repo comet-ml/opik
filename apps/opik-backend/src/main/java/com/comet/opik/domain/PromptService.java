@@ -6,6 +6,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
@@ -14,6 +15,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -34,6 +36,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
 import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -85,6 +88,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull EventBus eventBus;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -111,6 +115,12 @@ class PromptServiceImpl implements PromptService {
                     .handle(() -> createPromptVersionFromPromptRequest(createdPrompt, workspaceId, promptRequest))
                     .withRetry(3, this::newVersionConflict);
         }
+
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_CREATED)
+                .workspaceId(workspaceId)
+                .payload(createdPrompt)
+                .build());
 
         return createdPrompt;
     }

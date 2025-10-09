@@ -143,6 +143,87 @@ interface AlertDAO {
             @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("""
+            WITH target_alerts AS (
+                SELECT
+                    a.id as id,
+                    a.name as name,
+                    a.enabled as enabled,
+                    a.created_at as created_at,
+                    a.created_by as created_by,
+                    a.last_updated_at as last_updated_at,
+                    a.last_updated_by as last_updated_by,
+                    w.id as webhook_id,
+                    w.url as webhook_url,
+                    w.secret_token as webhook_secret_token,
+                    w.headers as webhook_headers,
+                    w.created_at as webhook_created_at,
+                    w.created_by as webhook_created_by,
+                    w.last_updated_at as webhook_last_updated_at,
+                    w.last_updated_by as webhook_last_updated_by
+                FROM alerts a
+                JOIN webhooks w ON a.webhook_id = w.id
+                WHERE a.workspace_id = :workspaceId AND a.enabled = true
+            ),
+            trigger_ids AS (
+                SELECT id
+                FROM alert_triggers
+                WHERE alert_id IN (SELECT id FROM target_alerts) AND event_type = :eventType
+            ),
+            trigger_configs AS (
+                SELECT
+                    tc.alert_trigger_id AS alert_trigger_id,
+                    JSON_ARRAYAGG(tc.trigger_config_json) AS trigger_config_json
+                FROM (
+                    SELECT
+                        JSON_OBJECT(
+                            'id', id,
+                            'alert_trigger_id', alert_trigger_id,
+                            'config_type', config_type,
+                            'config_value', config_value,
+                            'created_at', created_at,
+                            'created_by', created_by,
+                            'last_updated_at', last_updated_at,
+                            'last_updated_by', last_updated_by
+                        ) AS trigger_config_json,
+                        alert_trigger_id
+                    FROM alert_trigger_configs
+                    WHERE alert_trigger_id IN (SELECT id FROM trigger_ids)
+                ) AS tc
+                GROUP BY tc.alert_trigger_id
+            ),
+            target_triggers AS (
+                SELECT
+                    tj.alert_id AS alert_id,
+                    JSON_ARRAYAGG(tj.trigger_json) AS triggers_json
+                FROM (
+                    SELECT
+                        JSON_OBJECT(
+                            'id', at.id,
+                            'alert_id', at.alert_id,
+                            'event_type', at.event_type,
+                            'trigger_configs', tc.trigger_config_json,
+                            'created_at', at.created_at,
+                            'created_by', at.created_by
+                        ) AS trigger_json,
+                        at.alert_id AS alert_id
+                    FROM alert_triggers at
+                    LEFT JOIN trigger_configs tc
+                        ON at.id = tc.alert_trigger_id
+                    WHERE at.id IN (SELECT id FROM trigger_ids)
+                ) AS tj
+                GROUP BY tj.alert_id
+            )
+            SELECT *
+            FROM target_alerts a
+            JOIN target_triggers t
+                ON a.id = t.alert_id;
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Alert> findByWorkspaceAndEventType(@Bind("workspaceId") String workspaceId,
+            @Bind("eventType") String eventType);
+
+    @SqlQuery("""
              WITH target_alerts AS (
                 SELECT
                     a.id as id,

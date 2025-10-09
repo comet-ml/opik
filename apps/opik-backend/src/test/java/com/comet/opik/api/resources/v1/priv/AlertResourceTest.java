@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Prompt;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
@@ -17,8 +18,10 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -32,6 +35,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.eclipse.jetty.http.HttpHeader;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -48,6 +52,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -65,7 +70,9 @@ import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -126,10 +133,12 @@ class AlertResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private AlertResourceClient alertResourceClient;
+    private PromptResourceClient promptResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         this.alertResourceClient = new AlertResourceClient(client);
+        promptResourceClient = new PromptResourceClient(client, TestUtils.getBaseUrl(client), factory);
 
         ClientSupportUtils.config(client);
 
@@ -931,6 +940,102 @@ class AlertResourceTest {
             // Verify message format
             assertThat(payload.get("message").toString()).isEqualTo(String.format("Alert '%s': %d %s events aggregated",
                     alert.name(), eventIds.size(), alert.triggers().getFirst().eventType().getValue()));
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Alert Events:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TestAlertEvents {
+
+        private WireMockServer externalWebhookServer;
+        private static final String WEBHOOK_PATH = "/webhook";
+        private String webhookUrl;
+
+        @BeforeAll
+        void setUpAll() {
+            externalWebhookServer = new WireMockServer(0);
+            externalWebhookServer.start();
+        }
+
+        @AfterAll
+        void tearDownAll() {
+            if (externalWebhookServer != null) {
+                externalWebhookServer.stop();
+            }
+        }
+
+        @BeforeEach
+        void setUp() {
+            externalWebhookServer.resetAll();
+
+            // Setup WireMock to return successful response
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
+        }
+
+        @Test
+        @DisplayName("Success: should successfully send prompt creation event to webhook")
+        void testCreatePromptEvent__whenWebhookServerReceivesAlert() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with webhook
+            var alert = generateAlert();
+            var webhook = alert.webhook().toBuilder()
+                    .url(webhookUrl)
+                    .build();
+            alert = alert.toBuilder()
+                    .webhook(webhook)
+                    .enabled(true)
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(PROMPT_CREATED)
+                            .build()))
+                    .build();
+
+            // First create an alert for the event
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a prompt to trigger the event
+            var expectedPrompt = factory.manufacturePojo(Prompt.class)
+                    .toBuilder()
+                    .versionCount(0L)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
+
+            // Wait for the webhook event to be sent
+
+            Awaitility.await().untilAsserted(() -> {
+                var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                assertThat(requests).hasSize(1);
+            });
+
+            String actualRequestBody = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH))).get(0)
+                    .getBodyAsString();
+
+            // Get sent event and verify it's payload
+            WebhookEvent<Map<String, Object>> actualEvent = JsonUtils.readValue(actualRequestBody, WebhookEvent.class);
+            List<String> payloads = (List<String>) actualEvent.getPayload().get("metadata");
+            assertThat(payloads).hasSize(1);
+            Prompt prompt = JsonUtils.readValue(payloads.getFirst(), Prompt.class);
+
+            assertThat(prompt)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPrompt);
         }
     }
 

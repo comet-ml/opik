@@ -109,7 +109,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class PromptResourceTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
-    private final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
+    public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
             "type"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -996,8 +996,8 @@ class PromptResourceTest {
             assertThat(actualPrompt)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS)
-                                    .withComparatorForType(PromptResourceTest.this::comparatorForCreateAtAndUpdatedAt,
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
                     .isEqualTo(updatedPrompt);
@@ -1827,9 +1827,9 @@ class PromptResourceTest {
             assertThat(actualPrompt)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS)
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
                                     .withComparatorForType(
-                                            PromptResourceTest.this::comparatorForCreateAtAndUpdatedAt,
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
                     .isEqualTo(expectedPrompt);
@@ -2588,7 +2588,8 @@ class PromptResourceTest {
             assertThat(actualPromptVersion)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersion);
         }
@@ -2609,7 +2610,8 @@ class PromptResourceTest {
             assertThat(actualPromptVersion)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
                                     .build())
                     .isEqualTo(createdPromptVersion);
         }
@@ -2646,7 +2648,8 @@ class PromptResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withIgnoredFields("variables", "promptId")
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersions);
 
@@ -2777,8 +2780,9 @@ class PromptResourceTest {
             assertThat(promptPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS)
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
                                     .build())
                     .isEqualTo(expectedPrompts);
         }
@@ -2796,7 +2800,7 @@ class PromptResourceTest {
                 TAGS);
     }
 
-    private int comparatorForCreateAtAndUpdatedAt(Instant actual, Instant expected) {
+    public static int comparatorForCreateAtAndUpdatedAt(Instant actual, Instant expected) {
         var now = Instant.now();
 
         if (actual.isAfter(now) || actual.equals(now))
