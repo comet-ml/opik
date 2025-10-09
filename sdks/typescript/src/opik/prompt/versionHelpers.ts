@@ -6,6 +6,7 @@
 import type * as OpikApi from "@/rest_api/api";
 import type { Prompts } from "@/rest_api/api/resources/prompts/client/Client";
 import type { RequestOptions } from "@/types/request";
+import fastDeepEqual from "fast-deep-equal";
 
 /**
  * Fetches the latest version of a prompt, returning null if not found (404).
@@ -65,6 +66,7 @@ export function shouldCreateNewVersion(
 /**
  * Deep equality check for metadata objects.
  * Handles undefined and null as equivalent to empty objects.
+ * Uses fast-deep-equal for reliable structural comparison.
  *
  * @param a - First metadata object
  * @param b - Second metadata object
@@ -78,9 +80,8 @@ export function isMetadataEqual(
   const normalizedA = a ?? {};
   const normalizedB = b ?? {};
 
-  // Use JSON stringification for deep comparison
-  // Note: This assumes metadata doesn't contain functions, symbols, or circular refs
-  return JSON.stringify(normalizedA) === JSON.stringify(normalizedB);
+  // Use fast-deep-equal for robust structural comparison
+  return fastDeepEqual(normalizedA, normalizedB);
 }
 
 /**

@@ -87,7 +87,7 @@ export class Prompt {
     if (!this._metadata) {
       return undefined;
     }
-    return JSON.parse(JSON.stringify(this._metadata));
+    return structuredClone(this._metadata);
   }
 
   /**
@@ -181,7 +181,7 @@ export class Prompt {
 
   /**
    * Updates prompt properties (name, description, and/or tags).
-   * Performs synchronous update (no batching).
+   * Performs immediate update (no batching).
    *
    * @param updates - Partial updates with optional name, description, and tags
    * @returns Promise resolving to this Prompt instance for method chaining
@@ -221,7 +221,7 @@ export class Prompt {
 
   /**
    * Deletes this prompt from the backend.
-   * Performs synchronous deletion (no batching).
+   * Performs immediate deletion (no batching).
    */
   async delete(): Promise<void> {
     await this.opik.deletePrompts([this.id]);
@@ -388,7 +388,6 @@ export class Prompt {
    */
   async getVersion(commit: string): Promise<Prompt | null> {
     try {
-      // Uses: POST /v1/private/prompts/versions/retrieve
       const response = await this.opik.api.prompts.retrievePromptVersion(
         { name: this.name, commit },
         this.opik.api.requestOptions
