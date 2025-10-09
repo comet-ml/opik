@@ -7,6 +7,7 @@ import {
   DEFAULT_OPEN_ROUTER_CONFIGS,
   DEFAULT_VERTEX_AI_CONFIGS,
   DEFAULT_CUSTOM_CONFIGS,
+  REASONING_MODELS,
 } from "@/constants/llm";
 import {
   LLMAnthropicConfigsType,
@@ -28,10 +29,18 @@ import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming
 
 export const getDefaultConfigByProvider = (
   provider?: PROVIDER_TYPE | "",
+  model?: PROVIDER_MODEL_TYPE | "",
 ): LLMPromptConfigsType => {
   if (provider === PROVIDER_TYPE.OPEN_AI) {
+    // Reasoning models (GPT-5, O1, O3, O4-mini) require temperature = 1.0
+    const isReasoningModel =
+      model && REASONING_MODELS.includes(model as PROVIDER_MODEL_TYPE);
+    const temperature = isReasoningModel
+      ? 1
+      : DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE;
+
     return {
-      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
+      temperature,
       maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
@@ -113,7 +122,7 @@ export const generateDefaultPrompt = ({
     messages: [generateDefaultLLMPromptMessage()],
     model: modelByDefault,
     provider,
-    configs: getDefaultConfigByProvider(provider),
+    configs: getDefaultConfigByProvider(provider, modelByDefault),
     ...initPrompt,
     id: generateRandomString(),
   };
