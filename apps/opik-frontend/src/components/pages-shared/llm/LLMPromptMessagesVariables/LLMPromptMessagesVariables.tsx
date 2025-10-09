@@ -8,7 +8,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINERS_MAP, EXPLAINER_ID } from "@/constants/explainers";
 
 const DEFAULT_DESCRIPTION =
-  "Detected variables in your prompt (e.g., {{variable1}}) will appear below. For each one, select a field from a recent trace to map it — including image fields like input.image_url or output.image_base64. These mappings auto-fill the variables during rule execution.";
+  "Detected variables in your prompt (e.g., {{variable1}}, {{{image_url}}}) will appear below. For each one, select a field from a recent trace to map it — including image fields like input.image_url or output.image_base64. Use {{{variable}}} for image URLs to prevent HTML encoding. These mappings auto-fill the variables during rule execution.";
 
 const DEFAULT_ERROR_TEXT =
   "Template parsing error. The variables cannot be extracted.";
