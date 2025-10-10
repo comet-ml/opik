@@ -164,7 +164,7 @@ const PromptMessageImageTags: React.FunctionComponent<
       })}
       {editable && canAddMore && (
         <Popover onOpenChange={setOpen} open={open}>
-          <TooltipWrapper content="Add image: base64 string, image URL, or template variable {{image}} (escaped) / {{{image}}} (unescaped for URLs)">
+          <TooltipWrapper content="Add image: base64 string, image URL, or template variable {{image}}">
             <PopoverTrigger asChild>
               <Button
                 data-testid="add-image-button"
@@ -193,29 +193,10 @@ const PromptMessageImageTags: React.FunctionComponent<
                   Add
                 </Button>
               </div>
-              <div className="space-y-2">
-                <p className="comet-body-xs text-muted-foreground">
-                  You can add a base64 string, image URL, or template variable:
-                </p>
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-2">
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">{`{{image}}`}</code>
-                    <span className="text-muted-foreground">
-                      Escaped (HTML-safe for text)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <code className="rounded bg-muted px-1 py-0.5 text-xs">{`{{{image}}}`}</code>
-                    <span className="text-muted-foreground">
-                      Unescaped (for image URLs)
-                    </span>
-                  </div>
-                </div>
-                <p className="comet-body-xs text-muted-foreground">
-                  Use unescaped syntax for image URLs to prevent HTML encoding
-                  of special characters.
-                </p>
-              </div>
+              <p className="comet-body-xs text-muted-foreground">
+                You can add a base64 string, image URL, or template variable{" "}
+                <code>{`{{image}}`}</code>
+              </p>
             </div>
           </PopoverContent>
         </Popover>

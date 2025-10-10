@@ -315,7 +315,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground]: {
     id: EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground,
     description:
-      "Use mustache syntax to reference dataset variables in your prompt. Examples: ",
+      "Use mustache syntax to reference dataset variables in your prompt. Example: ",
   },
   [EXPLAINER_ID.whats_llm_as_a_judge]: {
     id: EXPLAINER_ID.whats_llm_as_a_judge,
@@ -340,7 +340,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_format_should_the_prompt_be]: {
     id: EXPLAINER_ID.what_format_should_the_prompt_be,
     description:
-      "Use mustache syntax to reference dataset variables in your prompt. Examples: {{question}} (escaped), {{{image_url}}} (unescaped for URLs).",
+      "Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}.",
   },
   [EXPLAINER_ID.whats_an_optimization_run]: {
     id: EXPLAINER_ID.whats_an_optimization_run,
