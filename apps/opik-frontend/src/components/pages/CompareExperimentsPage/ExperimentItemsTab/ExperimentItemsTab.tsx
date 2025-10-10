@@ -40,6 +40,7 @@ import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtual
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsOutputCell from "@/components/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
@@ -181,6 +182,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
+  const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
@@ -250,6 +255,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       experimentsIds,
       filters,
       sorting,
+      search: search as string,
       truncate: true,
       page: page as number,
       size: size as number,
@@ -410,12 +416,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Comments",
         type: COLUMN_TYPE.string,
         cell: CommentsCell.Compare as never,
+        sortable: isColumnSortable(COLUMN_COMMENTS_ID, sortableColumns),
         customMeta: {
           experimentsIds,
         },
       } as ColumnData<ExperimentsCompare>,
     ];
-  }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
+  }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId, sortableColumns]);
 
   const scoresColumnsData = useMemo(() => {
     return dynamicScoresColumns.map(
@@ -481,6 +488,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           >(datasetColumnsData, {
             selectedColumns,
             columnsOrder,
+            sortableColumns,
           }),
         }),
       );
@@ -700,6 +708,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <SearchInput
+            searchText={search!}
+            setSearchText={setSearch}
+            placeholder="Search dataset items"
+            className="w-[320px]"
+            dimension="sm"
+          ></SearchInput>
           <FiltersButton
             columns={filterColumns}
             config={filtersConfig as never}

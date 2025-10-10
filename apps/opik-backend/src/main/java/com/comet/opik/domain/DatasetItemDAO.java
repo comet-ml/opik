@@ -378,8 +378,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LIMIT 1 BY id
             ) AS tfs ON ei.trace_id = tfs.id
             <endif>
+            <if(dataset_item_filters || search_filter)>
+            WHERE 1=1
             <if(dataset_item_filters)>
-            WHERE <dataset_item_filters>
+            AND <dataset_item_filters>
+            <endif>
+            <if(search_filter)>
+            AND <search_filter>
+            <endif>
             <endif>
             ;
             """;
@@ -721,8 +727,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.last_updated_at,
                 di.created_by,
                 di.last_updated_by
+            <if(dataset_item_filters || search_filter)>
+            HAVING 1=1
             <if(dataset_item_filters)>
-            HAVING <dataset_item_filters>
+            AND <dataset_item_filters>
+            <endif>
+            <if(search_filter)>
+            AND <search_filter>
+            <endif>
             <endif>
             <if(sort_fields)>
             ORDER BY <sort_fields>
@@ -1185,6 +1197,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                     feedbackScoreIsEmptyFilters));
                 });
 
+        Optional.ofNullable(datasetItemSearchCriteria.search())
+                .filter(s -> !s.isBlank())
+                .ifPresent(searchText -> template.add("search_filter",
+                        "multiSearchAnyCaseInsensitive(toString(data), :searchTerms) > 0"));
+
         return template;
     }
 
@@ -1195,6 +1212,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_ITEM);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                });
+
+        Optional.ofNullable(datasetItemSearchCriteria.search())
+                .filter(s -> !s.isBlank())
+                .ifPresent(searchText -> {
+                    String[] searchTerms = searchText.split("\\s+");
+                    statement.bind("searchTerms", searchTerms);
                 });
     }
 

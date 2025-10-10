@@ -14,7 +14,7 @@ public class SortableFields {
     public static final String LAST_CREATED_EXPERIMENT_AT = "last_created_experiment_at";
     public static final String LAST_CREATED_OPTIMIZATION_AT = "last_created_optimization_at";
     public static final String INPUT = "input";
-    public static final String OUTPUT = "output";
+    public static final String OUTPUT = "output.*";
     public static final String START_TIME = "start_time";
     public static final String END_TIME = "end_time";
     public static final String DURATION = "duration";
@@ -44,4 +44,6 @@ public class SortableFields {
     public static final String INSTRUCTIONS = "instructions";
     public static final String WEBHOOK_URL = "webhook_url";
     public static final String WEBHOOK_SECRET_TOKEN = "webhook_secret_token";
+    public static final String DATA = "data.*";
+    public static final String COMMENTS = "comments";
 }

@@ -16,5 +16,6 @@ public record DatasetItemSearchCriteria(
         @NonNull EntityType entityType,
         List<? extends Filter> filters,
         List<SortingField> sortingFields,
+        String search,
         boolean truncate) {
 }

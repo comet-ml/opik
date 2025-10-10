@@ -418,6 +418,7 @@ public class DatasetsResource {
             @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
+            @QueryParam("search") String search,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
@@ -438,6 +439,7 @@ public class DatasetsResource {
                 .experimentIds(experimentIds)
                 .filters(queryFilters)
                 .sortingFields(sortingFields)
+                .search(search)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
                 .build();

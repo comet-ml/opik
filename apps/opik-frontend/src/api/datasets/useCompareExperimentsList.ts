@@ -52,7 +52,7 @@ const getCompareExperimentsList = async (
         experiment_ids: JSON.stringify(experimentsIds),
         ...processFilters(filters),
         ...processSorting(sorting),
-        ...(search && { name: search }),
+        ...(search && { search }),
         truncate,
         size,
         page,
