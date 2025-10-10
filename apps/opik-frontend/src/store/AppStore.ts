@@ -11,8 +11,6 @@ type AppStore = {
   setUser: (user: AppUser) => void;
   activeWorkspaceName: string;
   setActiveWorkspaceName: (workspaceName: string) => void;
-  quickstartOpened: boolean;
-  setQuickstartOpened: (opened: boolean) => void;
 };
 
 const useAppStore = create<AppStore>((set) => ({
@@ -29,9 +27,6 @@ const useAppStore = create<AppStore>((set) => ({
       activeWorkspaceName: workspaceName,
     }));
   },
-  quickstartOpened: false,
-  setQuickstartOpened: (opened) =>
-    set((state) => ({ ...state, quickstartOpened: opened })),
 }));
 
 export const useActiveWorkspaceName = () =>

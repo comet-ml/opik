@@ -9,6 +9,7 @@ import WelcomeWizardDialog from "@/components/pages-shared/WelcomeWizard/Welcome
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 
 const PageLayout = () => {
   const [expanded = true, setExpanded] =
@@ -78,6 +79,9 @@ const PageLayout = () => {
         open={showWelcomeWizard}
         onClose={handleCloseWelcomeWizard}
       />
+
+      {/* Quickstart Dialog */}
+      <QuickstartDialog />
     </section>
   );
 };

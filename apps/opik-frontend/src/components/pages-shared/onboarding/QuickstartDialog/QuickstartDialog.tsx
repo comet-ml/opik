@@ -2,17 +2,13 @@ import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import React from "react";
 import { SheetTitle } from "@/components/ui/sheet";
 import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
+import { useOpenQuickStartDialog } from "@/hooks/useOpenQuickStartDialog";
 
-type QuickstartDialogProps = {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-};
-const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
-  open,
-  setOpen,
-}) => {
+const QuickstartDialog: React.FC = () => {
+  const { isOpen, setOpen } = useOpenQuickStartDialog();
+
   return (
-    <SideDialog open={open} setOpen={setOpen}>
+    <SideDialog open={isOpen} setOpen={setOpen}>
       <div className="flex w-full min-w-fit flex-col px-20 pb-20">
         <SheetTitle className="comet-title-xl my-3 text-left">
           Quickstart guide
@@ -47,4 +43,5 @@ const QuickstartDialog: React.FC<QuickstartDialogProps> = ({
   );
 };
 
+export { useOpenQuickStartDialog };
 export default QuickstartDialog;

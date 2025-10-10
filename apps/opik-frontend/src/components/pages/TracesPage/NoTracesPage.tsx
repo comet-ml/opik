@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Book, GraduationCap } from "lucide-react";
 import { useQueryParam } from "use-query-params";
 import noDataTracesImageUrl from "/images/no-data-traces.png";
@@ -6,12 +6,12 @@ import noDataSpansImageUrl from "/images/no-data-spans.png";
 import noDataMetricsImageUrl from "/images/no-data-metrics.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const NoTracesPage = () => {
-  const [openQuickstart, setOpenQuickstart] = useState(false);
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const [type = TRACE_DATA_TYPE.traces] = useQueryParam("type");
 
   const imageUrl = useMemo(() => {
@@ -46,11 +46,10 @@ const NoTracesPage = () => {
               Read documentation
             </a>
           </Button>
-          <Button onClick={() => setOpenQuickstart(true)}>
+          <Button onClick={openQuickstart}>
             <GraduationCap className="mr-2 size-4" />
             Explore Quickstart guide
           </Button>
-          <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
         </>
       }
     ></NoDataPage>

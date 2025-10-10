@@ -46,6 +46,8 @@ import liteLLMCode from "@/components/pages-shared/onboarding/FrameworkIntegrati
 import ragasCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Ragas.py?raw";
 import dspyCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/DSPy.py?raw";
 
+import { integrationLogsMap } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-logs";
+
 import ollamaCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Ollama.py?raw";
 import crewaiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/CrewAI.py?raw";
 import adkCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/ADK.py?raw";
@@ -75,6 +77,8 @@ export type Integration = {
   tag?: string;
   installCommand: string;
   docsLink: string;
+  executionUrl?: string;
+  executionLogs?: string[];
 };
 
 export const INTEGRATION_CATEGORIES = {
@@ -104,6 +108,8 @@ export const INTEGRATIONS: Integration[] = [
     code: openAiCode,
     installCommand: "pip install -U opik openai",
     docsLink: buildDocsUrl("/integrations/openai"),
+    executionUrl: "openai/run_stream",
+    executionLogs: integrationLogsMap.OpenAI,
   },
   // TODO: Code snippet required
   // {
@@ -125,6 +131,8 @@ export const INTEGRATIONS: Integration[] = [
     code: anthropicCode,
     installCommand: "pip install -U opik anthropic",
     docsLink: buildDocsUrl("/integrations/anthropic"),
+    executionUrl: "anthropic/run_stream",
+    executionLogs: integrationLogsMap.Anthropic,
   },
 
   {
@@ -147,6 +155,8 @@ export const INTEGRATIONS: Integration[] = [
     code: geminiCode,
     installCommand: "pip install -U opik google-genai",
     docsLink: buildDocsUrl("/integrations/gemini"),
+    // executionUrl: "gemini/run_stream",
+    // executionLogs: integrationLogsMap.Gemini,
   },
   {
     id: "ollama",

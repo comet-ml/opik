@@ -21,7 +21,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import HomePageChart from "@/components/pages/HomePage/HomePageChart";
 import { Project } from "@/types/projects";
-import useAppStore from "@/store/AppStore";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import {
   getChartData,
   RE_FETCH_INTERVAL,
@@ -108,7 +108,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
   intervalStart,
   intervalEnd,
 }) => {
-  const { setQuickstartOpened } = useAppStore();
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const [selectedMetric, setSelectedMetric] = useState<string | undefined>();
   const projectIds = useMemo(() => {
     return projects.map((p) => p.id);
@@ -274,7 +274,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
               Integrate your project with Opik to evaluate your AI.
               <br /> Metrics will appear here once data starts flowing.
             </div>
-            <Button className="mt-4" onClick={() => setQuickstartOpened(true)}>
+            <Button className="mt-4" onClick={openQuickstart}>
               Get started <ChevronRight className="ml-2 size-4 shrink-0" />
             </Button>
           </div>
@@ -303,7 +303,7 @@ export const MetricsOverview: React.FC<MetricsOverviewProps> = ({
             {description}
           </div>
           {noMetricsAndProjectsData && (
-            <Button className="mt-4" onClick={() => setQuickstartOpened(true)}>
+            <Button className="mt-4" onClick={openQuickstart}>
               Get started <ChevronRight className="ml-2 size-4 shrink-0" />
             </Button>
           )}

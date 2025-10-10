@@ -16,6 +16,9 @@ import { Integration } from "@/constants/integrations";
 import HelpLinks from "./HelpLinks";
 import { ExternalLink } from "lucide-react";
 import { IntegrationStep } from "./IntegrationStep";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
+import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
+import CodeExecutor from "@/components/pages-shared/onboarding/CodeExecutor/CodeExecutor";
 
 type IntegrationDetailsDialogProps = {
   selectedIntegration?: Integration;
@@ -27,6 +30,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
 > = ({ selectedIntegration, onClose }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
+  const variant = useFeatureFlagVariantKey("run-button-activation-test");
 
   if (!selectedIntegration) {
     return null;
@@ -46,6 +50,14 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     apiKey,
     withHighlight: true,
   });
+
+  const canExecuteCode =
+    selectedIntegration.executionUrl &&
+    selectedIntegration.executionLogs?.length &&
+    apiKey &&
+    Boolean(CODE_EXECUTOR_SERVICE_URL);
+
+  const shouldShowCodeExecutor = canExecuteCode && variant === "test";
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
@@ -92,11 +104,23 @@ const IntegrationDetailsDialog: React.FunctionComponent<
             title={`2. Run the following code to get started with ${selectedIntegration.title}`}
             className="mb-6"
           >
-            <CodeHighlighter
-              data={codeWithConfig}
-              copyData={codeWithConfigToCopy}
-              highlightedLines={lines}
-            />
+            {shouldShowCodeExecutor ? (
+              <CodeExecutor
+                executionUrl={selectedIntegration.executionUrl!}
+                executionLogs={selectedIntegration.executionLogs!}
+                data={codeWithConfig}
+                copyData={codeWithConfigToCopy}
+                apiKey={apiKey}
+                workspaceName={workspaceName}
+                highlightedLines={lines}
+              />
+            ) : (
+              <CodeHighlighter
+                data={codeWithConfig}
+                copyData={codeWithConfigToCopy}
+                highlightedLines={lines}
+              />
+            )}
           </IntegrationStep>
 
           <Separator className="my-6" />

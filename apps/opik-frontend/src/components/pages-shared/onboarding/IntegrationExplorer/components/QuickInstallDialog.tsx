@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogAutoScrollBody,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import cursorLogo from "/images/integrations/cursor.png";
 import copilotLogo from "/images/integrations/copilot.png";
 import windsurfLogo from "/images/integrations/windsurf.png";
@@ -128,6 +129,9 @@ If issues are reported:
 `;
 
 const QUICKSTART_DOCS_LINK = "https://www.comet.com/docs/opik/quickstart";
+const CURSOR_PROMPT_URL = `https://cursor.com/link/prompt?text=${encodeURIComponent(
+  AI_ASSISTANT_PROMPT,
+)}`;
 
 type QuickInstallDialogProps = {
   open: boolean;
@@ -193,13 +197,28 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
               className="mb-6"
             >
               <div className="relative overflow-hidden rounded-md bg-primary-foreground">
-                <div className="absolute right-2 top-0.5 z-10">
-                  <CopyButton
-                    message="Successfully copied code"
-                    text={AI_ASSISTANT_PROMPT}
-                    tooltipText="Copy code"
-                    className="mr-2 text-muted-slate"
-                  />
+                <div className="flex items-center justify-between gap-2 border-b border-b-border p-2">
+                  <div className="comet-body-s-accented px-2 text-foreground">
+                    AI assistant prompt
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="xs" asChild>
+                      <a
+                        href={CURSOR_PROMPT_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Try in Cursor
+                        <ExternalLink className="ml-1.5 size-3" />
+                      </a>
+                    </Button>
+                    <CopyButton
+                      message="Successfully copied code"
+                      text={AI_ASSISTANT_PROMPT}
+                      tooltipText="Copy code"
+                      className="text-muted-slate"
+                    />
+                  </div>
                 </div>
                 <pre className="max-h-[300px] select-all overflow-auto whitespace-pre-wrap p-4 font-code text-sm">
                   {AI_ASSISTANT_PROMPT}
