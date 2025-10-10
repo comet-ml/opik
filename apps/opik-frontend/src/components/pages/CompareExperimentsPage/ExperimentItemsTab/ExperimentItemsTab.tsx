@@ -437,7 +437,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         },
       } as ColumnData<ExperimentsCompare>,
     ];
-  }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId, sortableColumns]);
+  }, [
+    dynamicOutputColumns,
+    experiments,
+    experimentsIds,
+    setTraceId,
+    sortableColumns,
+  ]);
 
   const scoresColumnsData = useMemo(() => {
     return dynamicScoresColumns.map(
