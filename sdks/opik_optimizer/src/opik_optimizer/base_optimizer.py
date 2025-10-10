@@ -341,6 +341,7 @@ class BaseOptimizer(ABC):
             "metric": getattr(metric, "__name__", str(metric)),
             "dataset": getattr(dataset, "name", None),
             "dataset_id": dataset_id,
+            "optimizer": self.__class__.__name__,
             "optimizer_metadata": self._build_optimizer_metadata(),
             "tool_signatures": self._summarize_tool_signatures(prompt),
             "configuration": {

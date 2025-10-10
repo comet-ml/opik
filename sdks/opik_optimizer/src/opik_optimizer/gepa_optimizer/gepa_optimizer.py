@@ -253,7 +253,7 @@ class GepaOptimizer(BaseOptimizer):
                     opt_id = None
 
             gepa_reporting.display_header(
-                algorithm="GEPA",
+                algorithm=self.__class__.__name__,
                 optimization_id=opt_id,
                 dataset_id=getattr(dataset, "id", None),
                 verbose=self.verbose,
@@ -264,7 +264,7 @@ class GepaOptimizer(BaseOptimizer):
             _display_config(
                 messages=prompt.get_messages(),
                 optimizer_config={
-                    "optimizer": "GEPA",
+                    "optimizer": self.__class__.__name__,
                     "model": self.model,
                     "reflection_model": self.reflection_model,
                     "max_metric_calls": max_metric_calls,
@@ -422,7 +422,7 @@ class GepaOptimizer(BaseOptimizer):
                     "system_prompt": candidate_prompt,
                     "gepa_score": val_scores[idx] if idx < len(val_scores) else None,
                     "opik_score": score,
-                    "source": "GEPA",
+                    "source": self.__class__.__name__,
                 }
             )
             history.append(
