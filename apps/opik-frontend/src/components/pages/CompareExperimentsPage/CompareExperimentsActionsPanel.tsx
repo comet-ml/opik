@@ -67,20 +67,23 @@ const processNestedExportColumn = (
 };
 
 type CompareExperimentsActionsPanelProps = {
-  rows?: ExperimentsCompare[];
+  getDataForExport?: () => Promise<ExperimentsCompare[]>;
+  selectedRows?: ExperimentsCompare[];
   columnsToExport?: string[];
   experiments?: Experiment[];
 };
 
 const CompareExperimentsActionsPanel: React.FC<
   CompareExperimentsActionsPanelProps
-> = ({ rows = [], columnsToExport, experiments }) => {
+> = ({ getDataForExport, selectedRows = [], columnsToExport, experiments }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
-  const disabled = !rows?.length;
+  const disabled = !selectedRows?.length;
 
-  const mapRowData = useCallback(() => {
-    if (!columnsToExport) return [];
+  const mapRowData = useCallback(async () => {
+    if (!columnsToExport || !getDataForExport) return [];
+
+    const rows = await getDataForExport();
 
     const localExperiments = experiments ?? [];
     const isAllNamesUnique =
@@ -132,7 +135,7 @@ const CompareExperimentsActionsPanel: React.FC<
         {},
       );
     });
-  }, [rows, columnsToExport, experiments]);
+  }, [getDataForExport, columnsToExport, experiments]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {

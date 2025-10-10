@@ -17,7 +17,8 @@ import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDi
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
-  rows: Array<Trace | Span>;
+  getDataForExport: () => Promise<Array<Trace | Span>>;
+  selectedRows: Array<Trace | Span>;
   columnsToExport: string[];
   projectName: string;
   projectId: string;
@@ -25,7 +26,8 @@ type TracesActionsPanelProps = {
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
-  rows,
+  getDataForExport,
+  selectedRows,
   type,
   columnsToExport,
   projectName,
@@ -35,18 +37,18 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
-  const tracesBatchDeleteMutation = useTracesBatchDeleteMutation();
-  const disabled = !rows?.length;
+  const { mutate } = useTracesBatchDeleteMutation();
+  const disabled = !selectedRows?.length;
 
   const deleteTracesHandler = useCallback(() => {
-    tracesBatchDeleteMutation.mutate({
+    mutate({
       projectId,
-      ids: rows.map((row) => row.id),
+      ids: selectedRows.map((row) => row.id),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, rows]);
+  }, [projectId, selectedRows, mutate]);
 
-  const mapRowData = useCallback(() => {
+  const mapRowData = useCallback(async () => {
+    const rows = await getDataForExport();
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         // we need split by dot to parse feedback_scores into correct structure
@@ -70,7 +72,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         return acc;
       }, {});
     });
-  }, [rows, columnsToExport]);
+  }, [getDataForExport, columnsToExport]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {
@@ -95,14 +97,19 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       />
       <AddTagDialog
         key={`tag-${resetKeyRef.current}`}
-        rows={rows}
+        rows={selectedRows}
         open={open === 3}
         setOpen={setOpen}
         projectId={projectId}
         type={type}
         onSuccess={onClearSelection}
       />
-      <AddToDropdown rows={rows} disabled={disabled} />
+      <AddToDropdown
+        getDataForExport={getDataForExport}
+        selectedRows={selectedRows}
+        disabled={disabled}
+        dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+      />
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"

@@ -417,6 +417,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const { refetch: refetchExportData } = useTracesOrSpansList(
+    {
+      projectId,
+      type: type as TRACE_DATA_TYPE,
+      sorting: sortedColumns,
+      filters,
+      page: page as number,
+      size: size as number,
+      search: search as string,
+      truncate: false,
+    },
+    {
+      enabled: false,
+    },
+  );
+
   const { data: statisticData, refetch: refetchStatistic } =
     useTracesOrSpansStatistic(
       {
@@ -529,6 +545,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const getDataForExport = useCallback(async (): Promise<
+    Array<Trace | Span>
+  > => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
 
   const handleRowClick = useCallback(
     (row?: Trace | Span, lastSection?: DetailsActionSectionValue) => {
@@ -838,7 +873,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <TracesActionsPanel
             projectId={projectId}
             projectName={projectName}
-            rows={selectedRows}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             type={type as TRACE_DATA_TYPE}
             onClearSelection={clearRowSelection}
