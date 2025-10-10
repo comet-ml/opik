@@ -22,7 +22,10 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
                 metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
 
                 if isinstance(metric, multi_metric_objective.MultiMetricObjective):
-                    if hasattr(metric_val, "metadata") and "raw_score_results" in metric_val.metadata:
+                    if (
+                        hasattr(metric_val, "metadata")
+                        and "raw_score_results" in metric_val.metadata
+                    ):
                         return [metric_val, *metric_val.metadata["raw_score_results"]]
                     else:
                         return [metric_val]
