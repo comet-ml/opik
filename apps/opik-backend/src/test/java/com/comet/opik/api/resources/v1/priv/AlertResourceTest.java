@@ -89,6 +89,7 @@ import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
 import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -1345,6 +1346,114 @@ class AlertResourceTest {
                                                     JsonUtils.writeValueAsString(Set.of(projectId))))
                                             .build()))
                             .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("traceErrorsProjectScopeProvider")
+        @DisplayName("when single trace with error is created, then webhook is called based on project scope")
+        void whenSingleTraceWithErrorIsCreated_thenWebhookIsCalledBasedOnProjectScope(
+                Function<UUID, AlertTrigger> getAlertTrigger) {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with or without project scope configuration
+            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a trace with error
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload();
+            List<Trace> traces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
+
+            assertThat(traces).hasSize(1);
+            Trace actualTrace = traces.getFirst();
+
+            assertThat(actualTrace)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
+                                    .build())
+                    .isEqualTo(trace);
+
+            assertThat(actualTrace.projectName()).isEqualTo(projectName);
+            assertThat(actualTrace.projectId()).isEqualTo(projectId);
+        }
+
+        static Stream<Arguments> traceErrorsProjectScopeProvider() {
+            return Stream.of(
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_ERRORS)
+                            .build()),
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_ERRORS)
+                            .triggerConfigs(List.of(
+                                    AlertTriggerConfig.builder()
+                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                            .configValue(Map.of(
+                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
+                                            .build()))
+                            .build()));
+        }
+
+        @Test
+        @DisplayName("when batch of traces with errors is created, then webhook is called")
+        void whenBatchOfTracesWithErrorsIsCreated_thenWebhookIsCalled() {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert for trace errors
+            var alertTrigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_ERRORS)
+                    .build();
+            var alert = createAlertForEvent(alertTrigger);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a batch of traces with errors
+            List<Trace> tracesWithErrors = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .visibilityMode(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload();
+            List<Trace> actualTraces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
+
+            assertThat(actualTraces).hasSize(tracesWithErrors.size());
+
+            actualTraces.forEach(actualTrace -> {
+                assertThat(actualTrace.projectName()).isEqualTo(projectName);
+                assertThat(actualTrace.projectId()).isEqualTo(projectId);
+            });
+
+            assertThat(actualTraces)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
+                                    .build())
+                    .ignoringCollectionOrder()
+                    .isEqualTo(tracesWithErrors);
         }
 
         private String verifyWebhookCalledAndGetPayload() {
