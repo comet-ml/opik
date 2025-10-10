@@ -130,7 +130,7 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   localStorageKey,
 }) => {
   const tableData = useMemo(() => {
-    if (!isObject(data) || isNull(data)) {
+    if (!isObject(data)) {
       return [];
     }
 
@@ -139,7 +139,7 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
       key,
       value,
       depth: 0,
-      isExpandable: isObject(value) && !isNull(value) && 0 < maxDepth,
+      isExpandable: isObject(value) && 0 < maxDepth,
     }));
   }, [data, maxDepth]);
 
@@ -167,8 +167,6 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   const [expanded, setExpanded] = localStorageKey
     ? [localStorageExpanded, setLocalStorageExpanded]
     : [regularExpanded, setRegularExpanded];
-
-  // Removed useEffect that reset expanded state on initialExpanded changes to preserve user interaction state.
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
@@ -232,8 +230,7 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
           key: `Item ${index + 1}`,
           value: item,
           depth: row.depth + 1,
-          isExpandable:
-            isObject(item) && !isNull(item) && row.depth + 1 < maxDepth,
+          isExpandable: isObject(item) && row.depth + 1 < maxDepth,
         }));
       }
 

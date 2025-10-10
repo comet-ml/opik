@@ -23,9 +23,6 @@ export interface MessageRendererProps {
    */
   message: unknown;
 
-  /**
-   * Optional className to apply to the container
-   */
   className?: string;
 
   /**
@@ -116,7 +113,6 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
             }
           }
 
-          // Handle string result
           const textContent =
             typeof extractedText === "string"
               ? extractedText
