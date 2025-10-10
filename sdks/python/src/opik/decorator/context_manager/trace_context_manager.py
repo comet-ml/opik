@@ -1,4 +1,5 @@
 import logging
+from contextlib import contextmanager
 from typing import Any, Generator, Optional, Dict, List
 
 from opik import datetime_helpers
@@ -8,6 +9,7 @@ from .. import base_track_decorator
 LOGGER = logging.getLogger(__name__)
 
 
+@contextmanager
 def start_as_current_trace(
     name: str,
     input: Optional[Dict[str, Any]] = None,
