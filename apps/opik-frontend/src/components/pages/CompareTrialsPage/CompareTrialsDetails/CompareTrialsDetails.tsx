@@ -36,9 +36,9 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
 
   const scores = useMemo(() => {
     if (isCompare || !experiment?.feedback_scores) return [];
-    
+
     const objectiveName = optimization?.objective_name;
-    
+
     // Sort scores: main objective first, then alphabetically
     return [...experiment.feedback_scores].sort((a, b) => {
       if (a.name === objectiveName) return -1;
@@ -49,12 +49,15 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
 
   const colorMap = useMemo(() => {
     if (!optimization?.objective_name || scores.length === 0) return {};
-    
+
     const secondaryScoreNames = scores
       .filter((score) => score.name !== optimization.objective_name)
       .map((score) => score.name);
-    
-    return generateDistinctColorMap(optimization.objective_name, secondaryScoreNames);
+
+    return generateDistinctColorMap(
+      optimization.objective_name,
+      secondaryScoreNames,
+    );
   }, [optimization?.objective_name, scores]);
 
   useEffect(() => {

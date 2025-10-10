@@ -1,5 +1,4 @@
 import React from "react";
-import * as RechartsPrimitive from "recharts";
 import isUndefined from "lodash/isUndefined";
 import { getPayloadConfigFromPayload, useChart } from "@/components/ui/chart";
 import {
@@ -36,9 +35,7 @@ const OptimizationProgressTooltip = React.forwardRef<
   }
 
   const firstItem = payload[0];
-  const allFeedbackScores = (
-    firstItem?.payload?.allFeedbackScores || []
-  ).sort(
+  const allFeedbackScores = (firstItem?.payload?.allFeedbackScores || []).sort(
     (a: { name: string; value: number }, b: { name: string; value: number }) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
   );
@@ -111,13 +108,9 @@ const OptimizationProgressTooltip = React.forwardRef<
                 <>
                   <div className="mx-2 border-t border-border/50"></div>
                   {allFeedbackScores.map(
-                    (
-                      score: { name: string; value: number },
-                      idx: number,
-                    ) => {
+                    (score: { name: string; value: number }, idx: number) => {
                       // Get color from config if available, otherwise use default gray
-                      const scoreColor =
-                        config[score.name]?.color || "#64748b";
+                      const scoreColor = config[score.name]?.color || "#64748b";
 
                       return (
                         <div

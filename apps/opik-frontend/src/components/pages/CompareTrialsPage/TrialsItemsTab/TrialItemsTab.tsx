@@ -306,13 +306,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   const scoresColumnsData = useMemo(() => {
     // Extract all unique feedback score names from experiments
     const feedbackScoreNames = new Set<string>();
-    
+
     experiments?.forEach((experiment) => {
       experiment.feedback_scores?.forEach((score) => {
         feedbackScoreNames.add(score.name);
       });
     });
-    
+
     // Convert to array and sort: main objective first, then alphabetically
     const sortedScoreNames = Array.from(feedbackScoreNames).sort((a, b) => {
       // Main objective always comes first
@@ -321,7 +321,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       // Sort the rest alphabetically (case-insensitive)
       return a.localeCompare(b, undefined, { sensitivity: "base" });
     });
-    
+
     // Create column for each feedback score
     return sortedScoreNames.map((scoreName) => ({
       id: `score_${scoreName}`,
@@ -335,14 +335,14 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       },
     })) as ColumnData<ExperimentsCompare>[];
   }, [experiments, experimentsIds, objectiveName]);
-  
+
   // Auto-select all score columns when they become available
   useEffect(() => {
     const scoreColumnIds = scoresColumnsData.map((col) => col.id);
     const missingScoreColumns = scoreColumnIds.filter(
-      (id) => !selectedColumns.includes(id)
+      (id) => !selectedColumns.includes(id),
     );
-    
+
     if (missingScoreColumns.length > 0) {
       setSelectedColumns((prev) => [...prev, ...missingScoreColumns]);
     }

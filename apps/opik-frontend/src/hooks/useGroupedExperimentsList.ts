@@ -473,13 +473,13 @@ export default function useGroupedExperimentsList(
     () => ({
       content: hasGroups
         ? groupedData.content
-        : (data?.content as GroupedExperiment[]) ?? [],
+        : ((data?.content as GroupedExperiment[]) ?? []),
       flattenGroups: hasGroups ? groupedData.flattenGroups : [],
       aggregationMap: hasGroups ? aggregationMap : {},
       sortable_by: hasGroups
         ? groupedData.sortable_by
-        : data?.sortable_by ?? [],
-      total: hasGroups ? groupedData.total : data?.total ?? 0,
+        : (data?.sortable_by ?? []),
+      total: hasGroups ? groupedData.total : (data?.total ?? 0),
     }),
     [
       hasGroups,
