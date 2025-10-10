@@ -5,7 +5,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from opik.cli import cli
@@ -27,7 +26,7 @@ class TestDownloadCommand:
         mock_opik = MagicMock()
         mock_client = MagicMock()
         mock_opik.Opik.return_value = mock_client
-        
+
         # Mock trace data
         mock_trace = MagicMock()
         mock_trace.id = "trace_123"
@@ -36,42 +35,47 @@ class TestDownloadCommand:
             "name": "test_trace",
             "start_time": "2024-01-01T00:00:00Z",
             "input": {"query": "test"},
-            "output": {"result": "success"}
+            "output": {"result": "success"},
         }
-        
+
         mock_span = MagicMock()
         mock_span.model_dump.return_value = {
             "id": "span_123",
             "name": "test_span",
             "start_time": "2024-01-01T00:00:00Z",
             "input": {"data": "test"},
-            "output": {"result": "processed"}
+            "output": {"result": "processed"},
         }
-        
+
         mock_client.search_traces.return_value = [mock_trace]
         mock_client.search_spans.return_value = [mock_span]
-        
+
         with patch("opik.cli.download.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
-                result = runner.invoke(cli, [
-                    "download",
-                    "test_project",
-                    "--output-dir", temp_dir,
-                    "--max-results", "10"
-                ])
-                
+                result = runner.invoke(
+                    cli,
+                    [
+                        "download",
+                        "test_project",
+                        "--output-dir",
+                        temp_dir,
+                        "--max-results",
+                        "10",
+                    ],
+                )
+
                 assert result.exit_code == 0
                 assert "Successfully downloaded 1 items" in result.output
-                
+
                 # Check that files were created
                 # The download command creates workspace/project_name structure
                 project_dir = Path(temp_dir) / "default" / "test_project"
                 assert project_dir.exists()
-                
+
                 trace_files = list(project_dir.glob("trace_*.json"))
                 assert len(trace_files) == 1
-                
+
                 # Check file content
                 with open(trace_files[0], "r") as f:
                     data = json.load(f)
@@ -85,16 +89,14 @@ class TestDownloadCommand:
         mock_client = MagicMock()
         mock_opik.Opik.return_value = mock_client
         mock_client.search_traces.return_value = []
-        
+
         with patch("opik.cli.download.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
-                result = runner.invoke(cli, [
-                    "download",
-                    "empty_project",
-                    "--output-dir", temp_dir
-                ])
-                
+                result = runner.invoke(
+                    cli, ["download", "empty_project", "--output-dir", temp_dir]
+                )
+
                 assert result.exit_code == 0
                 assert "No traces found in the project" in result.output
 
@@ -121,18 +123,18 @@ class TestUploadCommand:
         mock_opik = MagicMock()
         mock_client = MagicMock()
         mock_opik.Opik.return_value = mock_client
-        
+
         # Create mock trace and span objects
         mock_trace_obj = MagicMock()
         mock_client.trace.return_value = mock_trace_obj
         mock_client.span.return_value = MagicMock()
-        
+
         with patch("opik.cli.upload.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Create test data directory structure
                 project_dir = Path(temp_dir) / "test_project"
                 project_dir.mkdir(parents=True)
-                
+
                 # Create a test trace file
                 trace_data = {
                     "trace": {
@@ -144,37 +146,37 @@ class TestUploadCommand:
                         "output": {"result": "success"},
                         "metadata": {"version": "1.0"},
                         "tags": ["test"],
-                        "thread_id": "thread_123"
+                        "thread_id": "thread_123",
                     },
-                    "spans": [{
-                        "id": "span_123",
-                        "name": "test_span",
-                        "start_time": "2024-01-01T00:00:00Z",
-                        "end_time": "2024-01-01T00:01:00Z",
-                        "input": {"data": "test"},
-                        "output": {"result": "processed"},
-                        "type": "general",
-                        "model": "gpt-4",
-                        "provider": "openai"
-                    }],
+                    "spans": [
+                        {
+                            "id": "span_123",
+                            "name": "test_span",
+                            "start_time": "2024-01-01T00:00:00Z",
+                            "end_time": "2024-01-01T00:01:00Z",
+                            "input": {"data": "test"},
+                            "output": {"result": "processed"},
+                            "type": "general",
+                            "model": "gpt-4",
+                            "provider": "openai",
+                        }
+                    ],
                     "downloaded_at": "2024-01-01T00:00:00Z",
-                    "project_name": "test_project"
+                    "project_name": "test_project",
                 }
-                
+
                 trace_file = project_dir / "trace_123.json"
                 with open(trace_file, "w") as f:
                     json.dump(trace_data, f)
-                
+
                 runner = CliRunner()
-                result = runner.invoke(cli, [
-                    "upload", 
-                    str(project_dir), 
-                    "test_project"
-                ])
-                
+                result = runner.invoke(
+                    cli, ["upload", str(project_dir), "test_project"]
+                )
+
                 assert result.exit_code == 0
                 assert "Successfully uploaded 1 items" in result.output
-                
+
                 # Verify that the client methods were called
                 mock_client.trace.assert_called_once()
                 mock_client.span.assert_called_once()
@@ -184,41 +186,38 @@ class TestUploadCommand:
         mock_opik = MagicMock()
         mock_client = MagicMock()
         mock_opik.Opik.return_value = mock_client
-        
+
         with patch("opik.cli.upload.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Create test data directory structure
                 project_dir = Path(temp_dir) / "test_project"
                 project_dir.mkdir(parents=True)
-                
+
                 # Create a test trace file
                 trace_data = {
                     "trace": {
                         "id": "trace_123",
                         "name": "test_trace",
-                        "start_time": "2024-01-01T00:00:00Z"
+                        "start_time": "2024-01-01T00:00:00Z",
                     },
                     "spans": [],
                     "downloaded_at": "2024-01-01T00:00:00Z",
-                    "project_name": "test_project"
+                    "project_name": "test_project",
                 }
-                
+
                 trace_file = project_dir / "trace_123.json"
                 with open(trace_file, "w") as f:
                     json.dump(trace_data, f)
-                
+
                 runner = CliRunner()
-                result = runner.invoke(cli, [
-                    "upload", 
-                    str(project_dir), 
-                    "test_project",
-                    "--dry-run"
-                ])
-                
+                result = runner.invoke(
+                    cli, ["upload", str(project_dir), "test_project", "--dry-run"]
+                )
+
                 assert result.exit_code == 0
                 assert "Dry run complete: Would upload 1 items" in result.output
                 assert "Dry run mode - no data will be uploaded" in result.output
-                
+
                 # Verify that no actual upload methods were called
                 mock_client.trace.assert_not_called()
                 mock_client.span.assert_not_called()
@@ -228,12 +227,10 @@ class TestUploadCommand:
         with tempfile.TemporaryDirectory() as temp_dir:
             nonexistent_dir = Path(temp_dir) / "nonexistent"
             runner = CliRunner()
-            result = runner.invoke(cli, [
-                "upload", 
-                str(nonexistent_dir), 
-                "test_project"
-            ])
-            
+            result = runner.invoke(
+                cli, ["upload", str(nonexistent_dir), "test_project"]
+            )
+
             assert result.exit_code == 1
             assert "Directory not found" in result.output
 
@@ -243,14 +240,10 @@ class TestUploadCommand:
             # Create empty project directory
             project_dir = Path(temp_dir) / "empty_project"
             project_dir.mkdir(parents=True)
-            
+
             runner = CliRunner()
-            result = runner.invoke(cli, [
-                "upload", 
-                str(project_dir), 
-                "test_project"
-            ])
-            
+            result = runner.invoke(cli, ["upload", str(project_dir), "test_project"])
+
             assert result.exit_code == 0
             assert "No trace files found" in result.output
 

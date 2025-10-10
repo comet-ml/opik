@@ -4,7 +4,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import click
 from rich.console import Console
@@ -15,7 +15,7 @@ import opik
 console = Console()
 
 
-def _upload_traces(client, project_dir: Path, dry_run: bool) -> int:
+def _upload_traces(client: Any, project_dir: Path, dry_run: bool) -> int:
     """Upload traces from JSON files."""
     trace_files = list(project_dir.glob("trace_*.json"))
 
@@ -78,15 +78,17 @@ def _upload_traces(client, project_dir: Path, dry_run: bool) -> int:
 
                 # Create spans for this trace (let system generate new IDs)
                 # First, create a mapping of old span IDs to new span IDs
-                span_id_mapping = {}
+                span_id_mapping: Dict[str, str] = {}
 
                 # Sort spans by hierarchy (root spans first, then children)
                 # Build a mapping from span ID to span info for O(1) parent lookup
                 span_id_to_info = {span.get("id"): span for span in spans_info}
-                span_depths = {}
+                span_depths: Dict[str, int] = {}
 
-                def compute_span_depth(span_info):
+                def compute_span_depth(span_info: Dict[str, Any]) -> int:
                     span_id = span_info.get("id")
+                    if span_id is None:
+                        return 0  # Skip spans without IDs
                     if span_id in span_depths:
                         return span_depths[span_id]
                     parent_id = span_info.get("parent_span_id")
@@ -158,7 +160,7 @@ def _upload_traces(client, project_dir: Path, dry_run: bool) -> int:
     return uploaded_count
 
 
-def _upload_datasets(client, project_dir: Path, dry_run: bool) -> int:
+def _upload_datasets(client: Any, project_dir: Path, dry_run: bool) -> int:
     """Upload datasets from JSON files."""
     dataset_files = list(project_dir.glob("dataset_*.json"))
 
@@ -181,7 +183,7 @@ def _upload_datasets(client, project_dir: Path, dry_run: bool) -> int:
 
             # Check if dataset already exists
             try:
-                existing_dataset = client.get_dataset(dataset_data["name"])
+                client.get_dataset(dataset_data["name"])
                 console.print(
                     f"[yellow]Dataset '{dataset_data['name']}' already exists, skipping...[/yellow]"
                 )
@@ -219,7 +221,7 @@ def _upload_datasets(client, project_dir: Path, dry_run: bool) -> int:
     return uploaded_count
 
 
-def _upload_experiments(client, project_dir: Path, dry_run: bool) -> int:
+def _upload_experiments(client: Any, project_dir: Path, dry_run: bool) -> int:
     """Upload experiments from JSON files."""
     experiment_files = list(project_dir.glob("experiment_*.json"))
 
@@ -258,7 +260,7 @@ def _upload_experiments(client, project_dir: Path, dry_run: bool) -> int:
             # Create experiment with basic metadata
             # Note: We only create the experiment metadata, not the trace relationships
             # The traces will maintain their experiment_id when uploaded separately
-            experiment_obj = client.create_experiment(
+            client.create_experiment(
                 dataset_name=experiment_data["dataset_name"],
                 name=experiment_data["name"],
                 experiment_config=experiment_data["experiment_data"].get("metadata"),
@@ -279,7 +281,7 @@ def _upload_experiments(client, project_dir: Path, dry_run: bool) -> int:
     return uploaded_count
 
 
-def _upload_prompts(client, project_dir: Path, dry_run: bool) -> int:
+def _upload_prompts(client: Any, project_dir: Path, dry_run: bool) -> int:
     """Upload prompts from JSON files."""
     prompt_files = list(project_dir.glob("prompt_*.json"))
 
@@ -400,7 +402,7 @@ def upload(
 
         if not project_dir.exists():
             console.print(f"[red]Error: Directory not found: {project_dir}[/red]")
-            console.print(f"[yellow]Make sure the folder path is correct.[/yellow]")
+            console.print("[yellow]Make sure the folder path is correct.[/yellow]")
             sys.exit(1)
 
         console.print(f"[green]Uploading data from {project_dir}[/green]")
