@@ -2,10 +2,11 @@ import pytest
 
 import opik
 from opik.api_objects import attachment
-from opik.types import FeedbackScoreDict
+from opik.types import FeedbackScoreDict, ErrorInfoDict
 
 from ...testlib import (
     ANY_BUT_NONE,
+    ANY_STRING,
     FeedbackScoreModel,
     SpanModel,
     TraceModel,
@@ -252,11 +253,57 @@ def test_start_as_current_span__user_error__logged_and_raised(fake_backend):
             tags=["one", "two", "three"],
             metadata={"one": "first", "two": "second", "three": "third"},
             project_name="test-project",
+            model="gpt-3.5-turbo",
+            provider="openai",
             flush=True,
         ):
             raise Exception("Test exception")
 
     assert exc_info.value.args[0] == "Test exception"
+
+    assert len(fake_backend.trace_trees) == 1
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="test-span",
+        project_name="test-project",
+        input={"input": "test-input"},
+        output=None,
+        tags=["one", "two", "three"],
+        metadata={"one": "first", "two": "second", "three": "third"},
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="test-span",
+                input={"input": "test-input"},
+                output=None,
+                tags=["one", "two", "three"],
+                metadata={"one": "first", "two": "second", "three": "third"},
+                type="llm",
+                end_time=ANY_BUT_NONE,
+                project_name="test-project",
+                model="gpt-3.5-turbo",
+                provider="openai",
+                error_info=ErrorInfoDict(
+                    exception_type="Exception",
+                    message="Test exception",
+                    traceback=ANY_STRING,
+                ),
+                total_cost=None,
+                last_updated_at=ANY_BUT_NONE,
+            )
+        ],
+        error_info=ErrorInfoDict(
+            exception_type="Exception",
+            message="Test exception",
+            traceback=ANY_STRING,
+        ),
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
 
 def test_start_as_current_span__distributed_headers_provided__child_span_created(

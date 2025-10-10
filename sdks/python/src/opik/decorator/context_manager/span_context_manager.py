@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List, Generator
 
 from opik.api_objects import span, opik_client
 from opik.types import SpanType
-from .. import arguments_helpers, base_track_decorator
+from .. import arguments_helpers, base_track_decorator, error_info_collector
 
 LOGGER = logging.getLogger(__name__)
 
@@ -66,39 +66,49 @@ def start_as_current_span(
         tracing_active=True,
     )
 
+    end_arguments = arguments_helpers.EndSpanParameters(
+        input=span_creation_result.span_data.input or input,
+        output=span_creation_result.span_data.output or output,
+        tags=span_creation_result.span_data.tags or tags,
+        metadata=span_creation_result.span_data.metadata or metadata,
+        provider=span_creation_result.span_data.provider or provider,
+        model=span_creation_result.span_data.model or model,
+    )
     try:
         yield span_creation_result.span_data
 
-        # fill end arguments
-        end_arguments = arguments_helpers.EndSpanParameters(
-            input=span_creation_result.span_data.input or input,
-            output=span_creation_result.span_data.output or output,
-            tags=span_creation_result.span_data.tags or tags,
-            metadata=span_creation_result.span_data.metadata or metadata,
-            provider=span_creation_result.span_data.provider or provider,
-            model=span_creation_result.span_data.model or model,
-        )
+        # update end arguments
+        end_arguments.input = span_creation_result.span_data.input or input
+        end_arguments.output = span_creation_result.span_data.output or output
+        end_arguments.tags = span_creation_result.span_data.tags or tags
+        end_arguments.metadata = span_creation_result.span_data.metadata or metadata
+        end_arguments.provider = span_creation_result.span_data.provider or provider
+        end_arguments.model = span_creation_result.span_data.model or model
     except Exception as exception:
         LOGGER.error(
             "Error in user's script while executing span context manager: %s",
             str(exception),
             exc_info=True,
         )
+
+        # collect error info
+        end_arguments.error_info = error_info_collector.collect(exception)
+        end_arguments.output = None
         raise
+    finally:
+        # save span/trace data at the end of the context manager
+        client = opik_client.get_client_cached()
 
-    # save span/trace data at the end of the context manager
-    client = opik_client.get_client_cached()
-
-    span_creation_result.span_data.init_end_time().update(
-        **end_arguments.to_kwargs(),
-    )
-    client.span(**span_creation_result.span_data.as_parameters)
-
-    if span_creation_result.trace_data is not None:
-        span_creation_result.trace_data.init_end_time().update(
-            **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+        span_creation_result.span_data.init_end_time().update(
+            **end_arguments.to_kwargs(),
         )
-        client.trace(**span_creation_result.trace_data.as_parameters)
+        client.span(**span_creation_result.span_data.as_parameters)
 
-    if flush:
-        client.flush()
+        if span_creation_result.trace_data is not None:
+            span_creation_result.trace_data.init_end_time().update(
+                **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
+            )
+            client.trace(**span_creation_result.trace_data.as_parameters)
+
+        if flush:
+            client.flush()
