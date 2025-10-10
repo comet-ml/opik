@@ -8,6 +8,7 @@ import {
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import { ButtonLayoutSize } from "@/components/pages-shared/traces/DetailsActionSection";
+import { isObjectSpan } from "@/lib/traces";
 
 type TraceDataViewerActionsPanelProps = {
   layoutSize: ButtonLayoutSize;
@@ -24,7 +25,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
   const annotationCount = data.feedback_scores?.length;
   const commentsCount = data.comments?.length;
 
-  const isSpan = "span_id" in data;
+  const isSpan = isObjectSpan(data);
   const dataType = isSpan ? "spans" : "traces";
 
   return (
