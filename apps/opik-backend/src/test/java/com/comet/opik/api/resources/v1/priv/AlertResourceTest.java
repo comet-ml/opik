@@ -7,6 +7,7 @@ import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
@@ -86,6 +87,7 @@ import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
 import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -1250,6 +1252,99 @@ class AlertResourceTest {
                 assertThat(actualScore.id()).isEqualTo(trace.id());
                 assertThat(actualScore.author()).isEqualTo(USER);
             });
+        }
+
+        @ParameterizedTest
+        @MethodSource("traceThreadFeedbackScoreProjectScopeProvider")
+        @DisplayName("when single trace thread feedback score is created, then webhook is called based on project scope")
+        void whenSingleTraceThreadFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(
+                Function<UUID, AlertTrigger> getAlertTrigger) {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, mock.getLeft(), mock.getRight());
+
+            // Create an alert with or without project scope configuration
+            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a thread with multiple traces
+            var threadId = UUID.randomUUID().toString();
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .threadId(threadId)
+                            .projectName(project.name())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, mock.getLeft(), mock.getRight());
+
+            // Wait for the thread to be created
+            Awaitility.await().untilAsserted(() -> {
+                var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(), mock.getRight());
+                assertThat(thread.threadModelId()).isNotNull();
+            });
+
+            // Get the thread
+            var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(), mock.getRight());
+
+            // Close thread
+            traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
+                    mock.getRight());
+
+            // Create a feedback score for the thread
+            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
+                    .threadId(thread.id())
+                    .projectName(project.name())
+                    .name(feedbackScore.name())
+                    .value(feedbackScore.value())
+                    .reason(feedbackScore.reason())
+                    .source(feedbackScore.source())
+                    .build();
+
+            traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload();
+            List<FeedbackScoreBatchItemThread> feedbackScores = JsonUtils.readCollectionValue(
+                    payload, List.class, FeedbackScoreBatchItemThread.class);
+
+            assertThat(feedbackScores).hasSize(1);
+            FeedbackScoreBatchItemThread actualScore = feedbackScores.getFirst();
+
+            // Assert feedback score details using recursive comparison
+            assertThat(actualScore)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(Comparator.naturalOrder(), Instant.class)
+                                    .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
+                                    .build())
+                    .isEqualTo(feedbackScoreBatchItem);
+
+            assertThat(actualScore.threadId()).isEqualTo(thread.id());
+            assertThat(actualScore.author()).isEqualTo(USER);
+        }
+
+        static Stream<Arguments> traceThreadFeedbackScoreProjectScopeProvider() {
+            return Stream.of(
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
+                            .build()),
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(
+                                    AlertTriggerConfig.builder()
+                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                            .configValue(Map.of(
+                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
+                                            .build()))
+                            .build()));
         }
 
         private String verifyWebhookCalledAndGetPayload() {
