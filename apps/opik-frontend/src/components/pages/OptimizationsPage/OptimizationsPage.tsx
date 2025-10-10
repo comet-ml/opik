@@ -22,7 +22,6 @@ import {
 } from "use-query-params";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
-import uniq from "lodash/uniq";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -81,7 +80,6 @@ import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
-import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
