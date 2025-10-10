@@ -53,11 +53,7 @@ const PlaygroundVariableCell: React.FunctionComponent<
       );
     }
 
-    return (
-      <div className="size-full min-w-0 overflow-hidden break-words">
-        {value}
-      </div>
-    );
+    return <div className="size-full overflow-y-auto">{value}</div>;
   };
 
   return (

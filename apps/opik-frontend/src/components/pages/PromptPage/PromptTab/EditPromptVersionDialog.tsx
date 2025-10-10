@@ -107,7 +107,6 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const isValid =
     template?.length && (templateHasChanges || metadataHasChanges);
 
-  // Parse images from both versions for comparison
   const { text: originalText, images: originalImages } =
     parseContentWithImages(promptTemplate);
   const { text: currentText, images: currentImages } =
