@@ -613,6 +613,10 @@ navigation:
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
+          - page: Hierarchical Reflective Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
+            slug: hierarchical_reflective_optimizer
           - page: MIPRO Optimizer
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
