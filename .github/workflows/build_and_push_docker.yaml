@@ -42,7 +42,7 @@ jobs:
 
   build-n-push-image:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
         - name: Checkout
           uses: actions/checkout@v4.1.1
