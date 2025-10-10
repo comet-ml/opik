@@ -55,7 +55,11 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   const copyButton = (
     <CopyButton
       message="Successfully copied code"
-      text={code.message}
+      text={
+        typeof code.message === "object" && code.message !== null
+          ? JSON.stringify(code.message, null, 2)
+          : code.message
+      }
       tooltipText="Copy code"
     />
   );

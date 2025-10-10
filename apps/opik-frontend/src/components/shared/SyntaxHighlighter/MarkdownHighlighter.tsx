@@ -81,12 +81,37 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
     );
   }, [codeOutput.message, searchPlugin, searchPlainText]);
 
+  // Check if the content is a JSON table (not searchable)
+  const isJsonTable = useMemo(() => {
+    if (isNull(codeOutput.message)) return false;
+
+    // Handle object messages - render as JSON table
+    if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
+      return true;
+    }
+
+    // Handle structured result from prettifyMessage
+    if (
+      typeof codeOutput.message === "object" &&
+      codeOutput.message !== null &&
+      "renderType" in codeOutput.message
+    ) {
+      const structuredResult = codeOutput.message as {
+        renderType: string;
+        data: unknown;
+      };
+      return structuredResult.renderType === "json-table";
+    }
+
+    return false;
+  }, [codeOutput.message]);
+
   return (
     <SyntaxHighlighterLayout
       leftHeader={modeSelector}
       rightHeader={
         <>
-          {withSearch && (
+          {withSearch && !isJsonTable && (
             <SyntaxHighlighterSearch
               searchValue={localSearchValue}
               onSearch={setLocalSearchValue}
