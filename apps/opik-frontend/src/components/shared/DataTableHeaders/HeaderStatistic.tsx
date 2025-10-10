@@ -73,6 +73,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
     );
     if (countStat && statistic?.value) {
       sumValue = Number(countStat.value) * statistic.value;
+
+      // Round token counts to whole numbers (tokens are discrete units)
+      if (statisticKey && statisticKey.includes("tokens")) {
+        sumValue = Math.round(sumValue);
+      }
     }
   }
 
