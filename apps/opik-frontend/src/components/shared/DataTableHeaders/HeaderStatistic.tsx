@@ -70,8 +70,12 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
         s.type === STATISTIC_AGGREGATION_TYPE.COUNT &&
         (s.name === "trace_count" || s.name === "span_count"),
     );
-    if (countStat && statistic?.value) {
-      sumValue = countStat.value * statistic.value;
+    if (
+      countStat &&
+      countStat.type === STATISTIC_AGGREGATION_TYPE.COUNT &&
+      statistic?.value
+    ) {
+      sumValue = Number(countStat.value) * statistic.value;
     }
   }
 
