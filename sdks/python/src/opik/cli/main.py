@@ -1,7 +1,6 @@
 """Main CLI entry point for Opik."""
 
 from importlib import metadata
-from typing import Optional
 
 import click
 

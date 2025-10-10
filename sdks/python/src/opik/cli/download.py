@@ -4,7 +4,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import click
 from rich.console import Console
@@ -16,7 +16,7 @@ console = Console()
 
 
 def _download_traces(
-    client,
+    client: Any,
     project_name: str,
     project_dir: Path,
     max_results: int,
@@ -88,7 +88,7 @@ def _download_traces(
     return downloaded_count
 
 
-def _download_datasets(client, project_dir: Path, max_results: int) -> int:
+def _download_datasets(client: Any, project_dir: Path, max_results: int) -> int:
     """Download datasets."""
     try:
         datasets = client.get_datasets(max_results=max_results, sync_items=True)
@@ -139,7 +139,7 @@ def _download_datasets(client, project_dir: Path, max_results: int) -> int:
         return 0
 
 
-def _download_experiments(client, project_dir: Path, max_results: int) -> int:
+def _download_experiments(client: Any, project_dir: Path, max_results: int) -> int:
     """Download experiments."""
     try:
         # Get all datasets first to find experiments
@@ -200,7 +200,7 @@ def _download_experiments(client, project_dir: Path, max_results: int) -> int:
         return 0
 
 
-def _download_prompts(client, project_dir: Path, max_results: int) -> int:
+def _download_prompts(client: Any, project_dir: Path, max_results: int) -> int:
     """Download prompts."""
     try:
         prompts = client.search_prompts()

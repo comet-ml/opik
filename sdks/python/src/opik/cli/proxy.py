@@ -1,7 +1,6 @@
 """Proxy command for Opik CLI."""
 
 import sys
-from typing import Optional
 
 import click
 
