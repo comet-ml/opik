@@ -1,5 +1,6 @@
 import pytest
 from typing import Any
+from collections.abc import Callable
 
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik_optimizer.multi_metric_objective import MultiMetricObjective
@@ -25,7 +26,10 @@ class TestMultiMetricObjective:
     def test_weights_are_applied_correctly(self) -> None:
         """Test that custom weights are properly applied to metrics"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
         weights = [0.5, 0.5]
         multi_metric = MultiMetricObjective(metrics=metrics, weights=weights)
 
@@ -42,7 +46,11 @@ class TestMultiMetricObjective:
     def test_final_score_is_weighted_average__three_metrics(self) -> None:
         """Test that the final score is correct weighted average with three metrics"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2, metric_returning_0_1]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+            metric_returning_0_1,
+        ]
         weights = [0.5, 0.3, 0.2]
         multi_metric = MultiMetricObjective(metrics=metrics, weights=weights)
 
@@ -59,7 +67,11 @@ class TestMultiMetricObjective:
     def test_metadata_contains_raw_score_results(self) -> None:
         """Test that metadata contains all raw score results from subscores"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2, metric_returning_0_1]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+            metric_returning_0_1,
+        ]
         weights = [0.4, 0.4, 0.2]
         multi_metric = MultiMetricObjective(metrics=metrics, weights=weights)
 
@@ -89,7 +101,9 @@ class TestMultiMetricObjective:
     def test_equal_weights_when_no_weights_provided__one_metric(self) -> None:
         """Test that single metric works correctly (edge case)"""
         # Arrange
-        metrics = [metric_returning_0_5]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5
+        ]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
         # Act
@@ -115,7 +129,10 @@ class TestMultiMetricObjective:
     def test_equal_weights_when_no_weights_provided__two_metrics(self) -> None:
         """Test that weights are equal when not provided (two metrics)"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
         # Act
@@ -135,7 +152,11 @@ class TestMultiMetricObjective:
     def test_equal_weights_when_no_weights_provided__three_metrics(self) -> None:
         """Test that weights are equal when not provided (three metrics)"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2, metric_returning_0_1]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+            metric_returning_0_1,
+        ]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
         # Act
@@ -156,7 +177,10 @@ class TestMultiMetricObjective:
     def test_custom_name_is_set(self) -> None:
         """Test that custom name is properly set"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
         custom_name = "my_custom_objective"
         multi_metric = MultiMetricObjective(metrics=metrics, name=custom_name)
 
@@ -174,7 +198,10 @@ class TestMultiMetricObjective:
     def test_default_name_is_set(self) -> None:
         """Test that default name is set when not provided"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
         # Act
@@ -211,7 +238,10 @@ class TestMultiMetricObjective:
             received_outputs_2.append(llm_output)
             return ScoreResult(name="tracking_metric_returning_0_2", value=0.2)
 
-        metrics = [tracking_metric_1, tracking_metric_2]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            tracking_metric_1,
+            tracking_metric_2,
+        ]
         multi_metric = MultiMetricObjective(metrics=metrics)
         test_item = {"input": "test input", "expected_output": "test output"}
         test_output = "generated response"
@@ -231,7 +261,10 @@ class TestMultiMetricObjective:
     def test_weights_sum_not_required_to_be_one(self) -> None:
         """Test that weights don't need to sum to 1.0"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
         weights = [2.0, 3.0]  # Sum is 5.0, not 1.0
         multi_metric = MultiMetricObjective(metrics=metrics, weights=weights)
 
@@ -248,7 +281,11 @@ class TestMultiMetricObjective:
     def test_zero_weight_excludes_metric_from_result(self) -> None:
         """Test that a metric with zero weight doesn't contribute to final score"""
         # Arrange
-        metrics = [metric_returning_0_5, metric_returning_0_2, metric_returning_0_1]
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+            metric_returning_0_1,
+        ]
         weights = [0.5, 0.0, 0.5]  # metric_returning_0_2 has zero weight
         multi_metric = MultiMetricObjective(metrics=metrics, weights=weights)
 
