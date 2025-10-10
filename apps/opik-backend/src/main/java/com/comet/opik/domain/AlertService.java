@@ -237,13 +237,14 @@ class AlertServiceImpl implements AlertService {
 
     private WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId, String userName) {
         String eventId = idGenerator.generateId().toString();
-        var eventType = alert.triggers().isEmpty()
+        var eventType = CollectionUtils.isEmpty(alert.triggers())
                 ? AlertEventType.TRACE_ERRORS
                 : alert.triggers().getFirst().eventType();
         Set<String> eventIds = Set.of(idGenerator.generateId().toString()); // Dummy event ID for test
+        var alertId = alert.id() == null ? idGenerator.generateId() : alert.id();
 
         Map<String, Object> payload = Map.of(
-                "alertId", alert.id().toString(),
+                "alertId", alertId,
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,

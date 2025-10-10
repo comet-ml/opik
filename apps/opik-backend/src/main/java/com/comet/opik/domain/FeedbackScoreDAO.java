@@ -34,6 +34,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AlertEventType.TRACE_FEEDBACK_SCORE;
+import static com.comet.opik.api.AlertEventType.TRACE_THREAD_FEEDBACK_SCORE;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -353,6 +354,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .doOnSuccess(cnt -> {
                         switch (entityType) {
                             case TRACE -> publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId);
+                            case THREAD -> publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId);
                             default -> {
                                 // no-op
                             }
