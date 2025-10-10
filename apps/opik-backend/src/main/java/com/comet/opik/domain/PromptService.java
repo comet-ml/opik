@@ -36,7 +36,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
+import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
 import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -260,14 +262,22 @@ class PromptServiceImpl implements PromptService {
                     .commit(commit)
                     .build();
 
-            return savePromptVersion(workspaceId, promptVersion);
+            var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
+            postPromptCommittedEvent(savedPromptVersion, workspaceId);
+
+            return savedPromptVersion;
         });
 
         if (createPromptVersion.version().commit() != null) {
             return handler.withError(this::newVersionConflict);
         } else {
             // only retry if commit is not provided
-            return handler.onErrorDo(() -> retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName));
+            return handler.onErrorDo(() -> {
+                var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
+                postPromptCommittedEvent(savedPromptVersion, workspaceId);
+
+                return savedPromptVersion;
+            });
         }
     }
 
@@ -322,6 +332,8 @@ class PromptServiceImpl implements PromptService {
 
             return null;
         });
+
+        postPromptsDeletedEvent(Set.of(id), workspaceId);
     }
 
     @Override
@@ -337,6 +349,8 @@ class PromptServiceImpl implements PromptService {
             handle.attach(PromptDAO.class).delete(ids, workspaceId);
             return null;
         });
+
+        postPromptsDeletedEvent(ids, workspaceId);
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
@@ -590,5 +604,21 @@ class PromptServiceImpl implements PromptService {
                     return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
                             .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
                 })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId) {
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_COMMITTED)
+                .workspaceId(workspaceId)
+                .payload(promptVersion)
+                .build());
+    }
+
+    private void postPromptsDeletedEvent(Set<UUID> ids, String workspaceId) {
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_DELETED)
+                .workspaceId(workspaceId)
+                .payload(ids)
+                .build());
     }
 }

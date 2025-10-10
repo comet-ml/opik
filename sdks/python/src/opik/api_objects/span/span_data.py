@@ -95,6 +95,19 @@ class SpanData:
         )
 
     def update(self, **new_data: Any) -> "SpanData":
+        """
+        Updates the attributes of the object with the provided key-value pairs. This method checks if
+        an attribute exists before updating it and merges the data appropriately for specific
+        keywords like metadata, output, input, attachments, and tags. If a key doesn't correspond
+        to an attribute of the object or the provided value is None, the update is skipped.
+
+        Args:
+            **new_data: Key-value pairs of attributes to update. Keys should match existing
+                attributes on the object, and values that are None will not update.
+
+        Returns:
+            SpanData: The updated object instance.
+        """
         for key, value in new_data.items():
             if value is None:
                 continue

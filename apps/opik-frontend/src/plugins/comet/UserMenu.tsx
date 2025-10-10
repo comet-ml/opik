@@ -14,9 +14,8 @@ import {
   UserPlus,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
 
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -56,7 +55,7 @@ const UserMenu = () => {
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
-  const [openQuickstart, setOpenQuickstart] = useState(false);
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const hideUpgradeButton = matches.some(
     (match) => match.staticData?.hideUpgradeButton,
@@ -326,7 +325,7 @@ const UserMenu = () => {
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem
-              onClick={() => setOpenQuickstart(true)}
+              onClick={openQuickstart}
               className="cursor-pointer"
             >
               <GraduationCap className="mr-2 size-4" />
@@ -439,8 +438,6 @@ const UserMenu = () => {
       {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
-
-      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
     </div>
   );
 };
