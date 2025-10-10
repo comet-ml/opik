@@ -18,7 +18,9 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 > = (context) => {
   const experimentCompare = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { feedbackKey } = (custom ?? {}) as CustomMeta;
+  const { feedbackKey, colorMap } = (custom ?? {}) as CustomMeta & {
+    colorMap?: Record<string, string>;
+  };
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -43,9 +45,11 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
       reasons = extractReasonsFromValueByAuthor(feedbackScore.value_by_author);
     }
 
+    const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
+
     return (
       <div className="flex h-4 w-full items-center justify-end gap-1">
-        <FeedbackScoreCellValue feedbackScore={feedbackScore} />
+        <FeedbackScoreCellValue feedbackScore={feedbackScore} color={color} />
         {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>
             <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
