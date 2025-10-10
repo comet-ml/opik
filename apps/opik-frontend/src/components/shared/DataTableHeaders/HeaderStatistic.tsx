@@ -53,7 +53,8 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   statisticKey,
   dataFormater = formatNumericData,
 }) => {
-  const [value, setValue] = React.useState<string>("p50");
+  const [percentileValue, setPercentileValue] = React.useState<string>("p50");
+  const [avgSumValue, setAvgSumValue] = React.useState<string>("avg");
 
   // Check if this column should display sum
   const shouldDisplaySum =
@@ -82,18 +83,36 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   switch (statistic?.type) {
     case STATISTIC_AGGREGATION_TYPE.AVG:
       if (shouldDisplaySum && sumValue !== null) {
+        const displayValue =
+          avgSumValue === "avg" ? statistic.value : sumValue;
         return (
-          <span className="comet-body-s truncate text-foreground">
-            <span>avg</span>
-            <span className="ml-1 font-semibold">
-              {dataFormater(statistic.value)}
-            </span>
-            <span className="mx-1.5 text-muted-slate">|</span>
-            <span>sum</span>
-            <span className="ml-1 font-semibold">
-              {dataFormater(sumValue)}
-            </span>
-          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="flex max-w-full">
+                <span className="comet-body-s truncate text-foreground">
+                  <span>{avgSumValue}</span>
+                  <span className="ml-1 font-semibold">
+                    {dataFormater(displayValue)}
+                  </span>
+                </span>
+                <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuCheckboxItem
+                onSelect={() => setAvgSumValue("avg")}
+                checked={avgSumValue === "avg"}
+              >
+                Average
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                onSelect={() => setAvgSumValue("sum")}
+                checked={avgSumValue === "sum"}
+              >
+                Sum
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
       }
       return (
@@ -119,9 +138,9 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
           <DropdownMenuTrigger asChild>
             <div className="flex max-w-full">
               <span className="comet-body-s truncate text-foreground">
-                <span>{value}</span>
+                <span>{percentileValue}</span>
                 <span className="ml-1 font-semibold">
-                  {dataFormater(get(statistic.value, value, 0))}
+                  {dataFormater(get(statistic.value, percentileValue, 0))}
                 </span>
               </span>
               <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
@@ -132,8 +151,8 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
               return (
                 <DropdownMenuCheckboxItem
                   key={option.value}
-                  onSelect={() => setValue(option.value)}
-                  checked={value === option.value}
+                  onSelect={() => setPercentileValue(option.value)}
+                  checked={percentileValue === option.value}
                 >
                   {option.label}
                 </DropdownMenuCheckboxItem>
