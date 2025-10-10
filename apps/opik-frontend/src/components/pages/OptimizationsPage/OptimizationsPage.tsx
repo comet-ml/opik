@@ -81,6 +81,7 @@ import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
+import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -375,6 +376,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     },
     [setGroupLimit],
   );
+
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
     const indexMap: Record<string, number> = {};
@@ -394,22 +396,25 @@ const OptimizationsPage: React.FunctionComponent = () => {
           index += 1;
         }
 
+        // Only include the main objective score in the chart
+        const objectiveName = optimization.objective_name;
+        const objectiveScore = optimization.feedback_scores?.find(
+          (score) => score.name === objectiveName,
+        );
+
         groupsMap[key].data.unshift({
           entityId: optimization.id,
           entityName: optimization.name,
           createdDate: formatDate(optimization.created_at),
-          scores: (optimization.feedback_scores || []).reduce<
-            Record<string, number>
-          >((acc, score) => {
-            acc[score.name] = score.value;
-            return acc;
-          }, {}),
+          scores: objectiveScore
+            ? { [objectiveScore.name]: objectiveScore.value }
+            : {},
         });
 
-        groupsMap[key].lines = uniq([
-          ...groupsMap[key].lines,
-          ...(optimization.feedback_scores || []).map((s) => s.name),
-        ]);
+        // Only add the objective name to lines
+        if (objectiveName && !groupsMap[key].lines.includes(objectiveName)) {
+          groupsMap[key].lines.push(objectiveName);
+        }
       }
     });
 

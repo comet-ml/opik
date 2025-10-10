@@ -68,6 +68,7 @@ export const getScoreValue = (
 
 /**
  * Generate a color map ensuring main objective and secondary scores have distinct colors
+ * Secondary scores are sorted alphabetically to guarantee consistent color assignment
  */
 export const generateDistinctColorMap = (
   mainObjective: string,
@@ -78,8 +79,13 @@ export const generateDistinctColorMap = (
   // Assign main objective color
   colorMap[mainObjective] = MAIN_OBJECTIVE_COLOR;
 
+  // Sort secondary scores alphabetically to ensure consistent color assignment
+  const sortedSecondaryScores = [...secondaryScores].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
+
   // Assign colors to secondary scores from the secondary color palette
-  secondaryScores.forEach((scoreName, index) => {
+  sortedSecondaryScores.forEach((scoreName, index) => {
     // Use modulo to cycle through colors if we have more scores than colors
     colorMap[scoreName] =
       SECONDARY_SCORE_COLORS[index % SECONDARY_SCORE_COLORS.length];
