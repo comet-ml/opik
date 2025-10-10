@@ -75,8 +75,8 @@ public abstract sealed class FeedbackScoreItem {
         // entity (trace or span) id
         @NotNull private UUID id;
 
-        @ConstructorProperties({"id", "projectName", "projectId", "name", "categoryName", "value", "reason", "source",
-                "author"})
+        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "source",
+                "author", "id"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
                 BigDecimal value, String reason, ScoreSource source, String author, UUID id) {
             super(projectName, projectId, name, value, categoryName, reason, source, author);
@@ -104,8 +104,8 @@ public abstract sealed class FeedbackScoreItem {
         @JsonIgnore
         private UUID id;
 
-        @ConstructorProperties({"threadId", "projectName", "projectId", "name", "categoryName", "value", "reason",
-                "source", "author"})
+        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason",
+                "source", "author", "threadId"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
                 BigDecimal value, String reason, ScoreSource source, String author, String threadId) {
             super(projectName, projectId, name, value, categoryName, reason, source, author);
