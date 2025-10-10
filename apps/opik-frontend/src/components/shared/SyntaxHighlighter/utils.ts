@@ -15,9 +15,7 @@ export const generateSyntaxHighlighterCode = (
   prettifyConfig?: PrettifyConfig,
 ): CodeOutput => {
   const response = prettifyConfig
-    ? prettifyMessage(data, {
-        type: prettifyConfig.fieldType,
-      })
+    ? prettifyMessage(data)
     : {
         message: data,
         prettified: false,

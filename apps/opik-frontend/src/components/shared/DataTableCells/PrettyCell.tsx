@@ -7,10 +7,6 @@ import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWr
 import { prettifyMessage } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
 
-type CustomMeta = {
-  fieldType: "input" | "output";
-};
-
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
 const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
@@ -19,8 +15,6 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
   });
-  const { custom } = context.column.columnDef.meta ?? {};
-  const { fieldType = "input" } = (custom ?? {}) as CustomMeta;
   const value = context.getValue() as string | object | undefined | null;
 
   const rawValue = useMemo(() => {
@@ -47,10 +41,8 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
       };
     }
 
-    return prettifyMessage(value, {
-      type: fieldType,
-    });
-  }, [value, fieldType, hasExceededLimit]);
+    return prettifyMessage(value);
+  }, [value, hasExceededLimit]);
 
   const message = useMemo(() => {
     if (isObject(response.message)) {
