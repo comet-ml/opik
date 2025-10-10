@@ -53,6 +53,113 @@ opik.configure(
 ```
 Refer to the [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/) for more configuration options.
 
+## CLI Commands
+
+The Opik Python SDK includes powerful CLI commands for downloading and uploading project data:
+
+### Download Command
+
+Download data from an Opik workspace/project to local files:
+
+```bash
+# Download traces only (default)
+opik download WORKSPACE/PROJECT_NAME
+
+# Download all data types
+opik download WORKSPACE/PROJECT_NAME --all
+
+# Download specific data types
+opik download WORKSPACE/PROJECT_NAME --include traces datasets prompts
+
+# Download all except experiments
+opik download WORKSPACE/PROJECT_NAME --all --exclude experiments
+
+# Download with custom output directory and filters
+opik download WORKSPACE/PROJECT_NAME --output-dir ./my-data --filter 'name contains "test"' --max-results 100
+
+# If no workspace is specified, defaults to "default"
+opik download PROJECT_NAME --all
+```
+
+**Options:**
+- `--all`: Include all data types (traces, datasets, experiments, prompts, threads)
+- `--include`: Data types to include (can be specified multiple times)
+- `--exclude`: Data types to exclude (can be specified multiple times)
+- `--output-dir, -o`: Directory to save downloaded data (defaults to current directory)
+- `--max-results`: Maximum number of items to download per data type (default: 1000)
+- `--filter`: Filter string using Opik Query Language (OQL)
+
+**Supported Data Types:**
+- `traces`: Execution traces with spans and timing information (project-specific)
+- `datasets`: Evaluation datasets with input/output pairs (workspace-level)
+- `experiments`: Evaluation experiments and their results (workspace-level)
+- `prompts`: Prompt templates and their versions (workspace-level)
+
+**Note:** Thread metadata is automatically derived from traces with the same `thread_id`, so threads don't need to be downloaded or uploaded separately.
+
+### Upload Command
+
+Upload data from local files to an Opik workspace/project:
+
+```bash
+# Upload traces only (default)
+opik upload FOLDER WORKSPACE/PROJECT_NAME
+
+# Upload all data types
+opik upload FOLDER WORKSPACE/PROJECT_NAME --all
+
+# Upload specific data types
+opik upload FOLDER WORKSPACE/PROJECT_NAME --include traces datasets
+
+# Upload with dry run to preview
+opik upload FOLDER WORKSPACE/PROJECT_NAME --all --dry-run
+
+# If no workspace is specified, defaults to "default"
+opik upload FOLDER PROJECT_NAME --all
+```
+
+**Options:**
+- `--all`: Include all data types (traces, datasets, experiments, prompts, threads)
+- `--include`: Data types to include (can be specified multiple times)
+- `--exclude`: Data types to exclude (can be specified multiple times)
+- `--dry-run`: Show what would be uploaded without actually uploading
+
+**File Organization:**
+Downloaded files are organized in a hierarchical structure that mirrors the workspace/project hierarchy:
+
+```
+output-dir/
+├── WORKSPACE/
+│   └── PROJECT_NAME/
+│       ├── trace_*.json          # Individual traces with their spans
+│       ├── dataset_*.json         # Dataset definitions and items
+│       ├── experiment_*.json      # Experiment configurations and results
+│       └── prompt_*.json         # Prompt templates and versions
+```
+
+**Examples:**
+```bash
+# Download from default workspace
+opik download default/ez-mcp-chatbot --all
+# Creates: ./default/ez-mcp-chatbot/ with all data files
+
+# Download from different workspace (cloud/enterprise only)
+opik download production/my-project --all
+# Creates: ./production/my-project/ with all data files
+
+# Upload to different workspace/project (cloud/enterprise only)
+opik upload ./default/ez-mcp-chatbot production/copy --all
+# Uploads data from default/ez-mcp-chatbot to production/copy
+
+# Note: Open source installations only support the "default" workspace
+```
+
+**Note:** Thread metadata is automatically calculated from traces with the same `thread_id` when uploaded, so no separate thread files are needed.
+
+**Important:** 
+- **Traces and spans** are project-specific and will be uploaded to the specified project
+- **Datasets, experiments, and prompts** belong to the workspace and are shared across all projects in that workspace
+
 ### Dynamic Tracing Control
 
 Control tracing behavior at runtime without code changes:
