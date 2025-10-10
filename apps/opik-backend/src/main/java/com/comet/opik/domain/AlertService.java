@@ -257,7 +257,7 @@ class AlertServiceImpl implements AlertService {
                 .id(eventId)
                 .url(alert.webhook().url())
                 .eventType(eventType)
-                .alertId(alert.id())
+                .alertId(alertId)
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
                 .maxRetries(1)
