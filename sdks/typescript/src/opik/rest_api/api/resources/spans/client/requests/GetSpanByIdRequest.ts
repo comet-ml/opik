@@ -7,5 +7,5 @@
  *     {}
  */
 export interface GetSpanByIdRequest {
-    truncate?: boolean;
+    stripAttachments?: boolean;
 }
