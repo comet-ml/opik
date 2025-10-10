@@ -1,8 +1,10 @@
 import pytest
 
 import opik
+from opik.types import ErrorInfoDict
 from ...testlib import (
     ANY_BUT_NONE,
+    ANY_STRING,
     TraceModel,
     assert_equal,
 )
@@ -128,6 +130,28 @@ def test_start_as_current_trace__user_error__logged_and_raised(fake_backend):
             raise Exception("Test exception")
 
     assert exc_info.value.args[0] == "Test exception"
+
+    assert len(fake_backend.trace_trees) == 1
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        name="test-trace",
+        project_name="test-project",
+        input={"input": "test-input"},
+        output=None,
+        tags=["one", "two", "three"],
+        metadata={"one": "first", "three": "third", "two": "second"},
+        error_info=ErrorInfoDict(
+            exception_type="Exception",
+            message="Test exception",
+            traceback=ANY_STRING,
+        ),
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
 
 
 def test_start_as_current_trace__minimal_parameters__works(fake_backend):
