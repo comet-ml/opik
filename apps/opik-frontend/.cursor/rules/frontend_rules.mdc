@@ -1,7 +1,7 @@
 ---
 description: Main frontend development guidelines - references detailed rules
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # Frontend Development Guidelines

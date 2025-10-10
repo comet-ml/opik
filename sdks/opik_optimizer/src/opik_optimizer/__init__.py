@@ -16,8 +16,15 @@ from .gepa_optimizer import GepaOptimizer
 from .logging_config import setup_logging
 from .meta_prompt_optimizer import MetaPromptOptimizer
 from .mipro_optimizer import MiproOptimizer
+from .hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
+from .parameter_optimizer import (
+    ParameterOptimizer,
+    ParameterSearchSpace,
+    ParameterSpec,
+    ParameterType,
+)
 
 __version__ = importlib.metadata.version("opik_optimizer")
 
@@ -34,9 +41,14 @@ __all__ = [
     "MetaPromptOptimizer",
     "MiproOptimizer",
     "EvolutionaryOptimizer",
+    "HierarchicalReflectiveOptimizer",
+    "ParameterOptimizer",
     "OptimizationResult",
     "OptimizableAgent",
     "setup_logging",
     "datasets",
     "TaskConfig",
+    "ParameterSearchSpace",
+    "ParameterSpec",
+    "ParameterType",
 ]

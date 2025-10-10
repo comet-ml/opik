@@ -303,6 +303,8 @@ serviceToggles:
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: "false"
   # Default: false
+  # Description: Whether or not Alert feature is enabled
+  alertsEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -356,7 +358,7 @@ feedbackScores:
 webhook:
   # Default: false
   # Description: Whether or not webhook functionality is enabled
-  enabled: false
+  enabled: true
   # Default: webhook-events
   # Description: Redis stream name for webhook events
   streamName: webhook-events
@@ -384,3 +386,7 @@ webhook:
   # Default: 1s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: 1s
+  debouncing:
+    # Default: {}
+    # Description: Period for events aggregation before sending to webhook endpoint
+    windowSize: 1s

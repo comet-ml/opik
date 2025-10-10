@@ -1,7 +1,7 @@
 ---
-globs: sdks/typescript/**/*.{ts,tsx}
+globs: sdks/typescript/**/*
 description: Testing patterns for the Opik TypeScript SDK (Vitest)
-alwaysApply: true
+alwaysApply: false
 ---
 
 ## Testing Best Practices (TypeScript SDK)

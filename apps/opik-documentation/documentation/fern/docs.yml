@@ -285,6 +285,10 @@ navigation:
                 path: docs/contributing/documentation.mdx
                 slug: documentation
                 icon: fa-regular fa-book
+              - page: Local Development Setup
+                path: docs/contributing/local-development.mdx
+                slug: local-development
+                icon: fa-regular fa-laptop-code
               - page: Python SDK
                 path: docs/contributing/python-sdk.mdx
                 slug: python-sdk
@@ -324,12 +328,9 @@ navigation:
           - section: Frameworks
             skip-slug: true
             contents:
-              - page: Agno
-                path: docs/tracing/integrations/agno.mdx
-                slug: agno
               - page: BeeAI
-                path: docs/tracing/integrations/beeai.mdx
-                slug: beeai
+                path: docs/tracing/integrations/beeai-typescript.mdx
+                slug: beeai-typescript
               - page: LangChain
                 path: docs/tracing/integrations/langchainjs.mdx
                 slug: langchainjs
@@ -364,6 +365,12 @@ navigation:
               - page: AG2
                 path: docs/tracing/integrations/ag2.mdx
                 slug: ag2
+              - page: Agno
+                path: docs/tracing/integrations/agno.mdx
+                slug: agno
+              - page: BeeAI
+                path: docs/tracing/integrations/beeai.mdx
+                slug: beeai
               - page: Autogen
                 path: docs/tracing/integrations/autogen.mdx
                 slug: autogen
@@ -373,7 +380,7 @@ navigation:
               - page: DSPy
                 path: docs/tracing/integrations/dspy.mdx
                 slug: dspy
-              - page: Google Agent Development Kit
+              - page: Google ADK
                 path: docs/tracing/integrations/adk.mdx
                 slug: adk
               - page: Haystack
@@ -394,6 +401,9 @@ navigation:
               - page: Llama Index
                 path: docs/tracing/integrations/llama_index.mdx
                 slug: llama_index
+              - page: Microsoft Agent Framework
+                path: docs/tracing/integrations/microsoft-agent-framework.mdx
+                slug: microsoft-agent-framework
               - page: OpenAI Agents
                 path: docs/tracing/integrations/openai_agents.mdx
                 slug: openai_agents
@@ -512,6 +522,16 @@ navigation:
           - page: Spring AI
             path: docs/tracing/integrations/spring-ai.mdx
             slug: spring-ai
+      - section: .NET
+        skip-slug: true
+        icon: fa-solid fa-code
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: Microsoft Agent Framework
+                path: docs/tracing/integrations/microsoft-agent-framework-dotnet.mdx
+                slug: microsoft-agent-framework-dotnet
       - section: Ruby
         skip-slug: true
         icon: fa-solid fa-gem
@@ -532,12 +552,12 @@ navigation:
           - page: Flowise
             path: docs/tracing/integrations/flowise.mdx
             slug: flowise
-          # - page: Langflow
-          #   path: docs/tracing/integrations/langflow.mdx
-          #   slug: langflow
-          # - page: OpenWebUI
-          #   path: docs/tracing/integrations/openwebui.mdx
-          #   slug: openwebui
+          - page: Langflow
+            path: docs/tracing/integrations/langflow.mdx
+            slug: langflow
+          - page: OpenWebUI
+            path: docs/tracing/integrations/openwebui.mdx
+            slug: openwebui
       - section: Multi-Language
         skip-slug: true
         icon: fa-solid fa-globe
@@ -593,6 +613,10 @@ navigation:
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
+          - page: Hierarchical Reflective Optimizer
+            icon: fa-regular fa-puzzle-piece
+            path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
+            slug: hierarchical_reflective_optimizer
           - page: MIPRO Optimizer
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
@@ -644,6 +668,9 @@ navigation:
       - page: Platform Architecture
         path: docs/self-host/architecture.mdx
         slug: architecture
+      - page: Scaling Opik
+        path: docs/self-host/scaling.mdx
+        slug: scaling
       - page: Advanced clickhouse backup
         path: docs/self-host/backup.mdx
         slug: backup
@@ -672,6 +699,15 @@ navigation:
           - page: Overview
             path: docs/reference/typescript-sdk/overview.mdx
             slug: overview
+          - page: Opik TS
+            path: docs/reference/typescript-sdk/opik-ts.mdx
+            slug: opik-ts
+          - page: Prompts
+            path: docs/reference/typescript-sdk/prompts.mdx
+            slug: prompts
+          - page: Opik Query Language (OQL)
+            path: docs/reference/typescript-sdk/opik-query-language.mdx
+            slug: opik-query-language
           - section: Evaluation
             slug: evaluation
             contents:

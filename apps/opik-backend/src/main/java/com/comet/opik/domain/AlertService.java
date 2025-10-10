@@ -1,17 +1,24 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
+import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.api.sorting.SortingFactoryAlerts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
+import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -24,8 +31,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Handle;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +44,7 @@ import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @ImplementedBy(AlertServiceImpl.class)
 public interface AlertService {
@@ -46,7 +57,13 @@ public interface AlertService {
 
     Alert getById(UUID id);
 
+    List<Alert> findAllByWorkspaceAndEventType(String workspaceId, AlertEventType eventType);
+
+    Alert getByIdAndWorkspace(UUID id, String workspaceId);
+
     void deleteBatch(Set<UUID> ids);
+
+    WebhookTestResult testWebhook(Alert alert);
 }
 
 @Slf4j
@@ -63,6 +80,7 @@ class AlertServiceImpl implements AlertService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryAlerts sortingFactory;
+    private final @NonNull WebhookHttpClient webhookHttpClient;
 
     @Override
     public UUID create(@NonNull Alert alert) {
@@ -138,9 +156,24 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    public Alert getById(UUID id) {
+    public Alert getById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        return getByIdAndWorkspace(id, workspaceId);
+    }
 
+    @Override
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventType", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspaceAndEventType(@NonNull String workspaceId, @NonNull AlertEventType eventType) {
+        log.info("Fetching all enabled alerts for workspace '{}', eventType '{}'", workspaceId, eventType);
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+
+            return alertDAO.findByWorkspaceAndEventType(workspaceId, eventType.getValue());
+        });
+    }
+
+    @Override
+    public Alert getByIdAndWorkspace(@NonNull UUID id, @NonNull String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 
@@ -155,11 +188,82 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    public void deleteBatch(Set<UUID> ids) {
+    public void deleteBatch(@NonNull Set<UUID> ids) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             deleteBatch(handle, ids);
             return null;
         });
+    }
+
+    @Override
+    public WebhookTestResult testWebhook(@NonNull Alert alert) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        var event = mapAlertToWebhookEvent(alert, workspaceId, userName);
+        String requestBody = JsonUtils.writeValueAsString(event);
+
+        return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
+                .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(response -> {
+                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}', statusCode='{}'",
+                            event.getId(), event.getEventType(), event.getUrl(), response.getStatus());
+
+                    return WebhookTestResult.builder()
+                            .status(WebhookTestResult.Status.SUCCESS)
+                            .statusCode(response.getStatus())
+                            .requestBody(requestBody)
+                            .errorMessage(null)
+                            .build();
+                })
+                .onErrorResume(throwable -> {
+                    log.error("Failed to send webhook: id='{}', type='{}', url='{}', error='{}'",
+                            event.getId(), event.getEventType(), event.getUrl(), throwable.getMessage(), throwable);
+
+                    int statusCode = (throwable instanceof RetryUtils.RetryableHttpException rhe)
+                            ? rhe.getStatusCode()
+                            : 0;
+
+                    return Mono.just(WebhookTestResult.builder()
+                            .status(WebhookTestResult.Status.FAILURE)
+                            .statusCode(statusCode)
+                            .requestBody(requestBody)
+                            .errorMessage(throwable.getMessage())
+                            .build());
+                })
+                .block();
+    }
+
+    private WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId, String userName) {
+        String eventId = idGenerator.generateId().toString();
+        var eventType = alert.triggers().isEmpty()
+                ? AlertEventType.TRACE_ERRORS
+                : alert.triggers().getFirst().eventType();
+        Set<String> eventIds = Set.of(idGenerator.generateId().toString()); // Dummy event ID for test
+
+        Map<String, Object> payload = Map.of(
+                "alertId", alert.id().toString(),
+                "alertName", alert.name(),
+                "eventType", eventType.getValue(),
+                "eventIds", eventIds,
+                "eventCount", eventIds.size(),
+                "aggregationType", "consolidated",
+                "message", String.format("Alert '%s': %d %s events aggregated",
+                        alert.name(), eventIds.size(), eventType.getValue()));
+
+        return WebhookEvent.<Map<String, Object>>builder()
+                .id(eventId)
+                .url(alert.webhook().url())
+                .eventType(eventType)
+                .alertId(alert.id())
+                .payload(payload)
+                .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
+                .maxRetries(1)
+                .workspaceId(workspaceId)
+                .userName(userName)
+                .createdAt(Instant.now())
+                .build();
     }
 
     private void deleteBatch(Handle handle, Set<UUID> ids) {

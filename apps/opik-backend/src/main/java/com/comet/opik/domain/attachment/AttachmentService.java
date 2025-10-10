@@ -50,6 +50,12 @@ public interface AttachmentService {
 
     void uploadAttachment(AttachmentInfo attachmentInfo, byte[] data, String workspaceId, String userName);
 
+    /**
+     * Internal method for backend async uploads - works for both MinIO and S3.
+     * Bypasses the frontend restriction that requires presigned URLs for S3.
+     */
+    void uploadAttachmentInternal(AttachmentInfo attachmentInfo, byte[] data, String workspaceId, String userName);
+
     InputStream downloadAttachment(AttachmentInfo attachmentInfo, String workspaceId);
 
     Mono<Attachment.AttachmentPage> list(int page, int size, AttachmentSearchCriteria criteria, String baseUrlEncoded);
@@ -70,6 +76,12 @@ public interface AttachmentService {
      */
     Mono<Void> deleteSpecificAttachments(List<AttachmentInfo> attachments, UUID entityId, EntityType entityType,
             UUID containerId);
+
+    /**
+     * Delete only auto-stripped attachments (those matching the pattern {context}-attachment-{num}-{timestamp}.{ext})
+     * for the given entity IDs. User-uploaded attachments are preserved.
+     */
+    Mono<Long> deleteAutoStrippedAttachments(EntityType entityType, Set<UUID> entityIds);
 }
 
 @Slf4j
@@ -141,6 +153,18 @@ class AttachmentServiceImpl implements AttachmentService {
                     "Direct attachment upload is forbidden for S3, please use multi-part upload with presigned urls",
                     Response.Status.FORBIDDEN);
         }
+
+        // Delegate to internal method for actual upload logic
+        uploadAttachmentInternal(attachmentInfo, data, workspaceId, userName);
+    }
+
+    /**
+     * Internal method for backend async uploads - works for both MinIO and S3
+     * Does not enforce the presigned URL restriction that applies to frontend uploads
+     */
+    @Override
+    public void uploadAttachmentInternal(@NonNull AttachmentInfo attachmentInfo, byte[] data,
+            @NonNull String workspaceId, @NonNull String userName) {
 
         attachmentInfo = attachmentInfo.toBuilder()
                 .containerId(getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName))
@@ -367,6 +391,42 @@ class AttachmentServiceImpl implements AttachmentService {
                     return Mono.empty(); // Continue processing
                 })
                 .then();
+    }
+
+    @Override
+    public Mono<Long> deleteAutoStrippedAttachments(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+                .flatMap(attachments -> {
+                    // Filter to only auto-stripped attachments
+                    List<AttachmentInfo> autoStrippedAttachments = AttachmentUtils
+                            .filterAutoStrippedAttachments(attachments);
+
+                    if (autoStrippedAttachments.isEmpty()) {
+                        log.info("No auto-stripped attachments found for entityType '{}', entityIds count '{}'",
+                                entityType, entityIds.size());
+                        return Mono.just(0L);
+                    }
+
+                    log.info(
+                            "Deleting '{}' auto-stripped attachments (out of '{}' total) for entityType '{}', entityIds count '{}'",
+                            autoStrippedAttachments.size(), attachments.size(), entityType, entityIds.size());
+
+                    Set<String> fileNames = autoStrippedAttachments.stream()
+                            .map(AttachmentInfo::fileName)
+                            .collect(Collectors.toSet());
+
+                    // Delete files from storage
+                    return Mono.fromRunnable(() -> fileService.deleteObjects(fileNames))
+                            .onErrorResume(error -> {
+                                log.warn("Failed to delete files from storage: {}", error.getMessage());
+                                return Mono.empty(); // Continue with DB deletion even if file deletion fails
+                            })
+                            .then(attachmentDAO.deleteByFileNames(entityType, entityIds, fileNames));
+                });
     }
 
 }

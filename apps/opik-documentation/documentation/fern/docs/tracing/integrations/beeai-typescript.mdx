@@ -1,0 +1,179 @@
+---
+title: Observability for BeeAI (TypeScript) with Opik
+description: Start here to integrate Opik into your BeeAI-based genai application for end-to-end LLM observability, unit testing, and optimization.
+---
+
+[BeeAI](https://beeai.dev/) is an agent framework designed to simplify the development of AI agents with a focus on simplicity and performance. It provides a clean API for building agents with built-in support for tool usage, conversation management, and extensible architecture.
+
+BeeAI's primary advantage is its lightweight design that makes it easy to create and deploy AI agents without unnecessary complexity, while maintaining powerful capabilities for production use.
+
+<Frame>
+  <img src="/img/tracing/beeai_typescript_integration.png" alt="BeeAI TypeScript tracing" />
+</Frame>
+
+## Getting started
+
+To use the BeeAI integration with Opik, you will need to have BeeAI and the required OpenTelemetry packages installed.
+
+### Installation
+
+#### Option 1: Using npm
+
+```bash
+npm install beeai-framework@0.1.13 @ai-sdk/openai @arizeai/openinference-instrumentation-beeai @opentelemetry/sdk-node dotenv
+```
+
+#### Option 2: Using yarn
+
+```bash
+yarn add beeai-framework@0.1.13 @ai-sdk/openai @arizeai/openinference-instrumentation-beeai @opentelemetry/sdk-node dotenv
+```
+
+<Info>
+**Version Compatibility**: The BeeAI instrumentation currently supports `beeai-framework` version 0.1.13. Using a newer version may cause compatibility issues.
+</Info>
+
+### Requirements
+
+- Node.js ≥ 18
+- BeeAI Framework (`beeai-framework`)
+- OpenInference Instrumentation for BeeAI (`@arizeai/openinference-instrumentation-beeai`)
+- OpenTelemetry SDK for Node.js (`@opentelemetry/sdk-node`)
+
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        # Your LLM API key
+        export OPENAI_API_KEY="your-openai-api-key"
+        
+        # Opik configuration
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        # Your LLM API key
+        export OPENAI_API_KEY="your-openai-api-key"
+
+        # Opik configuration
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        # Your LLM API key
+        export OPENAI_API_KEY="your-openai-api-key"
+
+        # Opik configuration
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+
+</Tabs>
+
+## Using Opik with BeeAI
+
+Set up OpenTelemetry instrumentation for BeeAI:
+
+```typescript
+import "dotenv/config";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { BeeAIInstrumentation } from "@arizeai/openinference-instrumentation-beeai";
+import * as beeaiFramework from "beeai-framework";
+
+// Initialize BeeAI Instrumentation
+const beeAIInstrumentation = new BeeAIInstrumentation();
+
+// Configure and start the OpenTelemetry SDK
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter(),
+  instrumentations: [beeAIInstrumentation],
+});
+sdk.start();
+
+// Manually patch BeeAI framework (required for trace collection)
+beeAIInstrumentation.manuallyInstrument(beeaiFramework);
+
+// Now you can use BeeAI as normal
+import { ReActAgent } from "beeai-framework/agents/react";
+import { OpenAIChatModel } from "beeai-framework/adapters/openai/backend/chat";
+import { WikipediaTool } from "beeai-framework/tools/search/wikipedia";
+import { OpenMeteoTool } from "beeai-framework/tools/weather/openmeteo";
+import { TokenMemory } from "beeai-framework/memory";
+
+// Initialize the OpenAI language model
+const llm = new OpenAIChatModel("gpt-4o-mini", {
+  temperature: 0.7,
+});
+
+// Create tools for the agent
+const tools = [
+  new WikipediaTool(),
+  new OpenMeteoTool(),
+];
+
+// Create a ReAct agent with memory
+const agent = new ReActAgent({
+  llm,
+  tools,
+  memory: new TokenMemory({ llm }),
+});
+
+// Run the agent
+async function main() {
+  const response = await agent.run({
+    prompt: "I'm planning a trip to Barcelona, Spain. Can you research key attractions and landmarks I should visit, and also tell me what the current weather conditions are like there?",
+    execution: {
+      maxRetriesPerStep: 3,
+      totalMaxRetries: 10,
+      maxIterations: 5,
+    },
+  });
+  
+  console.log("Agent Response:", response.result.text);
+  return response;
+}
+
+// Run the example
+main();
+```
+
+
+## Further improvements
+
+If you have any questions or suggestions for improving the BeeAI integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.
+

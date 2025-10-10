@@ -1,0 +1,126 @@
+---
+title: "Opik Query Language (OQL)"
+---
+
+OQL provides a powerful, SQL-like syntax for filtering data in Opik. It's used with various SDK methods like `searchPrompts()` to find exactly the data you need using expressive filter conditions.
+
+## Operators
+
+### String Operators
+
+```typescript
+// Exact match
+'name = "greeting-prompt"';
+
+// Not equal
+'name != "old-prompt"';
+
+// Contains substring (case-insensitive)
+'name contains "greeting"';
+
+// Does not contain substring
+'name not_contains "deprecated"';
+
+// Starts with prefix
+'name starts_with "prod-"';
+
+// Ends with suffix
+'name ends_with "-v2"';
+```
+
+### Comparison Operators
+
+```typescript
+// Greater than (alphabetical for strings)
+'name > "m"'; // Names starting with n-z
+
+// Less than (alphabetical for strings)
+'name < "m"'; // Names starting with a-l
+```
+
+### List Operators
+
+```typescript
+// Check if list contains value
+'tags contains "production"';
+
+// Check if list does not contain value
+'tags not_contains "experimental"';
+```
+
+## Combining Conditions
+
+Use `AND` to combine multiple filter conditions. All conditions must be true for a result to match:
+
+```typescript
+// Multiple conditions with AND
+'tags contains "production" AND name contains "greeting" AND created_by = "user@example.com"';
+
+// Complex multi-field filtering
+'name starts_with "prod-" AND tags contains "stable" AND name not_contains "deprecated"';
+```
+
+<Note>
+  Currently, only `AND` logic is supported. `OR` logic is not available in OQL.
+</Note>
+
+## Examples
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Filter by single tag
+const prod = await client.searchPrompts('tags contains "production"');
+
+// Combine name pattern and tag
+const approved = await client.searchPrompts(
+  'name starts_with "prod-" AND tags contains "qa-approved"'
+);
+
+// Multiple conditions
+const results = await client.searchPrompts(
+  'created_by = "user@example.com" AND tags contains "production" AND name not_contains "deprecated"'
+);
+```
+
+<Note>
+  These examples use `searchPrompts()` but the same OQL syntax works with other
+  search methods. Specific resource types may support additional fields - see
+  their respective documentation.
+</Note>
+
+## Syntax Rules
+
+### String Values
+
+Always wrap string values in double quotes:
+
+```typescript
+// ✅ Correct - double quotes around values
+await client.searchPrompts('name = "my-prompt"');
+await client.searchPrompts('tags contains "production"');
+
+// ❌ Incorrect - missing quotes
+await client.searchPrompts("name = my-prompt"); // Will fail
+
+// ❌ Incorrect - single quotes
+await client.searchPrompts("name = 'my-prompt'"); // Will fail
+```
+
+### Error Handling
+
+```typescript
+try {
+  const results = await client.searchPrompts("invalid syntax ===");
+} catch (error) {
+  console.error("Invalid OQL syntax:", error.message);
+}
+```
+
+## Best Practices
+
+1. **Use descriptive tag hierarchies** - Structure tags like `"production"`, `"staging"`, `"team-alpha"` for effective filtering
+2. **Use naming conventions** - Implement consistent naming patterns (e.g., `"prod-"` prefix) to enable powerful filtering
+3. **Handle errors** - Always wrap OQL queries in try-catch blocks to handle syntax errors gracefully

@@ -77,7 +77,6 @@ public interface TraceThreadService {
 class TraceThreadServiceImpl implements TraceThreadService {
 
     private static final Duration LOCK_DURATION = Duration.ofSeconds(5);
-    private static final int BATCH_THREAD_PROCESSING_CONCURRENCY = 5;
 
     private final @NonNull TraceThreadDAO traceThreadDAO;
     private final @NonNull TraceThreadIdService traceThreadIdService;
@@ -238,6 +237,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     private Mono<Map.Entry<Long, List<TraceThreadModel>>> saveThreads(List<TraceThreadModel> traceThreads,
             List<TraceThreadModel> existingThreads) {
+
         Map<UUID, TraceThreadModel> threadModelMap = existingThreads.stream()
                 .collect(Collectors.toMap(TraceThreadModel::id, Function.identity()));
 
@@ -397,26 +397,50 @@ class TraceThreadServiceImpl implements TraceThreadService {
             return Mono.empty();
         }
 
-        return Flux.fromIterable(threadIds)
-                .flatMap(threadId -> verifyAndCreateThreadIfNeed(projectId, threadId),
-                        Math.min(threadIds.size(), BATCH_THREAD_PROCESSING_CONCURRENCY)) // Limit the concurrency to BATCH_THREAD_PROCESSING_CONCURRENCY
-                .then();
+        return verifyAndCreateThreadIfNeed(projectId, threadIds);
     }
 
-    private Mono<UUID> verifyAndCreateThreadIfNeed(UUID projectId, String threadId) {
-        return traceService.getThreadById(projectId, threadId)
-                .switchIfEmpty(Mono.error(new NotFoundException("Thread '%s' not found:".formatted(threadId))))
+    private Mono<Void> verifyAndCreateThreadIfNeed(UUID projectId, Set<String> threadIds) {
+        return traceService.getMinimalThreadInfoByIds(projectId, threadIds)
+                .flatMap(existingThreads -> validateIfAllThreadsExist(threadIds, existingThreads))
+                .flatMapMany(Flux::fromIterable)
                 // If the trace thread exists on the trace table, let's check if it has a trace thread model id
-                .flatMap(traceThread -> getOrCreateThreadId(projectId, threadId)
-                        .map(threadModelId -> traceThread.toBuilder().threadModelId(threadModelId).build()))
+                .flatMap(traceThread -> {
+                    if (traceThread.threadModelId() != null) {
+                        return Mono.just(traceThread);
+                    }
+                    // If it does not have a trace thread model id, create a new one
+                    return getOrCreateThreadId(projectId, traceThread.id())
+                            .map(id -> traceThread.toBuilder().threadModelId(id).build());
+                })
                 // If it has a trace thread model id, check if the trace thread entity exists in the database
                 .flatMap(traceThread -> traceThreadDAO.findByThreadModelId(traceThread.threadModelId(), projectId)
                         .map(TraceThreadModel::id)
                         //If it does not exist, create a new one
                         .switchIfEmpty(Mono.deferContextual(ctx -> {
                             String userName = ctx.get(RequestContext.USER_NAME);
-                            return createTraceThread(projectId, threadId, traceThread, userName);
-                        })));
+                            return createTraceThread(projectId, traceThread.id(), traceThread, userName);
+                        })))
+                .then();
+    }
+
+    private Mono<List<TraceThread>> validateIfAllThreadsExist(Set<String> threadIds,
+            List<TraceThread> existingThreads) {
+        Set<String> existingThreadIdIds = existingThreads.stream()
+                .map(TraceThread::id)
+                .collect(Collectors.toSet());
+
+        // Find threadIds that do not exist in the trace table
+        Set<String> missingThreadIds = threadIds.stream()
+                .filter(threadId -> !existingThreadIdIds.contains(threadId))
+                .collect(Collectors.toSet());
+
+        if (!missingThreadIds.isEmpty()) {
+            return Mono.error(new NotFoundException("Thread '%s' not found:".formatted(missingThreadIds)));
+        }
+
+        // If all threadIds exist, return any of them to continue the flow
+        return Mono.just(existingThreads);
     }
 
     private Mono<UUID> createTraceThread(UUID projectId, String threadId, TraceThread traceThread, String userName) {

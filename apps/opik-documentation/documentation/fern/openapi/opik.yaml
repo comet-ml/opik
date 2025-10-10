@@ -72,6 +72,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
+- name: Welcome Wizard
+  description: Welcome wizard tracking resources
 - name: Workspaces
   description: Workspace related resources
 - name: Redirect
@@ -162,6 +164,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/TraceCountResponse"
   /v1/private/alerts:
+    get:
+      tags:
+      - Alerts
+      summary: Find alerts
+      description: Find alerts
+      operationId: findAlerts
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertPage_Public"
     post:
       tags:
       - Alerts
@@ -284,6 +322,31 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "409":
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/alerts/webhooks/tests:
+    post:
+      tags:
+      - Alerts
+      summary: Test alert webhook
+      description: Test alert webhook
+      operationId: testWebhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Alert_Write"
+      responses:
+        "200":
+          description: Webhook test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookTestResult"
+        "422":
+          description: Unprocessable Content
           content:
             application/json:
               schema:
@@ -1286,7 +1349,6 @@ paths:
         in: query
         required: true
         schema:
-          minLength: 1
           type: string
       - name: filters
         in: query
@@ -1323,6 +1385,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Dataset_Public"
+  /v1/private/datasets/{id}/items/experiments/items/stats:
+    get:
+      tags:
+      - Datasets
+      summary: Get experiment items stats for dataset
+      description: Get experiment items stats for dataset
+      operationId: getDatasetExperimentItemsStats
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: experiment_ids
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment items stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
   /v1/private/datasets/items/{itemId}:
     get:
       tags:
@@ -3068,7 +3160,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3140,6 +3240,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
+          default: false
       responses:
         "200":
           description: Span resource
@@ -3547,7 +3655,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3613,6 +3729,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
+          default: false
       responses:
         "200":
           description: Trace resource
@@ -3953,7 +4077,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: Truncate image included in the messages
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: filters
         in: query
         schema:
@@ -4154,6 +4286,34 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/welcome-wizard:
+    get:
+      tags:
+      - Welcome Wizard
+      summary: Get welcome wizard tracking status
+      description: Get welcome wizard tracking status for the current workspace
+      operationId: getWelcomeWizardStatus
+      responses:
+        "200":
+          description: Welcome wizard tracking status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WelcomeWizardTracking"
+    post:
+      tags:
+      - Welcome Wizard
+      summary: Submit welcome wizard
+      description: Submit welcome wizard with user information
+      operationId: submitWelcomeWizard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WelcomeWizardSubmission"
+      responses:
+        "204":
+          description: Welcome wizard submitted successfully
   /v1/private/workspaces/costs/summaries:
     post:
       tags:
@@ -4665,7 +4825,6 @@ components:
           readOnly: true
     Webhook:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4761,7 +4920,6 @@ components:
             $ref: "#/components/schemas/AlertTrigger_Write"
     Webhook_Write:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4794,6 +4952,26 @@ components:
           items:
             type: string
             format: uuid
+    AlertPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert_Public"
+        sortable_by:
+          type: array
+          items:
+            type: string
     AlertTriggerConfig_Public:
       required:
       - type
@@ -4899,7 +5077,6 @@ components:
           readOnly: true
     Webhook_Public:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4942,6 +5119,21 @@ components:
         message:
           type: string
         details:
+          type: string
+    WebhookTestResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - success
+          - failure
+        status_code:
+          type: integer
+          format: int32
+        request_body:
+          type: string
+        error_message:
           type: string
     AnnotationQueueItemIds:
       required:
@@ -5414,6 +5606,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter"
         created_at:
           type: string
           format: date-time
@@ -5571,6 +5767,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     TraceThreadLlmAsJudgeCode:
       required:
       - messages
@@ -5683,6 +5903,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Write"
         type:
           type: string
           enum:
@@ -5770,6 +5994,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceFilter_Write:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     TraceThreadLlmAsJudgeCode_Write:
       required:
       - messages
@@ -5847,6 +6095,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -6006,6 +6258,30 @@ components:
           - DOUBLE
         description:
           type: string
+    TraceFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     TraceThreadLlmAsJudgeCode_Public:
       required:
       - messages
@@ -6069,6 +6345,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -6161,6 +6441,10 @@ components:
           format: float
         enabled:
           type: boolean
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceFilter"
         project_id:
           type: string
           format: uuid
@@ -7316,6 +7600,65 @@ components:
         dataset_name:
           minLength: 1
           type: string
+    AvgValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            type: number
+            format: double
+    CountValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            type: integer
+            format: int64
+    PercentageValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            $ref: "#/components/schemas/PercentageValues_Public"
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+    ProjectStatItemObject_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - COUNT
+          - PERCENTAGE
+          - AVG
+      discriminator:
+        propertyName: type
+        mapping:
+          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
+          COUNT: "#/components/schemas/CountValueStat_Public"
+          AVG: "#/components/schemas/AvgValueStat_Public"
+    ProjectStats_Public:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatItemObject_Public"
     DatasetItem_Public:
       required:
       - data
@@ -8372,15 +8715,6 @@ components:
         items:
           type: object
       - type: string
-    PercentageValues_Public:
-      type: object
-      properties:
-        p50:
-          type: number
-        p90:
-          type: number
-        p99:
-          type: number
     PromptVersionLink_Public:
       required:
       - id
@@ -9623,30 +9957,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThreadFilter_Public"
-    TraceFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     TraceThreadFilter_Public:
       type: object
       properties:
@@ -10228,10 +10538,12 @@ components:
             type: string
     ServiceTogglesConfig:
       required:
+      - alertsEnabled
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
+      - welcomeWizardEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
@@ -10241,6 +10553,10 @@ components:
         guardrailsEnabled:
           type: boolean
         opikAIEnabled:
+          type: boolean
+        alertsEnabled:
+          type: boolean
+        welcomeWizardEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -10545,56 +10861,6 @@ components:
           type: array
           items:
             type: string
-    AvgValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: number
-            format: double
-    CountValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: integer
-            format: int64
-    PercentageValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            $ref: "#/components/schemas/PercentageValues_Public"
-    ProjectStatItemObject_Public:
-      type: object
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-          enum:
-          - COUNT
-          - PERCENTAGE
-          - AVG
-      discriminator:
-        propertyName: type
-        mapping:
-          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
-          COUNT: "#/components/schemas/CountValueStat_Public"
-          AVG: "#/components/schemas/AvgValueStat_Public"
-    ProjectStats_Public:
-      type: object
-      properties:
-        stats:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProjectStatItemObject_Public"
     FeedbackScoreBatch:
       required:
       - scores
@@ -11224,8 +11490,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceSearchStreamRequest_Public:
       type: object
       properties:
@@ -11250,8 +11521,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceUpdate:
       type: object
       properties:
@@ -11292,6 +11568,35 @@ components:
           type: array
           items:
             type: string
+    WelcomeWizardTracking:
+      type: object
+      properties:
+        completed:
+          type: boolean
+          description: Whether the welcome wizard has been completed
+    WelcomeWizardSubmission:
+      type: object
+      properties:
+        role:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: Optional user role
+        integrations:
+          type: array
+          description: List of integrations the user selected
+          items:
+            type: string
+            description: List of integrations the user selected
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional user email
+          format: email
+        join_beta_program:
+          type: boolean
+          description: Whether user wants to join beta programs
     Result:
       type: object
       properties:

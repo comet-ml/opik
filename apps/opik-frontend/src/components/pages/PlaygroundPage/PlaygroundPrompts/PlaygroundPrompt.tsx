@@ -131,7 +131,7 @@ const PlaygroundPrompt = ({
         model: newModel,
         provider: newProvider,
         ...(newProvider !== provider && {
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         }),
       });
       setLastPickedModel(newModel);
@@ -148,7 +148,7 @@ const PlaygroundPrompt = ({
         updatePrompt(promptId, {
           model: newModel,
           provider: newProvider,
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         });
       }
     },
@@ -179,7 +179,7 @@ const PlaygroundPrompt = ({
         updatePrompt(promptId, {
           model: newModel,
           provider: newProvider,
-          configs: getDefaultConfigByProvider(newProvider),
+          configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
         updateOutput(promptId, "", { value: "" });

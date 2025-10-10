@@ -66,6 +66,7 @@ import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import { Separator } from "@/components/ui/separator";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
+import useExperimentItemsStatistic from "@/api/datasets/useExperimentItemsStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
@@ -74,6 +75,7 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/lib/experiments";
+import { formatDuration } from "@/lib/date";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -245,6 +247,21 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
   );
 
+  const { refetch: refetchExportData } = useCompareExperimentsList(
+    {
+      workspaceName,
+      datasetId,
+      experimentsIds,
+      filters,
+      truncate: false,
+      page: page as number,
+      size: size as number,
+    },
+    {
+      enabled: false,
+    },
+  );
+
   const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
     useCompareExperimentsColumns(
       {
@@ -268,9 +285,26 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
     );
 
+  const { data: statisticData } = useExperimentItemsStatistic(
+    {
+      datasetId,
+      experimentsIds,
+      filters,
+    },
+    {
+      placeholderData: keepPreviousData,
+      refetchInterval: REFETCH_INTERVAL,
+    },
+  );
+
   const experimentsCount = experimentsIds.length;
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
+
+  const columnsStatistic = useMemo(
+    () => statisticData?.stats ?? [],
+    [statisticData],
+  );
   const noDataText = "There is no data for the selected experiments";
 
   const dynamicDatasetColumns = useMemo(() => {
@@ -362,6 +396,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Duration",
         type: COLUMN_TYPE.duration,
         cell: DurationCell.Compare as never,
+        statisticKey: "duration",
+        statisticDataFormater: formatDuration,
         customMeta: {
           experimentsIds,
         },
@@ -387,6 +423,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
           header: FeedbackScoreHeader as never,
           cell: CompareExperimentsFeedbackScoreCell as never,
+          statisticKey: `feedback_scores.${label}`,
           customMeta: {
             experimentsIds,
             feedbackKey: label,
@@ -398,6 +435,25 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const selectedRows: Array<ExperimentsCompare> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const getDataForExport = useCallback(async (): Promise<
+    ExperimentsCompare[]
+  > => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
 
   const handleRowClick = useCallback(
     (row: ExperimentsCompare) => {
@@ -633,8 +689,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
         setExpandedCommentSections([String(idx)]);
       },
+      columnsStatistic,
     }),
-    [handleRowClick, setExpandedCommentSections],
+    [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
 
   if (isPending || isFeedbackScoresPending || isExperimentsOutputPending) {
@@ -664,7 +721,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel
-            rows={selectedRows}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
           />

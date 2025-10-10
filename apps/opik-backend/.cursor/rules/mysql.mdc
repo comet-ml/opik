@@ -1,7 +1,7 @@
 ---
 description: MySQL transaction usage guidelines for opik-backend
-globs:
-alwaysApply: true
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 # MySQL Transaction Guidelines
 

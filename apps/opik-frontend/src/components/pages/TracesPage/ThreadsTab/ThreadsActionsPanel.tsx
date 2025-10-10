@@ -14,7 +14,8 @@ import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToD
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 
 type ThreadsActionsPanelProps = {
-  rows: Thread[];
+  getDataForExport: () => Promise<Thread[]>;
+  selectedRows: Thread[];
   columnsToExport: string[];
   projectName: string;
   projectId: string;
@@ -22,21 +23,28 @@ type ThreadsActionsPanelProps = {
 
 const ThreadsActionsPanel: React.FunctionComponent<
   ThreadsActionsPanelProps
-> = ({ rows, columnsToExport, projectName, projectId }) => {
+> = ({
+  getDataForExport,
+  selectedRows,
+  columnsToExport,
+  projectName,
+  projectId,
+}) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
   const { mutate } = useThreadBatchDeleteMutation();
-  const disabled = !rows?.length;
+  const disabled = !selectedRows?.length;
 
   const deleteThreadsHandler = useCallback(() => {
     mutate({
       projectId,
-      ids: rows.map((row) => row.id),
+      ids: selectedRows.map((row) => row.id),
     });
-  }, [projectId, mutate, rows]);
+  }, [projectId, mutate, selectedRows]);
 
-  const mapRowData = useCallback(() => {
+  const mapRowData = useCallback(async () => {
+    const rows = await getDataForExport();
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         // we need split by dot to parse feedback_scores into correct structure
@@ -60,7 +68,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         return acc;
       }, {});
     });
-  }, [rows, columnsToExport]);
+  }, [getDataForExport, columnsToExport]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {
@@ -81,7 +89,12 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
-      <AddToDropdown rows={rows} disabled={disabled} />
+      <AddToDropdown
+        getDataForExport={getDataForExport}
+        selectedRows={selectedRows}
+        disabled={disabled}
+        dataType="threads"
+      />
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
         getData={mapRowData}

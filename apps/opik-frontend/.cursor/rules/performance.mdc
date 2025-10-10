@@ -1,7 +1,7 @@
 ---
 description: Frontend performance optimization rules for React hooks and data processing
-globs: "**/*"
-alwaysApply: true
+globs: apps/opik-frontend/**/*
+alwaysApply: false
 ---
 
 # Frontend Performance Guidelines

@@ -320,6 +320,7 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -340,6 +341,8 @@ class RawTracesClient:
         filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
+
+        strip_attachments : typing.Optional[bool]
 
         sorting : typing.Optional[str]
 
@@ -363,6 +366,7 @@ class RawTracesClient:
                 "project_id": project_id,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
             },
@@ -516,7 +520,11 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TracePublic]:
         """
         Get trace by id
@@ -524,6 +532,8 @@ class RawTracesClient:
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -536,6 +546,9 @@ class RawTracesClient:
         _response = self._client_wrapper.httpx_client.request(
             f"v1/private/traces/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "strip_attachments": strip_attachments,
+            },
             request_options=request_options,
         )
         try:
@@ -1243,6 +1256,7 @@ class RawTracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1261,6 +1275,8 @@ class RawTracesClient:
         project_id : typing.Optional[str]
 
         truncate : typing.Optional[bool]
+
+        strip_attachments : typing.Optional[bool]
 
         filters : typing.Optional[str]
 
@@ -1283,6 +1299,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
             },
@@ -1445,6 +1462,7 @@ class RawTracesClient:
         last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1464,7 +1482,10 @@ class RawTracesClient:
             Max number of trace thread to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1486,6 +1507,7 @@ class RawTracesClient:
                 "last_retrieved_thread_model_id": last_retrieved_thread_model_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
             },
             headers={
                 "content-type": "application/json",
@@ -1532,6 +1554,7 @@ class RawTracesClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1551,7 +1574,10 @@ class RawTracesClient:
             Max number of traces to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1573,6 +1599,7 @@ class RawTracesClient:
                 "last_retrieved_id": last_retrieved_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
             },
             headers={
                 "content-type": "application/json",
@@ -2106,6 +2133,7 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2126,6 +2154,8 @@ class AsyncRawTracesClient:
         filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
+
+        strip_attachments : typing.Optional[bool]
 
         sorting : typing.Optional[str]
 
@@ -2149,6 +2179,7 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
             },
@@ -2302,7 +2333,11 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_trace_by_id(
-        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TracePublic]:
         """
         Get trace by id
@@ -2310,6 +2345,8 @@ class AsyncRawTracesClient:
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2322,6 +2359,9 @@ class AsyncRawTracesClient:
         _response = await self._client_wrapper.httpx_client.request(
             f"v1/private/traces/{jsonable_encoder(id)}",
             method="GET",
+            params={
+                "strip_attachments": strip_attachments,
+            },
             request_options=request_options,
         )
         try:
@@ -3029,6 +3069,7 @@ class AsyncRawTracesClient:
         project_name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3047,6 +3088,8 @@ class AsyncRawTracesClient:
         project_id : typing.Optional[str]
 
         truncate : typing.Optional[bool]
+
+        strip_attachments : typing.Optional[bool]
 
         filters : typing.Optional[str]
 
@@ -3069,6 +3112,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
             },
@@ -3231,6 +3275,7 @@ class AsyncRawTracesClient:
         last_retrieved_thread_model_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3250,7 +3295,10 @@ class AsyncRawTracesClient:
             Max number of trace thread to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3272,6 +3320,7 @@ class AsyncRawTracesClient:
                 "last_retrieved_thread_model_id": last_retrieved_thread_model_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
             },
             headers={
                 "content-type": "application/json",
@@ -3319,6 +3368,7 @@ class AsyncRawTracesClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
+        strip_attachments: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3338,7 +3388,10 @@ class AsyncRawTracesClient:
             Max number of traces to be streamed
 
         truncate : typing.Optional[bool]
-            Truncate image included in either input, output or metadata
+            Truncate input, output and metadata to slim payloads
+
+        strip_attachments : typing.Optional[bool]
+            If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3360,6 +3413,7 @@ class AsyncRawTracesClient:
                 "last_retrieved_id": last_retrieved_id,
                 "limit": limit,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
             },
             headers={
                 "content-type": "application/json",
