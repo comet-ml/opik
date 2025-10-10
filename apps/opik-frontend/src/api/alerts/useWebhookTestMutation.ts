@@ -9,7 +9,7 @@ const testWebhook = async (
   alert: Partial<Alert>,
 ): Promise<WebhookTestResult> => {
   const { data } = await api.post<WebhookTestResult>(
-    `${ALERTS_REST_ENDPOINT}/webhook/test`,
+    `${ALERTS_REST_ENDPOINT}webhooks/tests`,
     alert,
   );
   return data;
