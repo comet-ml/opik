@@ -156,7 +156,7 @@ opik upload ./default/ez-mcp-chatbot production/copy --all
 
 **Note:** Thread metadata is automatically calculated from traces with the same `thread_id` when uploaded, so no separate thread files are needed.
 
-**Important:** 
+**Important:**
 - **Traces and spans** are project-specific and will be uploaded to the specified project
 - **Datasets, experiments, and prompts** belong to the workspace and are shared across all projects in that workspace
 

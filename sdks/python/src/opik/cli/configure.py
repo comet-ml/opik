@@ -2,12 +2,10 @@
 
 import logging
 import sys
-from typing import Optional
 
 import click
 
-import opik.configurator as opik_configure
-from opik.configurator import interactive_helpers
+from opik.configurator import configure as opik_configure, interactive_helpers
 
 LOGGER = logging.getLogger(__name__)
 
