@@ -1,10 +1,12 @@
 import React from "react";
 import { ChevronDown } from "lucide-react";
 import get from "lodash/get";
+import find from "lodash/find";
 
 import { formatNumericData } from "@/lib/utils";
 import {
   ColumnStatistic,
+  ColumnsStatistic,
   DropdownOption,
   STATISTIC_AGGREGATION_TYPE,
 } from "@/types/shared";
@@ -30,18 +32,69 @@ const OPTIONS: DropdownOption<string>[] = [
   },
 ];
 
+// Columns that should display sum alongside avg
+const COLUMNS_WITH_SUM = [
+  "total_estimated_cost",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+];
+
 type HeaderStatisticProps = {
   statistic?: ColumnStatistic;
+  columnsStatistic?: ColumnsStatistic;
+  statisticKey?: string;
   dataFormater?: (value: number) => string;
 };
 
 const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   statistic,
+  columnsStatistic,
+  statisticKey,
   dataFormater = formatNumericData,
 }) => {
   const [value, setValue] = React.useState<string>("p50");
+
+  // Check if this column should display sum
+  const shouldDisplaySum =
+    statistic?.type === STATISTIC_AGGREGATION_TYPE.AVG &&
+    statisticKey &&
+    COLUMNS_WITH_SUM.includes(statisticKey);
+
+  // Calculate sum if needed: sum = count * avg
+  let sumValue: number | null = null;
+  if (shouldDisplaySum && columnsStatistic) {
+    const countStat = find(
+      columnsStatistic,
+      (s) =>
+        s.type === STATISTIC_AGGREGATION_TYPE.COUNT &&
+        (s.name === "trace_count" || s.name === "span_count"),
+    );
+    if (countStat && statistic?.value) {
+      sumValue = countStat.value * statistic.value;
+    }
+  }
+
   switch (statistic?.type) {
     case STATISTIC_AGGREGATION_TYPE.AVG:
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="comet-body-s truncate text-foreground">
+            <span>avg</span>
+            <span className="ml-1 font-semibold">
+              {dataFormater(statistic.value)}
+            </span>
+          </span>
+          {shouldDisplaySum && sumValue !== null && (
+            <span className="comet-body-s truncate text-foreground">
+              <span>sum</span>
+              <span className="ml-1 font-semibold">
+                {dataFormater(sumValue)}
+              </span>
+            </span>
+          )}
+        </div>
+      );
     case STATISTIC_AGGREGATION_TYPE.COUNT:
       return (
         <span className="comet-body-s truncate text-foreground">
