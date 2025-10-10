@@ -5,6 +5,7 @@ import {
   Calendar,
   ChevronDown,
   Clock,
+  Coins,
   Copy,
   Hash,
   MessageCircleMore,
@@ -17,10 +18,12 @@ import {
 import copy from "clipboard-copy";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
+import isUndefined from "lodash/isUndefined";
 
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import useAppStore from "@/store/AppStore";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/components/shared/Loader/Loader";
@@ -322,6 +325,22 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               </span>
             </div>
           </TooltipWrapper>
+          {!isUndefined(thread?.total_estimated_cost) && (
+            <TooltipWrapper
+              content={`Estimated cost ${formatCost(
+                thread?.total_estimated_cost,
+              )}`}
+            >
+              <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
+                <Coins className="size-4 shrink-0" />
+                <span className="comet-body-s-accented truncate">
+                  {formatCost(thread?.total_estimated_cost, {
+                    modifier: "short",
+                  })}
+                </span>
+              </div>
+            </TooltipWrapper>
+          )}
         </div>
         {thread && (
           <ThreadDetailsTags
