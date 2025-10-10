@@ -81,17 +81,25 @@ def _upload_traces(client, project_dir: Path, dry_run: bool) -> int:
                 span_id_mapping = {}
 
                 # Sort spans by hierarchy (root spans first, then children)
-                def get_span_depth(span_info):
+                # Build a mapping from span ID to span info for O(1) parent lookup
+                span_id_to_info = {span.get("id"): span for span in spans_info}
+                span_depths = {}
+
+                def compute_span_depth(span_info):
+                    span_id = span_info.get("id")
+                    if span_id in span_depths:
+                        return span_depths[span_id]
                     parent_id = span_info.get("parent_span_id")
                     if parent_id is None:
-                        return 0
-                    # Find parent span and add 1 to its depth
-                    for other_span in spans_info:
-                        if other_span.get("id") == parent_id:
-                            return get_span_depth(other_span) + 1
-                    return 1  # If parent not found, assume depth 1
+                        depth = 0
+                    elif parent_id in span_id_to_info:
+                        depth = compute_span_depth(span_id_to_info[parent_id]) + 1
+                    else:
+                        depth = 1  # If parent not found, assume depth 1
+                    span_depths[span_id] = depth
+                    return depth
 
-                sorted_spans = sorted(spans_info, key=get_span_depth)
+                sorted_spans = sorted(spans_info, key=compute_span_depth)
 
                 for span_info in sorted_spans:
                     old_span_id = span_info.get("id")
