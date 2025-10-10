@@ -83,8 +83,7 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   switch (statistic?.type) {
     case STATISTIC_AGGREGATION_TYPE.AVG:
       if (shouldDisplaySum && sumValue !== null) {
-        const displayValue =
-          avgSumValue === "avg" ? statistic.value : sumValue;
+        const displayValue = avgSumValue === "avg" ? statistic.value : sumValue;
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
