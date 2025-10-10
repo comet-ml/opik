@@ -11,6 +11,8 @@ export interface TraceSearchStreamRequestPublic {
     lastRetrievedId?: string;
     /** Max number of traces to be streamed */
     limit?: number;
-    /** Truncate image included in either input, output or metadata */
+    /** Truncate input, output and metadata to slim payloads */
     truncate?: boolean;
+    /** If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments */
+    stripAttachments?: boolean;
 }

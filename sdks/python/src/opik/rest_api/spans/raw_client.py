@@ -199,6 +199,7 @@ class RawSpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -224,6 +225,8 @@ class RawSpansClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
@@ -248,6 +251,7 @@ class RawSpansClient:
                 "type": type,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
             },
@@ -443,7 +447,7 @@ class RawSpansClient:
         self,
         id: str,
         *,
-        truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SpanPublic]:
         """
@@ -453,7 +457,7 @@ class RawSpansClient:
         ----------
         id : str
 
-        truncate : typing.Optional[bool]
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -467,7 +471,7 @@ class RawSpansClient:
             f"v1/private/spans/{jsonable_encoder(id)}",
             method="GET",
             params={
-                "truncate": truncate,
+                "strip_attachments": strip_attachments,
             },
             request_options=request_options,
         )
@@ -1276,6 +1280,7 @@ class AsyncRawSpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1301,6 +1306,8 @@ class AsyncRawSpansClient:
 
         truncate : typing.Optional[bool]
 
+        strip_attachments : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
@@ -1325,6 +1332,7 @@ class AsyncRawSpansClient:
                 "type": type,
                 "filters": filters,
                 "truncate": truncate,
+                "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
             },
@@ -1520,7 +1528,7 @@ class AsyncRawSpansClient:
         self,
         id: str,
         *,
-        truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SpanPublic]:
         """
@@ -1530,7 +1538,7 @@ class AsyncRawSpansClient:
         ----------
         id : str
 
-        truncate : typing.Optional[bool]
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1544,7 +1552,7 @@ class AsyncRawSpansClient:
             f"v1/private/spans/{jsonable_encoder(id)}",
             method="GET",
             params={
-                "truncate": truncate,
+                "strip_attachments": strip_attachments,
             },
             request_options=request_options,
         )

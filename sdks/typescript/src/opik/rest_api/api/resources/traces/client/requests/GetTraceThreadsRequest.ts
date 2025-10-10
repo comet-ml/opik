@@ -12,6 +12,7 @@ export interface GetTraceThreadsRequest {
     projectName?: string;
     projectId?: string;
     truncate?: boolean;
+    stripAttachments?: boolean;
     filters?: string;
     sorting?: string;
 }

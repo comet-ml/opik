@@ -20,6 +20,7 @@ export const TraceThreadSearchStreamRequest: core.serialization.Schema<
     ),
     limit: core.serialization.number().optional(),
     truncate: core.serialization.boolean().optional(),
+    stripAttachments: core.serialization.property("strip_attachments", core.serialization.boolean().optional()),
 });
 
 export declare namespace TraceThreadSearchStreamRequest {
@@ -30,5 +31,6 @@ export declare namespace TraceThreadSearchStreamRequest {
         last_retrieved_thread_model_id?: string | null;
         limit?: number | null;
         truncate?: boolean | null;
+        strip_attachments?: boolean | null;
     }
 }
