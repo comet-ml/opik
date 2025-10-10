@@ -6,7 +6,12 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.filter.AutomationRuleEvaluatorFilter;
+import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -40,6 +45,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
@@ -58,6 +64,9 @@ public class AutomationRuleEvaluatorsResource {
 
     private final @NonNull AutomationRuleEvaluatorService service;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @GET
     @Operation(operationId = "findEvaluators", summary = "Find project Evaluators", description = "Find project Evaluators", responses = {
@@ -65,14 +74,24 @@ public class AutomationRuleEvaluatorsResource {
     })
     @JsonView(View.Public.class)
     public Response find(@QueryParam("project_id") UUID projectId,
+            @QueryParam("id") String id,
             @QueryParam("name") String name,
+            @QueryParam("filters") String filters,
+            @QueryParam("sorting") String sorting,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
                 workspaceId, page);
-        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(projectId, workspaceId, name, page, size);
+
+        var queryFilters = filtersFactory.newFilters(filters, AutomationRuleEvaluatorFilter.LIST_TYPE_REFERENCE);
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+        String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields, sortingFactory.getFieldMapping());
+        List<String> sortableBy = sortingFactory.getSortableFields();
+
+        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(projectId, workspaceId, id, name, queryFilters,
+                sortingFieldsSql, sortableBy, page, size);
         log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
                 evaluatorPage.size(), projectId, workspaceId, page, evaluatorPage.total());
 
