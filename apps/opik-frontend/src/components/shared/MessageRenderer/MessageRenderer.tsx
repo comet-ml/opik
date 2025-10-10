@@ -15,6 +15,8 @@ import {
   isArrayLikeString,
 } from "@/lib/arrayParser";
 
+const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
+
 export interface MessageRendererProps {
   /**
    * The message data to render. Can be a string, object, null, or undefined.
@@ -106,7 +108,10 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
             };
             if (structuredResult.renderType === "json-table") {
               return (
-                <JsonKeyValueTable data={structuredResult.data} maxDepth={3} />
+                <JsonKeyValueTable
+                  data={structuredResult.data}
+                  maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
+                />
               );
             }
           }
@@ -121,7 +126,12 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
       }
 
       // Fall back to JSON table for objects that can't be prettified as text
-      return <JsonKeyValueTable data={message} maxDepth={3} />;
+      return (
+        <JsonKeyValueTable
+          data={message}
+          maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
+        />
+      );
     }
 
     // Handle other types (numbers, booleans, etc.)

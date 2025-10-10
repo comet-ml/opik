@@ -14,6 +14,7 @@ import isString from "lodash/isString";
 import isNumber from "lodash/isNumber";
 import isBoolean from "lodash/isBoolean";
 import isNull from "lodash/isNull";
+import useLocalStorageState from "use-local-storage-state";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ interface JsonKeyValueTableProps {
   data: unknown;
   className?: string;
   maxDepth?: number;
+  localStorageKey?: string;
 }
 
 interface JsonRowData {
@@ -125,6 +127,7 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   data,
   className,
   maxDepth = 5,
+  localStorageKey,
 }) => {
   const tableData = useMemo(() => {
     if (!isObject(data) || isNull(data)) {
@@ -149,9 +152,21 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
     return expanded;
   }, [tableData]);
 
-  const [expanded, setExpanded] = useState<ExpandedState>(
+  // Use localStorage for persistence if localStorageKey is provided, otherwise use regular state
+  const [localStorageExpanded, setLocalStorageExpanded] =
+    useLocalStorageState<ExpandedState>(
+      localStorageKey || "json-table-expanded-state-fallback",
+      {
+        defaultValue: initialExpanded,
+      },
+    );
+  const [regularExpanded, setRegularExpanded] = useState<ExpandedState>(
     () => initialExpanded,
   );
+
+  const [expanded, setExpanded] = localStorageKey
+    ? [localStorageExpanded, setLocalStorageExpanded]
+    : [regularExpanded, setRegularExpanded];
 
   // Removed useEffect that reset expanded state on initialExpanded changes to preserve user interaction state.
 

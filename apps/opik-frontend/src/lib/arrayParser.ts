@@ -7,7 +7,6 @@ import toString from "lodash/toString";
 export interface ArrayParseOptions {
   /**
    * Whether to convert array items to strings using toString
-   * @default true
    */
   convertToString?: boolean;
   /**
@@ -97,5 +96,11 @@ export const formatArrayAsOrderedList = (
  */
 export const isArrayLikeString = (content: string): boolean => {
   const trimmed = content.trim();
+
+  // Check for [object Object] which indicates an object was stringified
+  if (trimmed === "[object Object]") {
+    return false;
+  }
+
   return trimmed.startsWith("[") && trimmed.endsWith("]");
 };

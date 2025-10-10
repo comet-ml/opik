@@ -3,13 +3,15 @@ import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
 import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
-import { cn, isStringMarkdown } from "@/lib/utils";
+import { isStringMarkdown } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
 import SyntaxHighlighterSearch from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
+
+const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
 
 export interface MarkdownHighlighterProps {
   searchValue?: string;
@@ -38,11 +40,19 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
     });
 
   const markdownPreview = useMemo(() => {
-    if (isNull(codeOutput.message)) return "";
+    if (isNull(codeOutput.message)) {
+      return <div className="comet-code text-muted-foreground">null</div>;
+    }
 
     // Handle object messages - render as JSON table
     if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
-      return <JsonKeyValueTable data={codeOutput.message} maxDepth={3} />;
+      return (
+        <JsonKeyValueTable
+          data={codeOutput.message}
+          maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
+          localStorageKey="json-table-expanded-state"
+        />
+      );
     }
 
     // Handle structured result from prettifyMessage
@@ -56,16 +66,20 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         data: unknown;
       };
       if (structuredResult.renderType === "json-table") {
-        return <JsonKeyValueTable data={structuredResult.data} maxDepth={3} />;
+        return (
+          <JsonKeyValueTable
+            data={structuredResult.data}
+            maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
+            localStorageKey="json-table-expanded-state"
+          />
+        );
       }
     }
 
     if (isStringMarkdown(codeOutput.message)) {
       return (
         <ReactMarkdown
-          className={cn(
-            "prose dark:prose-invert comet-markdown comet-markdown-highlighter",
-          )}
+          className="comet-markdown comet-markdown-highlighter prose dark:prose-invert"
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
           rehypePlugins={[rehypeRaw]}
         >

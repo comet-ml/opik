@@ -52,14 +52,22 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     />
   );
 
+  const getCopyText = () => {
+    if (typeof code.message === "object" && code.message !== null) {
+      try {
+        return JSON.stringify(code.message, null, 2);
+      } catch (error) {
+        // Fallback for objects that can't be JSON stringified
+        return String(code.message);
+      }
+    }
+    return String(code.message);
+  };
+
   const copyButton = (
     <CopyButton
       message="Successfully copied code"
-      text={
-        typeof code.message === "object" && code.message !== null
-          ? JSON.stringify(code.message, null, 2)
-          : code.message
-      }
+      text={getCopyText()}
       tooltipText="Copy code"
     />
   );
