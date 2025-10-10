@@ -108,6 +108,21 @@ const SORTING_KEY = "compare-experiments-sorting";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
+    id: COLUMN_ID_ID,
+    label: "ID (Dataset item)",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: COLUMN_DURATION_ID,
+    label: "Duration",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: COLUMN_COMMENTS_ID,
+    label: "Comments",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "output",
     label: "Evaluation task",
     type: COLUMN_TYPE.string,
@@ -604,9 +619,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
         }),
       ),
+      ...sortBy(dynamicOutputColumns, "label").map(({ id, label }) => ({
+        id,
+        label: `${label} (Output)`,
+        type: COLUMN_TYPE.string,
+      })),
       ...FILTER_COLUMNS,
     ];
-  }, [dynamicDatasetColumns]);
+  }, [dynamicDatasetColumns, dynamicOutputColumns]);
 
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
