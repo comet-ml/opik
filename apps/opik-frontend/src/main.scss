@@ -83,8 +83,8 @@
     --message-input-background: #e7ecff;
 
     /* Action cards */
-    --action-card-shadow:
-      0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+      0 2px 4px -2px rgb(0 0 0 / 0.1);
 
     /* Action types */
     --action-trace-background: #dafbf0;
@@ -242,8 +242,7 @@
     --special-button-active: #1e9a65;
 
     /* Action cards - Dark Mode */
-    --action-card-shadow:
-      0 4px 6px -1px rgb(255 255 255 / 0.1),
+    --action-card-shadow: 0 4px 6px -1px rgb(255 255 255 / 0.1),
       0 2px 4px -2px rgb(255 255 255 / 0.05);
 
     /* Action types - Dark Mode (darker backgrounds, lighter text) */
