@@ -29,18 +29,20 @@ type UseTracesOrSpansListParams = {
   truncate?: boolean;
 };
 
+export type TracesOrSpansListData = {
+  content: Array<Trace | Span>;
+  sortable_by: string[];
+  total: number;
+};
+
 type UseTracesOrSpansListResponse = {
-  data: {
-    content: Array<Trace | Span>;
-    sortable_by: string[];
-    total: number;
-  };
+  data: TracesOrSpansListData | undefined;
   isPending: boolean;
   isLoading: boolean;
   isError: boolean;
   refetch: (
     options?: RefetchOptions,
-  ) => Promise<QueryObserverResult<unknown, unknown>>;
+  ) => Promise<QueryObserverResult<TracesOrSpansListData, unknown>>;
 };
 
 export default function useTracesOrSpansList(

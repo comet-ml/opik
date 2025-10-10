@@ -315,6 +315,21 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
+  const { refetch: refetchExportData } = useThreadList(
+    {
+      projectId,
+      sorting: sortedColumns,
+      filters,
+      page: page as number,
+      size: size as number,
+      search: search as string,
+      truncate: false,
+    },
+    {
+      enabled: false,
+    },
+  );
+
   const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no threads yet` : "No search results";
 
@@ -400,6 +415,23 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const selectedRows: Thread[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const getDataForExport = useCallback(async (): Promise<Thread[]> => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
 
   const handleRowClick = useCallback(
     (row?: Thread) => {
@@ -540,7 +572,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <ThreadsActionsPanel
             projectId={projectId}
             projectName={projectName}
-            rows={selectedRows}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
             columnsToExport={columnsToExport}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />

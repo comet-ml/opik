@@ -32,13 +32,15 @@ import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 const DEFAULT_SIZE = 100;
 
 type AddToDatasetDialogProps = {
-  rows: Array<Trace | Span>;
+  getDataForExport: () => Promise<Array<Trace | Span>>;
+  selectedRows: Array<Trace | Span>;
   open: boolean;
   setOpen: (open: boolean) => void;
 };
 
 const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
-  rows,
+  getDataForExport,
+  selectedRows,
   open,
   setOpen,
 }) => {
@@ -47,6 +49,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [fetching, setFetching] = useState<boolean>(false);
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
 
@@ -68,11 +71,11 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const total = data?.total ?? 0;
 
   const validRows = useMemo(() => {
-    return rows.filter((r) => !isUndefined(r.input));
-  }, [rows]);
+    return selectedRows.filter((r) => !isUndefined(r.input));
+  }, [selectedRows]);
 
   const noValidRows = validRows.length === 0;
-  const partialValid = validRows.length !== rows.length;
+  const partialValid = validRows.length !== selectedRows.length;
 
   const onItemsAdded = useCallback(
     (dataset: Dataset) => {
@@ -102,40 +105,59 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   );
 
   const addToDatasetHandler = useCallback(
-    (dataset: Dataset) => {
+    async (dataset: Dataset) => {
+      setFetching(true);
       setOpen(false);
-      mutate(
-        {
-          workspaceName,
-          datasetId: dataset.id,
-          datasetItems: validRows.map((r) => {
-            const isSpan = isObjectSpan(r);
-            const spanId = isSpan ? r.id : "";
-            const traceId = isSpan ? get(r, "trace_id", "") : r.id;
+      try {
+        const rows = await getDataForExport();
+        const validRowsFromFetch = rows.filter((r) => !isUndefined(r.input));
 
-            return {
-              data: {
-                input: r.input,
-                ...(r.output && { expected_output: r.output }),
-              },
-              source: isSpan
-                ? DATASET_ITEM_SOURCE.span
-                : DATASET_ITEM_SOURCE.trace,
-              trace_id: traceId,
-              ...(isSpan ? { span_id: spanId } : {}),
-            };
-          }),
-        },
-        {
-          onSuccess: () => onItemsAdded(dataset),
-        },
-      );
+        mutate(
+          {
+            workspaceName,
+            datasetId: dataset.id,
+            datasetItems: validRowsFromFetch.map((r) => {
+              const isSpan = isObjectSpan(r);
+              const spanId = isSpan ? r.id : "";
+              const traceId = isSpan ? get(r, "trace_id", "") : r.id;
+
+              return {
+                data: {
+                  input: r.input,
+                  ...(r.output && { expected_output: r.output }),
+                },
+                source: isSpan
+                  ? DATASET_ITEM_SOURCE.span
+                  : DATASET_ITEM_SOURCE.trace,
+                trace_id: traceId,
+                ...(isSpan ? { span_id: spanId } : {}),
+              };
+            }),
+          },
+          {
+            onSuccess: () => onItemsAdded(dataset),
+          },
+        );
+      } catch (error) {
+        const message = get(
+          error,
+          ["response", "data", "message"],
+          get(error, "message", "Failed to fetch data for adding to dataset"),
+        );
+        toast({
+          title: "Failed to fetch data",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setFetching(false);
+      }
     },
-    [setOpen, mutate, workspaceName, validRows, onItemsAdded],
+    [getDataForExport, setOpen, mutate, workspaceName, onItemsAdded, toast],
   );
 
   const renderListItems = () => {
-    if (isPending) {
+    if (isPending || fetching) {
       return <Loader />;
     }
 

@@ -122,6 +122,19 @@ const DatasetItemsPage = () => {
     },
   );
 
+  const { refetch: refetchExportData } = useDatasetItemsList(
+    {
+      datasetId,
+      page: page as number,
+      size: size as number,
+      search: search!,
+      truncate: false,
+    },
+    {
+      enabled: false,
+    },
+  );
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -158,6 +171,23 @@ const DatasetItemsPage = () => {
   const selectedRows: DatasetItem[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const getDataForExport = useCallback(async (): Promise<DatasetItem[]> => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
 
   const dynamicDatasetColumns = useMemo(() => {
     return (data?.columns ?? [])
@@ -338,7 +368,8 @@ const DatasetItemsPage = () => {
         </div>
         <div className="flex items-center gap-2">
           <DatasetItemsActionsPanel
-            datasetItems={selectedRows}
+            getDataForExport={getDataForExport}
+            selectedDatasetItems={selectedRows}
             datasetId={datasetId}
             datasetName={dataset?.name ?? ""}
             columnsToExport={columnsToExport}

@@ -247,6 +247,21 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
   );
 
+  const { refetch: refetchExportData } = useCompareExperimentsList(
+    {
+      workspaceName,
+      datasetId,
+      experimentsIds,
+      filters,
+      truncate: false,
+      page: page as number,
+      size: size as number,
+    },
+    {
+      enabled: false,
+    },
+  );
+
   const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
     useCompareExperimentsColumns(
       {
@@ -420,6 +435,25 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const selectedRows: Array<ExperimentsCompare> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const getDataForExport = useCallback(async (): Promise<
+    ExperimentsCompare[]
+  > => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
 
   const handleRowClick = useCallback(
     (row: ExperimentsCompare) => {
@@ -687,7 +721,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel
-            rows={selectedRows}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
           />
