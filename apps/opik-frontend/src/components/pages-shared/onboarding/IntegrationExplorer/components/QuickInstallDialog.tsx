@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogAutoScrollBody,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import cursorLogo from "/images/integrations/cursor.png";
 import copilotLogo from "/images/integrations/copilot.png";
 import windsurfLogo from "/images/integrations/windsurf.png";
@@ -128,6 +129,9 @@ If issues are reported:
 `;
 
 const QUICKSTART_DOCS_LINK = "https://www.comet.com/docs/opik/quickstart";
+const CURSOR_PROMPT_URL = `https://cursor.com/link/prompt?text=${encodeURIComponent(
+  AI_ASSISTANT_PROMPT,
+)}`;
 
 type QuickInstallDialogProps = {
   open: boolean;
@@ -193,7 +197,22 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
               className="mb-6"
             >
               <div className="relative overflow-hidden rounded-md bg-primary-foreground">
-                <div className="absolute right-2 top-0.5 z-10">
+                <div className="absolute right-2 top-0.5 z-10 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-0 text-muted-slate"
+                    asChild
+                  >
+                    <a
+                      href={CURSOR_PROMPT_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Try in Cursor
+                      <ExternalLink className="ml-1.5 size-3" />
+                    </a>
+                  </Button>
                   <CopyButton
                     message="Successfully copied code"
                     text={AI_ASSISTANT_PROMPT}
