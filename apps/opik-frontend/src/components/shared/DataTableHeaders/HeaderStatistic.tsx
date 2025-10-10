@@ -81,23 +81,28 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
 
   switch (statistic?.type) {
     case STATISTIC_AGGREGATION_TYPE.AVG:
-      return (
-        <div className="flex flex-col gap-0.5">
+      if (shouldDisplaySum && sumValue !== null) {
+        return (
           <span className="comet-body-s truncate text-foreground">
             <span>avg</span>
             <span className="ml-1 font-semibold">
               {dataFormater(statistic.value)}
             </span>
-          </span>
-          {shouldDisplaySum && sumValue !== null && (
-            <span className="comet-body-s truncate text-foreground">
-              <span>sum</span>
-              <span className="ml-1 font-semibold">
-                {dataFormater(sumValue)}
-              </span>
+            <span className="mx-1.5 text-muted-slate">|</span>
+            <span>sum</span>
+            <span className="ml-1 font-semibold">
+              {dataFormater(sumValue)}
             </span>
-          )}
-        </div>
+          </span>
+        );
+      }
+      return (
+        <span className="comet-body-s truncate text-foreground">
+          <span>avg</span>
+          <span className="ml-1 font-semibold">
+            {dataFormater(statistic.value)}
+          </span>
+        </span>
       );
     case STATISTIC_AGGREGATION_TYPE.COUNT:
       return (
