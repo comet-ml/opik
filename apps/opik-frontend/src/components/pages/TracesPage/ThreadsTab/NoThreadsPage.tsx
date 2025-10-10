@@ -3,9 +3,7 @@ import { Book, GraduationCap } from "lucide-react";
 import noDataThreadsImageUrl from "/images/no-data-threads.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import QuickstartDialog, {
-  useOpenQuickStartDialog,
-} from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 
 const NoThreadsPage = () => {
@@ -34,7 +32,6 @@ const NoThreadsPage = () => {
             <GraduationCap className="mr-2 size-4" />
             Explore Quickstart guide
           </Button>
-          <QuickstartDialog />
         </>
       }
     ></NoDataPage>

@@ -6,9 +6,7 @@ import noDataSpansImageUrl from "/images/no-data-spans.png";
 import noDataMetricsImageUrl from "/images/no-data-metrics.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import QuickstartDialog, {
-  useOpenQuickStartDialog,
-} from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
@@ -52,7 +50,6 @@ const NoTracesPage = () => {
             <GraduationCap className="mr-2 size-4" />
             Explore Quickstart guide
           </Button>
-          <QuickstartDialog />
         </>
       }
     ></NoDataPage>

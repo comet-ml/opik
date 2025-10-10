@@ -15,9 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import QuickstartDialog, {
-  useOpenQuickStartDialog,
-} from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -440,8 +438,6 @@ const UserMenu = () => {
       {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
-
-      <QuickstartDialog />
     </div>
   );
 };
