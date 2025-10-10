@@ -3,6 +3,8 @@
 # Declare variables to be passed into your templates.
 
 global:
+  argocd: false
+  useHelmHooks: true
   security:
     allowInsecureImages: true
 
@@ -24,6 +26,7 @@ serviceAccount:
 
 demoDataJob: 
   enabled: true
+
 nodeSelector: {}
 tolerations: []
 affinity: {}
