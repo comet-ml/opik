@@ -331,3 +331,72 @@ def test_start_as_current_span__distributed_headers_provided__child_span_created
         last_updated_at=ANY_BUT_NONE,
     )
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
+
+
+def test_start_as_current_span__parent_trace_exists__new_not_created(fake_backend):
+    """Test that the parent trace is used if it exists."""
+    with opik.start_as_current_trace(
+        "minimal-trace", project_name="test-project", flush=True
+    ):
+        with opik.start_as_current_span(
+            "test-span",
+            type="llm",
+            input={"input": "test-input"},
+            output={"output": "test-output"},
+            tags=["one", "two", "three"],
+            metadata={"one": "first", "two": "second", "three": "third"},
+            model="gpt-3.5-turbo",
+            provider="openai",
+        ) as span:
+            span.usage = {
+                "completion_tokens": 101,
+                "prompt_tokens": 20,
+                "total_tokens": 121,
+            }
+
+    assert len(fake_backend.trace_trees) == 1
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="minimal-trace",
+        project_name="test-project",
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="test-span",
+                input={"input": "test-input"},
+                output={"output": "test-output"},
+                tags=["one", "two", "three"],
+                metadata={
+                    "one": "first",
+                    "three": "third",
+                    "two": "second",
+                    "usage": {
+                        "completion_tokens": 101,
+                        "prompt_tokens": 20,
+                        "total_tokens": 121,
+                    },
+                },
+                type="llm",
+                usage={
+                    "completion_tokens": 101,
+                    "original_usage.completion_tokens": 101,
+                    "original_usage.prompt_tokens": 20,
+                    "original_usage.total_tokens": 121,
+                    "prompt_tokens": 20,
+                    "total_tokens": 121,
+                },
+                end_time=ANY_BUT_NONE,
+                project_name="test-project",
+                model="gpt-3.5-turbo",
+                provider="openai",
+                last_updated_at=ANY_BUT_NONE,
+            )
+        ],
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
