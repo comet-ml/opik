@@ -6,15 +6,18 @@ import { useState } from "react";
 
 const FeedbackScoreCellValue = ({
   feedbackScore,
+  color: customColor,
 }: {
   feedbackScore?: TraceFeedbackScore;
+  color?: string;
 }) => {
   const [openHoverCard, setOpenHoverCard] = useState(false);
 
   if (!feedbackScore) return "-";
 
   const label = feedbackScore.name;
-  const color = TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!];
+  const color =
+    customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!];
   const valueByAuthor = feedbackScore.value_by_author;
   const value = feedbackScore.value;
   const category = feedbackScore.category_name;

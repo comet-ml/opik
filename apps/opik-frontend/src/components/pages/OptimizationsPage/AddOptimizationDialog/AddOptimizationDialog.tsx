@@ -83,6 +83,7 @@ optimizer = MetaPromptOptimizer(
     num_prompts_per_round=4,
     n_threads=8,
     enable_context=True,
+    temperature=0.0,
     seed=42,
 )
 
