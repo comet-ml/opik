@@ -9,7 +9,6 @@ from opik_optimizer.utils import search_wikipedia
 
 from opik.evaluation.metrics import LevenshteinRatio, Equals
 from opik.evaluation.metrics.score_result import ScoreResult
-import random
 
 
 dataset = hotpot_300()
@@ -23,10 +22,6 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
 def equals(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = Equals()
     return metric.score(reference=dataset_item["answer"], output=llm_output)
-
-
-def random_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    return ScoreResult(name="random_metric", value=random.random())
 
 
 prompt = ChatPrompt(
@@ -63,8 +58,8 @@ optimizer = GepaOptimizer(
 )
 
 multi_metric_objective = opik_optimizer.MultiMetricObjective(
-    weights=[0.6, 0.1, 0.3],
-    metrics=[levenshtein_ratio, equals, random_metric],
+    weights=[0.6, 0.4],
+    metrics=[levenshtein_ratio, equals],
     name="my_composite_metric",
 )
 
