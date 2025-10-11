@@ -53,6 +53,173 @@ opik.configure(
 ```
 Refer to the [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/) for more configuration options.
 
+## CLI Commands
+
+The Opik Python SDK includes powerful CLI commands for downloading and uploading project data:
+
+### Download Command
+
+Download data from an Opik workspace or workspace/project to local files:
+
+```bash
+# Download from a specific project
+opik download WORKSPACE/PROJECT_NAME
+
+# Download from all projects in a workspace
+opik download WORKSPACE
+
+# Download all data types from a specific project
+opik download WORKSPACE/PROJECT_NAME --all
+
+# Download all data types from all projects in a workspace
+opik download WORKSPACE --all
+
+# Download specific data types from a project
+opik download WORKSPACE/PROJECT_NAME --include traces datasets prompts
+
+# Download specific data types from all projects in a workspace
+opik download WORKSPACE --include traces datasets prompts
+
+# Download all except experiments from a project
+opik download WORKSPACE/PROJECT_NAME --all --exclude experiments
+
+# Download with custom path and filters
+opik download WORKSPACE/PROJECT_NAME --path ./my-data --filter 'name contains "test"' --max-results 100
+
+# Download only items with names starting with "test"
+opik download WORKSPACE --name "^test"
+
+# Download only datasets containing "evaluation" from all projects
+opik download WORKSPACE --include datasets --name ".*evaluation.*"
+
+# Download with name filtering and custom path
+opik download WORKSPACE/PROJECT_NAME --name ".*prod.*" --path ./production-data
+```
+
+**Options:**
+- `--all`: Include all data types (traces, datasets, experiments, prompts, threads)
+- `--include`: Data types to include (can be specified multiple times)
+- `--exclude`: Data types to exclude (can be specified multiple times)
+- `--path, -p`: Directory to save downloaded data (defaults to current directory)
+- `--max-results`: Maximum number of items to download per data type (default: 1000)
+- `--filter`: Filter string using Opik Query Language (OQL)
+- `--name`: Filter items by name using Python regex patterns (matches trace names, dataset names, experiment names, or prompt names)
+
+**Supported Data Types:**
+- `traces`: Execution traces with spans and timing information (project-specific)
+- `datasets`: Evaluation datasets with input/output pairs (workspace-level)
+- `experiments`: Evaluation experiments and their results (workspace-level)
+- `prompts`: Prompt templates and their versions (workspace-level)
+
+**Note:** Thread metadata is automatically derived from traces with the same `thread_id`, so threads don't need to be downloaded or uploaded separately.
+
+### Upload Command
+
+Upload data from local files to an Opik workspace or workspace/project:
+
+```bash
+# Upload to a specific project
+opik upload WORKSPACE/PROJECT_NAME
+
+# Upload to all projects in a workspace
+opik upload WORKSPACE
+
+# Upload all data types to a specific project
+opik upload WORKSPACE/PROJECT_NAME --all
+
+# Upload all data types to all projects in a workspace
+opik upload WORKSPACE --all
+
+# Upload specific data types to a project
+opik upload WORKSPACE/PROJECT_NAME --include traces datasets
+
+# Upload specific data types to all projects in a workspace
+opik upload WORKSPACE --include traces datasets
+
+# Upload with dry run to preview
+opik upload WORKSPACE/PROJECT_NAME --all --dry-run
+
+# Upload only items with names matching a pattern
+opik upload WORKSPACE --name ".*test.*"
+
+# Upload with name filtering and dry run
+opik upload WORKSPACE/PROJECT_NAME --all --name "^prod" --dry-run
+
+# Upload from a specific directory
+opik upload WORKSPACE/PROJECT_NAME --path ./my-data
+
+# Upload from a specific directory with all data types
+opik upload WORKSPACE --path ./my-data --all
+```
+
+**Options:**
+- `--all`: Include all data types (traces, datasets, experiments, prompts, threads)
+- `--include`: Data types to include (can be specified multiple times)
+- `--exclude`: Data types to exclude (can be specified multiple times)
+- `--path, -p`: Directory containing JSON files to upload (defaults to current directory)
+- `--dry-run`: Show what would be uploaded without actually uploading
+- `--name`: Filter items by name using Python regex patterns (matches trace names, dataset names, experiment names, or prompt names)
+
+**File Organization:**
+Downloaded files are organized in a hierarchical structure that mirrors the workspace/project hierarchy:
+
+```
+path/
+├── WORKSPACE/
+│   └── PROJECT_NAME/
+│       ├── trace_*.json          # Individual traces with their spans
+│       ├── dataset_*.json         # Dataset definitions and items
+│       ├── experiment_*.json      # Experiment configurations and results
+│       └── prompt_*.json         # Prompt templates and versions
+```
+
+**Name Filtering:**
+Both download and upload commands support filtering by name using Python regex patterns:
+
+```bash
+# Download only traces with names starting with "test"
+opik download WORKSPACE --name "^test"
+
+# Download datasets containing "evaluation" (case-insensitive)
+opik download WORKSPACE --include datasets --name "(?i).*evaluation.*"
+
+# Upload only items with names ending in "_v2"
+opik upload WORKSPACE --name ".*_v2$"
+
+# Upload prompts with names containing "template"
+opik upload WORKSPACE --include prompts --name ".*template.*"
+```
+
+**Regex Pattern Examples:**
+- `^test` - Names starting with "test"
+- `.*prod.*` - Names containing "prod"
+- `.*_v[0-9]+$` - Names ending with version numbers like "_v1", "_v2", etc.
+- `(?i).*template.*` - Names containing "template" (case-insensitive)
+- `^[A-Z].*` - Names starting with uppercase letters
+
+**Examples:**
+```bash
+# Download from default workspace
+opik download default/ez-mcp-chatbot --all
+# Creates: ./default/ez-mcp-chatbot/ with all data files
+
+# Download from different workspace (cloud/enterprise only)
+opik download production/my-project --all
+# Creates: ./production/my-project/ with all data files
+
+# Upload to different workspace/project (cloud/enterprise only)
+opik upload production/copy --path ./default/ez-mcp-chatbot --all
+# Uploads data from default/ez-mcp-chatbot to production/copy
+
+# Note: Open source installations only support the "default" workspace
+```
+
+**Note:** Thread metadata is automatically calculated from traces with the same `thread_id` when uploaded, so no separate thread files are needed.
+
+**Important:**
+- **Traces and spans** are project-specific and will be uploaded to the specified project
+- **Datasets, experiments, and prompts** belong to the workspace and are shared across all projects in that workspace
+
 ### Dynamic Tracing Control
 
 Control tracing behavior at runtime without code changes:
