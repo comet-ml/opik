@@ -606,6 +606,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 )
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
+            	LIMIT 1 BY id
             )
             SELECT
                 ei.dataset_item_id AS id,
