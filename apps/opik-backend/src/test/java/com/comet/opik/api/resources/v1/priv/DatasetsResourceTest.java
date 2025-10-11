@@ -6595,4 +6595,140 @@ class DatasetsResourceTest {
             TraceAssertions.assertStats(stats.stats(), expectedStats);
         }
     }
+
+    @Nested
+    @DisplayName("OPIK-2469: Duplicate Experiment Items Test")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DuplicateExperimentItemsTest {
+
+        @Test
+        @DisplayName("Should return unique experiment items when duplicates exist in ClickHouse")
+        void findDatasetItemsWithExperimentItems__whenDuplicatesExistInClickHouse__thenReturnUniqueItems() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create dataset item
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create traces
+            var trace1 = factory.manufacturePojo(Trace.class);
+            var trace2 = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace1, workspaceName, apiKey);
+            createAndAssert(trace2, workspaceName, apiKey);
+
+            // Create experiment and experiment items
+            var experimentId = GENERATOR.generate();
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace1.id())
+                    .input(trace1.input())
+                    .output(trace1.output())
+                    .build();
+
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace2.id())
+                    .input(trace2.input())
+                    .output(trace2.output())
+                    .build();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem1, experimentItem2))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Manually insert a duplicate of experimentItem1 directly into ClickHouse
+            // This simulates the bug condition where multiple versions exist
+            insertDuplicateExperimentItem(workspaceId, experimentItem1);
+
+            // Query the endpoint
+            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId,
+                    List.of(experimentId),
+                    apiKey,
+                    workspaceName);
+
+            // Assert results
+            assertThat(result).isNotNull();
+            assertThat(result.content()).hasSize(1);
+
+            var datasetItemResult = result.content().get(0);
+            assertThat(datasetItemResult.id()).isEqualTo(datasetItem.id());
+
+            // CRITICAL ASSERTION: Should have exactly 2 unique experiment items (no duplicates)
+            var experimentItems = datasetItemResult.experimentItems();
+            assertThat(experimentItems).isNotNull();
+
+            // Count experiment items by their ID to detect duplicates
+            var experimentItemIds = experimentItems.stream()
+                    .map(ExperimentItem::id)
+                    .collect(Collectors.toList());
+
+            var uniqueIds = new HashSet<>(experimentItemIds);
+
+            // THIS IS THE KEY ASSERTION - Verifies fix for OPIK-2469
+            assertThat(experimentItemIds)
+                    .as("Should not contain duplicate experiment item IDs")
+                    .hasSameSizeAs(uniqueIds)
+                    .as("Should have exactly 2 unique experiment items")
+                    .hasSize(2);
+
+            // Verify the correct experiment items are present
+            assertThat(uniqueIds).containsExactlyInAnyOrder(experimentItem1.id(), experimentItem2.id());
+
+            // Verify each experiment item appears only once
+            experimentItemIds.forEach(id -> {
+                long count = experimentItemIds.stream().filter(i -> i.equals(id)).count();
+                assertThat(count)
+                        .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
+                        .isEqualTo(1);
+            });
+        }
+
+        /**
+         * Helper method to insert a duplicate experiment item directly into ClickHouse.
+         * This simulates the bug condition where multiple versions of the same item exist.
+         */
+        private void insertDuplicateExperimentItem(String workspaceId, ExperimentItem item) {
+            try (var connection = CLICKHOUSE.createConnection("?database=" + DATABASE_NAME)) {
+                var statement = connection.createStatement();
+
+                // Insert a duplicate row with an older timestamp
+                // Format as Unix timestamp (seconds since epoch) which ClickHouse accepts
+                var olderTimestamp = Instant.now().minus(1, ChronoUnit.HOURS).getEpochSecond();
+
+                String sql = String.format(
+                        """
+                                INSERT INTO experiment_items (
+                                    id, workspace_id, experiment_id, dataset_item_id, trace_id,
+                                    created_at, last_updated_at, created_by, last_updated_by
+                                ) VALUES (
+                                    '%s', '%s', '%s', '%s', '%s',
+                                    %d, %d, 'test-user', 'test-user'
+                                )
+                                """,
+                        item.id(), workspaceId, item.experimentId(), item.datasetItemId(), item.traceId(),
+                        olderTimestamp, olderTimestamp);
+
+                statement.execute(sql);
+            } catch (Exception exception) {
+                throw new RuntimeException("Failed to insert duplicate experiment item", exception);
+            }
+        }
+    }
 }
