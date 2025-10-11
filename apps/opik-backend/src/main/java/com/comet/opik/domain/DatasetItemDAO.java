@@ -606,7 +606,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 )
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
-            	LIMIT 1 BY id
             )
             SELECT
                 ei.dataset_item_id AS id,
@@ -689,7 +688,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM spans final
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                    GROUP BY workspace_id, project_id, trace_id
+                    GROUP BY workspace_id, trace_id
                 ) s ON t.id = s.trace_id
                 GROUP BY
                     t.id,

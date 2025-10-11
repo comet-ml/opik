@@ -6597,13 +6597,13 @@ class DatasetsResourceTest {
     }
 
     @Nested
-    @DisplayName("OPIK-2469: Duplicate Experiment Items Test")
+    @DisplayName("OPIK-2469: Cross-Project Traces Duplicate Test")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class DuplicateExperimentItemsTest {
+    class CrossProjectTracesDuplicateTest {
 
         @Test
-        @DisplayName("Should return unique experiment items when duplicates exist in ClickHouse")
-        void findDatasetItemsWithExperimentItems__whenDuplicatesExistInClickHouse__thenReturnUniqueItems() {
+        @DisplayName("Should return unique experiment items when traces exist in multiple projects")
+        void findDatasetItemsWithExperimentItems__whenTraceExistsInMultipleProjects__thenReturnUniqueItems() {
 
             var workspaceName = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -6623,9 +6623,14 @@ class DatasetsResourceTest {
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            // Create traces
-            var trace1 = factory.manufacturePojo(Trace.class);
-            var trace2 = factory.manufacturePojo(Trace.class);
+            // Create two traces in PROJECT A
+            var projectA = UUID.randomUUID().toString();
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectA)
+                    .build();
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectA)
+                    .build();
             createAndAssert(trace1, workspaceName, apiKey);
             createAndAssert(trace2, workspaceName, apiKey);
 
@@ -6652,9 +6657,14 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-            // Manually insert a duplicate of experimentItem1 directly into ClickHouse
-            // This simulates the bug condition where multiple versions exist
-            insertDuplicateExperimentItem(workspaceId, experimentItem1);
+            // ROOT CAUSE: Create spans for trace1 in a DIFFERENT PROJECT (PROJECT B)
+            // This simulates cross-project traces which cause duplicates in the spans aggregation
+            var projectB = UUID.randomUUID().toString();
+            var span1InProjectB = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectB)
+                    .traceId(trace1.id())
+                    .build();
+            createSpan(span1InProjectB, apiKey, workspaceName);
 
             // Query the endpoint
             var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
@@ -6671,6 +6681,7 @@ class DatasetsResourceTest {
             assertThat(datasetItemResult.id()).isEqualTo(datasetItem.id());
 
             // CRITICAL ASSERTION: Should have exactly 2 unique experiment items (no duplicates)
+            // Even though trace1 exists in TWO projects (A and B), experimentItem1 should appear ONCE
             var experimentItems = datasetItemResult.experimentItems();
             assertThat(experimentItems).isNotNull();
 
@@ -6698,37 +6709,6 @@ class DatasetsResourceTest {
                         .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
                         .isEqualTo(1);
             });
-        }
-
-        /**
-         * Helper method to insert a duplicate experiment item directly into ClickHouse.
-         * This simulates the bug condition where multiple versions of the same item exist.
-         */
-        private void insertDuplicateExperimentItem(String workspaceId, ExperimentItem item) {
-            try (var connection = CLICKHOUSE.createConnection("?database=" + DATABASE_NAME)) {
-                var statement = connection.createStatement();
-
-                // Insert a duplicate row with an older timestamp
-                // Format as Unix timestamp (seconds since epoch) which ClickHouse accepts
-                var olderTimestamp = Instant.now().minus(1, ChronoUnit.HOURS).getEpochSecond();
-
-                String sql = String.format(
-                        """
-                                INSERT INTO experiment_items (
-                                    id, workspace_id, experiment_id, dataset_item_id, trace_id,
-                                    created_at, last_updated_at, created_by, last_updated_by
-                                ) VALUES (
-                                    '%s', '%s', '%s', '%s', '%s',
-                                    %d, %d, 'test-user', 'test-user'
-                                )
-                                """,
-                        item.id(), workspaceId, item.experimentId(), item.datasetItemId(), item.traceId(),
-                        olderTimestamp, olderTimestamp);
-
-                statement.execute(sql);
-            } catch (Exception exception) {
-                throw new RuntimeException("Failed to insert duplicate experiment item", exception);
-            }
         }
     }
 }
