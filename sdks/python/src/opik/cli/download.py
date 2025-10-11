@@ -1,6 +1,7 @@
 """Download command for Opik CLI."""
 
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -15,12 +16,24 @@ import opik
 console = Console()
 
 
+def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
+    """Check if a name matches the given regex pattern."""
+    if pattern is None:
+        return True
+    try:
+        return bool(re.search(pattern, name))
+    except re.error as e:
+        console.print(f"[red]Invalid regex pattern '{pattern}': {e}[/red]")
+        return False
+
+
 def _download_traces(
     client: Any,
     project_name: str,
     project_dir: Path,
     max_results: int,
     filter: Optional[str],
+    name_pattern: Optional[str] = None,
 ) -> int:
     """Download traces and their spans."""
     with Progress(
@@ -41,6 +54,23 @@ def _download_traces(
 
     if not traces:
         console.print("[yellow]No traces found in the project.[/yellow]")
+        return 0
+
+    # Filter traces by name pattern if specified
+    if name_pattern:
+        original_count = len(traces)
+        traces = [
+            trace
+            for trace in traces
+            if _matches_name_pattern(trace.name or "", name_pattern)
+        ]
+        if len(traces) < original_count:
+            console.print(
+                f"[blue]Filtered to {len(traces)} traces matching pattern '{name_pattern}'[/blue]"
+            )
+
+    if not traces:
+        console.print("[yellow]No traces found matching the name pattern.[/yellow]")
         return 0
 
     # Download each trace with its spans
@@ -88,13 +118,34 @@ def _download_traces(
     return downloaded_count
 
 
-def _download_datasets(client: Any, project_dir: Path, max_results: int) -> int:
+def _download_datasets(
+    client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
+) -> int:
     """Download datasets."""
     try:
         datasets = client.get_datasets(max_results=max_results, sync_items=True)
 
         if not datasets:
             console.print("[yellow]No datasets found in the project.[/yellow]")
+            return 0
+
+        # Filter datasets by name pattern if specified
+        if name_pattern:
+            original_count = len(datasets)
+            datasets = [
+                dataset
+                for dataset in datasets
+                if _matches_name_pattern(dataset.name, name_pattern)
+            ]
+            if len(datasets) < original_count:
+                console.print(
+                    f"[blue]Filtered to {len(datasets)} datasets matching pattern '{name_pattern}'[/blue]"
+                )
+
+        if not datasets:
+            console.print(
+                "[yellow]No datasets found matching the name pattern.[/yellow]"
+            )
             return 0
 
         downloaded_count = 0
@@ -139,7 +190,9 @@ def _download_datasets(client: Any, project_dir: Path, max_results: int) -> int:
         return 0
 
 
-def _download_experiments(client: Any, project_dir: Path, max_results: int) -> int:
+def _download_experiments(
+    client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
+) -> int:
     """Download experiments."""
     try:
         # Get all datasets first to find experiments
@@ -159,6 +212,12 @@ def _download_experiments(client: Any, project_dir: Path, max_results: int) -> i
                 )
 
                 for experiment in experiments:
+                    # Filter by name pattern if specified
+                    if name_pattern and not _matches_name_pattern(
+                        experiment.name, name_pattern
+                    ):
+                        continue
+
                     try:
                         # Get experiment data
                         experiment_data_obj = experiment.get_experiment_data()
@@ -200,13 +259,34 @@ def _download_experiments(client: Any, project_dir: Path, max_results: int) -> i
         return 0
 
 
-def _download_prompts(client: Any, project_dir: Path, max_results: int) -> int:
+def _download_prompts(
+    client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
+) -> int:
     """Download prompts."""
     try:
         prompts = client.search_prompts()
 
         if not prompts:
             console.print("[yellow]No prompts found in the project.[/yellow]")
+            return 0
+
+        # Filter prompts by name pattern if specified
+        if name_pattern:
+            original_count = len(prompts)
+            prompts = [
+                prompt
+                for prompt in prompts
+                if _matches_name_pattern(prompt.name, name_pattern)
+            ]
+            if len(prompts) < original_count:
+                console.print(
+                    f"[blue]Filtered to {len(prompts)} prompts matching pattern '{name_pattern}'[/blue]"
+                )
+
+        if not prompts:
+            console.print(
+                "[yellow]No prompts found matching the name pattern.[/yellow]"
+            )
             return 0
 
         downloaded_count = 0
@@ -244,10 +324,10 @@ def _download_prompts(client: Any, project_dir: Path, max_results: int) -> int:
 
 
 @click.command()
-@click.argument("workspace_project", type=str)
+@click.argument("workspace_or_project", type=str)
 @click.option(
-    "--output-dir",
-    "-o",
+    "--path",
+    "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
     default="./",
     help="Directory to save downloaded data. Defaults to current directory.",
@@ -285,47 +365,50 @@ def _download_prompts(client: Any, project_dir: Path, max_results: int) -> int:
     multiple=True,
     help="Data types to exclude from download. Can be specified multiple times.",
 )
+@click.option(
+    "--name",
+    type=str,
+    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, experiment names, or prompt names.",
+)
 def download(
-    workspace_project: str,
-    output_dir: str,
+    workspace_or_project: str,
+    path: str,
     max_results: int,
     filter: Optional[str],
     all: bool,
     include: tuple,
     exclude: tuple,
+    name: Optional[str],
 ) -> None:
     """
-    Download data from a workspace/project to local files.
+    Download data from a workspace or workspace/project to local files.
 
-    This command fetches traces, datasets, experiments, and prompts from the specified workspace/project
+    This command fetches traces, datasets, experiments, and prompts from the specified workspace or project
     and saves them to local JSON files in the output directory.
 
     Note: Thread metadata is automatically derived from traces with the same thread_id,
     so threads don't need to be downloaded separately.
 
-    WORKSPACE_PROJECT: The workspace/project to download data from (e.g., "default/ez-mcp-chatbot").
-                      If no workspace is specified, defaults to "default" workspace.
+    WORKSPACE_OR_PROJECT: Either a workspace name (e.g., "my-workspace") to download all projects,
+                          or workspace/project (e.g., "my-workspace/my-project") to download a specific project.
     """
     try:
         # Parse workspace/project from the argument
-        if "/" in workspace_project:
-            workspace, project_name = workspace_project.split("/", 1)
+        if "/" in workspace_or_project:
+            workspace, project_name = workspace_or_project.split("/", 1)
+            download_specific_project = True
         else:
-            # Default to "default" workspace if not specified
-            workspace = "default"
-            project_name = workspace_project
+            # Only workspace specified - download all projects
+            workspace = workspace_or_project
+            project_name = None
+            download_specific_project = False
 
-        # Initialize Opik client with workspace and project
-        client = opik.Opik(workspace=workspace, project_name=project_name)
+        # Initialize Opik client with workspace
+        client = opik.Opik(workspace=workspace)
 
         # Create output directory
-        output_path = Path(output_dir)
+        output_path = Path(path)
         output_path.mkdir(parents=True, exist_ok=True)
-
-        # Create workspace/project directory structure
-        workspace_dir = output_path / workspace
-        project_dir = workspace_dir / project_name
-        project_dir.mkdir(parents=True, exist_ok=True)
 
         # Determine which data types to download
         if all:
@@ -339,61 +422,175 @@ def download(
         # Apply exclusions
         data_types = include_set - exclude_set
 
-        console.print(
-            f"[green]Downloading data from workspace: {workspace}, project: {project_name}[/green]"
-        )
-        console.print(f"[blue]Output directory: {workspace}/{project_name}[/blue]")
-        console.print(f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]")
-
-        # Note about workspace vs project-specific data
-        project_specific = [dt for dt in data_types if dt in ["traces"]]
-        workspace_data = [
-            dt for dt in data_types if dt in ["datasets", "experiments", "prompts"]
-        ]
-
-        if project_specific and workspace_data:
+        if download_specific_project:
+            # Download from specific project
             console.print(
-                f"[yellow]Note: {', '.join(project_specific)} are project-specific, {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                f"[green]Downloading data from workspace: {workspace}, project: {project_name}[/green]"
             )
-        elif workspace_data:
+
+            # Create workspace/project directory structure
+            workspace_dir = output_path / workspace
+            assert project_name is not None  # Type narrowing for mypy
+            project_dir = workspace_dir / project_name
+            project_dir.mkdir(parents=True, exist_ok=True)
+
+            console.print(f"[blue]Output directory: {workspace}/{project_name}[/blue]")
+            console.print(f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]")
+
+            # Note about workspace vs project-specific data
+            project_specific = [dt for dt in data_types if dt in ["traces"]]
+            workspace_data = [
+                dt for dt in data_types if dt in ["datasets", "experiments", "prompts"]
+            ]
+
+            if project_specific and workspace_data:
+                console.print(
+                    f"[yellow]Note: {', '.join(project_specific)} are project-specific, {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                )
+            elif workspace_data:
+                console.print(
+                    f"[yellow]Note: {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                )
+
+            # Download each data type
+            total_downloaded = 0
+
+            # Download traces
+            if "traces" in data_types:
+                console.print("[blue]Downloading traces...[/blue]")
+                traces_downloaded = _download_traces(
+                    client, project_name, project_dir, max_results, filter, name
+                )
+                total_downloaded += traces_downloaded
+
+            # Download datasets
+            if "datasets" in data_types:
+                console.print("[blue]Downloading datasets...[/blue]")
+                datasets_downloaded = _download_datasets(
+                    client, project_dir, max_results, name
+                )
+                total_downloaded += datasets_downloaded
+
+            # Download experiments
+            if "experiments" in data_types:
+                console.print("[blue]Downloading experiments...[/blue]")
+                experiments_downloaded = _download_experiments(
+                    client, project_dir, max_results, name
+                )
+                total_downloaded += experiments_downloaded
+
+            # Download prompts
+            if "prompts" in data_types:
+                console.print("[blue]Downloading prompts...[/blue]")
+                prompts_downloaded = _download_prompts(
+                    client, project_dir, max_results, name
+                )
+                total_downloaded += prompts_downloaded
+
             console.print(
-                f"[yellow]Note: {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                f"[green]Successfully downloaded {total_downloaded} items to {project_dir}[/green]"
+            )
+        else:
+            # Download from all projects in workspace
+            console.print(
+                f"[green]Downloading data from workspace: {workspace} (all projects)[/green]"
             )
 
-        # Download each data type
-        total_downloaded = 0
+            # Get all projects in the workspace
+            try:
+                projects_response = client.rest_client.projects.find_projects()
+                projects = projects_response.content or []
 
-        # Download traces
-        if "traces" in data_types:
-            console.print("[blue]Downloading traces...[/blue]")
-            traces_downloaded = _download_traces(
-                client, project_name, project_dir, max_results, filter
-            )
-            total_downloaded += traces_downloaded
+                if not projects:
+                    console.print(
+                        f"[yellow]No projects found in workspace '{workspace}'[/yellow]"
+                    )
+                    return
 
-        # Download datasets
-        if "datasets" in data_types:
-            console.print("[blue]Downloading datasets...[/blue]")
-            datasets_downloaded = _download_datasets(client, project_dir, max_results)
-            total_downloaded += datasets_downloaded
+                console.print(
+                    f"[blue]Found {len(projects)} projects in workspace[/blue]"
+                )
+                console.print(
+                    f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]"
+                )
 
-        # Download experiments
-        if "experiments" in data_types:
-            console.print("[blue]Downloading experiments...[/blue]")
-            experiments_downloaded = _download_experiments(
-                client, project_dir, max_results
-            )
-            total_downloaded += experiments_downloaded
+                # Note about workspace vs project-specific data
+                project_specific = [dt for dt in data_types if dt in ["traces"]]
+                workspace_data = [
+                    dt
+                    for dt in data_types
+                    if dt in ["datasets", "experiments", "prompts"]
+                ]
 
-        # Download prompts
-        if "prompts" in data_types:
-            console.print("[blue]Downloading prompts...[/blue]")
-            prompts_downloaded = _download_prompts(client, project_dir, max_results)
-            total_downloaded += prompts_downloaded
+                if project_specific and workspace_data:
+                    console.print(
+                        f"[yellow]Note: {', '.join(project_specific)} are project-specific, {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                    )
+                elif workspace_data:
+                    console.print(
+                        f"[yellow]Note: {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                    )
 
-        console.print(
-            f"[green]Successfully downloaded {total_downloaded} items to {project_dir}[/green]"
-        )
+                total_downloaded = 0
+
+                # Download workspace-level data once (datasets, experiments, prompts)
+                workspace_dir = output_path / workspace
+                workspace_dir.mkdir(parents=True, exist_ok=True)
+
+                # Download datasets
+                if "datasets" in data_types:
+                    console.print("[blue]Downloading datasets...[/blue]")
+                    datasets_downloaded = _download_datasets(
+                        client, workspace_dir, max_results, name
+                    )
+                    total_downloaded += datasets_downloaded
+
+                # Download experiments
+                if "experiments" in data_types:
+                    console.print("[blue]Downloading experiments...[/blue]")
+                    experiments_downloaded = _download_experiments(
+                        client, workspace_dir, max_results, name
+                    )
+                    total_downloaded += experiments_downloaded
+
+                # Download prompts
+                if "prompts" in data_types:
+                    console.print("[blue]Downloading prompts...[/blue]")
+                    prompts_downloaded = _download_prompts(
+                        client, workspace_dir, max_results, name
+                    )
+                    total_downloaded += prompts_downloaded
+
+                # Download traces from each project
+                if "traces" in data_types:
+                    for project in projects:
+                        project_name = project.name
+                        console.print(
+                            f"[blue]Downloading traces from project: {project_name}...[/blue]"
+                        )
+
+                        # Create project directory
+                        assert project_name is not None  # Type narrowing for mypy
+                        project_dir = workspace_dir / project_name
+                        project_dir.mkdir(parents=True, exist_ok=True)
+
+                        traces_downloaded = _download_traces(
+                            client, project_name, project_dir, max_results, filter, name
+                        )
+                        total_downloaded += traces_downloaded
+
+                        if traces_downloaded > 0:
+                            console.print(
+                                f"[green]Downloaded {traces_downloaded} traces from {project_name}[/green]"
+                            )
+
+                console.print(
+                    f"[green]Successfully downloaded {total_downloaded} items from workspace '{workspace}'[/green]"
+                )
+
+            except Exception as e:
+                console.print(f"[red]Error getting projects from workspace: {e}[/red]")
+                sys.exit(1)
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
