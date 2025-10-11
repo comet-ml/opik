@@ -22,6 +22,8 @@ from .decorator.tracing_runtime_config import (
     reset_tracing_to_config_default,
     set_tracing_active,
 )
+from .decorator.context_manager.span_context_manager import start_as_current_span
+from .decorator.context_manager.trace_context_manager import start_as_current_trace
 
 
 _logging.setup()
@@ -50,6 +52,8 @@ __all__ = [
     "reset_tracing_to_config_default",
     "set_tracing_active",
     "is_tracing_active",
+    "start_as_current_span",
+    "start_as_current_trace",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()

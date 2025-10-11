@@ -17,6 +17,7 @@ export const TraceSearchStreamRequestPublic: core.serialization.Schema<
     lastRetrievedId: core.serialization.property("last_retrieved_id", core.serialization.string().optional()),
     limit: core.serialization.number().optional(),
     truncate: core.serialization.boolean().optional(),
+    stripAttachments: core.serialization.property("strip_attachments", core.serialization.boolean().optional()),
 });
 
 export declare namespace TraceSearchStreamRequestPublic {
@@ -27,5 +28,6 @@ export declare namespace TraceSearchStreamRequestPublic {
         last_retrieved_id?: string | null;
         limit?: number | null;
         truncate?: boolean | null;
+        strip_attachments?: boolean | null;
     }
 }
