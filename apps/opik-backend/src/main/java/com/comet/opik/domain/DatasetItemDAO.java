@@ -688,7 +688,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     FROM spans final
                     WHERE workspace_id = :workspace_id
                     AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                    GROUP BY workspace_id, trace_id
+                    GROUP BY workspace_id, project_id, trace_id
                 ) s ON t.id = s.trace_id
                 GROUP BY
                     t.id,
