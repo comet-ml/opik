@@ -18,7 +18,11 @@ class TestDownloadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["download", "--help"])
         assert result.exit_code == 0
-        assert "Download data from a workspace/project to local files" in result.output
+        assert (
+            "Download data from a workspace or workspace/project to local files"
+            in result.output
+        )
+        assert "--name" in result.output
 
     def test_download_command_success(self):
         """Test successful download command."""
@@ -57,8 +61,8 @@ class TestDownloadCommand:
                     cli,
                     [
                         "download",
-                        "test_project",
-                        "--output-dir",
+                        "default/test_project",
+                        "--path",
                         temp_dir,
                         "--max-results",
                         "10",
@@ -94,11 +98,188 @@ class TestDownloadCommand:
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["download", "empty_project", "--output-dir", temp_dir]
+                    cli, ["download", "default/empty_project", "--path", temp_dir]
                 )
 
                 assert result.exit_code == 0
                 assert "No traces found in the project" in result.output
+
+    def test_download_command_workspace_only(self):
+        """Test download command with workspace-only format."""
+        mock_opik = MagicMock()
+        mock_client = MagicMock()
+        mock_opik.Opik.return_value = mock_client
+
+        # Mock projects response
+        mock_project = MagicMock()
+        mock_project.name = "test_project"
+        mock_projects_response = MagicMock()
+        mock_projects_response.content = [mock_project]
+        mock_client.rest_client.projects.find_projects.return_value = (
+            mock_projects_response
+        )
+
+        # Mock trace data
+        mock_trace = MagicMock()
+        mock_trace.id = "trace_123"
+        mock_trace.name = "test_trace"
+        mock_trace.model_dump.return_value = {
+            "id": "trace_123",
+            "name": "test_trace",
+            "start_time": "2024-01-01T00:00:00Z",
+            "input": {"query": "test"},
+            "output": {"result": "success"},
+        }
+
+        mock_span = MagicMock()
+        mock_span.model_dump.return_value = {
+            "id": "span_123",
+            "name": "test_span",
+            "start_time": "2024-01-01T00:00:00Z",
+            "input": {"data": "test"},
+            "output": {"result": "processed"},
+        }
+
+        mock_client.search_traces.return_value = [mock_trace]
+        mock_client.search_spans.return_value = [mock_span]
+
+        with patch("opik.cli.download.opik", mock_opik):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                runner = CliRunner()
+                result = runner.invoke(
+                    cli,
+                    [
+                        "download",
+                        "test_workspace",
+                        "--path",
+                        temp_dir,
+                        "--max-results",
+                        "10",
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert (
+                    "Downloading data from workspace: test_workspace (all projects)"
+                    in result.output
+                )
+                assert "Found 1 projects in workspace" in result.output
+
+                # Check that files were created in workspace structure
+                workspace_dir = Path(temp_dir) / "test_workspace"
+                project_dir = workspace_dir / "test_project"
+                assert project_dir.exists()
+
+                trace_files = list(project_dir.glob("trace_*.json"))
+                assert len(trace_files) == 1
+
+    def test_download_command_with_name_filter(self):
+        """Test download command with name filtering."""
+        mock_opik = MagicMock()
+        mock_client = MagicMock()
+        mock_opik.Opik.return_value = mock_client
+
+        # Mock trace data with different names
+        mock_trace1 = MagicMock()
+        mock_trace1.id = "trace_123"
+        mock_trace1.name = "test_trace"
+        mock_trace1.model_dump.return_value = {
+            "id": "trace_123",
+            "name": "test_trace",
+            "start_time": "2024-01-01T00:00:00Z",
+        }
+
+        mock_trace2 = MagicMock()
+        mock_trace2.id = "trace_456"
+        mock_trace2.name = "prod_trace"
+        mock_trace2.model_dump.return_value = {
+            "id": "trace_456",
+            "name": "prod_trace",
+            "start_time": "2024-01-01T00:00:00Z",
+        }
+
+        mock_span = MagicMock()
+        mock_span.model_dump.return_value = {
+            "id": "span_123",
+            "name": "test_span",
+            "start_time": "2024-01-01T00:00:00Z",
+        }
+
+        # Return both traces initially
+        mock_client.search_traces.return_value = [mock_trace1, mock_trace2]
+        mock_client.search_spans.return_value = [mock_span]
+
+        with patch("opik.cli.download.opik", mock_opik):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                runner = CliRunner()
+                result = runner.invoke(
+                    cli,
+                    [
+                        "download",
+                        "default/test_project",
+                        "--path",
+                        temp_dir,
+                        "--name",
+                        "^test",
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert "Filtered to 1 traces matching pattern '^test'" in result.output
+
+                # Check that only the matching trace was downloaded
+                project_dir = Path(temp_dir) / "default" / "test_project"
+                trace_files = list(project_dir.glob("trace_*.json"))
+                assert len(trace_files) == 1
+
+                # Check file content
+                with open(trace_files[0], "r") as f:
+                    data = json.load(f)
+                    assert data["trace"]["name"] == "test_trace"
+
+    def test_download_command_invalid_regex(self):
+        """Test download command with invalid regex pattern."""
+        mock_opik = MagicMock()
+        mock_client = MagicMock()
+        mock_opik.Opik.return_value = mock_client
+
+        # Mock trace data so the regex validation is triggered
+        mock_trace = MagicMock()
+        mock_trace.id = "trace_123"
+        mock_trace.name = "test_trace"
+        mock_trace.model_dump.return_value = {
+            "id": "trace_123",
+            "name": "test_trace",
+            "start_time": "2024-01-01T00:00:00Z",
+        }
+
+        mock_span = MagicMock()
+        mock_span.model_dump.return_value = {
+            "id": "span_123",
+            "name": "test_span",
+            "start_time": "2024-01-01T00:00:00Z",
+        }
+
+        mock_client.search_traces.return_value = [mock_trace]
+        mock_client.search_spans.return_value = [mock_span]
+
+        with patch("opik.cli.download.opik", mock_opik):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                runner = CliRunner()
+                result = runner.invoke(
+                    cli,
+                    [
+                        "download",
+                        "default/test_project",
+                        "--path",
+                        temp_dir,
+                        "--name",
+                        "[invalid",
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert "Invalid regex pattern" in result.output
 
     def test_download_command_import_error(self):
         """Test download command when Opik import fails."""
@@ -115,7 +296,11 @@ class TestUploadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["upload", "--help"])
         assert result.exit_code == 0
-        assert "Upload data from local files to a workspace/project" in result.output
+        assert (
+            "Upload data from local files to a workspace or workspace/project"
+            in result.output
+        )
+        assert "--name" in result.output
 
     def test_upload_command_success(self):
         """Test successful upload command."""
@@ -171,7 +356,7 @@ class TestUploadCommand:
 
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["upload", str(project_dir), "test_project"]
+                    cli, ["upload", "default/test_project", "--path", str(project_dir)]
                 )
 
                 assert result.exit_code == 0
@@ -211,7 +396,14 @@ class TestUploadCommand:
 
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["upload", str(project_dir), "test_project", "--dry-run"]
+                    cli,
+                    [
+                        "upload",
+                        "default/test_project",
+                        "--path",
+                        str(project_dir),
+                        "--dry-run",
+                    ],
                 )
 
                 assert result.exit_code == 0
@@ -228,7 +420,7 @@ class TestUploadCommand:
             nonexistent_dir = Path(temp_dir) / "nonexistent"
             runner = CliRunner()
             result = runner.invoke(
-                cli, ["upload", str(nonexistent_dir), "test_project"]
+                cli, ["upload", "default/test_project", "--path", str(nonexistent_dir)]
             )
 
             assert result.exit_code == 1
@@ -242,10 +434,201 @@ class TestUploadCommand:
             project_dir.mkdir(parents=True)
 
             runner = CliRunner()
-            result = runner.invoke(cli, ["upload", str(project_dir), "test_project"])
+            result = runner.invoke(
+                cli, ["upload", "default/test_project", "--path", str(project_dir)]
+            )
 
             assert result.exit_code == 0
             assert "No trace files found" in result.output
+
+    def test_upload_command_workspace_only(self):
+        """Test upload command with workspace-only format."""
+        mock_opik = MagicMock()
+        mock_client = MagicMock()
+        mock_opik.Opik.return_value = mock_client
+
+        # Mock projects response
+        mock_project = MagicMock()
+        mock_project.name = "test_project"
+        mock_projects_response = MagicMock()
+        mock_projects_response.content = [mock_project]
+        mock_client.rest_client.projects.find_projects.return_value = (
+            mock_projects_response
+        )
+
+        # Create mock trace and span objects
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "new_trace_123"
+        mock_client.trace.return_value = mock_trace_obj
+        mock_client.span.return_value = MagicMock()
+
+        with patch("opik.cli.upload.opik", mock_opik):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create test data directory structure
+                project_dir = Path(temp_dir) / "test_project"
+                project_dir.mkdir(parents=True)
+
+                # Create a test trace file
+                trace_data = {
+                    "trace": {
+                        "id": "trace_123",
+                        "name": "test_trace",
+                        "start_time": "2024-01-01T00:00:00Z",
+                        "end_time": "2024-01-01T00:01:00Z",
+                        "input": {"query": "test"},
+                        "output": {"result": "success"},
+                        "metadata": {"version": "1.0"},
+                        "tags": ["test"],
+                        "thread_id": "thread_123",
+                    },
+                    "spans": [
+                        {
+                            "id": "span_123",
+                            "name": "test_span",
+                            "start_time": "2024-01-01T00:00:00Z",
+                            "end_time": "2024-01-01T00:01:00Z",
+                            "input": {"data": "test"},
+                            "output": {"result": "processed"},
+                            "type": "general",
+                            "model": "gpt-4",
+                            "provider": "openai",
+                        }
+                    ],
+                    "downloaded_at": "2024-01-01T00:00:00Z",
+                    "project_name": "test_project",
+                }
+
+                trace_file = project_dir / "trace_123.json"
+                with open(trace_file, "w") as f:
+                    json.dump(trace_data, f)
+
+                runner = CliRunner()
+                result = runner.invoke(
+                    cli, ["upload", "test_workspace", "--path", str(project_dir)]
+                )
+
+                assert result.exit_code == 0
+                assert (
+                    "Uploading to workspace: test_workspace (all projects)"
+                    in result.output
+                )
+                assert "Found 1 projects in workspace" in result.output
+                assert "Uploading traces to project: test_project" in result.output
+
+                # Verify that the client methods were called
+                mock_client.trace.assert_called_once()
+                mock_client.span.assert_called_once()
+
+    def test_upload_command_with_name_filter(self):
+        """Test upload command with name filtering."""
+        mock_opik = MagicMock()
+        mock_client = MagicMock()
+        mock_opik.Opik.return_value = mock_client
+
+        # Create mock trace and span objects
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "new_trace_123"
+        mock_client.trace.return_value = mock_trace_obj
+        mock_client.span.return_value = MagicMock()
+
+        with patch("opik.cli.upload.opik", mock_opik):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create test data directory structure
+                project_dir = Path(temp_dir) / "test_project"
+                project_dir.mkdir(parents=True)
+
+                # Create trace files with different names
+                trace_data1 = {
+                    "trace": {
+                        "id": "trace_123",
+                        "name": "test_trace",
+                        "start_time": "2024-01-01T00:00:00Z",
+                    },
+                    "spans": [],
+                    "downloaded_at": "2024-01-01T00:00:00Z",
+                    "project_name": "test_project",
+                }
+
+                trace_data2 = {
+                    "trace": {
+                        "id": "trace_456",
+                        "name": "prod_trace",
+                        "start_time": "2024-01-01T00:00:00Z",
+                    },
+                    "spans": [],
+                    "downloaded_at": "2024-01-01T00:00:00Z",
+                    "project_name": "test_project",
+                }
+
+                trace_file1 = project_dir / "trace_123.json"
+                trace_file2 = project_dir / "trace_456.json"
+                with open(trace_file1, "w") as f:
+                    json.dump(trace_data1, f)
+                with open(trace_file2, "w") as f:
+                    json.dump(trace_data2, f)
+
+                runner = CliRunner()
+                result = runner.invoke(
+                    cli,
+                    [
+                        "upload",
+                        "default/test_project",
+                        "--path",
+                        str(project_dir),
+                        "--name",
+                        "^test",
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert "Successfully uploaded 1 items" in result.output
+
+                # Verify that only one trace was uploaded (the matching one)
+                mock_client.trace.assert_called_once()
+
+    def test_upload_command_invalid_regex(self):
+        """Test upload command with invalid regex pattern."""
+        mock_opik = MagicMock()
+        mock_client = MagicMock()
+        mock_opik.Opik.return_value = mock_client
+
+        with patch("opik.cli.upload.opik", mock_opik):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create test data directory structure
+                project_dir = Path(temp_dir) / "test_project"
+                project_dir.mkdir(parents=True)
+
+                # Create a test trace file
+                trace_data = {
+                    "trace": {
+                        "id": "trace_123",
+                        "name": "test_trace",
+                        "start_time": "2024-01-01T00:00:00Z",
+                    },
+                    "spans": [],
+                    "downloaded_at": "2024-01-01T00:00:00Z",
+                    "project_name": "test_project",
+                }
+
+                trace_file = project_dir / "trace_123.json"
+                with open(trace_file, "w") as f:
+                    json.dump(trace_data, f)
+
+                runner = CliRunner()
+                result = runner.invoke(
+                    cli,
+                    [
+                        "upload",
+                        "default/test_project",
+                        "--path",
+                        str(project_dir),
+                        "--name",
+                        "[invalid",
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert "Invalid regex pattern" in result.output
 
     def test_upload_command_import_error(self):
         """Test upload command when Opik import fails."""
