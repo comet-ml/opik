@@ -115,12 +115,13 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
                     View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
-            @JsonView({View.Public.class}) List<AutomationRuleEvaluator<?>> content)
+            @JsonView({View.Public.class}) List<AutomationRuleEvaluator<?>> content,
+            @JsonView({View.Public.class}) List<String> sortableBy)
             implements
                 Page<AutomationRuleEvaluator<?>>{
 
-        public static AutomationRuleEvaluatorPage empty(int page) {
-            return new AutomationRuleEvaluatorPage(page, 0, 0, List.of());
+        public static AutomationRuleEvaluatorPage empty(int page, List<String> sortableBy) {
+            return new AutomationRuleEvaluatorPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 }
