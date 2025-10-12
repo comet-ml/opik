@@ -17,7 +17,6 @@ Opik ships adapters that wrap GEval-based judges so they can score entire conver
 | `ConversationQARelevanceMetric` | Checks whether the answer directly addresses the user question. | `QARelevanceJudge` |
 | `ConversationSummarizationConsistencyMetric` | Gauges how faithful a summary is to the source discussion. | `SummarizationConsistencyJudge` |
 | `ConversationSummarizationCoherenceMetric` | Evaluates the coherence of a conversation summary. | `SummarizationCoherenceJudge` |
-| `ConversationPromptPerplexityMetric` | Rates how difficult the prompt is for downstream models. | `PromptPerplexityJudge` |
 | `ConversationPromptUncertaintyMetric` | Estimates how ambiguous the prompt is for downstream models. | `PromptUncertaintyJudge` |
 
 ## Usage
@@ -50,9 +49,6 @@ Validates that an auto-generated summary sticks to the facts shared in the trans
 
 ### ConversationSummarizationCoherenceMetric {#conversationsummarizationcoherencemetric}
 Looks at the same summary through a writing-quality lens: is it organised, easy to skim, and logically grouped? Combine it with the consistency judge to ensure summaries are both faithful and readable before they populate CRM notes or ticket backlogs.
-
-### ConversationPromptPerplexityMetric {#conversationpromptperplexitymetric}
-Estimates how challenging the conversation’s latest user request will be for your model family. Higher scores correlate with vague or technically complex questions that historically yield weaker answers. Use this signal to decide when to route conversations to higher-capability models (or to human agents) before investing compute on elaborate reasoning chains.
 
 ### ConversationPromptUncertaintyMetric {#conversationpromptuncertaintymetric}
 Pinpoints last-turn prompts that lack critical context (“Can you finish it?”) or contain conflicting instructions. Surfacing these cases lets you proactively ask the user for clarification or enrich the prompt with missing metadata before rerunning expensive evaluations.

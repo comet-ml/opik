@@ -59,20 +59,19 @@ print(score.value, score.reason)
 
 Inspect `score.reason` for granular rationales and route risky cases accordingly. The raw 0–10 judgement is divided by 10 in the returned value.
 
-### Prompt Diagnostics
-`PromptPerplexityJudge` and `PromptUncertaintyJudge` estimate how difficult or ambiguous a user prompt is before it reaches your model. Run them on raw user messages to prioritise agent hand-offs or to warn users when the request is ill-posed.
+### Prompt Uncertainty Judge
+`PromptUncertaintyJudge` estimates how ambiguous a user prompt is before it reaches your model. Run it on raw user messages to prioritise agent hand-offs or to warn users when the request is ill-posed.
 
-```python title="Prompt diagnostics"
-from opik.evaluation.metrics import PromptPerplexityJudge, PromptUncertaintyJudge
+```python title="Prompt uncertainty"
+from opik.evaluation.metrics import PromptUncertaintyJudge
 
 prompt = "Summarise the attached 400 page contract in one sentence and guarantee there are no mistakes."
 
-perplexity = PromptPerplexityJudge().score(prompt=prompt)
 uncertainty = PromptUncertaintyJudge().score(prompt=prompt)
-print(perplexity.value, uncertainty.value)
+print(uncertainty.value)
 ```
 
-Combining both metrics helps identify prompts that are simultaneously complex and underspecified, alerting product flows before the final model produces a disappointing answer. Each judge emits an integer from 0 (best) to 10 (worst) prior to normalisation.
+Use the score to highlight prompts that may confuse downstream models; the judge emits an integer from 0 (best) to 10 (worst) before normalisation.
 
 ### Summarization Consistency Judge
 Checks whether a generated summary is faithful to the source material. This is the right choice when a downstream workflow consumes summaries and you need to enforce factual alignment with the source document.

@@ -11,7 +11,7 @@ from .bias_classifier import (
     ReligiousBiasJudge,
 )
 from .compliance_risk import ComplianceRiskJudge
-from .prompt_diagnostics import PromptPerplexityJudge, PromptUncertaintyJudge
+from .prompt_uncertainty import PromptUncertaintyJudge
 from .qa_suite import (
     DialogueHelpfulnessJudge,
     QARelevanceJudge,
@@ -28,7 +28,6 @@ __all__ = [
     "ReligiousBiasJudge",
     "RegionalBiasJudge",
     "ComplianceRiskJudge",
-    "PromptPerplexityJudge",
     "PromptUncertaintyJudge",
     "DialogueHelpfulnessJudge",
     "QARelevanceJudge",

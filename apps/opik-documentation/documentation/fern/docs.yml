@@ -198,7 +198,7 @@ navigation:
               - page: Compliance risk
                 path: docs/evaluation/metrics/compliance_risk.mdx
                 slug: compliance_risk
-              - page: Prompt diagnostics
+              - page: Prompt uncertainty
                 path: docs/evaluation/metrics/prompt_diagnostics.mdx
                 slug: prompt_diagnostics
               - page: Moderation

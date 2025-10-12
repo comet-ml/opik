@@ -14,7 +14,6 @@ from .conversation.g_eval_wrappers import (
     ConversationQARelevanceMetric,
     ConversationSummarizationCoherenceMetric,
     ConversationSummarizationConsistencyMetric,
-    ConversationPromptPerplexityMetric,
     ConversationPromptUncertaintyMetric,
 )
 from .heuristics.contains import Contains
@@ -49,7 +48,6 @@ from .llm_judges.g_eval_presets import (
     DialogueHelpfulnessJudge,
     GenderBiasJudge,
     PoliticalBiasJudge,
-    PromptPerplexityJudge,
     PromptUncertaintyJudge,
     QARelevanceJudge,
     RegionalBiasJudge,
@@ -86,7 +84,6 @@ __all__ = [
     "ConversationQARelevanceMetric",
     "ConversationSummarizationCoherenceMetric",
     "ConversationSummarizationConsistencyMetric",
-    "ConversationPromptPerplexityMetric",
     "ConversationPromptUncertaintyMetric",
     "ComplianceRiskJudge",
     "Contains",
@@ -113,7 +110,6 @@ __all__ = [
     "PromptInjectionGuard",
     "LanguageAdherenceMetric",
     "PoliticalBiasJudge",
-    "PromptPerplexityJudge",
     "PromptUncertaintyJudge",
     "SpearmanRanking",
     "ReligiousBiasJudge",

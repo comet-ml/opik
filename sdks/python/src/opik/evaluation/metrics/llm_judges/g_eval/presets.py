@@ -174,20 +174,6 @@ GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
             " when the agent fully delivers the requested outcome."
         ),
     ),
-    "prompt_perplexity": GEvalPresetDefinition(
-        name="g_eval_prompt_perplexity_metric",
-        task_introduction=(
-            "You review a user prompt and judge how difficult it is for an LLM to"
-            " interpret (higher perplexity = harder). Provide a short justification."
-        ),
-        evaluation_criteria=(
-            "Return an integer score from 0 (simple, low perplexity) to 10 (high perplexity)."
-            " Consider vocabulary complexity, nested objectives, conflicting constraints,"
-            " or missing context that forces the model to guess."
-            " Use 0 for straightforward prompts, 5 for moderately complex requests, and 10 for"
-            " extremely challenging or under-specified prompts."
-        ),
-    ),
     "prompt_uncertainty": GEvalPresetDefinition(
         name="g_eval_prompt_uncertainty_metric",
         task_introduction=(

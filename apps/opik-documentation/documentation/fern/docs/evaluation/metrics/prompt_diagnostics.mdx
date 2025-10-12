@@ -1,34 +1,29 @@
 ---
-description: Estimate prompt difficulty and ambiguity with PromptPerplexityJudge and PromptUncertaintyJudge
+description: Estimate prompt ambiguity with PromptUncertaintyJudge
 ---
 
-# Prompt Diagnostics
+# Prompt Uncertainty
 
-Prompt diagnostics help you triage risky or underspecified user requests before they reach your production model. Opik ships two complementary judges:
+Prompt uncertainty scoring helps you triage risky or underspecified user requests before they reach your production model. `PromptUncertaintyJudge` highlights missing context or conflicting instructions that could confuse an assistant.
 
-- **`PromptPerplexityJudge`** – estimates how difficult the prompt is likely to be for the downstream model family.
-- **`PromptUncertaintyJudge`** – flags ambiguity, missing context, or conflicting instructions that could confuse an assistant.
-
-Run them on raw prompts to decide whether to request clarification, route to a human, or fan out to more capable models.
+Run the judge on raw prompts to decide whether to request clarification, route to a human, or fan out to more capable models.
 
 ```python title="Triaging tricky prompts"
-from opik.evaluation.metrics import PromptPerplexityJudge, PromptUncertaintyJudge
+from opik.evaluation.metrics import PromptUncertaintyJudge
 
 prompt = (
     "Summarise the attached 200-page legal agreement into a single bullet, "
     "guaranteeing there are no omissions."
 )
 
-perplexity = PromptPerplexityJudge().score(input=prompt)
 uncertainty = PromptUncertaintyJudge().score(input=prompt)
 
-print(perplexity.value, perplexity.reason)
 print(uncertainty.value, uncertainty.reason)
 ```
 
 ## Inputs
 
-Both judges accept a single string via the `input` keyword. You can optionally pass additional metadata (dataset row contents, prompt IDs) via keyword arguments – these will be forwarded to the underlying base metric for tracking.
+The judge accepts a single string via the `input` keyword. You can optionally pass additional metadata (dataset row contents, prompt IDs) via keyword arguments – these will be forwarded to the underlying base metric for tracking.
 
 ## Configuration
 
@@ -39,4 +34,4 @@ Both judges accept a single string via the `input` keyword. You can optionally p
 | `track` | `True` | Disable to skip logging evaluations. |
 | `project_name` | `None` | Override the project when logging results. |
 
-Each evaluator emits an integer between 0 and 10 (normalised to 0–1 by Opik). Inspect the `reason` text for rationale and per-criterion feedback, and trigger follow-up automations when scores cross a threshold.
+The evaluator emits an integer between 0 and 10 (normalised to 0–1 by Opik). Inspect the `reason` text for rationale and per-criterion feedback, and trigger follow-up automations when scores cross a threshold.

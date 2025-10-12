@@ -9,7 +9,7 @@ import opik.exceptions as exceptions
 from .. import base_metric, score_result
 from ..llm_judges.g_eval_presets import (
     compliance_risk as compliance_presets,
-    prompt_diagnostics as prompt_presets,
+    prompt_uncertainty as prompt_presets,
     qa_suite as qa_presets,
 )
 from . import conversation_thread_metric, types as conversation_types
@@ -340,50 +340,6 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
         )
 
 
-class ConversationPromptPerplexityMetric(GEvalConversationMetric):
-    """
-    Estimate the perplexity of the prompt implied by the full conversation.
-
-    This wrapper forwards the final assistant response to
-    :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.prompt_diagnostics.PromptPerplexityJudge`
-    so you can flag confusing or unstable prompts.
-
-    Args:
-        model: Optional model name for the judge backend.
-        track: Whether to automatically track results. Defaults to ``True``.
-        project_name: Optional project used for tracked scores. Defaults to ``None``.
-        temperature: Judge sampling temperature.
-
-    Example:
-        >>> from opik.evaluation.metrics import ConversationPromptPerplexityMetric
-        >>> conversation = [
-        ...     {"role": "user", "content": "Rewrite the prompt if it seems unclear."},
-        ...     {"role": "assistant", "content": "The instructions are ambiguous..."},
-        ... ]
-        >>> metric = ConversationPromptPerplexityMetric(model="gpt-4")
-        >>> result = metric.score(conversation)
-        >>> result.value  # doctest: +SKIP
-        0.37
-    """
-
-    def __init__(
-        self,
-        model: Optional[str] = None,
-        track: bool = True,
-        project_name: Optional[str] = None,
-        temperature: float = 0.0,
-    ) -> None:
-        super().__init__(
-            judge=prompt_presets.PromptPerplexityJudge(
-                model=model,
-                track=track,
-                project_name=project_name,
-                temperature=temperature,
-            ),
-            name="conversation_prompt_perplexity",
-        )
-
-
 class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
     """
     Measure how uncertain the assistant appears about executing the prompt.
@@ -435,6 +391,5 @@ __all__ = [
     "ConversationQARelevanceMetric",
     "ConversationSummarizationCoherenceMetric",
     "ConversationSummarizationConsistencyMetric",
-    "ConversationPromptPerplexityMetric",
     "ConversationPromptUncertaintyMetric",
 ]

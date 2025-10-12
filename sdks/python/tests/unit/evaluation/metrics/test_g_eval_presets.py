@@ -9,7 +9,6 @@ from opik.evaluation.metrics.llm_judges.g_eval_presets import (
     DialogueHelpfulnessJudge,
     GenderBiasJudge,
     PoliticalBiasJudge,
-    PromptPerplexityJudge,
     PromptUncertaintyJudge,
     QARelevanceJudge,
     RegionalBiasJudge,
@@ -84,10 +83,6 @@ def test_bias_and_agent_wrapper_presets():
 
 
 def test_prompt_wrapper_presets():
-    assert (
-        PromptPerplexityJudge(track=False).task_introduction
-        == GEVAL_PRESETS["prompt_perplexity"].task_introduction
-    )
     assert (
         PromptUncertaintyJudge(track=False).evaluation_criteria
         == GEVAL_PRESETS["prompt_uncertainty"].evaluation_criteria
