@@ -267,11 +267,15 @@ def create_demo_evaluation_project(context: DemoDataContext, base_url: str, work
             # Calculate time shift to move latest end_time to now while preserving time differences
             time_shift = calculate_time_shift_to_now(experiment_traces_grouped_by_project[project_id])
 
-            for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+            for idx, original_trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+                # Create a copy to avoid mutating the original demo_data
+                trace = dict(original_trace)
+                # Store the old ID before modification
+                old_trace_id = trace["id"]
                 # Apply time shift to maintain time differences
                 trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
                 trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
-                new_id = get_new_uuid_by_time(context, trace["id"], trace["start_time"])
+                new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
                 trace["id"] = new_id
                 # Remove fields that shouldn't be in the trace data
                 trace.pop("project_id", None)
@@ -519,11 +523,15 @@ def create_demo_optimizer_project(context: DemoDataContext, base_url: str, works
             # Calculate time shift to move latest end_time to now while preserving time differences
             time_shift = calculate_time_shift_to_now(evaluation_traces)
 
-            for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+            for idx, original_trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+                # Create a copy to avoid mutating the original demo_data
+                trace = dict(original_trace)
+                # Store the old ID before modification
+                old_trace_id = trace["id"]
                 # Apply time shift to maintain time differences
                 trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
                 trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
-                new_id = get_new_uuid_by_time(context, trace["id"], trace["start_time"])
+                new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
                 trace["id"] = new_id
                 # Remove fields that shouldn't be in the trace data
                 trace.pop("project_id", None)
