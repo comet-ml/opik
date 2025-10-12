@@ -104,18 +104,18 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) => `${round(row.sampling_rate * 100, 1)}%`,
   },
-  {
-    id: "type",
-    label: "Scope",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
-  },
-  {
-    id: "enabled",
-    label: "Status",
-    type: COLUMN_TYPE.string,
-    cell: StatusCell as never,
-  },
+  // {
+  //   id: "type",
+  //   label: "Scope",
+  //   type: COLUMN_TYPE.string,
+  //   accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+  // },
+  // {
+  //   id: "enabled",
+  //   label: "Status",
+  //   type: COLUMN_TYPE.string,
+  //   cell: StatusCell as never,
+  // },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -128,9 +128,9 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_by",
   "created_at",
   "sampling_rate",
-  "enabled",
+  // "enabled",
   "project_id",
-  "type",
+  // "type",
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";
