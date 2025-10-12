@@ -7,5 +7,5 @@
  *     {}
  */
 export interface GetTraceByIdRequest {
-    truncate?: boolean;
+    stripAttachments?: boolean;
 }

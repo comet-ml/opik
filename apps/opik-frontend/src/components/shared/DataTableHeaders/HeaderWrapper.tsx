@@ -58,6 +58,8 @@ const HeaderWrapper = <TData,>({
         >
           <HeaderStatistic
             statistic={columnStatistic}
+            columnsStatistic={columnsStatistic}
+            statisticKey={statisticKey}
             dataFormater={statisticDataFormater}
           />
         </div>

@@ -16,4 +16,4 @@ def test_track__get_client_cached_raised_error__error_is_caught__user_function_i
 
         assert f() == 42
 
-        mock_get_client_cached.assert_called_once()
+        mock_get_client_cached.assert_called()

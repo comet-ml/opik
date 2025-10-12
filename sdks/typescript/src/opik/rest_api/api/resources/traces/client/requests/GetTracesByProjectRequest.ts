@@ -13,6 +13,7 @@ export interface GetTracesByProjectRequest {
     projectId?: string;
     filters?: string;
     truncate?: boolean;
+    stripAttachments?: boolean;
     sorting?: string;
     exclude?: string;
 }
