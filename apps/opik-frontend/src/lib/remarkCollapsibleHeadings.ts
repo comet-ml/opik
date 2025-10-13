@@ -71,7 +71,6 @@ export const makeHeadingsCollapsible = (
   const lines = markdown.split("\n");
   const result: string[] = [];
   let inCollapsibleSection = false;
-  let collapsibleContent: string[] = [];
   let currentHeading = "";
 
   for (let i = 0; i < lines.length; i++) {
@@ -100,7 +99,6 @@ export const makeHeadingsCollapsible = (
       result.push(`<div class="${contentClassName}">`);
 
       inCollapsibleSection = true;
-      collapsibleContent = []; // eslint-disable-line @typescript-eslint/no-unused-vars
     } else if (inCollapsibleSection) {
       // Check if we've reached another heading (non-collapsible)
       const regularHeadingMatch = line.match(/^(#{1,6})\s+(.+)$/);
