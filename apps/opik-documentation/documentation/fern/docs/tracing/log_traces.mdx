@@ -690,6 +690,8 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         Use this context manager to create and manage a trace. A trace represents the overall execution flow of your application.
 
+        For detailed API reference, see [`opik.start_as_current_trace`](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/start_as_current_trace.html).
+
         ```python
         import opik
 
@@ -716,6 +718,8 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         Use this context manager to create and manage a span within a trace. Spans represent individual operations or function calls.
 
+        For detailed API reference, see [`opik.start_as_current_span`](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/start_as_current_span.html).
+
         ```python
         import opik
 
@@ -735,7 +739,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         **Parameters:**
         - `name` (str): The name of the span
-        - `type` (SpanType, optional): Type of span ("general", "llm", "retrieval", etc.)
+        - `type` (SpanType, optional): Type of span ("general", "tool", "llm", "guardrail", etc.)
         - `input` (Dict[str, Any], optional): Input data for the span
         - `output` (Dict[str, Any], optional): Output data for the span
         - `tags` (List[str], optional): Tags to categorize the span
@@ -843,7 +847,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
 5. **Use project organization**: Organize your traces by project to keep your Opik dashboard clean and organized.
 
-6. **Consider performance**: Use `flush=False` (default) for better performance unless you need immediate data availability.
+6. **Consider performance**: Use `flush=True` only when immediate data availability is required, as it can slow down your application by triggering a synchronous, immediate data upload.
 
 
 ### Logging to a specific project
