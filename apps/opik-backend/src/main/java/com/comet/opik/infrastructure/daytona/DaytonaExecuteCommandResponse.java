@@ -1,0 +1,18 @@
+package com.comet.opik.infrastructure.daytona;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import lombok.Builder;
+
+@Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+public record DaytonaExecuteCommandResponse(
+        String cmdId,
+        String output,
+        String stdout,
+        String stderr,
+        Integer exitCode,
+        String error) {
+}

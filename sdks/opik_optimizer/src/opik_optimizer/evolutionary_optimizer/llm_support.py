@@ -32,7 +32,7 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 class LlmSupport:
     if TYPE_CHECKING:
-        model: str
+        optimizer_model: str
         llm_call_counter: int
         project_name: str | None
         disable_litellm_monitoring: bool
@@ -101,10 +101,10 @@ class LlmSupport:
         for attempt in range(max_retries + 1):
             try:
                 logger.debug(
-                    f"Calling model '{self.model}' with messages: {messages}, params: {llm_config_params} (attempt {attempt + 1})"
+                    f"Calling model '{self.optimizer_model}' with messages: {messages}, params: {llm_config_params} (attempt {attempt + 1})"
                 )
                 response = litellm.completion(
-                    model=self.model, messages=messages, **llm_config_params
+                    model=self.optimizer_model, messages=messages, **llm_config_params
                 )
                 self.increment_llm_counter()
                 return response.choices[0].message.content
@@ -129,7 +129,7 @@ class LlmSupport:
                 raise
             except Exception as e:
                 logger.error(
-                    f"Error calling model '{self.model}': {type(e).__name__} - {e}"
+                    f"Error calling model '{self.optimizer_model}': {type(e).__name__} - {e}"
                 )
                 raise
         # Should never reach here

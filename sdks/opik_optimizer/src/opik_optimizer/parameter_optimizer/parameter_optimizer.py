@@ -61,6 +61,7 @@ class ParameterOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         raise NotImplementedError(
@@ -79,6 +80,7 @@ class ParameterOptimizer(BaseOptimizer):
         n_trials: int | None = None,
         n_samples: int | None = None,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         if not isinstance(parameter_space, ParameterSearchSpace):
@@ -236,11 +238,14 @@ class ParameterOptimizer(BaseOptimizer):
         ]
         if completed_trials:
             best_trial = max(completed_trials, key=lambda t: t.value)  # type: ignore[arg-type]
-            if best_trial.value is not None and best_trial.value > best_score:
-                best_score = float(best_trial.value)
+            if best_trial.value is not None:
+                # Always capture the parameters from the best trial
                 best_parameters = best_trial.user_attrs.get("parameters", {})
-                best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
-                best_model = best_trial.user_attrs.get("model", prompt.model)
+                # Only update score/kwargs/model if it beats baseline
+                if best_trial.value > best_score:
+                    best_score = float(best_trial.value)
+                    best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
+                    best_model = best_trial.user_attrs.get("model", prompt.model)
 
         local_space: ParameterSearchSpace | None = None
         if (
@@ -294,11 +299,14 @@ class ParameterOptimizer(BaseOptimizer):
                 ]
                 if completed_trials:
                     new_best = max(completed_trials, key=lambda t: t.value)  # type: ignore[arg-type]
-                    if new_best.value is not None and new_best.value > best_score:
-                        best_score = float(new_best.value)
+                    if new_best.value is not None:
+                        # Always capture the parameters from the best trial
                         best_parameters = new_best.user_attrs.get("parameters", {})
-                        best_model_kwargs = new_best.user_attrs.get("model_kwargs", {})
-                        best_model = new_best.user_attrs.get("model", prompt.model)
+                        # Only update score/kwargs/model if it beats previous best
+                        if new_best.value > best_score:
+                            best_score = float(new_best.value)
+                            best_model_kwargs = new_best.user_attrs.get("model_kwargs", {})
+                            best_model = new_best.user_attrs.get("model", prompt.model)
 
         else:
             local_trials = 0

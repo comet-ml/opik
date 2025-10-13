@@ -16,6 +16,7 @@ import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 import reactor.util.retry.Retry;
 
+import java.util.Map;
 import java.util.function.Function;
 
 @Singleton
@@ -44,13 +45,47 @@ public class RetriableHttpClient {
     public interface RetryableHttpCallContext {
         Tuple2<RetryableHttpPost, Retry> getRequestWithContext();
 
+        default RetryableHttpCallContextWithHeaders withHeaders(@NonNull Map<String, String> headers) {
+            return () -> Tuples.of(this, headers);
+        }
+
         default RetryableHttpCallContextWithResponse withRequestBody(@NonNull Entity<?> requestEntity) {
-            return () -> Tuples.of(this, requestEntity);
+            return new RetryableHttpCallContextWithResponse() {
+                @Override
+                public Tuple2<RetryableHttpCallContext, Entity<?>> getRequestWithContextAndFunction() {
+                    return Tuples.of(RetryableHttpCallContext.this, requestEntity);
+                }
+
+                @Override
+                public Map<String, String> getHeaders() {
+                    return Map.of();
+                }
+            };
+        }
+    }
+
+    public interface RetryableHttpCallContextWithHeaders {
+        Tuple2<RetryableHttpCallContext, Map<String, String>> getRequestWithHeaders();
+
+        default RetryableHttpCallContextWithResponse withRequestBody(@NonNull Entity<?> requestEntity) {
+            var tuple = this.getRequestWithHeaders();
+            return new RetryableHttpCallContextWithResponse() {
+                @Override
+                public Tuple2<RetryableHttpCallContext, Entity<?>> getRequestWithContextAndFunction() {
+                    return Tuples.of(tuple.getT1(), requestEntity);
+                }
+
+                @Override
+                public Map<String, String> getHeaders() {
+                    return tuple.getT2();
+                }
+            };
         }
     }
 
     public interface RetryableHttpCallContextWithResponse {
         Tuple2<RetryableHttpCallContext, Entity<?>> getRequestWithContextAndFunction();
+        Map<String, String> getHeaders();
 
         default <T> RetryableHttpExecutableContext<T> withResponse(@NonNull Function<Response, T> responseFunction) {
             return () -> Tuples.of(this, responseFunction);
@@ -67,9 +102,10 @@ public class RetriableHttpClient {
             Retry retrySpec = getFullContext().getT1().getRequestWithContextAndFunction().getT1()
                     .getRequestWithContext().getT2();
             Entity<?> requestBody = getFullContext().getT1().getRequestWithContextAndFunction().getT2();
+            Map<String, String> headers = getFullContext().getT1().getHeaders();
             Function<Response, T> responseFunction = getFullContext().getT2();
 
-            return httpClient.executePostWithRetry(requestBody, retrySpec, requestFunction, responseFunction);
+            return httpClient.executePostWithRetry(requestBody, retrySpec, requestFunction, headers, responseFunction);
         }
 
     }
@@ -85,8 +121,8 @@ public class RetriableHttpClient {
     }
 
     private <T> T executePostWithRetry(Entity<?> request, Retry retrySpec, Function<Client, WebTarget> requestFunction,
-            Function<Response, T> responseFunction) {
-        return Mono.defer(() -> performHttpPost(request, requestFunction)
+            Map<String, String> headers, Function<Response, T> responseFunction) {
+        return Mono.defer(() -> performHttpPost(request, requestFunction, headers)
                 .flatMap(response -> {
                     int statusCode = response.getStatus();
 
@@ -110,21 +146,31 @@ public class RetriableHttpClient {
         return statusCode == 503 || statusCode == 504;
     }
 
-    private Mono<Response> performHttpPost(Entity<?> request, Function<Client, WebTarget> requestFunction) {
-        return Mono.create(sink -> requestFunction.apply(client)
-                .request()
-                .async()
-                .post(request, new InvocationCallback<Response>() {
-                    @Override
-                    public void completed(Response response) {
-                        sink.success(response);
-                    }
+    private Mono<Response> performHttpPost(Entity<?> request, Function<Client, WebTarget> requestFunction,
+            Map<String, String> headers) {
+        return Mono.create(sink -> {
+            var builder = requestFunction.apply(client).request();
 
-                    @Override
-                    public void failed(Throwable throwable) {
-                        sink.error(throwable);
-                    }
-                }));
+            // Add custom headers if provided
+            if (headers != null && !headers.isEmpty()) {
+                for (Map.Entry<String, String> header : headers.entrySet()) {
+                    builder = builder.header(header.getKey(), header.getValue());
+                }
+            }
+
+            builder.async()
+                    .post(request, new InvocationCallback<Response>() {
+                        @Override
+                        public void completed(Response response) {
+                            sink.success(response);
+                        }
+
+                        @Override
+                        public void failed(Throwable throwable) {
+                            sink.error(throwable);
+                        }
+                    });
+        });
     }
 
 }

@@ -258,6 +258,7 @@ class MiproOptimizer(BaseOptimizer):
         n_samples: int | None = 10,
         auto_continue: bool = False,
         agent_class: str | None = None,
+        optimization_id: str | None = None,
         **kwargs,
     ) -> OptimizationResult:
         """
@@ -301,20 +302,26 @@ class MiproOptimizer(BaseOptimizer):
         num_trials = kwargs.pop("num_trials", 3)
         auto = kwargs.pop("auto", "light")
 
-        with self.create_optimization_context(dataset, metric) as optimization:
-            result = self._optimize_prompt(
-                dataset=dataset,
-                metric=metric,
-                task_config=task_config,
-                num_candidates=num_candidates,
-                experiment_config=experiment_config,
-                optimization_id=optimization.id if optimization is not None else None,
-                num_trials=num_trials,
-                n_samples=n_samples,
-                auto=auto,
-                **kwargs,
-            )
-            return result
+        opt_id = self.create_optimization(
+            optimization_id=optimization_id,
+            dataset_name=dataset.name,
+            objective_name=metric.__name__,
+            metadata={"optimizer": self.__class__.__name__},
+        )
+
+        result = self._optimize_prompt(
+            dataset=dataset,
+            metric=metric,
+            task_config=task_config,
+            num_candidates=num_candidates,
+            experiment_config=experiment_config,
+            optimization_id=opt_id,
+            num_trials=num_trials,
+            n_samples=n_samples,
+            auto=auto,
+            **kwargs,
+        )
+        return result
 
     def _optimize_prompt(
         self,

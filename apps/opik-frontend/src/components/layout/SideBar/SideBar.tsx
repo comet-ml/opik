@@ -17,6 +17,7 @@ import {
   ChevronRight,
   SparklesIcon,
   UserPen,
+  Zap,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -85,14 +86,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         count: "experiments",
       },
       {
-        id: "optimizations",
-        path: "/$workspaceName/optimizations",
-        type: MENU_ITEM_TYPE.router,
-        icon: SparklesIcon,
-        label: "Optimization runs",
-        count: "optimizations",
-      },
-      {
         id: "datasets",
         path: "/$workspaceName/datasets",
         type: MENU_ITEM_TYPE.router,
@@ -107,6 +100,27 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: UserPen,
         label: "Annotation queues",
         count: "annotation_queues",
+      },
+    ],
+  },
+  {
+    id: "optimization",
+    label: "Optimization",
+    items: [
+      {
+        id: "optimization_studio",
+        path: "/$workspaceName/optimization-studio",
+        type: MENU_ITEM_TYPE.router,
+        icon: Zap,
+        label: "Optimization Studio",
+      },
+      {
+        id: "optimization_runs",
+        path: "/$workspaceName/optimizations",
+        type: MENU_ITEM_TYPE.router,
+        icon: SparklesIcon,
+        label: "Optimization runs",
+        count: "optimizations",
       },
     ],
   },

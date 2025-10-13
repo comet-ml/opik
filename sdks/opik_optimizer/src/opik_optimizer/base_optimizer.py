@@ -5,6 +5,7 @@ import copy
 import inspect
 import logging
 import time
+import warnings
 from abc import ABC, abstractmethod
 import random
 import importlib.metadata
@@ -53,7 +54,8 @@ class OptimizationRound(BaseModel):
 class BaseOptimizer(ABC):
     def __init__(
         self,
-        model: str,
+        optimizer_model: str = "openai/gpt-4o-mini",
+        model: str | None = None,
         verbose: int = 1,
         seed: int = 42,
         **model_kwargs: Any,
@@ -62,13 +64,25 @@ class BaseOptimizer(ABC):
         Base class for optimizers.
 
         Args:
-           model: LiteLLM model name
+           optimizer_model: LiteLLM model name for the optimizer's algorithm operations
+               (generating prompt variations, mutations, etc.). Defaults to "openai/gpt-4o-mini".
+           model: (Deprecated) Optional fallback model for prompt.model if not set.
+               Use prompt.model directly instead.
            verbose: Controls internal logging/progress bars (0=off, 1=on).
            seed: Random seed for reproducibility (default: 42)
            model_kwargs: additional args for model (eg, temperature)
         """
+        if model is not None:
+            warnings.warn(
+                "The 'model' parameter is deprecated. Use 'optimizer_model' for the optimizer's "
+                "algorithm operations, and set 'model' directly on the ChatPrompt for evaluation. "
+                "This parameter will be removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        self.optimizer_model = optimizer_model
         self.model = model
-        self.reasoning_model = model
         self.model_kwargs = model_kwargs
         self.verbose = verbose
         self.seed = seed
@@ -129,6 +143,44 @@ class BaseOptimizer(ABC):
             self._opik_client = opik.Opik()
         return self._opik_client
 
+    def create_optimization(
+        self,
+        optimization_id: str | None,
+        dataset_name: str,
+        objective_name: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """
+        Create a new optimization with a specific ID or generate a new one.
+
+        Args:
+            optimization_id: Optional optimization ID to use. If None, generates a new one.
+            dataset_name: Name of the dataset
+            objective_name: Name of the objective/metric
+            metadata: Optional metadata for the optimization
+
+        Returns:
+            str: The optimization ID (either provided or newly generated)
+        """
+        # Use provided ID or generate a new one
+        from opik.rest_api import id_helpers
+
+        opt_id = optimization_id if optimization_id is not None else id_helpers.generate_id()
+
+        try:
+            self.opik_client._rest_client.optimizations.create_optimization(
+                id=opt_id,
+                name=None,
+                dataset_name=dataset_name,
+                objective_name=objective_name,
+                status="running",
+                metadata=metadata,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create optimization with ID {opt_id}: {e}")
+
+        return opt_id
+
     def validate_optimization_inputs(
         self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
     ) -> None:
@@ -182,7 +234,8 @@ class BaseOptimizer(ABC):
         # Only configure if prompt is a valid ChatPrompt object
         if hasattr(prompt, "model") and hasattr(prompt, "model_kwargs"):
             if prompt.model is None:
-                prompt.model = self.model
+                # Fallback chain: prompt.model -> optimizer.model -> optimizer.optimizer_model
+                prompt.model = self.model if self.model is not None else self.optimizer_model
             if prompt.model_kwargs is None:
                 prompt.model_kwargs = self.model_kwargs
 
@@ -278,7 +331,11 @@ class BaseOptimizer(ABC):
     def _build_agent_config(self, prompt: "chat_prompt.ChatPrompt") -> dict[str, Any]:
         agent_config: dict[str, Any] = dict(prompt.to_dict())
         agent_config["project_name"] = getattr(prompt, "project_name", None)
-        agent_config["model"] = getattr(prompt, "model", None) or self.model
+        agent_config["model"] = (
+            getattr(prompt, "model", None)
+            or self.model
+            or self.optimizer_model
+        )
         agent_config["tools"] = self._serialize_tools(prompt)
         return self._drop_none(agent_config)
 
@@ -290,6 +347,7 @@ class BaseOptimizer(ABC):
         metadata = {
             "name": self.__class__.__name__,
             "version": _OPTIMIZER_VERSION,
+            "optimizer_model": self.optimizer_model,
             "model": self.model,
             "model_kwargs": self.model_kwargs or None,
             "seed": getattr(self, "seed", None),
@@ -299,9 +357,6 @@ class BaseOptimizer(ABC):
         # n_threads is used by some optimizers instead of num_threads
         if metadata["num_threads"] is None and hasattr(self, "n_threads"):
             metadata["num_threads"] = getattr(self, "n_threads")
-
-        if hasattr(self, "reasoning_model"):
-            metadata["reasoning_model"] = getattr(self, "reasoning_model")
 
         extra_parameters = self.get_optimizer_metadata()
         if extra_parameters:
@@ -403,6 +458,7 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -432,6 +488,7 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
@@ -480,6 +537,7 @@ class BaseOptimizer(ABC):
         n_trials: int | None = None,
         n_samples: int | None = None,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -555,7 +613,8 @@ class BaseOptimizer(ABC):
         random.seed(seed)
 
         if prompt.model is None:
-            prompt.model = self.model
+            # Fallback chain: prompt.model -> optimizer.model -> optimizer.optimizer_model
+            prompt.model = self.model if self.model is not None else self.optimizer_model
         if prompt.model_kwargs is None:
             prompt.model_kwargs = self.model_kwargs
 

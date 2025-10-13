@@ -434,6 +434,26 @@ pythonEvaluator:
   # Description: Min delay between retry attempts
   minRetryDelay: ${PYTHON_EVALUATOR_MIN_RETRY_DELAY:-500ms}
 
+# Daytona sandbox configuration
+daytona:
+  # Default: https://app.daytona.io/api
+  # Description: URL of the Daytona API server
+  url: ${DAYTONA_API_URL:-https://app.daytona.io/api}
+  # Default: empty
+  # Description: Daytona API authentication token
+  apiToken: ${DAYTONA_API_TOKEN:-}
+  # Default: opik-optimization-runner:0.0.6
+  # Description: Name of the Daytona snapshot to use for optimization sandboxes
+  snapshotName: ${DAYTONA_SNAPSHOT_NAME:-opik-optimization-runner:0.0.6}
+  # Default: 3
+  # Description: Maximum number of retry attempts to reach Daytona API before giving up
+  maxRetryAttempts: ${DAYTONA_MAX_RETRY_ATTEMPTS:-3}
+  # Default: 1s
+  # Description: Max delay between retry attempts
+  maxRetryDelay: ${DAYTONA_MAX_RETRY_DELAY:-1s}
+  # Default: 500ms
+  # Description: Min delay between retry attempts
+  minRetryDelay: ${DAYTONA_MIN_RETRY_DELAY:-500ms}
 
 serviceToggles:
   # Default: true
@@ -454,6 +474,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether or not Optimization Studio is enabled
+  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:

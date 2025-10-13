@@ -40,6 +40,8 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import OptimizationStudioHomePage from "@/components/pages/OptimizationStudioHomePage/OptimizationStudioHomePage";
+import OptimizationStudioRunPage from "@/components/pages/OptimizationStudioRunPage/OptimizationStudioRunPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -267,6 +269,27 @@ const compareTrialsRoute = createRoute({
   },
 });
 
+// Optimization Studio
+const optimizationStudioRoute = createRoute({
+  path: "/optimization-studio",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Optimization Studio",
+  },
+});
+
+const optimizationStudioHomeRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationStudioRoute,
+  component: OptimizationStudioHomePage,
+});
+
+const optimizationStudioRunRoute = createRoute({
+  path: "/run",
+  getParentRoute: () => optimizationStudioRoute,
+  component: OptimizationStudioRunPage,
+});
+
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
@@ -464,6 +487,10 @@ const routeTree = rootRoute.addChildren([
       annotationQueuesRoute.addChildren([
         annotationQueuesListRoute,
         annotationQueueDetailsRoute,
+      ]),
+      optimizationStudioRoute.addChildren([
+        optimizationStudioHomeRoute,
+        optimizationStudioRunRoute,
       ]),
     ]),
   ]),

@@ -98,7 +98,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str,
+        optimizer_model: str = "openai/gpt-4o-mini",
+        model: str | None = None,
         population_size: int = DEFAULT_POPULATION_SIZE,
         num_generations: int = DEFAULT_NUM_GENERATIONS,
         mutation_rate: float = DEFAULT_MUTATION_RATE,
@@ -118,7 +119,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> None:
         """
         Args:
-            model: The model to use for evaluation
+            optimizer_model: The model used by the optimizer for generating prompt variations,
+                mutations, and crossover operations. Defaults to "openai/gpt-4o-mini".
+            model: (Deprecated) Optional fallback model for prompt.model if not set.
+                Use prompt.model directly instead.
             population_size: Number of prompts in the population
             num_generations: Number of generations to run
             mutation_rate: Mutation rate for genetic operations
@@ -151,7 +155,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
             del model_kwargs["project_name"]
 
-        super().__init__(model=model, verbose=verbose, **model_kwargs)
+        super().__init__(optimizer_model=optimizer_model, model=model, verbose=verbose, **model_kwargs)
         self.population_size = population_size
         self.num_generations = num_generations
         self.mutation_rate = mutation_rate
@@ -522,6 +526,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -550,17 +555,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.project_name = self.agent_class.project_name
 
         # Step 0. Start Opik optimization run
-        opik_optimization_run: optimization.Optimization | None = None
-        try:
-            opik_optimization_run = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                metadata={"optimizer": self.__class__.__name__},
-            )
-            self._current_optimization_id = opik_optimization_run.id
-        except Exception as e:
-            logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
-            self._current_optimization_id = None
+        self._current_optimization_id = self.create_optimization(
+            optimization_id=optimization_id,
+            dataset_name=dataset.name,
+            objective_name=metric.__name__,
+            metadata={"optimizer": self.__class__.__name__},
+        )
 
         reporting.display_header(
             algorithm=self.__class__.__name__,
@@ -946,6 +946,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 ),
                 "adaptive_mutation": self.adaptive_mutation,
                 "metric_name": metric.__name__,
+                "optimizer_model": self.optimizer_model,
                 "model": self.model,
                 "moo_enabled": self.enable_moo,
                 "llm_crossover_enabled": self.enable_llm_crossover,
@@ -1011,6 +1012,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
@@ -1083,6 +1085,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 n_samples=n_samples,
                 auto_continue=auto_continue,
                 agent_class=agent_class,
+                optimization_id=optimization_id,
                 mcp_config=mcp_config,
                 **kwargs,
             )

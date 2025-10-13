@@ -55,6 +55,7 @@ public class CorsFactory {
         cors.setInitParameter(CrossOriginFilter.ALLOWED_ORIGINS_PARAM, "*");
         cors.setInitParameter(CrossOriginFilter.ALLOWED_HEADERS_PARAM, String.join(",", ALLOWED_HEADERS));
         cors.setInitParameter(CrossOriginFilter.ALLOWED_METHODS_PARAM, String.join(",", ALLOWED_METHODS));
+        cors.setInitParameter(CrossOriginFilter.EXPOSED_HEADERS_PARAM, HttpHeaders.LOCATION);
         cors.setInitParameter(CrossOriginFilter.CHAIN_PREFLIGHT_PARAM, Boolean.FALSE.toString());
 
         // URL mappings

@@ -466,6 +466,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         mcp_config = kwargs.pop("mcp_config", None)
@@ -503,23 +504,16 @@ class MetaPromptOptimizer(BaseOptimizer):
             )
             n_samples = None
 
-        optimization = None
-        try:
-            optimization = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=getattr(metric, "__name__", str(metric)),
-                metadata={"optimizer": self.__class__.__name__},
-            )
-            logger.debug(f"Created optimization with ID: {optimization.id}")
-        except Exception as e:
-            logger.warning(
-                f"Opik server does not support optimizations: {e}. Please upgrade opik."
-            )
-            optimization = None
+        opt_id = self.create_optimization(
+            optimization_id=optimization_id,
+            dataset_name=dataset.name,
+            objective_name=getattr(metric, "__name__", str(metric)),
+            metadata={"optimizer": self.__class__.__name__},
+        )
 
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=optimization.id if optimization is not None else None,
+            optimization_id=opt_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -535,9 +529,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
         try:
-            optimization_id = optimization.id if optimization is not None else None
             result = self._optimize_prompt(
-                optimization_id=optimization_id,
+                optimization_id=opt_id,
                 prompt=prompt,
                 dataset=dataset,
                 metric=metric,
@@ -572,6 +565,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
         fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
         allow_tool_use_on_second_pass: bool = False,
@@ -609,6 +603,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_samples=n_samples,
             auto_continue=auto_continue,
             agent_class=agent_class,
+            optimization_id=optimization_id,
             mcp_config=mcp_config,
             candidate_generator=self._generate_mcp_candidate_prompts,
             candidate_generator_kwargs={

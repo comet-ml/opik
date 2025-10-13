@@ -496,6 +496,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         max_retries: int = 2,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -508,16 +509,16 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Setup agent class
         self.agent_class = self.setup_agent_class(prompt, agent_class)
 
-        optimization = self.opik_client.create_optimization(
+        opt_id = self.create_optimization(
+            optimization_id=optimization_id,
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
             metadata={"optimizer": self.__class__.__name__},
         )
-        logger.debug(f"Created optimization with ID: {optimization.id}")
 
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=optimization.id if optimization is not None else None,
+            optimization_id=opt_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -539,7 +540,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 prompt=prompt,
                 dataset=dataset,
                 metric=metric,
-                optimization_id=optimization.id,
+                optimization_id=opt_id,
                 n_samples=n_samples,
             )
 
@@ -610,7 +611,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             prompt=prompt,
                             dataset=dataset,
                             metric=metric,
-                            optimization_id=optimization.id,
+                            optimization_id=opt_id,
                             n_samples=n_samples,
                             attempt=attempt,
                             max_attempts=max_attempts,
@@ -712,7 +713,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             details=details,
             llm_calls=self.llm_call_counter,
             tool_calls=self.tool_call_counter,
-            optimization_id=optimization.id,
+            optimization_id=opt_id,
             dataset_id=dataset.id,
             tool_prompts=tool_prompts,
         )

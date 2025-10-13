@@ -305,6 +305,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
+  # Default: true
+  # Description: Whether or not Optimization Studio is enabled
+  optimizationStudioEnabled: "true"
 
 # Trace Thread configuration
 traceThreadConfig:

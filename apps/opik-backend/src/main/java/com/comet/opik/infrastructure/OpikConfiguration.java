@@ -91,4 +91,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private WebhookConfig webhook = new WebhookConfig();
+
+    @Valid @NotNull @JsonProperty
+    private com.comet.opik.infrastructure.daytona.DaytonaConfig daytona = new com.comet.opik.infrastructure.daytona.DaytonaConfig();
 }

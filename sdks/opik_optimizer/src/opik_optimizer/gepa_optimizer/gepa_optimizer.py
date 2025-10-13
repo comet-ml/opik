@@ -161,6 +161,7 @@ class GepaOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -233,7 +234,6 @@ class GepaOptimizer(BaseOptimizer):
 
         base_prompt = prompt.copy()
 
-        opt_id: str | None = None
         ds_id: str | None = getattr(dataset, "id", None)
 
         opik_client = opik.Opik(project_name=self.project_name)
@@ -241,16 +241,12 @@ class GepaOptimizer(BaseOptimizer):
         disable_experiment_reporting()
 
         try:
-            with optimization_context(
-                client=opik_client,
+            opt_id = self.create_optimization(
+                optimization_id=optimization_id,
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
-            ) as optimization:
-                try:
-                    opt_id = optimization.id if optimization is not None else None
-                except Exception:
-                    opt_id = None
+            )
 
             gepa_reporting.display_header(
                 algorithm="GEPA",

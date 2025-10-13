@@ -504,6 +504,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        optimization_id: str | None = None,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -530,20 +531,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Extract n_trials from kwargs for backward compatibility
         n_trials = kwargs.get("n_trials", 10)
 
-        optimization = None
-        try:
-            optimization = self.opik_client.create_optimization(
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                metadata={"optimizer": self.__class__.__name__},
-            )
-            optimization_run_id = optimization.id
-        except Exception:
-            logger.warning(
-                "Opik server does not support optimizations. Please upgrade opik."
-            )
-            optimization = None
-            optimization_run_id = None
+        optimization_run_id = self.create_optimization(
+            optimization_id=optimization_id,
+            dataset_name=dataset.name,
+            objective_name=metric.__name__,
+            metadata={"optimizer": self.__class__.__name__},
+        )
 
         # Start experiment reporting
         reporting.display_header(
@@ -576,7 +569,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 dataset=dataset,
                 metric=metric,
                 n_samples=n_samples,
-                optimization_id=(optimization.id if optimization is not None else None),
+                optimization_id=optimization_run_id,
             )
 
             eval_report.set_score(baseline_score)
@@ -603,13 +596,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset=dataset,
             metric=metric,
             baseline_score=baseline_score,
-            optimization_id=optimization.id if optimization is not None else None,
+            optimization_id=optimization_run_id,
             experiment_config=experiment_config,
             n_trials=n_trials,
             n_samples=n_samples,
         )
-        if optimization:
-            self.update_optimization(optimization, status="completed")
 
         utils.enable_experiment_reporting()
         return result
