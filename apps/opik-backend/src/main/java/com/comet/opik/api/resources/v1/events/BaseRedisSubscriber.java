@@ -92,6 +92,13 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             log.warn("{} consumer already started. Ignoring start request", getSubscriberName());
             return;
         }
+        // Log configuration values
+        log.info("{} consumer starting with configuration: streamName='{}', consumerGroupName='{}', consumerBatchSize='{}', poolingInterval='{}'",
+                getSubscriberName(),
+                config.getStreamName(),
+                config.getConsumerGroupName(),
+                batchSize,
+                config.getPoolingInterval().toJavaDuration());
         // This particular subscriber implementation only consumes the respective Redis stream
         stream = initStream(config, redisson);
         log.info("{} consumer started successfully", getSubscriberName());
