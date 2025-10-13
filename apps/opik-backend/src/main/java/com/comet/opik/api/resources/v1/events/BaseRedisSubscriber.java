@@ -89,11 +89,12 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Override
     public void start() {
         if (stream != null) {
-            log.warn("{} consumer already started. Ignoring start request", getSubscriberName());
+            log.warn("'{}' consumer already started. Ignoring start request", getSubscriberName());
             return;
         }
         // Log configuration values
-        log.info("{} consumer starting with configuration: streamName='{}', consumerGroupName='{}', consumerBatchSize='{}', poolingInterval='{}'",
+        log.info(
+                "'{}' consumer starting with configuration: streamName='{}', consumerGroupName='{}', consumerBatchSize='{}', poolingInterval='{}'",
                 getSubscriberName(),
                 config.getStreamName(),
                 config.getConsumerGroupName(),
@@ -101,7 +102,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 config.getPoolingInterval().toJavaDuration());
         // This particular subscriber implementation only consumes the respective Redis stream
         stream = initStream(config, redisson);
-        log.info("{} consumer started successfully", getSubscriberName());
+        log.info("'{}' consumer started successfully", getSubscriberName());
     }
 
     @Override
@@ -145,7 +146,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var streamName = config.getStreamName();
         var codec = config.getCodec();
         RStreamReactive<String, M> streamInstance = redisson.getStream(streamName, codec);
-        log.info("{} consumer listening for events on stream '{}'", getSubscriberName(), streamName);
+        log.info("'{}' consumer listening for events on stream '{}'", getSubscriberName(), streamName);
         enforceConsumerGroup(streamInstance);
         setupStreamListener(streamInstance);
         return streamInstance;
@@ -226,7 +227,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             try {
                 return Optional.of(Long.parseLong(parts[0]));
             } catch (NumberFormatException e) {
-                log.warn("Failed to parse timestamp from message ID: {}", idString, e);
+                log.warn("Failed to parse timestamp from message ID: '{}'", idString, e);
             }
         }
         return Optional.empty();
