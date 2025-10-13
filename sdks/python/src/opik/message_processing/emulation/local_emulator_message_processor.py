@@ -1,17 +1,15 @@
 import datetime
 from typing import List, Dict, Optional, Any
 
-from opik.message_processing.emulation import emulator_message_processor
 from opik.types import ErrorInfoDict, SpanType
-from . import models
+from . import models, emulator_message_processor
 
 
-class BackendEmulatorMessageProcessor(
+class LocalEmulatorMessageProcessor(
     emulator_message_processor.EmulatorMessageProcessor
 ):
-    """
-    This class serves as a replacement for the real backend. It collects all logged messages
-    to be used in tests.
+    """This class serves as a replacement for the real backend and collects all logged messages
+    locally in memory to be used for evaluation.
     """
 
     def __init__(self, merge_duplicates: bool = True) -> None:
