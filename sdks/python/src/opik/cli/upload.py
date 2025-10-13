@@ -364,7 +364,9 @@ def _upload_prompts(
 
 
 @click.command()
-@click.argument("workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True))
+@click.argument(
+    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+)
 @click.argument("workspace_name", type=str)
 @click.option(
     "--dry-run",
