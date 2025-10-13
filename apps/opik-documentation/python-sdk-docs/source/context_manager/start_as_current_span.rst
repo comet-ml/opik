@@ -41,16 +41,15 @@ With distributed tracing
 
 .. code-block:: python
 
+   import os
    import opik
 
-   # Extract headers from incoming request
-   distributed_headers = {
-       "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-   }
+   # extract headers from environment
+   distributed_trace_headers = os.environ.get("opik_distributed_trace_headers")
 
    with opik.start_as_current_span(
        "process_request",
-       **distributed_headers
+       opik_distributed_trace_headers=distributed_trace_headers
    ) as span:
        # Your code here
        pass

@@ -35,7 +35,7 @@ With input and output data
        # Your processing code here
        pass
 
-With project and thread information
+With conversational threads support using `thread_id` identifier
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
@@ -43,18 +43,14 @@ With project and thread information
    import opik
    import threading
 
-   def process_in_thread():
-       with opik.start_as_current_trace(
-           "background_processing",
-           project_name="my_project",
-           thread_id=threading.current_thread().name
-       ) as trace:
-           # Background processing code
-           pass
+   with opik.start_as_current_trace(
+       "chatbot_conversation",
+       project_name="my_project",
+       thread_id="00f067aa0ba902b7",
+   ) as trace:
+       # Your processing code here
+       pass
 
-   # Start thread
-   thread = threading.Thread(target=process_in_thread)
-   thread.start()
 
 Error handling
 ~~~~~~~~~~~~~~
