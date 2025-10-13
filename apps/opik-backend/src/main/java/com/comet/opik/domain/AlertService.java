@@ -248,6 +248,7 @@ class AlertServiceImpl implements AlertService {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
+                "metadata", "metadata related to the event",
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",

@@ -45,6 +45,9 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
+import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
+
 @Path("/v1/private/alerts")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -131,7 +134,15 @@ public class AlertResource {
 
         log.info("Got alerts on workspace_id '{}', count '{}'", workspaceId, alertPage.size());
 
-        return Response.ok(alertPage).build();
+        return Response.ok(alertPage.toBuilder()
+                .content(alertPage.content().stream()
+                        .map(alert -> alert.toBuilder().webhook(alert.webhook().toBuilder()
+                                .secretToken(alert.webhook().secretToken() != null
+                                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
+                                        : null)
+                                .build()).build())
+                        .toList())
+                .build()).build();
     }
 
     @GET
@@ -151,7 +162,11 @@ public class AlertResource {
 
         log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
 
-        return Response.ok().entity(alert).build();
+        return Response.ok().entity(alert.toBuilder().webhook(alert.webhook().toBuilder()
+                .secretToken(alert.webhook().secretToken() != null
+                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
+                        : null)
+                .build()).build()).build();
     }
 
     @POST

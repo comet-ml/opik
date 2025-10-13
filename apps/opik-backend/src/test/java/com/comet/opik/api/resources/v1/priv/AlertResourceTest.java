@@ -94,6 +94,8 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
 import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
+import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -114,7 +116,7 @@ class AlertResourceTest {
 
     private static final String[] ALERT_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "webhook.name", "webhook.createdAt", "webhook.lastUpdatedAt",
+            "lastUpdatedBy", "webhook.name", "webhook.secretToken", "webhook.createdAt", "webhook.lastUpdatedAt",
             "webhook.createdBy", "webhook.lastUpdatedBy", "triggers"};
 
     private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
@@ -277,36 +279,36 @@ class AlertResourceTest {
             return Stream.of(
                     // Name validation
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name(null).build(),
+                            generateAlert().toBuilder().name(null).build(),
                             422,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name("").build(),
+                            generateAlert().toBuilder().name("").build(),
                             422,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name("   ").build(),
+                            generateAlert().toBuilder().name("   ").build(),
                             422,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name("a".repeat(256)).build(),
+                            generateAlert().toBuilder().name("a".repeat(256)).build(),
                             422,
                             new ErrorMessage(List.of("name size must be between 0 and 255")),
                             ErrorMessage.class),
 
                     // WebhookId validation
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().webhook(null).build(),
+                            generateAlert().toBuilder().webhook(null).build(),
                             422,
                             new ErrorMessage(List.of("webhook must not be null")),
                             ErrorMessage.class),
 
                     // Invalid UUID version
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().id(UUID.randomUUID()).build(),
+                            generateAlert().toBuilder().id(UUID.randomUUID()).build(),
                             HttpStatus.SC_BAD_REQUEST,
                             new ErrorMessage(List.of("Alert id must be a version 7 UUID")),
                             ErrorMessage.class));
@@ -345,7 +347,7 @@ class AlertResourceTest {
             var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            compareAlerts(alert, actualAlert);
+            compareAlerts(alert, actualAlert, true);
         }
 
         @Test
@@ -387,7 +389,7 @@ class AlertResourceTest {
             var actualUpdatedAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            compareAlerts(updatedAlert, actualUpdatedAlert);
+            compareAlerts(updatedAlert, actualUpdatedAlert, true);
         }
 
         @Test
@@ -421,7 +423,7 @@ class AlertResourceTest {
             List<Alert> expectedAlerts = List.of(alert);
 
             findAlertsAndAssertPage(expectedAlerts, mock.getLeft(), mock.getRight(), expectedAlerts.size(), 1, null,
-                    null);
+                    null, true);
         }
 
         @Test
@@ -439,7 +441,7 @@ class AlertResourceTest {
             List<Alert> expectedAlerts = alerts.reversed();
 
             findAlertsAndAssertPage(expectedAlerts, mock.getLeft(), mock.getRight(), expectedAlerts.size(), 1, null,
-                    null);
+                    null, true);
         }
 
         @Test
@@ -457,8 +459,8 @@ class AlertResourceTest {
             List<Alert> alertPage1 = alerts.reversed().subList(0, 10);
             List<Alert> alertPage2 = alerts.reversed().subList(10, 20);
 
-            findAlertsAndAssertPage(alertPage1, mock.getLeft(), mock.getRight(), alerts.size(), 1, null, null);
-            findAlertsAndAssertPage(alertPage2, mock.getLeft(), mock.getRight(), alerts.size(), 2, null, null);
+            findAlertsAndAssertPage(alertPage1, mock.getLeft(), mock.getRight(), alerts.size(), 1, null, null, true);
+            findAlertsAndAssertPage(alertPage2, mock.getLeft(), mock.getRight(), alerts.size(), 2, null, null, true);
         }
 
         @ParameterizedTest
@@ -479,7 +481,7 @@ class AlertResourceTest {
                     .toList();
 
             findAlertsAndAssertPage(expectedAlerts, mock.getLeft(), mock.getRight(), expectedAlerts.size(), 1,
-                    List.of(sorting), null);
+                    List.of(sorting), null, false);
         }
 
         private Stream<Arguments> findAlerts__whenSortingByValidFields__thenReturnAlertsSorted() {
@@ -556,16 +558,7 @@ class AlertResourceTest {
                             SortingField.builder().field(SortableFields.WEBHOOK_URL).direction(Direction.ASC).build()),
                     Arguments.of(
                             webhookUrlComparator.reversed(),
-                            SortingField.builder().field(SortableFields.WEBHOOK_URL).direction(Direction.DESC).build()),
-
-                    // WEBHOOK_SECRET_TOKEN field sorting
-                    Arguments.of(
-                            webhookSecretTokenComparator,
-                            SortingField.builder().field(SortableFields.WEBHOOK_SECRET_TOKEN).direction(Direction.ASC)
-                                    .build()),
-                    Arguments.of(
-                            webhookSecretTokenComparator.reversed(),
-                            SortingField.builder().field(SortableFields.WEBHOOK_SECRET_TOKEN).direction(Direction.DESC)
+                            SortingField.builder().field(SortableFields.WEBHOOK_URL).direction(Direction.DESC)
                                     .build()));
         }
 
@@ -590,7 +583,7 @@ class AlertResourceTest {
             AlertFilter filter = getFilter.apply(alerts);
 
             findAlertsAndAssertPage(expectedAlerts.reversed(), mock.getLeft(), mock.getRight(), expectedAlerts.size(),
-                    1, null, List.of(filter));
+                    1, null, List.of(filter), false);
         }
 
         private Stream<Arguments> getValidFilters() {
@@ -668,29 +661,6 @@ class AlertResourceTest {
                                     .field(AlertField.WEBHOOK_URL)
                                     .operator(Operator.CONTAINS)
                                     .value(alerts.getFirst().webhook().url().substring(5, 10))
-                                    .build(),
-                            (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
-
-                    // WEBHOOK_SECRET_TOKEN field filtering
-                    Arguments.of(
-                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
-                                    .field(AlertField.WEBHOOK_SECRET_TOKEN)
-                                    .operator(Operator.EQUAL)
-                                    .value(alerts.getFirst().webhook().secretToken())
-                                    .build(),
-                            (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
-                    Arguments.of(
-                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
-                                    .field(AlertField.WEBHOOK_SECRET_TOKEN)
-                                    .operator(Operator.NOT_EQUAL)
-                                    .value(alerts.getFirst().webhook().secretToken())
-                                    .build(),
-                            (Function<List<Alert>, List<Alert>>) alerts -> alerts.subList(1, alerts.size())),
-                    Arguments.of(
-                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
-                                    .field(AlertField.WEBHOOK_SECRET_TOKEN)
-                                    .operator(Operator.CONTAINS)
-                                    .value(alerts.getFirst().webhook().secretToken().substring(2, 5))
                                     .build(),
                             (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
 
@@ -785,8 +755,8 @@ class AlertResourceTest {
             var mock = prepareMockWorkspace();
 
             // Create multiple alerts
-            var alert1 = factory.manufacturePojo(Alert.class);
-            var alert2 = factory.manufacturePojo(Alert.class);
+            var alert1 = generateAlert();
+            var alert2 = generateAlert();
             var createdAlertId1 = alertResourceClient.createAlert(alert1, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
             var createdAlertId2 = alertResourceClient.createAlert(alert2, mock.getLeft(), mock.getRight(),
@@ -1556,7 +1526,7 @@ class AlertResourceTest {
         return Pair.of(apiKey, workspaceName);
     }
 
-    private void compareAlerts(Alert expected, Alert actual) {
+    private void compareAlerts(Alert expected, Alert actual, boolean decryptSecretToken) {
         var preparedExpected = prepareForComparison(expected, true);
         var preparedActual = prepareForComparison(actual, false);
 
@@ -1571,6 +1541,13 @@ class AlertResourceTest {
                 .ignoringFields(TRIGGER_IGNORED_FIELDS)
                 .ignoringCollectionOrder()
                 .isEqualTo(preparedExpected.triggers());
+
+        if (decryptSecretToken) {
+            // We should decrypt secretToken in order to compare, since it encrypts on deserialization
+            assertThat(decrypt(actual.webhook().secretToken())).isEqualTo(maskApiKey(expected.webhook().secretToken()));
+        } else {
+            assertThat(actual.webhook().secretToken()).isEqualTo(expected.webhook().secretToken());
+        }
 
         for (int i = 0; i < preparedActual.triggers().size(); i++) {
             var actualTrigger = preparedActual.triggers().get(i);
@@ -1611,6 +1588,7 @@ class AlertResourceTest {
         var webhook = alert.webhook().toBuilder()
                 .createdBy(null)
                 .createdAt(null)
+                .secretToken(UUID.randomUUID().toString())
                 .build();
 
         var triggers = alert.triggers().stream()
@@ -1674,7 +1652,8 @@ class AlertResourceTest {
     }
 
     private void findAlertsAndAssertPage(List<Alert> expectedAlerts, String apiKey, String workspaceName,
-            int expectedTotal, int page, List<SortingField> sortingFields, List<AlertFilter> filters) {
+            int expectedTotal, int page, List<SortingField> sortingFields, List<AlertFilter> filters,
+            boolean decryptSecretToken) {
 
         // Always add size parameter - default to expectedAlerts.size() if not 0
         int size = expectedAlerts.isEmpty() ? 10 : expectedAlerts.size();
@@ -1690,7 +1669,7 @@ class AlertResourceTest {
         assertSortableFields(alertPage);
 
         for (int i = 0; i < alertPage.content().size(); i++) {
-            compareAlerts(expectedAlerts.get(i), alertPage.content().get(i));
+            compareAlerts(expectedAlerts.get(i), alertPage.content().get(i), decryptSecretToken);
         }
     }
 
@@ -1702,7 +1681,6 @@ class AlertResourceTest {
                 SortableFields.LAST_UPDATED_AT,
                 SortableFields.CREATED_BY,
                 SortableFields.LAST_UPDATED_BY,
-                SortableFields.WEBHOOK_URL,
-                SortableFields.WEBHOOK_SECRET_TOKEN);
+                SortableFields.WEBHOOK_URL);
     }
 }
