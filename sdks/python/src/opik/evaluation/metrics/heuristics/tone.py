@@ -1,4 +1,4 @@
-"""Rule-based tone guard for assistant responses."""
+"""Rule-based tone metric for assistant responses."""
 
 from __future__ import annotations
 
@@ -47,12 +47,12 @@ _FORBIDDEN_PHRASES = {
 }
 
 
-class ToneGuard(BaseMetric):
+class Tone(BaseMetric):
     """
     Flag tone issues like excessive negativity, shouting, or forbidden phrases.
 
     Args:
-        name: Display name for the metric result. Defaults to ``"tone_guard"``.
+        name: Display name for the metric result. Defaults to ``"tone_metric"``.
         track: Whether to automatically track results. Defaults to ``True``.
         project_name: Optional tracking project name. Defaults to ``None``.
         min_sentiment: Minimum sentiment score required (``-1.0`` to ``1.0`` scale).
@@ -64,8 +64,8 @@ class ToneGuard(BaseMetric):
             check.
 
     Example:
-        >>> from opik.evaluation.metrics import ToneGuard
-        >>> metric = ToneGuard(max_exclamations=2)
+        >>> from opik.evaluation.metrics import Tone
+        >>> metric = Tone(max_exclamations=2)
         >>> result = metric.score("THANK YOU for your patience!!!")
         >>> result.value  # doctest: +SKIP
         0.0
@@ -73,7 +73,7 @@ class ToneGuard(BaseMetric):
 
     def __init__(
         self,
-        name: str = "tone_guard",
+        name: str = "tone_metric",
         track: bool = True,
         project_name: Optional[str] = None,
         min_sentiment: float = -0.2,
@@ -98,11 +98,11 @@ class ToneGuard(BaseMetric):
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
         if not output or not output.strip():
-            raise MetricComputationError("Text is empty (ToneGuard).")
+            raise MetricComputationError("Text is empty (Tone metric).")
 
         tokens = re.findall(r"\b\w+\b", output.lower())
         if not tokens:
-            raise MetricComputationError("Unable to tokenize text for ToneGuard.")
+            raise MetricComputationError("Unable to tokenize text for Tone metric.")
 
         sentiment_score = self._compute_sentiment(tokens)
         upper_ratio = _uppercase_ratio(output)

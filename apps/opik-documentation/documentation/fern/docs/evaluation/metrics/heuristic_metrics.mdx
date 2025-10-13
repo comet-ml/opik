@@ -23,7 +23,7 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 | KLDivergence | Kullback–Leibler divergence between token distributions. |
 | LanguageAdherenceMetric | Checks whether text adheres to an expected language code. |
 | LevenshteinRatio | Computes the normalised Levenshtein similarity between output and reference. |
-| ReadabilityGuard | Deterministic readability guard using Flesch–Kincaid bounds. |
+| Readability | Reports Flesch Reading Ease and Flesch–Kincaid grade levels. |
 | RegexMatch | Validates the output against a regular expression pattern. |
 | ROUGE | Calculates ROUGE variants (rouge1, rouge2, rougeL, rougeLsum). |
 | SentenceBLEU | Calculates a single-sentence BLEU score against one or more references. |
@@ -350,18 +350,26 @@ Install `fasttext` and download a language ID model when using the default detec
 pip install fasttext
 ```
 
-### ReadabilityGuard
+### Readability
 
-`ReadabilityGuard` enforces Flesch–Kincaid grade boundaries. Set `min_grade` and/or `max_grade` to constrain the acceptable reading level.
+`Readability` computes Flesch Reading Ease (0–100) and the Flesch–Kincaid grade using the `textstat` package. The metric returns the reading-ease score normalised to `[0, 1]`.
 
 ```python
-from opik.evaluation.metrics import ReadabilityGuard
+from opik.evaluation.metrics import Readability
 
-metric = ReadabilityGuard(min_grade=6, max_grade=10)
+metric = Readability()
 score = metric.score(output="This is a simple explanation of the payment process.")
 print(score.value, score.reason)
 print(score.metadata["flesch_kincaid_grade"])
 ```
+
+Install the optional dependency when using this metric:
+
+```bash
+pip install textstat
+```
+
+Pass `enforce_bounds=True` alongside `min_grade` and/or `max_grade` to turn the metric into a strict guardrail that only reports 1.0 when the text meets your grade limits.
 
 ### Spearman Ranking
 

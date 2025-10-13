@@ -5,7 +5,7 @@ import pytest
 from opik.evaluation.metrics.llm_judges.llm_juries.metric import (
     LLMJuriesJudge,
 )
-from opik.evaluation.metrics.heuristics.prompt_injection import PromptInjectionGuard
+from opik.evaluation.metrics.heuristics.prompt_injection import PromptInjection
 from opik.evaluation.metrics.score_result import ScoreResult
 
 
@@ -14,7 +14,7 @@ class StubJudge(ScoreResult):
 
 
 def test_llm_juries_judge_average_scores():
-    class ConstantJudge(PromptInjectionGuard):
+    class ConstantJudge(PromptInjection):
         def __init__(self, value: float):
             super().__init__(track=False)
             self._value = value

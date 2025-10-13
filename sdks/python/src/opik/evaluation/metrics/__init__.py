@@ -30,9 +30,9 @@ from .heuristics.levenshtein_ratio import LevenshteinRatio
 from .heuristics.meteor import METEOR
 from .heuristics.bertscore import BERTScore
 from .heuristics.spearman import SpearmanRanking
-from .heuristics.readability import ReadabilityGuard
-from .heuristics.tone import ToneGuard
-from .heuristics.prompt_injection import PromptInjectionGuard
+from .heuristics.readability import Readability
+from .heuristics.tone import Tone
+from .heuristics.prompt_injection import PromptInjection
 from .heuristics.language_adherence import LanguageAdherenceMetric
 from .heuristics.regex_match import RegexMatch
 from .heuristics.bleu import SentenceBLEU, CorpusBLEU
@@ -106,8 +106,8 @@ __all__ = [
     "BERTScore",
     "METEOR",
     "ChrF",
-    "ReadabilityGuard",
-    "PromptInjectionGuard",
+    "Readability",
+    "PromptInjection",
     "LanguageAdherenceMetric",
     "PoliticalBiasJudge",
     "PromptUncertaintyJudge",
@@ -115,7 +115,7 @@ __all__ = [
     "ReligiousBiasJudge",
     "RegionalBiasJudge",
     "VADERSentiment",
-    "ToneGuard",
+    "Tone",
     "RougeConversationMetric",
     "BleuConversationMetric",
     "MeteorConversationMetric",

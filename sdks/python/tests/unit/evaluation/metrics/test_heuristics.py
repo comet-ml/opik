@@ -20,8 +20,8 @@ from opik.evaluation.metrics.heuristics.bertscore import BERTScore
 from opik.evaluation.metrics.heuristics.chrf import ChrF
 from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
 from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
-from opik.evaluation.metrics.heuristics.readability import ReadabilityGuard
-from opik.evaluation.metrics.heuristics.tone import ToneGuard
+from opik.evaluation.metrics.heuristics.readability import Readability
+from opik.evaluation.metrics.heuristics.tone import Tone
 from opik.evaluation.metrics.conversation.rouge_conversation.metric import (
     RougeConversationMetric,
 )
@@ -370,8 +370,12 @@ def test_vader_sentiment_metric_uses_custom_analyzer():
     assert result.metadata["vader"]["compound"] == -0.4
 
 
-def test_readability_guard_pass_and_fail():
-    baseline_guard = ReadabilityGuard(track=False)
+def test_readability_metric_and_guard_behaviour():
+    pytest.importorskip(
+        "textstat", reason="Readability metric relies on the optional textstat package"
+    )
+
+    readability = Readability(track=False)
     easy_text = (
         "We processed your insurance claim and scheduled an adjuster visit for tomorrow "
         "morning."
@@ -381,29 +385,37 @@ def test_readability_guard_pass_and_fail():
         " shall be irrevocably devolved."
     )
 
-    easy_result = baseline_guard.score(output=easy_text)
-    hard_result = baseline_guard.score(output=hard_text)
+    easy_result = readability.score(output=easy_text)
+    hard_result = readability.score(output=hard_text)
 
-    threshold = easy_result.metadata["flesch_kincaid_grade"] + 1.0
-    guard = ReadabilityGuard(min_grade=None, max_grade=threshold, track=False)
-    strict_guard = ReadabilityGuard(min_grade=threshold, max_grade=None, track=False)
-
+    assert 0.0 <= easy_result.value <= 1.0
+    assert 0.0 <= hard_result.value <= 1.0
+    assert easy_result.value > hard_result.value
+    assert easy_result.metadata is not None
+    assert hard_result.metadata is not None
     assert (
         hard_result.metadata["flesch_kincaid_grade"]
         > easy_result.metadata["flesch_kincaid_grade"]
     )
+    assert easy_result.metadata["within_grade_bounds"] is True
+    assert hard_result.metadata["within_grade_bounds"] is True
+
+    threshold = easy_result.metadata["flesch_kincaid_grade"] + 1.0
+    guard = Readability(max_grade=threshold, enforce_bounds=True, track=False)
+    strict_guard = Readability(min_grade=threshold, enforce_bounds=True, track=False)
+
     assert guard.score(output=easy_text).value == 1.0
     assert strict_guard.score(output=easy_text).value == 0.0
 
 
-def test_tone_guard_detects_shouting_and_negativity():
-    guard = ToneGuard(track=False, max_exclamations=1, max_upper_ratio=0.2)
+def test_tone_metric_detects_shouting_and_negativity():
+    metric = Tone(track=False, max_exclamations=1, max_upper_ratio=0.2)
 
     polite = "Thanks for your patience. I'm happy to help you resolve this."
     rude = "THIS IS TERRIBLE!!! YOU ARE USELESS!!!"
 
-    assert guard.score(output=polite).value == 1.0
-    assert guard.score(output=rude).value == 0.0
+    assert metric.score(output=polite).value == 1.0
+    assert metric.score(output=rude).value == 0.0
 
 
 class _StubRougeMetric:
