@@ -2,12 +2,26 @@ import isString from "lodash/isString";
 import isObject from "lodash/isObject";
 import { extractTextFromObject } from "./textExtraction";
 import { extractTextFromArray } from "./arrayExtraction";
+import {
+  convertConversationToMarkdown,
+  ConversationData,
+} from "./conversationMarkdown";
 import { PrettifyMessageResponse, ExtractTextResult } from "./types";
 
 export const prettifyMessage = (
   message: object | string | undefined,
   config?: { inputType?: string; outputType?: string },
 ) => {
+  // Check if this is a conversation JSON object that should be converted to markdown
+  if (isObject(message) && isConversationObject(message)) {
+    const markdown = convertConversationToMarkdown(message as ConversationData);
+    return {
+      message: markdown,
+      prettified: true,
+      renderType: "text",
+    } as PrettifyMessageResponse;
+  }
+
   // If config is provided, use it for type-specific prettification
   if (config && config.inputType) {
     // Handle array input type
@@ -136,4 +150,29 @@ export const prettifyMessage = (
       prettified: false,
     } as PrettifyMessageResponse;
   }
+};
+
+/**
+ * Checks if an object is a conversation JSON (OpenAI format)
+ * @param obj - The object to check
+ * @returns True if it's a conversation object
+ */
+const isConversationObject = (obj: object): boolean => {
+  if (!isObject(obj)) return false;
+
+  const objRecord = obj as Record<string, unknown>;
+
+  // Check for OpenAI conversation format
+  return (
+    "messages" in objRecord &&
+    Array.isArray(objRecord.messages) &&
+    objRecord.messages.length > 0 &&
+    // Check if messages have the expected structure
+    objRecord.messages.every(
+      (msg: unknown) =>
+        typeof msg === "object" &&
+        msg !== null &&
+        "role" in (msg as Record<string, unknown>),
+    )
+  );
 };

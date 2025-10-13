@@ -4,6 +4,7 @@ import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/Synta
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
 import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
 import { isStringMarkdown } from "@/lib/utils";
+import { makeHeadingsCollapsible } from "@/lib/remarkCollapsibleHeadings";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
@@ -77,13 +78,21 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
     }
 
     if (isStringMarkdown(codeOutput.message)) {
+      // Transform the markdown to make headings collapsible
+      const collapsibleMarkdown = makeHeadingsCollapsible(codeOutput.message, {
+        defaultOpen: false,
+        className: "collapsible-heading",
+        summaryClassName: "collapsible-heading-summary",
+        contentClassName: "collapsible-heading-content",
+      });
+
       return (
         <ReactMarkdown
           className="comet-markdown comet-markdown-highlighter prose dark:prose-invert"
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
           rehypePlugins={[rehypeRaw]}
         >
-          {codeOutput.message}
+          {collapsibleMarkdown}
         </ReactMarkdown>
       );
     }

@@ -5,6 +5,7 @@ import remarkBreaks from "remark-breaks";
 import isNull from "lodash/isNull";
 
 import { cn, isStringMarkdown } from "@/lib/utils";
+import { makeHeadingsCollapsible } from "@/lib/remarkCollapsibleHeadings";
 
 type MarkdownPreviewProps = {
   children?: string | null;
@@ -15,15 +16,23 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   children,
   className,
 }) => {
-  if (isNull(children)) return "";
+  if (isNull(children) || children === undefined) return "";
 
   if (isStringMarkdown(children)) {
+    // Transform the markdown to make headings collapsible
+    const collapsibleMarkdown = makeHeadingsCollapsible(children, {
+      defaultOpen: false,
+      className: "collapsible-heading",
+      summaryClassName: "collapsible-heading-summary",
+      contentClassName: "collapsible-heading-content",
+    });
+
     return (
       <ReactMarkdown
         className={cn("prose dark:prose-invert comet-markdown", className)}
         remarkPlugins={[remarkBreaks, remarkGfm]}
       >
-        {children}
+        {collapsibleMarkdown}
       </ReactMarkdown>
     );
   } else {
