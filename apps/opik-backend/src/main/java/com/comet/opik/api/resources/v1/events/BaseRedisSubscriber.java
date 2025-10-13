@@ -36,7 +36,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
      */
-    private final Logger log = LoggerFactory.getLogger(this.getClass().getName());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final StreamConfiguration config;
     private final RedissonReactiveClient redisson;
@@ -89,12 +89,18 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Override
     public void start() {
         if (stream != null) {
-            log.warn("{} consumer already started. Ignoring start request", getSubscriberName());
+            log.warn("'{}' consumer already started. Ignoring start request", getSubscriberName());
             return;
         }
         // This particular subscriber implementation only consumes the respective Redis stream
         stream = initStream(config, redisson);
-        log.info("{} consumer started successfully", getSubscriberName());
+        log.info(
+                "'{}' consumer started successfully with configuration: streamName='{}', consumerGroupName='{}', consumerBatchSize='{}', poolingInterval='{}'",
+                getSubscriberName(),
+                config.getStreamName(),
+                config.getConsumerGroupName(),
+                batchSize,
+                config.getPoolingInterval().toJavaDuration());
     }
 
     @Override
@@ -107,7 +113,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
         if (streamSubscription == null || streamSubscription.isDisposed()) {
             log.info("No active subscription, deleting Redis stream");
-            stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
+            deleteStream();
             return;
         }
 
@@ -130,15 +136,19 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         } catch (Exception exception) {
             log.error("Error processing last messages before shutdown", exception);
         } finally {
-            stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
+            deleteStream();
         }
+    }
+
+    private void deleteStream() {
+        stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted with name '{}'", config.getStreamName()))
+                .subscribe();
     }
 
     private RStreamReactive<String, M> initStream(StreamConfiguration config, RedissonReactiveClient redisson) {
         var streamName = config.getStreamName();
         var codec = config.getCodec();
         RStreamReactive<String, M> streamInstance = redisson.getStream(streamName, codec);
-        log.info("{} consumer listening for events on stream '{}'", getSubscriberName(), streamName);
         enforceConsumerGroup(streamInstance);
         setupStreamListener(streamInstance);
         return streamInstance;
@@ -219,7 +229,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             try {
                 return Optional.of(Long.parseLong(parts[0]));
             } catch (NumberFormatException e) {
-                log.warn("Failed to parse timestamp from message ID: {}", idString, e);
+                log.warn("Failed to parse timestamp from message ID: '{}'", idString, e);
             }
         }
         return Optional.empty();

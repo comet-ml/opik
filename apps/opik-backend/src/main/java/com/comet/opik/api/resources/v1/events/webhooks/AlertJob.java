@@ -53,7 +53,7 @@ public class AlertJob extends Job {
 
     @Override
     public void doJob(JobExecutionContext context) {
-        log.info("Starting alert job - checking for buckets to process");
+        log.debug("Starting alert job - checking for buckets to process");
 
         // Use distributed lock to prevent overlapping scans in case of slow Redis SCAN operations
         lockService.bestEffortLock(
@@ -62,7 +62,7 @@ public class AlertJob extends Job {
                         .flatMap(this::processBucket)
                         .onErrorContinue((throwable, bucketKey) -> log.error("Failed to process bucket '{}': {}",
                                 bucketKey, throwable.getMessage(), throwable))
-                        .doOnComplete(() -> log.info("Alert job finished processing all ready buckets"))
+                        .doOnComplete(() -> log.debug("Alert job finished processing all ready buckets"))
                         .then()),
                 Mono.defer(() -> {
                     log.info("Could not acquire lock for scanning buckets, another job instance is running");
