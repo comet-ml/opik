@@ -36,7 +36,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
      */
-    private final Logger log = LoggerFactory.getLogger(this.getClass().getName());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final StreamConfiguration config;
     private final RedissonReactiveClient redisson;

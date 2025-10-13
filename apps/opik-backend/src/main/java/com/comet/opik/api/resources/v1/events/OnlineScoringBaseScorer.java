@@ -44,7 +44,7 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
      */
-    private final Logger log = LoggerFactory.getLogger(this.getClass().getName());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
