@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
@@ -52,10 +52,22 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     />
   );
 
+  const copyText = useMemo(() => {
+    if (typeof code.message === "object" && code.message !== null) {
+      try {
+        return JSON.stringify(code.message, null, 2);
+      } catch (error) {
+        // Fallback for objects that can't be JSON stringified
+        return String(code.message);
+      }
+    }
+    return String(code.message);
+  }, [code.message]);
+
   const copyButton = (
     <CopyButton
       message="Successfully copied code"
-      text={code.message}
+      text={copyText}
       tooltipText="Copy code"
     />
   );
