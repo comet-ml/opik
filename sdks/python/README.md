@@ -119,37 +119,37 @@ Upload data from local files to an Opik workspace or workspace/project:
 
 ```bash
 # Upload to a specific project
-opik upload WORKSPACE/PROJECT_NAME
+opik upload ./my-data WORKSPACE/PROJECT_NAME
 
 # Upload to all projects in a workspace
-opik upload WORKSPACE
+opik upload ./my-data WORKSPACE
 
 # Upload all data types to a specific project
-opik upload WORKSPACE/PROJECT_NAME --all
+opik upload ./my-data WORKSPACE/PROJECT_NAME --all
 
 # Upload all data types to all projects in a workspace
-opik upload WORKSPACE --all
+opik upload ./my-data WORKSPACE --all
 
 # Upload specific data types to a project
-opik upload WORKSPACE/PROJECT_NAME --include traces datasets
+opik upload ./my-data WORKSPACE/PROJECT_NAME --include traces datasets
 
 # Upload specific data types to all projects in a workspace
-opik upload WORKSPACE --include traces datasets
+opik upload ./my-data WORKSPACE --include traces datasets
 
 # Upload with dry run to preview
-opik upload WORKSPACE/PROJECT_NAME --all --dry-run
+opik upload ./my-data WORKSPACE/PROJECT_NAME --all --dry-run
 
 # Upload only items with names matching a pattern
-opik upload WORKSPACE --name ".*test.*"
+opik upload ./my-data WORKSPACE --name ".*test.*"
 
 # Upload with name filtering and dry run
-opik upload WORKSPACE/PROJECT_NAME --all --name "^prod" --dry-run
+opik upload ./my-data WORKSPACE/PROJECT_NAME --all --name "^prod" --dry-run
 
 # Upload from a specific directory
-opik upload WORKSPACE/PROJECT_NAME --path ./my-data
+opik upload ./my-data WORKSPACE/PROJECT_NAME
 
 # Upload from a specific directory with all data types
-opik upload WORKSPACE --path ./my-data --all
+opik upload ./my-data WORKSPACE --all
 ```
 
 **Options:**

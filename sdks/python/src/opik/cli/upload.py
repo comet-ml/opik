@@ -364,14 +364,8 @@ def _upload_prompts(
 
 
 @click.command()
-@click.argument("workspace_or_project", type=str)
-@click.option(
-    "--path",
-    "-p",
-    type=click.Path(file_okay=False, dir_okay=True, readable=True),
-    default="./",
-    help="Directory containing JSON files to upload. Defaults to current directory.",
-)
+@click.argument("workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True))
+@click.argument("workspace_name", type=str)
 @click.option(
     "--dry-run",
     is_flag=True,
@@ -405,8 +399,8 @@ def _upload_prompts(
     help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, experiment names, or prompt names.",
 )
 def upload(
-    workspace_or_project: str,
-    path: str,
+    workspace_folder: str,
+    workspace_name: str,
     dry_run: bool,
     all: bool,
     include: tuple,
@@ -416,31 +410,32 @@ def upload(
     """
     Upload data from local files to a workspace or workspace/project.
 
-    This command reads data from JSON files in the specified path
+    This command reads data from JSON files in the specified workspace folder
     and uploads them to the specified workspace or project.
 
     Note: Thread metadata is automatically calculated from traces with the same thread_id,
     so threads don't need to be uploaded separately.
 
-    WORKSPACE_OR_PROJECT: Either a workspace name (e.g., "my-workspace") to upload to all projects,
-                          or workspace/project (e.g., "my-workspace/my-project") to upload to a specific project.
+    WORKSPACE_FOLDER: Directory containing JSON files to upload.
+    WORKSPACE_NAME: Either a workspace name (e.g., "my-workspace") to upload to all projects,
+                   or workspace/project (e.g., "my-workspace/my-project") to upload to a specific project.
     """
     try:
         # Parse workspace/project from the argument
-        if "/" in workspace_or_project:
-            workspace, project_name = workspace_or_project.split("/", 1)
+        if "/" in workspace_name:
+            workspace, project_name = workspace_name.split("/", 1)
             upload_to_specific_project = True
         else:
             # Only workspace specified - upload to all projects
-            workspace = workspace_or_project
+            workspace = workspace_name
             project_name = None
             upload_to_specific_project = False
 
         # Initialize Opik client with workspace
         client = opik.Opik(workspace=workspace)
 
-        # Use the specified path directly
-        project_dir = Path(path)
+        # Use the specified workspace folder directly
+        project_dir = Path(workspace_folder)
 
         # Determine which data types to upload
         if all:

@@ -356,7 +356,7 @@ class TestUploadCommand:
 
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["upload", "default/test_project", "--path", str(project_dir)]
+                    cli, ["upload", str(project_dir), "default/test_project"]
                 )
 
                 assert result.exit_code == 0
@@ -399,9 +399,8 @@ class TestUploadCommand:
                     cli,
                     [
                         "upload",
-                        "default/test_project",
-                        "--path",
                         str(project_dir),
+                        "default/test_project",
                         "--dry-run",
                     ],
                 )
@@ -420,7 +419,7 @@ class TestUploadCommand:
             nonexistent_dir = Path(temp_dir) / "nonexistent"
             runner = CliRunner()
             result = runner.invoke(
-                cli, ["upload", "default/test_project", "--path", str(nonexistent_dir)]
+                cli, ["upload", str(nonexistent_dir), "default/test_project"]
             )
 
             assert result.exit_code == 1
@@ -435,7 +434,7 @@ class TestUploadCommand:
 
             runner = CliRunner()
             result = runner.invoke(
-                cli, ["upload", "default/test_project", "--path", str(project_dir)]
+                cli, ["upload", str(project_dir), "default/test_project"]
             )
 
             assert result.exit_code == 0
@@ -504,7 +503,7 @@ class TestUploadCommand:
 
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["upload", "test_workspace", "--path", str(project_dir)]
+                    cli, ["upload", str(project_dir), "test_workspace"]
                 )
 
                 assert result.exit_code == 0
@@ -572,9 +571,8 @@ class TestUploadCommand:
                     cli,
                     [
                         "upload",
-                        "default/test_project",
-                        "--path",
                         str(project_dir),
+                        "default/test_project",
                         "--name",
                         "^test",
                     ],
@@ -619,9 +617,8 @@ class TestUploadCommand:
                     cli,
                     [
                         "upload",
-                        "default/test_project",
-                        "--path",
                         str(project_dir),
+                        "default/test_project",
                         "--name",
                         "[invalid",
                     ],
