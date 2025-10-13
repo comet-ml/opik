@@ -2,7 +2,6 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
-import isNull from "lodash/isNull";
 
 import { cn, isStringMarkdown } from "@/lib/utils";
 import { makeHeadingsCollapsible } from "@/lib/remarkCollapsibleHeadings";
