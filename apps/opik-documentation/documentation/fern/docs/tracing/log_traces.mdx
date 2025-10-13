@@ -843,7 +843,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
 5. **Use project organization**: Organize your traces by project to keep your Opik dashboard clean and organized.
 
-6. **Consider performance**: Use `flush=True` only if you need immediate data availability.
+6. **Consider performance**: Use `flush=True` only when immediate data availability is required, as it can slow down your application by triggering a synchronous, immediate data upload.
 
 
 ### Logging to a specific project
