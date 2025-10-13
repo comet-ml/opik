@@ -21,7 +21,7 @@ public record TraceThreadIdentifier(
 
     /**
      * Determines whether trace messages should be truncated.
-     * 
+     *
      * @return true if truncate is explicitly set to true, false otherwise.
      *         This means both null and false values result in no truncation,
      *         making truncation opt-in rather than default behavior.
