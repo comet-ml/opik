@@ -14,7 +14,7 @@ export const generateTagVariant = (label: string) => {
 export const isObjectSpan = (object: object): object is Span => 
   Boolean(get(object, "trace_id", false));
 
-export const isObjectThread = (object: object) =>
+export const isObjectThread = (object: object): object is Thread
   Boolean(get(object, "thread_model_id", false)) ||
   Boolean(get(object, "first_message", false)) ||
   Boolean(get(object, "last_message", false));
