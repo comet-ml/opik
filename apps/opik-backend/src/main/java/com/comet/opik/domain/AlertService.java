@@ -261,6 +261,7 @@ class AlertServiceImpl implements AlertService {
                 .alertId(alertId)
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
+                .secret(alert.webhook().secretToken())
                 .maxRetries(1)
                 .workspaceId(workspaceId)
                 .userName(userName)

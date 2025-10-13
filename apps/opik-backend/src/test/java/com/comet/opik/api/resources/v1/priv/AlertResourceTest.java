@@ -46,6 +46,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.function.TriConsumer;
@@ -623,7 +624,7 @@ class AlertResourceTest {
                             (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
                                     .field(AlertField.NAME)
                                     .operator(Operator.STARTS_WITH)
-                                    .value(alerts.getFirst().name().substring(0, 3))
+                                    .value(alerts.getFirst().name().substring(0, 2))
                                     .build(),
                             (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
                     Arguments.of(
@@ -1005,7 +1006,7 @@ class AlertResourceTest {
                     .build();
             promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
 
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             Prompt prompt = JsonUtils.readValue(payload, Prompt.class);
 
             assertThat(prompt)
@@ -1046,7 +1047,7 @@ class AlertResourceTest {
             // Now delete the prompt to trigger the deletion event
             deleteAction.accept(promptId, mock.getRight(), mock.getLeft());
 
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             Set<UUID> ids = JsonUtils.readCollectionValue(payload, Set.class, UUID.class);
 
             assertThat(ids).hasSize(1);
@@ -1083,7 +1084,7 @@ class AlertResourceTest {
             var expectedPromptVersion = promptResourceClient.createPromptVersion(expectedPrompt, mock.getLeft(),
                     mock.getRight());
 
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             PromptVersion promptVersion = JsonUtils.readValue(payload, PromptVersion.class);
 
             assertThat(promptVersion)
@@ -1137,7 +1138,7 @@ class AlertResourceTest {
             traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
 
             // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             List<FeedbackScoreBatchItem> feedbackScores = JsonUtils.readCollectionValue(
                     payload, List.class, FeedbackScoreBatchItem.class);
 
@@ -1211,7 +1212,7 @@ class AlertResourceTest {
             traceResourceClient.feedbackScores(feedbackScores, mock.getLeft(), mock.getRight());
 
             // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             List<FeedbackScoreBatchItem> actualFeedbackScores = JsonUtils.readCollectionValue(
                     payload, List.class, FeedbackScoreBatchItem.class);
 
@@ -1286,7 +1287,7 @@ class AlertResourceTest {
             traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
 
             // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             List<FeedbackScoreBatchItemThread> feedbackScores = JsonUtils.readCollectionValue(
                     payload, List.class, FeedbackScoreBatchItemThread.class);
 
@@ -1348,7 +1349,7 @@ class AlertResourceTest {
             traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
 
             // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             List<Trace> traces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
 
             assertThat(traces).hasSize(1);
@@ -1412,7 +1413,7 @@ class AlertResourceTest {
             traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
 
             // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             List<Trace> actualTraces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
 
             assertThat(actualTraces).hasSize(tracesWithErrors.size());
@@ -1465,7 +1466,7 @@ class AlertResourceTest {
             guardrailsResourceClient.addBatch(List.of(guardrail), mock.getLeft(), mock.getRight());
 
             // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload();
+            var payload = verifyWebhookCalledAndGetPayload(alert);
             List<Guardrail> guardrails = JsonUtils.readCollectionValue(payload, List.class, Guardrail.class);
 
             assertThat(guardrails).hasSize(1);
@@ -1497,15 +1498,19 @@ class AlertResourceTest {
                             .build()));
         }
 
-        private String verifyWebhookCalledAndGetPayload() {
+        private String verifyWebhookCalledAndGetPayload(Alert alert) {
             // Wait for the webhook event to be sent
             Awaitility.await().untilAsserted(() -> {
                 var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
                 assertThat(requests).hasSize(1);
             });
 
-            String actualRequestBody = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH))).get(0)
-                    .getBodyAsString();
+            var actualRequest = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH))).get(0);
+
+            String actualRequestBody = actualRequest.getBodyAsString();
+
+            assertThat(actualRequest.header(HttpHeaders.AUTHORIZATION).firstValue())
+                    .isEqualTo(alert.webhook().secretToken());
 
             // Get sent event and verify it's payload
             WebhookEvent<Map<String, Object>> actualEvent = JsonUtils.readValue(actualRequestBody, WebhookEvent.class);
