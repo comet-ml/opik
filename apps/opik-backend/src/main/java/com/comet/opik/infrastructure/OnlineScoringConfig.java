@@ -5,6 +5,9 @@ import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.util.List;
@@ -15,34 +18,34 @@ public class OnlineScoringConfig {
 
     public static final String PAYLOAD_FIELD = "message";
 
-    @Valid @JsonProperty
-    private String consumerGroupName;
+    @JsonProperty
+    @NotBlank private String consumerGroupName;
 
-    @Valid @JsonProperty
+    @JsonProperty
     @Min(1) private int consumerBatchSize;
 
     @Valid @JsonProperty
-    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval;
 
     @JsonProperty
-    private List<StreamConfiguration> streams;
+    @NotEmpty private List<@NotNull StreamConfiguration> streams;
 
     @Data
     public static class StreamConfiguration {
         @JsonProperty
-        private String scorer;
+        @NotBlank private String scorer;
 
         @JsonProperty
-        private String streamName;
+        @NotBlank private String streamName;
 
         @JsonProperty
-        private String codec;
+        @NotBlank private String codec;
 
         @JsonProperty
         @Min(1) private Integer consumerBatchSize;
 
-        @JsonProperty
+        @Valid @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration poolingInterval;
     }

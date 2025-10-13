@@ -200,26 +200,45 @@ encryption:
 onlineScoring:
   # Default: 500 ms
   # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
+  # This is the global default value, can be overridden per stream
   poolingInterval: 500ms
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: 'online_scoring'
   # Default: 3
   # Description: Maximum number of messages returned within a Redis Stream get
+  # This is the global default value, can be overridden per stream
   consumerBatchSize: 3
+  ## scorer: options from AutomationRuleEvaluatorType
+  ## streamName: the name of the stream in redis
+  ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
+  ## poolingInterval: (optional, but highly recommended) per stream pooling interval, overrides global value
+  ## consumerBatchSize: (optional, but highly recommended) per stream batch size, overrides global value
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: 500ms
+      consumerBatchSize: 3
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: 500ms
+      consumerBatchSize: 3
     - scorer: trace_thread_llm_as_judge
       streamName: stream_scoring_trace_thread_llm_as_judge
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: 500ms
+      consumerBatchSize: 3
     - scorer: trace_thread_user_defined_metric_python
       streamName: stream_scoring_trace_thread_user_defined_metric_python
       codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: 500ms
+      consumerBatchSize: 3
 
 # LLM providers client configuration
 llmProviderClient:

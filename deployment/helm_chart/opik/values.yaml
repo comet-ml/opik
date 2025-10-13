@@ -90,18 +90,6 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
-      # Online Scoring Configuration (optional, per-stream overrides)
-      # Uncomment to override global settings for specific scorers
-      # REDIS_SCORING_CONSUMER_POOL_INTERVAL: 500ms  # Global default
-      # REDIS_SCORING_CONSUMER_BATCH_SIZE: 5  # Global default
-      # REDIS_SCORING_LLM_AS_JUDGE_BATCH_SIZE: 10  # Per-stream override
-      # REDIS_SCORING_LLM_AS_JUDGE_POOL_INTERVAL: 300ms  # Per-stream override
-      # REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_BATCH_SIZE: 5  # Per-stream override
-      # REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_POOL_INTERVAL: 500ms  # Per-stream override
-      # REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_BATCH_SIZE: 10  # Per-stream override
-      # REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_POOL_INTERVAL: 300ms  # Per-stream override
-      # REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_BATCH_SIZE: 5  # Per-stream override
-      # REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_POOL_INTERVAL: 500ms  # Per-stream override
     envFrom:
       - configMapRef:
           name: opik-backend
