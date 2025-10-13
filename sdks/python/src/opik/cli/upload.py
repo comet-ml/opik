@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
+from opik.rest_api.core.api_error import ApiError
 
 console = Console()
 
@@ -215,9 +216,13 @@ def _upload_datasets(
                 )
                 uploaded_count += 1
                 continue
-            except Exception:
-                # Dataset doesn't exist, create it
-                pass
+            except ApiError as e:
+                if e.status_code == 404:
+                    # Dataset doesn't exist, create it
+                    pass
+                else:
+                    # Re-raise other API errors (network, auth, etc.)
+                    raise
 
             # Create dataset
             dataset = client.create_dataset(
@@ -278,19 +283,15 @@ def _upload_experiments(
                 continue
 
             # Check if experiment already exists
-            try:
-                existing_experiments = client.get_experiments_by_name(
-                    experiment_data["name"]
+            existing_experiments = client.get_experiments_by_name(
+                experiment_data["name"]
+            )
+            if existing_experiments:
+                console.print(
+                    f"[yellow]Experiment '{experiment_data['name']}' already exists, skipping...[/yellow]"
                 )
-                if existing_experiments:
-                    console.print(
-                        f"[yellow]Experiment '{experiment_data['name']}' already exists, skipping...[/yellow]"
-                    )
-                    uploaded_count += 1
-                    continue
-            except Exception:
-                # Experiment doesn't exist, create it
-                pass
+                uploaded_count += 1
+                continue
 
             # Create experiment with basic metadata
             # Note: We only create the experiment metadata, not the trace relationships
