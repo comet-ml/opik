@@ -160,6 +160,7 @@ You can learn more about the `opik` python SDK in the following sections:
    track
    configure
    opik_context/index
+   context_manager/index
 
 .. toctree::
    :caption: Integrations
