@@ -16,7 +16,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   children,
   className,
 }) => {
-  if (isNull(children)) return "";
+  if (isNull(children) || children === undefined) return "";
 
   if (isStringMarkdown(children)) {
     // Transform the markdown to make headings collapsible
