@@ -6,6 +6,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
+import sanitizeHtml from "sanitize-html";
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
@@ -15,19 +16,22 @@ const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
  * Strips HTML/Markdown tags from text to show clean plain text
  */
 const stripHtmlTags = (text: string): string => {
-  return text
-    .replace(/<br\s*\/?>/gi, "\n") // Convert <br> tags to newlines
+  // First, sanitize all HTML tags and entities
+  let sanitized = sanitizeHtml(text, {
+    allowedTags: [],
+    allowedAttributes: {},
+  });
+
+  // Then, convert HTML-specific newlines/entities (from previous UI) if desired
+  sanitized = sanitized
+    .replace(/<br\s*\/?>/gi, "\n") // Convert <br> tags (just in case any survived)
     .replace(/<\/p>/gi, "\n\n") // Convert </p> tags to double newlines
     .replace(/<\/div>/gi, "\n") // Convert </div> tags to newlines
-    .replace(/<[^>]*>/g, "") // Remove all other HTML tags
     .replace(/&nbsp;/g, " ") // Replace &nbsp; with regular spaces
-    .replace(/&lt;/g, "<") // Decode HTML entities
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
     .replace(/\n\s*\n\s*\n/g, "\n\n") // Replace multiple newlines with double newlines
     .trim();
+
+  return sanitized;
 };
 
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
