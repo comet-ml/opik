@@ -12,4 +12,4 @@ ALTER TABLE alert_triggers
     'prompt:deleted'
     ) NOT NULL;
 
---rollback ALTER TABLE alert_triggers MODIFY event_type ENUM('trace:errors', 'trace:feedback_score', 'trace_thread:feedback_score', 'prompt:created', 'prompt:committed', 'span:guardrails_triggered', 'prompt:deleted') NOT NULL;
+--rollback empty
