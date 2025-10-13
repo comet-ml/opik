@@ -7,6 +7,7 @@ import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
@@ -29,6 +30,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -36,6 +38,7 @@ import com.comet.opik.api.resources.v1.events.webhooks.AlertEventEvaluationServi
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -154,6 +157,7 @@ class AlertResourceTest {
     private PromptResourceClient promptResourceClient;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -162,6 +166,7 @@ class AlertResourceTest {
         promptResourceClient = new PromptResourceClient(client, baseUrl, factory);
         projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
         traceResourceClient = new TraceResourceClient(client, baseUrl);
+        guardrailsResourceClient = new GuardrailsResourceClient(client, baseUrl);
 
         ClientSupportUtils.config(client);
 
@@ -1454,6 +1459,72 @@ class AlertResourceTest {
                                     .build())
                     .ignoringCollectionOrder()
                     .isEqualTo(tracesWithErrors);
+        }
+
+        @ParameterizedTest
+        @MethodSource("traceGuardrailsTriggeredProjectScopeProvider")
+        @DisplayName("when guardrails are triggered for a trace, then webhook is called based on project scope")
+        void whenGuardrailsAreTriggeredForTrace_thenWebhookIsCalledBasedOnProjectScope(
+                Function<UUID, AlertTrigger> getAlertTrigger) {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with or without project scope configuration
+            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a trace
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create guardrails for the trace
+            Guardrail guardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(trace.id())
+                    .secondaryId(UUID.randomUUID())
+                    .projectName(projectName)
+                    .result(GuardrailResult.FAILED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrail), mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload();
+            List<Guardrail> guardrails = JsonUtils.readCollectionValue(payload, List.class, Guardrail.class);
+
+            assertThat(guardrails).hasSize(1);
+            Guardrail actualGuardrail = guardrails.getFirst();
+
+            // Assert guardrail details using recursive comparison
+            assertThat(actualGuardrail)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields("id", "projectId")
+                                    .build())
+                    .isEqualTo(guardrail);
+        }
+
+        static Stream<Arguments> traceGuardrailsTriggeredProjectScopeProvider() {
+            return Stream.of(
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                            .build()),
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                            .triggerConfigs(List.of(
+                                    AlertTriggerConfig.builder()
+                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                            .configValue(Map.of(
+                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
+                                            .build()))
+                            .build()));
         }
 
         private String verifyWebhookCalledAndGetPayload() {
