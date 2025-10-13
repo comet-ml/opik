@@ -19,6 +19,13 @@ public record TraceThreadIdentifier(
         @NotBlank String threadId,
         Boolean truncate) {
 
+    /**
+     * Determines whether trace messages should be truncated.
+     * 
+     * @return true if truncate is explicitly set to true, false otherwise.
+     *         This means both null and false values result in no truncation,
+     *         making truncation opt-in rather than default behavior.
+     */
     public boolean shouldTruncate() {
         return truncate != null && truncate;
     }
