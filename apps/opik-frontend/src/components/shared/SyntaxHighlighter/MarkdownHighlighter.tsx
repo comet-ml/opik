@@ -104,19 +104,6 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
       return true;
     }
 
-    // Handle structured result from prettifyMessage
-    if (
-      typeof codeOutput.message === "object" &&
-      codeOutput.message !== null &&
-      "renderType" in codeOutput.message
-    ) {
-      const structuredResult = codeOutput.message as {
-        renderType: string;
-        data: unknown;
-      };
-      return structuredResult.renderType === "json-table";
-    }
-
     return false;
   }, [codeOutput.message]);
 

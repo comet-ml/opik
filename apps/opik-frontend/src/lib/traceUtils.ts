@@ -3,7 +3,7 @@ import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { TAG_VARIANTS } from "@/components/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
-import { TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { TRACE_VISIBILITY_MODE, Span, Thread } from "@/types/traces";
 
 export const generateTagVariant = (label: string) => {
   const hash = md5(label);
@@ -11,10 +11,10 @@ export const generateTagVariant = (label: string) => {
   return TAG_VARIANTS[index % TAG_VARIANTS.length];
 };
 
-export const isObjectSpan = (object: object): object is Span => 
+export const isObjectSpan = (object: object): object is Span =>
   Boolean(get(object, "trace_id", false));
 
-export const isObjectThread = (object: object): object is Thread
+export const isObjectThread = (object: object): object is Thread =>
   Boolean(get(object, "thread_model_id", false)) ||
   Boolean(get(object, "first_message", false)) ||
   Boolean(get(object, "last_message", false));
