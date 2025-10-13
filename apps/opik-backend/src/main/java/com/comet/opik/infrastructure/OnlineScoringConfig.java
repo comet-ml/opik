@@ -28,8 +28,8 @@ public class OnlineScoringConfig {
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval;
 
-    @JsonProperty
-    @NotEmpty private List<@NotNull StreamConfiguration> streams;
+    @Valid @JsonProperty
+    @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
 
     @Data
     public static class StreamConfiguration {
