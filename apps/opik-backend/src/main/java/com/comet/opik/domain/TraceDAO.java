@@ -2092,7 +2092,12 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_TRACES_THREAD_BY_ID = """
             WITH traces_final AS (
                 SELECT
-                    *
+                    *,
+                    truncated_input,
+                    truncated_output,
+                    input_length,
+                    output_length,
+                    truncation_threshold
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -2213,7 +2218,7 @@ class TraceDAOImpl implements TraceDAO {
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '<no reason>', x), reasons), ', ')) AS reason,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
                         authors,
