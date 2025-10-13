@@ -11,7 +11,7 @@ export const generateTagVariant = (label: string) => {
   return TAG_VARIANTS[index % TAG_VARIANTS.length];
 };
 
-export const isObjectSpan = (object: object) =>
+export const isObjectSpan = (object: object): object is Span => 
   Boolean(get(object, "trace_id", false));
 
 export const isObjectThread = (object: object) =>
