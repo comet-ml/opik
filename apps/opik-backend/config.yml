@@ -136,7 +136,7 @@ redis:
     # Description: AWS User ID for IAM authentication
     awsUserId: ${OPIK_REDIS_AWS_USER_ID:-''}
     # Default: us-east-1
-    # Description: AWS region where ElasticCache is deployed
+    # Description: AWS region where ElastiCache is deployed
     awsRegion: ${AWS_REGION:-us-east-1}
     # Default: opik-redis
     # Description: ElasticCache resource name (replication group/cluster/serverless name)

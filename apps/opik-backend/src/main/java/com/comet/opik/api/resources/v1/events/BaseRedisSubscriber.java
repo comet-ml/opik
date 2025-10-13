@@ -141,7 +141,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     private void deleteStream() {
-        stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
+        stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted with name '{}'", config.getStreamName()))
+                .subscribe();
     }
 
     private RStreamReactive<String, M> initStream(StreamConfiguration config, RedissonReactiveClient redisson) {
