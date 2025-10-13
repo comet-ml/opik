@@ -11,6 +11,25 @@ const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
 const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
 
+/**
+ * Strips HTML/Markdown tags from text to show clean plain text
+ */
+const stripHtmlTags = (text: string): string => {
+  return text
+    .replace(/<br\s*\/?>/gi, "\n") // Convert <br> tags to newlines
+    .replace(/<\/p>/gi, "\n\n") // Convert </p> tags to double newlines
+    .replace(/<\/div>/gi, "\n") // Convert </div> tags to newlines
+    .replace(/<[^>]*>/g, "") // Remove all other HTML tags
+    .replace(/&nbsp;/g, " ") // Replace &nbsp; with regular spaces
+    .replace(/&lt;/g, "<") // Decode HTML entities
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n\s*\n\s*\n/g, "\n\n") // Replace multiple newlines with double newlines
+    .trim();
+};
+
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
@@ -59,25 +78,38 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
+    // Strip HTML tags from prettified content to show clean plain text
+    const displayMessage = response.prettified
+      ? stripHtmlTags(message)
+      : message;
+
     if (isSmall) {
       return (
         <CellTooltipWrapper
-          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
+          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
         >
           <span className="comet-code truncate">
             {hasExceededLimit
               ? rawValue.slice(0, maxDataLength) + "..."
-              : message}
+              : displayMessage}
           </span>
         </CellTooltipWrapper>
       );
     }
+
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
+        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
       </div>
     );
-  }, [isSmall, message, hasExceededLimit, rawValue, maxDataLength]);
+  }, [
+    isSmall,
+    hasExceededLimit,
+    message,
+    rawValue,
+    maxDataLength,
+    response.prettified,
+  ]);
 
   return (
     <CellWrapper
