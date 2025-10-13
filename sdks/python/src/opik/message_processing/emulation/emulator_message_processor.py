@@ -174,7 +174,11 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
 
         elif isinstance(message, trace_write.TraceWrite):
             if message.error_info is not None:
-                error_info = ErrorInfoDict(**message.error_info.dict(by_alias=True))
+                error_info = ErrorInfoDict(
+                    exception_type=message.error_info.exception_type,
+                    message=message.error_info.message,
+                    traceback=message.error_info.traceback,
+                )
             else:
                 error_info = None
 
@@ -224,7 +228,11 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
 
         elif isinstance(message, span_write.SpanWrite):
             if message.error_info is not None:
-                error_info = ErrorInfoDict(**message.error_info.dict(by_alias=True))
+                error_info = ErrorInfoDict(
+                    exception_type=message.error_info.exception_type,
+                    message=message.error_info.message,
+                    traceback=message.error_info.traceback,
+                )
             else:
                 error_info = None
 
