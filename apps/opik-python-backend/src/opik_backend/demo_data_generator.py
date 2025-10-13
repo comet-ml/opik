@@ -311,6 +311,9 @@ def create_demo_evaluation_project(context: DemoDataContext, base_url: str, work
                 if "parent_span_id" in span:
                     new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
                     span["parent_span_id"] = new_parent_span_id
+                # Remove fields that shouldn't be in the span data
+                span.pop("project_id", None)
+                span.pop("workspace_id", None)
                 client.span(**span)
 
             client.flush()
@@ -451,6 +454,9 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 if "parent_span_id" in span:
                     new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
                     span["parent_span_id"] = new_parent_span_id
+                # Remove fields that shouldn't be in the span data
+                span.pop("project_id", None)
+                span.pop("workspace_id", None)
                 client.span(**span)
 
             client.flush()
@@ -587,6 +593,9 @@ def create_demo_optimizer_project(context: DemoDataContext, base_url: str, works
                 if "parent_span_id" in span:
                     new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
                     span["parent_span_id"] = new_parent_span_id
+                # Remove fields that shouldn't be in the span data
+                span.pop("project_id", None)
+                span.pop("workspace_id", None)
                 client.span(**span)
 
             client.flush()
