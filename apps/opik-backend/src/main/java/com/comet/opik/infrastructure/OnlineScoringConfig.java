@@ -38,5 +38,12 @@ public class OnlineScoringConfig {
 
         @JsonProperty
         private String codec;
+
+        @JsonProperty
+        @Min(1) private Integer consumerBatchSize;
+
+        @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        private Duration poolingInterval;
     }
 }
