@@ -494,9 +494,9 @@ def upload(
 
         if upload_to_specific_project:
             # Upload to specific project
-            # Set the project name for the client
+            # Create a new client instance with the specific project name
             assert project_name is not None  # Type narrowing for mypy
-            client._project_name = project_name
+            client = opik.Opik(workspace=workspace, project_name=project_name)
 
             # Upload each data type
             total_uploaded = 0
@@ -587,12 +587,14 @@ def upload(
                             f"[blue]Uploading traces to project: {project_name}...[/blue]"
                         )
 
-                        # Set the project name for the client
+                        # Create a new client instance with the specific project name
                         assert project_name is not None  # Type narrowing for mypy
-                        client._project_name = project_name
+                        project_client = opik.Opik(
+                            workspace=workspace, project_name=project_name
+                        )
 
                         traces_uploaded = _upload_traces(
-                            client, project_dir, dry_run, name
+                            project_client, project_dir, dry_run, name
                         )
                         total_uploaded += traces_uploaded
 
