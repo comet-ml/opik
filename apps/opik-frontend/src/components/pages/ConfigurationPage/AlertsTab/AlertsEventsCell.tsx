@@ -4,7 +4,7 @@ import { Alert, ALERT_EVENT_TYPE } from "@/types/alerts";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 
 const EVENT_TYPE_LABELS: Record<ALERT_EVENT_TYPE, string> = {
-  [ALERT_EVENT_TYPE["trace:errors"]]: "New error",
+  [ALERT_EVENT_TYPE["trace:errors"]]: "New error in trace",
   [ALERT_EVENT_TYPE["span:guardrails_triggered"]]: "Guardrail triggered",
   [ALERT_EVENT_TYPE["prompt:created"]]: "Prompt created",
   [ALERT_EVENT_TYPE["prompt:committed"]]: "Prompt committed",
