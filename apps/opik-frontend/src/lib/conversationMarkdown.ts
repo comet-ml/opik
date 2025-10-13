@@ -18,7 +18,7 @@ export interface ToolCall {
 }
 
 export interface ConversationData {
-  model: string;
+  model?: string;
   messages: ConversationMessage[];
   tools?: Tool[];
   kwargs?: Record<string, unknown>;

@@ -162,7 +162,7 @@ const isConversationObject = (obj: object): boolean => {
 
   const objRecord = obj as Record<string, unknown>;
 
-  // Check for OpenAI conversation format
+  // Check for OpenAI conversation format (with or without model field)
   return (
     "messages" in objRecord &&
     Array.isArray(objRecord.messages) &&
