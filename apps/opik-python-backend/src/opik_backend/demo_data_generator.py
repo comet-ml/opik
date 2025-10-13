@@ -267,11 +267,15 @@ def create_demo_evaluation_project(context: DemoDataContext, base_url: str, work
             # Calculate time shift to move latest end_time to now while preserving time differences
             time_shift = calculate_time_shift_to_now(experiment_traces_grouped_by_project[project_id])
 
-            for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+            for idx, original_trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+                # Create a copy to avoid mutating the original demo_data
+                trace = dict(original_trace)
+                # Store the old ID before modification
+                old_trace_id = trace["id"]
                 # Apply time shift to maintain time differences
                 trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
                 trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
-                new_id = get_new_uuid_by_time(context, trace["id"], trace["start_time"])
+                new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
                 trace["id"] = new_id
                 # Remove fields that shouldn't be in the trace data
                 trace.pop("project_id", None)
@@ -281,21 +285,29 @@ def create_demo_evaluation_project(context: DemoDataContext, base_url: str, work
 
             # To handle parent_span_id correct UUIDv7 time first iterate over all spans
             evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            for span in sorted(evaluation_spans, key=lambda x: x["id"]):
-                
+            for original_span in sorted(evaluation_spans, key=lambda x: x["id"]):
+                # Create a copy to avoid mutating the original demo_data
+                span = dict(original_span)
+                # Store the old ID before modification
+                old_span_id = span["id"]
                 new_trace_id = get_new_uuid(context, span["trace_id"])
                 # Apply the same time shift as the parent trace to maintain temporal relationships
                 trace_time_shift = get_time_shift(context, new_trace_id)
                 span["start_time"] = apply_time_shift(span["start_time"], trace_time_shift)
                 span["end_time"] = apply_time_shift(span["end_time"], trace_time_shift)
-                new_id = get_new_uuid_by_time(context, span["id"], span["start_time"])
+                new_id = get_new_uuid_by_time(context, old_span_id, span["start_time"])
                 span["id"] = new_id
                 span["trace_id"] = new_trace_id
                 # Remove fields that shouldn't be in the span data
                 span.pop("project_id", None)
                 span.pop("workspace_id", None)
 
-            for span in sorted(evaluation_spans, key=lambda x: x["id"]):
+            for original_span in sorted(evaluation_spans, key=lambda x: x["id"]):
+                # Create a copy to avoid mutating the original demo_data
+                span = dict(original_span)
+                # Use the mapped IDs from context
+                span["id"] = get_new_uuid(context, original_span["id"])
+                span["trace_id"] = get_new_uuid(context, original_span["trace_id"])
                 if "parent_span_id" in span:
                     new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
                     span["parent_span_id"] = new_parent_span_id
@@ -399,12 +411,15 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             time_shift = calculate_time_shift_to_now(demo_traces)
             threads = []
 
-            for idx, trace in enumerate(sorted(demo_traces, key=lambda x: x["id"])):
-                
+            for idx, original_trace in enumerate(sorted(demo_traces, key=lambda x: x["id"])):
+                # Create a copy to avoid mutating the original demo_data
+                trace = dict(original_trace)
+                # Store the old ID before modification
+                old_trace_id = trace["id"]
                 # Apply time shift to maintain time differences
                 trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
                 trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
-                new_id = get_new_uuid_by_time(context, trace["id"], trace["start_time"])
+                new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
                 trace["id"] = new_id
                 # Only add thread_id if it exists and is not None
                 if "thread_id" in trace and trace["thread_id"] is not None:
@@ -413,17 +428,26 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 client.trace(**trace)
 
             # To handle parent_span_id correct UUIDv7 time first iterate over all spans
-            for span in sorted(demo_spans, key=lambda x: x["id"]):
+            for original_span in sorted(demo_spans, key=lambda x: x["id"]):
+                # Create a copy to avoid mutating the original demo_data
+                span = dict(original_span)
+                # Store the old ID before modification
+                old_span_id = span["id"]
                 new_trace_id = get_new_uuid(context, span["trace_id"])
                 # Apply the same time shift as the parent trace to maintain temporal relationships
                 trace_time_shift = get_time_shift(context, new_trace_id)
                 span["start_time"] = apply_time_shift(span["start_time"], trace_time_shift)
                 span["end_time"] = apply_time_shift(span["end_time"], trace_time_shift)
-                new_id = get_new_uuid_by_time(context, span["id"], span["start_time"])
+                new_id = get_new_uuid_by_time(context, old_span_id, span["start_time"])
                 span["id"] = new_id
                 span["trace_id"] = new_trace_id
 
-            for span in sorted(demo_spans, key=lambda x: x["id"]):
+            for original_span in sorted(demo_spans, key=lambda x: x["id"]):
+                # Create a copy to avoid mutating the original demo_data
+                span = dict(original_span)
+                # Use the mapped IDs from context
+                span["id"] = get_new_uuid(context, original_span["id"])
+                span["trace_id"] = get_new_uuid(context, original_span["trace_id"])
                 if "parent_span_id" in span:
                     new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
                     span["parent_span_id"] = new_parent_span_id
@@ -519,11 +543,15 @@ def create_demo_optimizer_project(context: DemoDataContext, base_url: str, works
             # Calculate time shift to move latest end_time to now while preserving time differences
             time_shift = calculate_time_shift_to_now(evaluation_traces)
 
-            for idx, trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+            for idx, original_trace in enumerate(sorted(evaluation_traces, key=lambda x: x["id"])):
+                # Create a copy to avoid mutating the original demo_data
+                trace = dict(original_trace)
+                # Store the old ID before modification
+                old_trace_id = trace["id"]
                 # Apply time shift to maintain time differences
                 trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
                 trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
-                new_id = get_new_uuid_by_time(context, trace["id"], trace["start_time"])
+                new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
                 trace["id"] = new_id
                 # Remove fields that shouldn't be in the trace data
                 trace.pop("project_id", None)
@@ -533,21 +561,29 @@ def create_demo_optimizer_project(context: DemoDataContext, base_url: str, works
 
             # To handle parent_span_id correct UUIDv7 time first iterate over all spans
             evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            for span in sorted(evaluation_spans, key=lambda x: x["id"]):
-                
+            for original_span in sorted(evaluation_spans, key=lambda x: x["id"]):
+                # Create a copy to avoid mutating the original demo_data
+                span = dict(original_span)
+                # Store the old ID before modification
+                old_span_id = span["id"]
                 new_trace_id = get_new_uuid(context, span["trace_id"])
                 # Apply the same time shift as the parent trace to maintain temporal relationships
                 trace_time_shift = get_time_shift(context, new_trace_id)
                 span["start_time"] = apply_time_shift(span["start_time"], trace_time_shift)
                 span["end_time"] = apply_time_shift(span["end_time"], trace_time_shift)
-                new_id = get_new_uuid_by_time(context, span["id"], span["start_time"])
+                new_id = get_new_uuid_by_time(context, old_span_id, span["start_time"])
                 span["id"] = new_id
                 span["trace_id"] = new_trace_id
                 # Remove fields that shouldn't be in the span data
                 span.pop("project_id", None)
                 span.pop("workspace_id", None)
 
-            for span in sorted(evaluation_spans, key=lambda x: x["id"]):
+            for original_span in sorted(evaluation_spans, key=lambda x: x["id"]):
+                # Create a copy to avoid mutating the original demo_data
+                span = dict(original_span)
+                # Use the mapped IDs from context
+                span["id"] = get_new_uuid(context, original_span["id"])
+                span["trace_id"] = get_new_uuid(context, original_span["trace_id"])
                 if "parent_span_id" in span:
                     new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
                     span["parent_span_id"] = new_parent_span_id
