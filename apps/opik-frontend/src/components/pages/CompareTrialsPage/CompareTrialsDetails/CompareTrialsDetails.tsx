@@ -9,7 +9,7 @@ import DateTag from "@/components/shared/DateTag/DateTag";
 import { Tag } from "@/components/ui/tag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { formatNumericData } from "@/lib/utils";
-import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
+import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import NavigationTag from "@/components/shared/NavigationTag";
 
 type CompareTrialsDetailsProps = {
