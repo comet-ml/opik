@@ -69,6 +69,7 @@ export class OpikCallbackHandler
   private client: Opik;
   private rootTraceId?: string;
   private tracerMap: Map<string, Trace | Span> = new Map();
+  private rootTraces: Map<string, Trace> = new Map();
 
   constructor(options?: Partial<OpikCallbackHandlerOptions>) {
     super();
@@ -127,7 +128,22 @@ export class OpikCallbackHandler
         metadata,
         threadId: this.options.metadata?.threadId as string | undefined,
       });
-      this.tracerMap.set(runId, trace);
+      
+      // Store the root trace separately for final cleanup
+      this.rootTraces.set(runId, trace);
+      
+      // Create a span within the trace for the actual LLM/chain call
+      const span = trace.span({
+        type: type || OpikSpanType.General,
+        name,
+        input,
+        tags,
+        metadata,
+        model,
+        provider,
+      });
+      
+      this.tracerMap.set(runId, span);
 
       return;
     }
@@ -184,17 +200,21 @@ export class OpikCallbackHandler
       tags,
       usage,
       metadata,
+      endTime: new Date(),
     });
-    span.end();
 
     if (runId === this.rootTraceId) {
-      const rootTrace = this.tracerMap.get(this.rootTraceId)!;
-      rootTrace?.update({
-        output,
-      });
+      const rootTrace = this.rootTraces.get(this.rootTraceId);
+      if (rootTrace) {
+        rootTrace.update({
+          output,
+          errorInfo,
+          endTime: new Date(),
+        });
+      }
       this.rootTraceId = undefined;
-      rootTrace?.end();
       this.tracerMap.clear();
+      this.rootTraces.clear();
     }
   }
 
@@ -211,10 +231,10 @@ export class OpikCallbackHandler
     },
     tags?: string[],
     metadata?: Record<string, unknown>,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
     logger.debug(
-      `handleChatModelStart runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleChatModelStart runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.startTracing({
       runId,
@@ -244,9 +264,10 @@ export class OpikCallbackHandler
     },
     tags?: string[],
     metadata?: Record<string, unknown>,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
     logger.debug(`handleLLMStart runId - ${runId}, parentRunId ${parentRunId}`);
+    logger.info(`STARTING TRACE FOR LLM ${llm.id.at(-1)?.toString()}`);
     this.startTracing({
       runId,
       parentRunId,
@@ -265,7 +286,7 @@ export class OpikCallbackHandler
     error: Error,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(`handleLLMError runId - ${runId}, parentRunId ${parentRunId}`);
     this.endTracing({
@@ -279,9 +300,11 @@ export class OpikCallbackHandler
     output: LLMResult | ChatResult,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
-    logger.debug(`handleLLMEnd runId - ${runId}, parentRunId ${parentRunId}`);
+    logger.debug(
+      `handleLLMEnd runId - ${runId}, parentRunId ${parentRunId}, output ${JSON.stringify(output)}`
+    );
     const { llmOutput, generations, ...metadata } = output;
 
     const tokenUsage =
@@ -291,8 +314,8 @@ export class OpikCallbackHandler
       runId,
       output: outputFromGenerations(generations),
       usage: {
-        prompt_tokens: tokenUsage.completionTokens,
-        completion_tokens: tokenUsage.promptTokens,
+        prompt_tokens: tokenUsage.promptTokens,
+        completion_tokens: tokenUsage.completionTokens,
         total_tokens: tokenUsage.totalTokens,
       },
       tags,
@@ -308,10 +331,10 @@ export class OpikCallbackHandler
     tags?: string[],
     metadata?: Record<string, unknown>,
     runType?: string,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
     logger.debug(
-      `handleChainStart runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleChainStart runId - ${runId}, parentRunId ${parentRunId}`
     );
     if (tags?.includes("langsmith:hidden")) {
       return;
@@ -344,10 +367,10 @@ export class OpikCallbackHandler
     error: Error,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(
-      `handleChainError runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleChainError runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.endTracing({
       runId,
@@ -360,7 +383,7 @@ export class OpikCallbackHandler
     output: ChainValues,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(`handleChainEnd runId - ${runId}, parentRunId ${parentRunId}`);
     this.endTracing({
@@ -377,10 +400,10 @@ export class OpikCallbackHandler
     parentRunId?: string,
     tags?: string[],
     metadata?: Record<string, unknown>,
-    runName?: string,
+    runName?: string
   ): Promise<void> {
     logger.debug(
-      `handleToolStart runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleToolStart runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.startTracing({
       runId,
@@ -400,10 +423,10 @@ export class OpikCallbackHandler
     error: Error,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(
-      `handleToolError runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleToolError runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.endTracing({
       runId,
@@ -416,7 +439,7 @@ export class OpikCallbackHandler
     output: unknown,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(`handleToolEnd runId - ${runId}, parentRunId ${parentRunId}`);
     this.endTracing({
@@ -430,10 +453,10 @@ export class OpikCallbackHandler
     action: AgentAction,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(
-      `handleAgentAction runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleAgentAction runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.startTracing({
       runId,
@@ -448,7 +471,7 @@ export class OpikCallbackHandler
     action: AgentFinish,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(`handleAgentEnd runId - ${runId}, parentRunId ${parentRunId}`);
     this.endTracing({
@@ -465,10 +488,10 @@ export class OpikCallbackHandler
     parentRunId?: string,
     tags?: string[],
     metadata?: Record<string, unknown>,
-    name?: string,
+    name?: string
   ): Promise<void> {
     logger.debug(
-      `handleRetrieverStart runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleRetrieverStart runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.startTracing({
       runId,
@@ -488,10 +511,10 @@ export class OpikCallbackHandler
     documents: unknown[],
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(
-      `handleRetrieverEnd runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleRetrieverEnd runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.endTracing({
       runId,
@@ -504,10 +527,10 @@ export class OpikCallbackHandler
     error: Error,
     runId: string,
     parentRunId?: string,
-    tags?: string[],
+    tags?: string[]
   ): Promise<void> {
     logger.debug(
-      `handleRetrieverError runId - ${runId}, parentRunId ${parentRunId}`,
+      `handleRetrieverError runId - ${runId}, parentRunId ${parentRunId}`
     );
     this.endTracing({
       runId,
