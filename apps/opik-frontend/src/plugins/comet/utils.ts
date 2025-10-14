@@ -1,6 +1,10 @@
 const BASE_URL = import.meta.env.VITE_BASE_COMET_URL || "/";
 const FROM_PARAM = "?from=llm";
 
+export const isProduction = () => {
+  return Boolean(window.environmentVariablesOverwrite?.PRODUCTION);
+};
+
 export const buildUrl = (
   path: string,
   workspaceName?: string,
