@@ -15,7 +15,7 @@ The `HierarchicalReflectiveOptimizer` uses hierarchical root cause analysis to i
 - Requires metrics that return **reasons** for their scores (using `ScoreResult` with `reason` field). Simple numeric metrics won't provide enough feedback for root cause analysis.
 - Best suited for refinement of existing prompts rather than discovering entirely new prompt structures.
 - Uses hierarchical analysis which involves multiple LLM calls for analyzing batches of failures and synthesizing findings.
-- Currently supports single-iteration optimization (one round of analysis and improvement), though the framework is designed for future multi-round support.
+- Supports multi-iteration optimization, allowing the optimizer to run multiple rounds of analysis and improvement until convergence or a maximum number of iterations is reached.
 
 </Note>
 
@@ -61,9 +61,16 @@ The `HierarchicalReflectiveOptimizer` takes a systematic approach to prompt impr
     - If an improvement doesn't increase the score, the optimizer can retry with a different seed (controlled by `max_retries`).
     - Only improvements that increase the score are kept; otherwise, the previous best prompt is retained.
 
-6.  **Result**:
-    - The highest-scoring prompt found across all improvements is returned as the optimized prompt.
-    - Detailed metadata about the optimization process, including failure modes addressed and improvement attempts, is included in the result.
+6.  **Multi-Iteration Optimization**:
+
+    - After addressing all identified failure modes in an iteration, the optimizer re-analyzes the improved prompt to identify any remaining failure modes.
+    - The number of iterations is controlled by `max_iterations` (default: 5).
+    - The optimizer automatically stops early if the improvement between iterations falls below the `convergence_threshold` (default: 1%).
+    - Each iteration performs a complete cycle of root cause analysis, targeted improvements, and evaluation.
+
+7.  **Result**:
+    - The highest-scoring prompt found across all iterations and improvements is returned as the optimized prompt.
+    - Detailed metadata about the optimization process, including failure modes addressed, number of iterations completed, and improvement attempts, is included in the result.
 
 <Warning>
   **Metric Requirements:** The `HierarchicalReflectiveOptimizer` requires metrics that provide **reasoning** about their scores. When using Opik metrics, ensure they return `ScoreResult` objects with the `reason` field populated. This feedback is critical for identifying failure modes.
@@ -102,9 +109,13 @@ from opik_optimizer import HierarchicalReflectiveOptimizer
 
 optimizer = HierarchicalReflectiveOptimizer(
     reasoning_model="openai/gpt-4.1",     # Model for analysis and improvement generation
+    # Optimization Parameters
+    max_iterations=5,                     # Maximum optimization iterations (default: 5)
+    convergence_threshold=0.01,           # Stop if improvement < 1% (default: 0.01)
     # Technical Parameters
     num_threads=12,                       # Parallel threads for evaluation
     max_parallel_batches=5,               # Max batches analyzed concurrently
+    batch_size=25,                        # Test cases per batch (default: 25)
     verbose=1,                            # 0=quiet, 1=show progress
     seed=42,                              # Random seed for reproducibility
     # LLM parameters (passed via **model_kwargs)
@@ -117,9 +128,17 @@ optimizer = HierarchicalReflectiveOptimizer(
 
 Key parameters include:
 
+**Optimization Control:**
+- `max_iterations`: Maximum number of optimization iterations to perform (default: 5). Each iteration performs root cause analysis, generates improvements, and evaluates them. The optimizer stops early if convergence is achieved.
+- `convergence_threshold`: Relative improvement threshold for early stopping (default: 0.01 or 1%). If the improvement between iterations is less than this threshold, the optimization stops early to avoid unnecessary LLM calls.
+
+**Model and Analysis:**
 - `reasoning_model`: The LLM used for root cause analysis, failure mode synthesis, and generating prompt improvements. This is typically a powerful model like GPT-4.
+- `batch_size`: Number of test cases per batch for root cause analysis (default: 25). Larger batches provide more context but use more tokens per analysis call.
 - `num_threads`: Number of parallel threads used for evaluating prompts against the dataset. Higher values speed up evaluation but increase concurrent API calls.
 - `max_parallel_batches`: Maximum number of batches to analyze concurrently during hierarchical root cause analysis. Controls parallelism vs. memory/API usage.
+
+**Other:**
 - `seed`: Random seed for reproducibility. Each retry attempt uses a varied seed to avoid cache hits and ensure different improvement suggestions.
 - `verbose`: Controls display of progress bars and detailed logging (0=off, 1=on).
 - `**model_kwargs`: Additional keyword arguments (e.g., `temperature`, `max_tokens`) passed to the underlying LLM calls.
@@ -128,7 +147,6 @@ The `optimize_prompt` method also accepts:
 
 - `max_retries`: Number of retry attempts if an improvement doesn't increase the score (default: 2). Each retry uses a different seed.
 - `n_samples`: Optional limit on the number of dataset items used for evaluation. Useful for faster iterations during development.
-- `auto_continue`: Reserved for future multi-round optimization support.
 
 ## Example Usage
 
@@ -249,6 +267,12 @@ optimizer = HierarchicalReflectiveOptimizer(
    - Use larger samples or full dataset for final optimization runs.
    - Ensure your sample is representative of the full dataset's diversity.
 
+6. **Iteration Configuration**
+   - `max_iterations=5` is a good default that balances thoroughness with cost.
+   - Increase to 10+ for complex prompts that may need multiple rounds of refinement.
+   - The optimizer will stop early if convergence is achieved, so higher values are safe.
+   - `convergence_threshold=0.01` (1%) provides a good balance. Lower values (e.g., 0.005) make the optimizer more thorough but may use more LLM calls.
+
 ## Comparison with Other Optimizers
 
 | Aspect                   | HierarchicalReflectiveOptimizer                     | MetaPromptOptimizer               | EvolutionaryOptimizer               |
@@ -256,7 +280,7 @@ optimizer = HierarchicalReflectiveOptimizer(
 | **Approach**             | Root cause analysis → targeted fixes    | Generate variations → evaluate    | Genetic algorithm with populations  |
 | **Metric Requirements**  | **Requires reasons** (ScoreResult)      | Scores only                       | Scores only                         |
 | **Best For**             | Refining complex prompts systematically | General prompt improvement        | Exploring diverse prompt structures |
-| **Iterations**           | Single round (currently)                | Multiple rounds                   | Multiple generations                |
+| **Iterations**           | Multiple (with early stopping)          | Multiple rounds                   | Multiple generations                |
 | **LLM Calls**            | Moderate (analysis + improvements)      | High (many candidate generations) | Very high (full populations)        |
 | **Failure Understanding** | Deep (identifies specific failure modes) | Limited                           | None (purely score-driven)          |
 
