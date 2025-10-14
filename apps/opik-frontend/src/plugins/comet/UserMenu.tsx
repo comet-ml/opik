@@ -43,7 +43,7 @@ import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
-import { buildUrl, isProduction } from "./utils";
+import { buildUrl, isOnPremise, isProduction } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
@@ -150,6 +150,7 @@ const UserMenu = () => {
   const renderUpgradeButton = () => {
     if (
       isProduction() &&
+      !isOnPremise() &&
       isOrganizationAdmin &&
       !isAcademic &&
       !hideUpgradeButton

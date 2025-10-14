@@ -14,6 +14,7 @@ type EnvironmentVariablesOverwrite = {
   OPIK_POSTHOG_KEY: string;
   OPIK_POSTHOG_HOST: string;
   PRODUCTION: boolean;
+  ON_PREMISE: boolean;
 };
 
 declare global {
