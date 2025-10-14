@@ -53,9 +53,253 @@ opik.configure(
 ```
 Refer to the [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/) for more configuration options.
 
+### Dynamic Tracing Control
+
+Control tracing behavior at runtime without code changes:
+
+```python
+import opik
+
+# Disable tracing globally
+opik.set_tracing_active(False)
+
+# Check current state
+print(opik.is_tracing_active())  # False
+
+# Re-enable tracing
+opik.set_tracing_active(True)
+
+# Reset to configuration default
+opik.reset_tracing_to_config_default()
+```
+
+This is useful for:
+- Performance optimization in high-throughput systems
+- Conditional tracing based on user type or request parameters
+- Debugging and troubleshooting without redeployment
+- Implementing sampling strategies
+- Calls already in progress when you disable tracing still finish logging.
+
+See `examples/dynamic_tracing_cookbook.py` for comprehensive usage patterns.
+
+## Basic Usage: Tracing
+
+The easiest way to log traces is to use the `@opik.track` decorator:
+
+```python
+import opik
+
+# Ensure Opik is configured (see Configuration section above)
+# opik.configure(...)
+
+@opik.track
+def my_llm_function(user_question: str) -> str:
+    # Your LLM call or business logic here
+    # For example:
+    # response = openai.ChatCompletion.create(...)
+    response = f"Echoing: {user_question}"
+
+    # You can add metadata to your trace
+    opik.set_tags(["example", "basic-usage"])
+    opik.log_metadata({"question_length": len(user_question)})
+
+    return response
+
+my_llm_function("Hello, Opik!")
+```
+Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/integrations/overview/) for popular LLM frameworks.
+
+## Integrations
+
+Opik provides seamless integrations with popular LLM frameworks and libraries. Simply import the integration and start tracing automatically:
+
+### OpenAI
+```python
+import opik
+from opik.integrations.openai import opik_openai
+
+# Automatically traces all OpenAI calls
+response = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+### Anthropic
+```python
+import opik
+from opik.integrations.anthropic import opik_anthropic
+
+# Automatically traces all Anthropic calls
+response = anthropic.messages.create(
+    model="claude-3-sonnet-20240229",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+### LangChain
+```python
+import opik
+from opik.integrations.langchain import opik_langchain
+
+# Automatically traces all LangChain operations
+llm = ChatOpenAI(model="gpt-3.5-turbo")
+response = llm.invoke("Hello!")
+```
+
+### LiteLLM
+```python
+import opik
+from opik.integrations.litellm import opik_litellm
+
+# Automatically traces all LiteLLM calls
+response = litellm.completion(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+### Other Supported Integrations
+- **AWS Bedrock**: Native support for Amazon Bedrock models
+- **Google Generative AI**: Integration with Google's Gemini models
+- **CrewAI**: Multi-agent framework integration
+- **DSPy**: Framework for building LLM applications
+- **Guardrails**: AI safety and reliability framework
+- **Haystack**: End-to-end NLP framework
+- **LlamaIndex**: Data framework for LLM applications
+- **SageMaker**: AWS SageMaker integration
+
+For detailed integration documentation, visit our [Integrations Guide](https://www.comet.com/docs/opik/integrations/overview/).
+
+## Examples
+
+Explore our comprehensive examples to get started with Opik:
+
+### Basic Usage
+- [`decorators.py`](examples/decorators.py) - Basic decorator usage and tracing
+- [`dynamic_tracing_example.py`](examples/dynamic_tracing_example.py) - Dynamic tracing control
+- [`distributed_tracing_example.py`](examples/distributed_tracing_example.py) - Distributed tracing patterns
+
+### Integrations
+- [`openai_integration_example.py`](examples/openai_integration_example.py) - OpenAI integration
+- [`langchain_integration_example.py`](examples/langchain_integration_example.py) - LangChain integration
+- [`manual_chain_building.py`](examples/manual_chain_building.py) - Manual chain building
+
+### Evaluation
+- [`evaluation_example.py`](examples/evaluation_example.py) - Basic evaluation setup
+- [`evaluate_prompt.py`](examples/evaluate_prompt.py) - Prompt evaluation
+- [`evaluate_existing_experiment.py`](examples/evaluate_existing_experiment.py) - Experiment evaluation
+- [`trajectory_accuracy_evaluation.py`](examples/trajectory_accuracy_evaluation.py) - Trajectory accuracy
+- [`trajectory_accuracy_judge_example.py`](examples/trajectory_accuracy_judge_example.py) - Judge-based evaluation
+
+### Data Management
+- [`cli_download_upload_example.py`](examples/cli_download_upload_example.py) - CLI export/import
+- [`evaluation_rules_download_upload_example.py`](examples/evaluation_rules_download_upload_example.py) - Evaluation rules management
+
+### Advanced Features
+- [`feedback_scores_example.py`](examples/feedback_scores_example.py) - Feedback scoring
+- [`metrics.py`](examples/metrics.py) - Custom metrics
+- [`search_traces_and_spans.py`](examples/search_traces_and_spans.py) - Trace searching
+- [`threaded_decorators.py`](examples/threaded_decorators.py) - Threading support
+
+### Data Generation
+- [`demo_data_generator.py`](examples/demo_data_generator.py) - Generate demo data
+- [`demo_data.py`](examples/demo_data.py) - Demo data examples
+
 ## CLI Commands
 
-The Opik Python SDK includes powerful CLI commands for exporting and importing project data:
+### Configure Command
+
+Configure the Opik Python SDK for your environment:
+
+```bash
+# Interactive configuration (recommended)
+opik configure
+
+# Configure for local Opik deployment
+opik configure --use-local
+
+# Auto-approve all prompts (useful for CI/CD)
+opik configure --yes
+```
+
+**Options:**
+- `--use-local, --use_local`: Configure for local Opik deployments (default: false)
+- `-y, --yes`: Automatically answer 'yes' to all prompts (useful for automated setups)
+
+The configure command will:
+- Create a configuration file for the Opik Python SDK
+- Prompt for your Opik server address (self-hosted) or API key and workspace (Comet.com)
+- Overwrite existing configuration if it already exists
+- Support both cloud and self-hosted deployments
+
+### Healthcheck Command
+
+Perform a comprehensive health check of your Opik setup:
+
+```bash
+# Basic health check
+opik healthcheck
+
+# Include installed packages information
+opik healthcheck --show-installed-packages
+```
+
+**Options:**
+- `--show-installed-packages`: Print the list of installed packages to the console (default: true)
+
+The healthcheck command will:
+- Validate your Opik configuration
+- Verify library installations and dependencies
+- Check the availability of the backend workspace
+- Print diagnostic information to help with troubleshooting
+- Show installed packages and their versions
+
+### Proxy Command
+
+Run a proxy server to integrate local LLM servers with Opik:
+
+```bash
+# Proxy for Ollama (default: http://localhost:11434)
+opik proxy --ollama
+
+# Proxy for Ollama with custom host
+opik proxy --ollama --ollama-host http://localhost:8080
+
+# Proxy for LM Studio (default: http://localhost:1234)
+opik proxy --lm-studio
+
+# Proxy for LM Studio with custom host
+opik proxy --lm-studio --lm-studio-host http://localhost:5678
+
+# Custom host and port
+opik proxy --ollama --host 0.0.0.0 --port 8000
+```
+
+**Options:**
+- `--ollama`: Run as a proxy server for Ollama
+- `--ollama-host`: Ollama server URL (default: http://localhost:11434)
+- `--lm-studio`: Run as a proxy server for LM Studio
+- `--lm-studio-host`: LM Studio server URL (default: http://localhost:1234)
+- `--host`: Host to bind to (default: localhost)
+- `--port`: Port to bind to (default: 7860)
+
+**Requirements:**
+- Install proxy dependencies: `pip install opik[proxy]`
+- You must specify either `--ollama` or `--lm-studio` (but not both)
+
+The proxy server will:
+- Forward requests from your application to the local LLM server
+- Automatically trace and log all interactions with Opik
+- Provide a unified interface for local LLM development
+- Support both Ollama and LM Studio backends
+
+## Additional CLI Commands
+
+The Opik Python SDK has two commands to help you quickly
+export and import your project's data, making it really easy to sync,
+back up, share, or analyze your data in third-party tools and
+environments.
 
 ### Export Command
 
@@ -220,70 +464,14 @@ opik import production/copy --path ./default/ez-mcp-chatbot --all
 - **Traces and spans** are project-specific and will be imported to the specified project
 - **Datasets, experiments, and prompts** belong to the workspace and are shared across all projects in that workspace
 
-### Dynamic Tracing Control
-
-Control tracing behavior at runtime without code changes:
-
-```python
-import opik
-
-# Disable tracing globally
-opik.set_tracing_active(False)
-
-# Check current state
-print(opik.is_tracing_active())  # False
-
-# Re-enable tracing
-opik.set_tracing_active(True)
-
-# Reset to configuration default
-opik.reset_tracing_to_config_default()
-```
-
-This is useful for:
-- Performance optimization in high-throughput systems
-- Conditional tracing based on user type or request parameters
-- Debugging and troubleshooting without redeployment
-- Implementing sampling strategies
-- Calls already in progress when you disable tracing still finish logging.
-
-See `examples/dynamic_tracing_cookbook.py` for comprehensive usage patterns.
-
-## Basic Usage: Tracing
-
-The easiest way to log traces is to use the `@opik.track` decorator:
-
-```python
-import opik
-
-# Ensure Opik is configured (see Configuration section above)
-# opik.configure(...)
-
-@opik.track
-def my_llm_function(user_question: str) -> str:
-    # Your LLM call or business logic here
-    # For example:
-    # response = openai.ChatCompletion.create(...)
-    response = f"Echoing: {user_question}"
-
-    # You can add metadata to your trace
-    opik.set_tags(["example", "basic-usage"])
-    opik.log_metadata({"question_length": len(user_question)})
-
-    return response
-
-my_llm_function("Hello, Opik!")
-```
-Traces will appear in your configured Opik project. Opik also offers many direct [integrations](https://www.comet.com/docs/opik/integrations/overview/) for popular LLM frameworks.
-
 ## Development & Contribution Guidelines
 
 For a more general contribution guide (backend + frontend + SDK) see our root [Contribution guide](../../CONTRIBUTING.md).
 
-# Coding guidelines
+### Coding Guidelines
 This guide is still in progress, however, it already contains useful information that you should know before submitting your PR.
 
-## General
+#### General
 We care a lot about the code maintainability. Well-organized logic which is easy to extend, re-factor and, most importantly - **read**, is what we are striving for.
 1. Follow [SOLID](https://realpython.com/solid-principles-python/) principles. Pay special attention to the "Single Responsibility" one.
 2. Avoid large modules, large classes, and large functions. Separate the code properly and describe this separation with names, not with comments. (See [1])
@@ -291,7 +479,7 @@ We care a lot about the code maintainability. Well-organized logic which is easy
 4. Don't violate the access rules! We know that Python allows you to access _protected/__private variables, but in Opik we are quite strict about not abusing that, whether it's an internal code or a test (don't forget about [3]!).
 5. Use comments only for something non-trivial that is hard to describe in any other way. Apart from these cases, comments should be used to answer the question "Why?" not "What?".
 
-## Imports
+#### Imports
 1. Import module - not name.
     Instead of this:
     ```python
@@ -321,7 +509,7 @@ We care a lot about the code maintainability. Well-organized logic which is easy
     from opik.types import FeedbackScoreDict  # ok!
     ```
 
-## Naming
+#### Naming
 1. Avoid abbreviations. In the vast majority of cases, it is not a problem to use variable names. People spend more time understanding what "fs" means than reading the word "files" or "file_system".
    ```python
    for d in dataset_items:  # bad!
@@ -333,7 +521,7 @@ We care a lot about the code maintainability. Well-organized logic which is easy
    ```
 2. Avoid creating modules like `utils.py`, `helpers.py`, `misc.py` etc. Especially in the big namespaces. They can quickly become dumps where people put everything that they haven't been able to create a better place for in 10 seconds after they started thinking about it. You can create those files though, but they should be localized in their namespaces designed for some specific features. In vast majority of cases there are better module names.
 
-## Testing
+#### Testing
 We highly encourage writing tests and we develop a lot of features in a test-driven way.
 1. Test public API, don't violate privacy.
 2. If you are an external contributor - make sure that the unit tests and e2e tests are green (they can be executed anywhere because they don't require any API keys or permissions). For internal Opik developers everything should be green in the CI.
