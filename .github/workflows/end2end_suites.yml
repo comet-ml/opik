@@ -71,7 +71,7 @@ jobs:
                 OPIK_USAGE_REPORT_ENABLED: false
               run: |
                 cd ${{ github.workspace }}
-                ./opik.sh --build
+                TOGGLE_WELCOME_WIZARD_ENABLED="false" ./opik.sh --build
                 
             - name: Check Docker pods are up (Local)
               run: |
