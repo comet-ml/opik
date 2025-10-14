@@ -5,10 +5,10 @@ from importlib import metadata
 import click
 
 from .configure import configure
-from .download import download
+from .export import export
 from .healthcheck import healthcheck
+from .import_command import import_data
 from .proxy import proxy
-from .upload import upload
 
 __version__: str = "0.0.0+dev"
 try:
@@ -29,5 +29,5 @@ def cli() -> None:
 cli.add_command(configure)
 cli.add_command(proxy)
 cli.add_command(healthcheck)
-cli.add_command(download)
-cli.add_command(upload)
+cli.add_command(export)
+cli.add_command(import_data)

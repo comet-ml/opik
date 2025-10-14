@@ -27,7 +27,7 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return False
 
 
-def _download_traces(
+def _export_traces(
     client: Any,
     project_name: str,
     project_dir: Path,
@@ -74,7 +74,7 @@ def _download_traces(
         return 0
 
     # Download each trace with its spans
-    downloaded_count = 0
+    exported_count = 0
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -105,23 +105,23 @@ def _download_traces(
                 with open(trace_file, "w", encoding="utf-8") as f:
                     json.dump(trace_data, f, indent=2, default=str)
 
-                downloaded_count += 1
+                exported_count += 1
                 progress.update(
                     task,
-                    description=f"Downloaded {downloaded_count}/{len(traces)} traces",
+                    description=f"Exported {exported_count}/{len(traces)} traces",
                 )
 
             except Exception as e:
-                console.print(f"[red]Error downloading trace {trace.id}: {e}[/red]")
+                console.print(f"[red]Error exporting trace {trace.id}: {e}[/red]")
                 continue
 
-    return downloaded_count
+    return exported_count
 
 
-def _download_datasets(
+def _export_datasets(
     client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
 ) -> int:
-    """Download datasets."""
+    """Export datasets."""
     try:
         datasets = client.get_datasets(max_results=max_results, sync_items=True)
 
@@ -148,7 +148,7 @@ def _download_datasets(
             )
             return 0
 
-        downloaded_count = 0
+        exported_count = 0
         for dataset in datasets:
             try:
                 # Get dataset items
@@ -175,7 +175,7 @@ def _download_datasets(
                 with open(dataset_file, "w", encoding="utf-8") as f:
                     json.dump(dataset_data, f, indent=2, default=str)
 
-                downloaded_count += 1
+                exported_count += 1
 
             except Exception as e:
                 console.print(
@@ -183,17 +183,17 @@ def _download_datasets(
                 )
                 continue
 
-        return downloaded_count
+        return exported_count
 
     except Exception as e:
-        console.print(f"[red]Error downloading datasets: {e}[/red]")
+        console.print(f"[red]Error exporting datasets: {e}[/red]")
         return 0
 
 
-def _download_experiments(
+def _export_experiments(
     client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
 ) -> int:
-    """Download experiments."""
+    """Export experiments."""
     try:
         # Get all datasets first to find experiments
         datasets = client.get_datasets(max_results=100, sync_items=False)
@@ -204,7 +204,7 @@ def _download_experiments(
             )
             return 0
 
-        downloaded_count = 0
+        exported_count = 0
         for dataset in datasets:
             try:
                 experiments = client.get_dataset_experiments(
@@ -238,7 +238,7 @@ def _download_experiments(
                         with open(experiment_file, "w", encoding="utf-8") as f:
                             json.dump(experiment_data, f, indent=2, default=str)
 
-                        downloaded_count += 1
+                        exported_count += 1
 
                     except Exception as e:
                         console.print(
@@ -252,17 +252,17 @@ def _download_experiments(
                 )
                 continue
 
-        return downloaded_count
+        return exported_count
 
     except Exception as e:
-        console.print(f"[red]Error downloading experiments: {e}[/red]")
+        console.print(f"[red]Error exporting experiments: {e}[/red]")
         return 0
 
 
-def _download_prompts(
+def _export_prompts(
     client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
 ) -> int:
-    """Download prompts."""
+    """Export prompts."""
     try:
         prompts = client.search_prompts()
 
@@ -289,7 +289,7 @@ def _download_prompts(
             )
             return 0
 
-        downloaded_count = 0
+        exported_count = 0
         for prompt in prompts:
             try:
                 # Get prompt history
@@ -310,27 +310,27 @@ def _download_prompts(
                 with open(prompt_file, "w", encoding="utf-8") as f:
                     json.dump(prompt_data, f, indent=2, default=str)
 
-                downloaded_count += 1
+                exported_count += 1
 
             except Exception as e:
                 console.print(f"[red]Error downloading prompt {prompt.name}: {e}[/red]")
                 continue
 
-        return downloaded_count
+        return exported_count
 
     except Exception as e:
-        console.print(f"[red]Error downloading prompts: {e}[/red]")
+        console.print(f"[red]Error exporting prompts: {e}[/red]")
         return 0
 
 
-@click.command()
+@click.command(name="export")
 @click.argument("workspace_or_project", type=str)
 @click.option(
     "--path",
     "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
     default="./",
-    help="Directory to save downloaded data. Defaults to current directory.",
+    help="Directory to save exported data. Defaults to current directory.",
 )
 @click.option(
     "--max-results",
@@ -370,7 +370,7 @@ def _download_prompts(
     type=str,
     help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, experiment names, or prompt names.",
 )
-def download(
+def export(
     workspace_or_project: str,
     path: str,
     max_results: int,
@@ -387,21 +387,21 @@ def download(
     and saves them to local JSON files in the output directory.
 
     Note: Thread metadata is automatically derived from traces with the same thread_id,
-    so threads don't need to be downloaded separately.
+    so threads don't need to be exported separately.
 
-    WORKSPACE_OR_PROJECT: Either a workspace name (e.g., "my-workspace") to download all projects,
-                          or workspace/project (e.g., "my-workspace/my-project") to download a specific project.
+    WORKSPACE_OR_PROJECT: Either a workspace name (e.g., "my-workspace") to export all projects,
+                          or workspace/project (e.g., "my-workspace/my-project") to export a specific project.
     """
     try:
         # Parse workspace/project from the argument
         if "/" in workspace_or_project:
             workspace, project_name = workspace_or_project.split("/", 1)
-            download_specific_project = True
+            export_specific_project = True
         else:
             # Only workspace specified - download all projects
             workspace = workspace_or_project
             project_name = None
-            download_specific_project = False
+            export_specific_project = False
 
         # Initialize Opik client with workspace
         client = opik.Opik(workspace=workspace)
@@ -422,7 +422,7 @@ def download(
         # Apply exclusions
         data_types = include_set - exclude_set
 
-        if download_specific_project:
+        if export_specific_project:
             # Download from specific project
             console.print(
                 f"[green]Downloading data from workspace: {workspace}, project: {project_name}[/green]"
@@ -453,47 +453,47 @@ def download(
                 )
 
             # Download each data type
-            total_downloaded = 0
+            total_exported = 0
 
             # Download traces
             if "traces" in data_types:
                 console.print("[blue]Downloading traces...[/blue]")
-                traces_downloaded = _download_traces(
+                traces_exported = _export_traces(
                     client, project_name, project_dir, max_results, filter, name
                 )
-                total_downloaded += traces_downloaded
+                total_exported += traces_exported
 
             # Download datasets
             if "datasets" in data_types:
                 console.print("[blue]Downloading datasets...[/blue]")
-                datasets_downloaded = _download_datasets(
+                datasets_exported = _export_datasets(
                     client, project_dir, max_results, name
                 )
-                total_downloaded += datasets_downloaded
+                total_exported += datasets_exported
 
             # Download experiments
             if "experiments" in data_types:
                 console.print("[blue]Downloading experiments...[/blue]")
-                experiments_downloaded = _download_experiments(
+                experiments_exported = _export_experiments(
                     client, project_dir, max_results, name
                 )
-                total_downloaded += experiments_downloaded
+                total_exported += experiments_exported
 
             # Download prompts
             if "prompts" in data_types:
                 console.print("[blue]Downloading prompts...[/blue]")
-                prompts_downloaded = _download_prompts(
+                prompts_exported = _export_prompts(
                     client, project_dir, max_results, name
                 )
-                total_downloaded += prompts_downloaded
+                total_exported += prompts_exported
 
             console.print(
-                f"[green]Successfully downloaded {total_downloaded} items to {project_dir}[/green]"
+                f"[green]Successfully exported {total_exported} items to {project_dir}[/green]"
             )
         else:
-            # Download from all projects in workspace
+            # Export from all projects in workspace
             console.print(
-                f"[green]Downloading data from workspace: {workspace} (all projects)[/green]"
+                f"[green]Exporting data from workspace: {workspace} (all projects)[/green]"
             )
 
             # Get all projects in the workspace
@@ -531,7 +531,7 @@ def download(
                         f"[yellow]Note: {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
                     )
 
-                total_downloaded = 0
+                total_exported = 0
 
                 # Download workspace-level data once (datasets, experiments, prompts)
                 workspace_dir = output_path / workspace
@@ -540,26 +540,26 @@ def download(
                 # Download datasets
                 if "datasets" in data_types:
                     console.print("[blue]Downloading datasets...[/blue]")
-                    datasets_downloaded = _download_datasets(
+                    datasets_exported = _export_datasets(
                         client, workspace_dir, max_results, name
                     )
-                    total_downloaded += datasets_downloaded
+                    total_exported += datasets_exported
 
                 # Download experiments
                 if "experiments" in data_types:
                     console.print("[blue]Downloading experiments...[/blue]")
-                    experiments_downloaded = _download_experiments(
+                    experiments_exported = _export_experiments(
                         client, workspace_dir, max_results, name
                     )
-                    total_downloaded += experiments_downloaded
+                    total_exported += experiments_exported
 
                 # Download prompts
                 if "prompts" in data_types:
                     console.print("[blue]Downloading prompts...[/blue]")
-                    prompts_downloaded = _download_prompts(
+                    prompts_exported = _export_prompts(
                         client, workspace_dir, max_results, name
                     )
-                    total_downloaded += prompts_downloaded
+                    total_exported += prompts_exported
 
                 # Download traces from each project
                 if "traces" in data_types:
@@ -574,18 +574,18 @@ def download(
                         project_dir = workspace_dir / project_name
                         project_dir.mkdir(parents=True, exist_ok=True)
 
-                        traces_downloaded = _download_traces(
+                        traces_exported = _export_traces(
                             client, project_name, project_dir, max_results, filter, name
                         )
-                        total_downloaded += traces_downloaded
+                        total_exported += traces_exported
 
-                        if traces_downloaded > 0:
+                        if traces_exported > 0:
                             console.print(
-                                f"[green]Downloaded {traces_downloaded} traces from {project_name}[/green]"
+                                f"[green]Exported {traces_exported} traces from {project_name}[/green]"
                             )
 
                 console.print(
-                    f"[green]Successfully downloaded {total_downloaded} items from workspace '{workspace}'[/green]"
+                    f"[green]Successfully exported {total_exported} items from workspace '{workspace}'[/green]"
                 )
 
             except Exception as e:
