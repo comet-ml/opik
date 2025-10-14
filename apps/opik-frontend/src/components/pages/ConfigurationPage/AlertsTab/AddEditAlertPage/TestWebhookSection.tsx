@@ -185,6 +185,7 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
                         handleTestTrigger(item.eventType, item.label)
                       }
                       disabled={isPending || isTestPending}
+                      className="px-0"
                     >
                       {isTestPending && (
                         <div className="mr-2 size-4 animate-spin rounded-full border-2 border-light-slate border-r-transparent" />

@@ -39,7 +39,7 @@ const WebhookPayloadExample: React.FunctionComponent<
   return (
     <div className="rounded-md border border-border bg-primary-foreground">
       <div className="flex h-10 items-center justify-between border-b border-border px-4">
-        <span>Payload</span>
+        <span className="text-light-slate">Payload</span>
         {actionButton && <div>{actionButton}</div>}
       </div>
       <CodeHighlighter
