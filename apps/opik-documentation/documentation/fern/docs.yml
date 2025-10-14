@@ -636,6 +636,10 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
+          - page: Multi-Metric Optimization
+            icon: fa-regular fa-chart-line
+            path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx
+            slug: multi_metric_optimization
       - section: Example Projects and Cookbooks
         slug: /optimizer-cookbooks
         contents:
