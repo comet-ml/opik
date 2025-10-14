@@ -87,4 +87,5 @@ class QueueConsumer(threading.Thread):
                 "The message queue size limit has been reached. The current message has been returned to the queue, and the newest message has been discarded.",
                 logger=LOGGER,
             )
+        message.delivery_attempts += 1
         self._message_queue.put_back(message)

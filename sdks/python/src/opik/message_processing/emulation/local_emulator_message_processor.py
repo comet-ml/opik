@@ -1,8 +1,14 @@
 import datetime
-from typing import List, Dict, Optional, Any
+import logging
+from typing import List, Dict, Optional, Any, Union
 
 from opik.types import ErrorInfoDict, SpanType
 from . import models, emulator_message_processor
+from .. import messages
+from ...rest_api.types import span_write, trace_write
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class LocalEmulatorMessageProcessor(
@@ -14,6 +20,19 @@ class LocalEmulatorMessageProcessor(
 
     def __init__(self, merge_duplicates: bool = True) -> None:
         super().__init__(merge_duplicates)
+
+    def process(
+        self,
+        message: Union[
+            messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
+        ],
+    ) -> None:
+        if hasattr(message, "delivery_attempts") and message.delivery_attempts > 1:
+            # skip retries
+            LOGGER.debug("Skipping retry of the message: %s", message)
+            return
+
+        super().process(message)
 
     def create_trace_model(
         self,

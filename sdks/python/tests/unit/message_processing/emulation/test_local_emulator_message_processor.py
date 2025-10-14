@@ -169,7 +169,7 @@ class TestLocalEmulatorMessageProcessorProcess:
         )
         self.test_datetime = datetime_helpers.local_timestamp()
 
-    def test_process_create_trace_message_calls_dispatch_message(self):
+    def test_process__create_trace_message__calls_dispatch_message(self):
         message = messages.CreateTraceMessage(
             trace_id="test_trace_id",
             project_name="test_project",
@@ -190,7 +190,7 @@ class TestLocalEmulatorMessageProcessorProcess:
 
         mock_dispatch.assert_called_once_with(message)
 
-    def test_process_exception_handling(self, capture_log):
+    def test_process__exception_handling(self, capture_log):
         message = messages.CreateTraceMessage(
             trace_id="test_trace_id",
             start_time=datetime.datetime.now(),
@@ -215,6 +215,47 @@ class TestLocalEmulatorMessageProcessorProcess:
             "Failed to process message by emulator message processor"
             in capture_log.text
         )
+
+    def test_process__create_trace_message__retry_message_skipped__calls_dispatch_message_once(
+        self,
+    ):
+        message_1 = messages.CreateTraceMessage(
+            trace_id="test_trace_1",
+            project_name="test_project",
+            name="test_trace",
+            start_time=self.test_datetime,
+            end_time=self.test_datetime,
+            input={"key": "value"},
+            output={"result": "success"},
+            metadata={"meta": "data"},
+            tags=["tag1", "tag2"],
+            error_info=None,
+            thread_id="thread_123",
+            last_updated_at=self.test_datetime,
+        )
+
+        message_2 = messages.CreateTraceMessage(
+            trace_id="test_trace_2",
+            project_name="test_project",
+            name="test_trace",
+            start_time=self.test_datetime,
+            end_time=self.test_datetime,
+            input={"key": "value"},
+            output={"result": "success"},
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=self.test_datetime,
+        )
+        # mark as the second delivery attempt
+        message_2.delivery_attempts = 2
+
+        with patch.object(self.processor, "_dispatch_message") as mock_dispatch:
+            self.processor.process(message_1)
+            self.processor.process(message_2)
+
+        mock_dispatch.assert_called_once_with(message_1)
 
 
 class TestLocalEmulatorMessageProcessorTraceTreesProperty:
