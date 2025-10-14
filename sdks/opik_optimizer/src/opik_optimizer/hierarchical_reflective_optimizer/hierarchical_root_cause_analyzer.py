@@ -1,8 +1,8 @@
 import logging
 import asyncio
 from typing import Any
-from tqdm import tqdm
 
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from opik.evaluation.evaluation_result import EvaluationResult
 from .types import (
     RootCauseAnalysis,
@@ -11,6 +11,7 @@ from .types import (
 )
 from . import reporting
 from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
+from ..reporting_utils import get_console
 
 logger = logging.getLogger(__name__)
 
@@ -285,13 +286,11 @@ Scores:
 
         semaphore = asyncio.Semaphore(self.max_parallel_batches)
 
-        # Create progress bar for batch processing
-        pbar = tqdm(
-            total=len(batch_tasks), desc="Processing batches", unit="batch", leave=False
-        )
+        # Create progress bar for batch processing using Rich
+        console = get_console()
 
         async def run_with_semaphore(
-            batch_num: int, task: Any
+            batch_num: int, task: Any, progress: Progress | None, task_id: Any | None
         ) -> tuple[int, BatchAnalysis]:
             async with semaphore:
                 try:
@@ -300,19 +299,36 @@ Scores:
                         f"Completed batch {batch_num}: "
                         f"identified {len(result.failure_modes)} failure modes"
                     )
-                    pbar.update(1)  # Update progress bar
+                    if progress and task_id is not None:
+                        progress.update(task_id, advance=1)  # Update progress bar
                     return batch_num, result
                 except Exception as exc:
                     logger.error(f"Batch {batch_num} failed: {exc}")
-                    pbar.update(1)  # Update progress bar even on error
+                    if progress and task_id is not None:
+                        progress.update(task_id, advance=1)  # Update progress bar even on error
                     raise
 
-        # Run all tasks with semaphore control
-        results = await asyncio.gather(
-            *[run_with_semaphore(num, task) for num, task in batch_tasks]
-        )
-
-        pbar.close()  # Close progress bar
+        # Run all tasks with semaphore control and rich progress bar
+        if self.verbose >= 1:
+            with Progress(
+                TextColumn("│      "),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                task_id = progress.add_task(
+                    "Processing batches", total=len(batch_tasks)
+                )
+                results = await asyncio.gather(
+                    *[run_with_semaphore(num, task, progress, task_id) for num, task in batch_tasks]
+                )
+        else:
+            # No progress bar in non-verbose mode
+            results = await asyncio.gather(
+                *[run_with_semaphore(num, task, None, None) for num, task in batch_tasks]
+            )
 
         # Sort by batch number to maintain order
         batch_analyses = [result for _, result in sorted(results)]
