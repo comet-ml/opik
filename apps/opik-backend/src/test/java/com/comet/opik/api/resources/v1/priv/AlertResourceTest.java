@@ -1531,6 +1531,44 @@ class AlertResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Get Webhook Examples:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetWebhookExamples {
+
+        @Test
+        @DisplayName("Success: should return webhook examples for all event types")
+        void getWebhookExamples__whenCalled__thenReturnExamplesForAllEventTypes() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // When
+            var webhookExamples = alertResourceClient.getWebhookExamples(mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            // Then
+            assertThat(webhookExamples).isNotNull();
+            assertThat(webhookExamples.responseExamples()).isNotNull();
+            assertThat(webhookExamples.responseExamples()).isNotEmpty();
+
+            // Verify that all alert event types have examples
+            assertThat(webhookExamples.responseExamples().keySet()).containsExactlyInAnyOrder(
+                    AlertEventType.TRACE_ERRORS,
+                    AlertEventType.TRACE_FEEDBACK_SCORE,
+                    AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+                    AlertEventType.PROMPT_CREATED,
+                    AlertEventType.PROMPT_COMMITTED,
+                    AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
+                    AlertEventType.PROMPT_DELETED);
+
+            // Verify that each example is a non-empty string
+            webhookExamples.responseExamples().values().forEach(example -> {
+                assertThat(example).isNotNull();
+                assertThat(example).isNotEmpty();
+            });
+        }
+    }
+
     private Pair<String, String> prepareMockWorkspace() {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();

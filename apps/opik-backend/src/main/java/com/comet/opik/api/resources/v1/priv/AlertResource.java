@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.AlertFilter;
@@ -209,5 +210,23 @@ public class AlertResource {
         log.info("Tested alert webhook with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
 
         return Response.ok().entity(response).build();
+    }
+
+    @GET
+    @Path("/webhooks/examples")
+    @Operation(operationId = "getWebhookExamples", summary = "Get webhook payload examples", description = "Get webhook payload examples for all alert event types", responses = {
+            @ApiResponse(responseCode = "200", description = "Webhook examples", content = @Content(schema = @Schema(implementation = WebhookExamples.class)))
+    })
+    public Response getWebhookExamples() {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting webhook examples on workspace_id '{}'", workspaceId);
+
+        var examples = alertService.getWebhookExamples();
+
+        log.info("Got webhook examples on workspace_id '{}'", workspaceId);
+
+        return Response.ok().entity(examples).build();
     }
 }

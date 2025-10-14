@@ -5,6 +5,7 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
+import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
@@ -36,7 +37,9 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +68,8 @@ public interface AlertService {
     void deleteBatch(Set<UUID> ids);
 
     WebhookTestResult testWebhook(Alert alert);
+
+    WebhookExamples getWebhookExamples();
 }
 
 @Slf4j
@@ -227,6 +232,16 @@ class AlertServiceImpl implements AlertService {
                     ]
                     """));
 
+    private static final Alert DUMMY_ALERT = Alert.builder()
+            .id(UUID.fromString("01234567-89ab-cdef-0123-456789abcdef"))
+            .name("Example Alert")
+            .enabled(true)
+            .webhook(Webhook.builder()
+                    .build())
+            .build();
+
+    private static final WebhookExamples WEBHOOK_EXAMPLES = prepareWebhookPayloadExamples();
+
     @Override
     public UUID create(@NonNull Alert alert) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -345,7 +360,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        var event = mapAlertToWebhookEvent(alert, workspaceId, userName);
+        var event = mapAlertToWebhookEvent(alert, workspaceId);
         String requestBody = JsonUtils
                 .writeValueAsString(event.toBuilder().url(null).headers(null).secret(null).build());
 
@@ -381,13 +396,18 @@ class AlertServiceImpl implements AlertService {
                 .block();
     }
 
-    private WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId, String userName) {
-        String eventId = idGenerator.generateId().toString();
+    @Override
+    public WebhookExamples getWebhookExamples() {
+        return WEBHOOK_EXAMPLES;
+    }
+
+    private static WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId) {
+        String eventId = "0198ec7e-e844-7537-aaaa-fc5db24dcce7";
         var eventType = CollectionUtils.isEmpty(alert.triggers())
                 ? AlertEventType.TRACE_ERRORS
                 : alert.triggers().getFirst().eventType();
-        Set<String> eventIds = Set.of(idGenerator.generateId().toString()); // Dummy event ID for test
-        var alertId = alert.id() == null ? idGenerator.generateId() : alert.id();
+        Set<String> eventIds = Set.of("0198ec7e-e844-7537-aaaa-fc5db24fb547");
+        var alertId = alert.id() == null ? UUID.fromString("0198ec7e-e844-7537-aaaa-fc5dd35fb547") : alert.id();
 
         Map<String, Object> payload = Map.of(
                 "alertId", alertId,
@@ -521,6 +541,29 @@ class AlertServiceImpl implements AlertService {
                 .createdBy(Optional.ofNullable(config.createdBy()).orElse(userName))
                 .createdAt(alert.createdAt()) // will be null for new alert, and not null for update
                 .lastUpdatedBy(userName)
+                .build();
+    }
+
+    private static WebhookExamples prepareWebhookPayloadExamples() {
+        Map<AlertEventType, String> examples = new HashMap<>();
+
+        Arrays.stream(AlertEventType.values())
+                .forEach(eventType -> {
+                    var alert = DUMMY_ALERT.toBuilder()
+                            .triggers(List.of(
+                                    AlertTrigger.builder()
+                                            .eventType(eventType)
+                                            .build()))
+                            .build();
+
+                    var webhookEvent = mapAlertToWebhookEvent(alert, "demo-workspace-id");
+                    String requestBody = JsonUtils
+                            .writeValueAsString(webhookEvent.toBuilder().url(null).headers(null).secret(null).build());
+                    examples.put(eventType, requestBody);
+                });
+
+        return WebhookExamples.builder()
+                .responseExamples(examples)
                 .build();
     }
 }
