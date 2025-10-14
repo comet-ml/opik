@@ -1,22 +1,55 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OpikCallbackHandler } from "../src/index";
+import type { Opik } from "opik";
+
+// Mock the opik module
+vi.mock("opik", () => ({
+  Opik: vi.fn(),
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  OpikSpanType: {
+    General: "general",
+    Llm: "llm",
+    Tool: "tool",
+  },
+}));
+
+const createMockOpikClient = (): Opik =>
+  ({
+    trace: vi.fn(),
+    flush: vi.fn().mockResolvedValue(undefined),
+    config: {
+      projectName: undefined,
+    },
+  }) as unknown as Opik;
 
 describe("Integration Export", () => {
+  let mockOpikClient: Opik;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockOpikClient = createMockOpikClient();
+  });
+
   it("should export OpikCallbackHandler", () => {
     expect(OpikCallbackHandler).toBeDefined();
     expect(typeof OpikCallbackHandler).toBe("function");
   });
 
   it("should create an instance of OpikCallbackHandler", () => {
-    // Mock the Opik constructor to avoid actual initialization
-    const handler = new OpikCallbackHandler();
+    // Use mocked client to avoid API key requirement
+    const handler = new OpikCallbackHandler({ client: mockOpikClient });
 
     expect(handler).toBeInstanceOf(OpikCallbackHandler);
     expect(handler.name).toBe("OpikCallbackHandler");
   });
 
   it("should have required callback methods", () => {
-    const handler = new OpikCallbackHandler();
+    const handler = new OpikCallbackHandler({ client: mockOpikClient });
 
     // Check that essential callback methods exist
     expect(typeof handler.handleChainStart).toBe("function");

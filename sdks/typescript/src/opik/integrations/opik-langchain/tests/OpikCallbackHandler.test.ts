@@ -153,8 +153,18 @@ describe("OpikCallbackHandler", () => {
 
     it("should create a span for child chain", async () => {
       const mockTrace = createMockTrace();
-      const mockSpan = createMockSpan();
-      (mockTrace.span as ReturnType<typeof vi.fn>).mockReturnValue(mockSpan);
+      const mockParentSpan = createMockSpan();
+      const mockChildSpan = createMockSpan();
+
+      // Parent span should return child span when .span() is called
+      (mockParentSpan.span as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockChildSpan
+      );
+
+      // Trace should return parent span when .span() is called
+      (mockTrace.span as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockParentSpan
+      );
 
       // First create a parent trace
       (mockOpikClient.trace as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -188,7 +198,8 @@ describe("OpikCallbackHandler", () => {
         parentRunId
       );
 
-      expect(mockTrace.span).toHaveBeenCalledWith({
+      // Should call span() on the parent span (not the trace)
+      expect(mockParentSpan.span).toHaveBeenCalledWith({
         type: "general", // Default type from OpikSpanType.General
         name: "ChildChain",
         input: { query: { value: "test" } }, // Input gets processed
@@ -223,6 +234,8 @@ describe("OpikCallbackHandler", () => {
 
     it("should update and end span", async () => {
       const mockTrace = createMockTrace();
+      const mockSpan = createMockSpan();
+      (mockTrace.span as ReturnType<typeof vi.fn>).mockReturnValue(mockSpan);
       (mockOpikClient.trace as ReturnType<typeof vi.fn>).mockReturnValue(
         mockTrace
       );
@@ -241,14 +254,15 @@ describe("OpikCallbackHandler", () => {
       const output = { answer: "response" };
       await handler.handleChainEnd(output, runId);
 
-      expect(mockTrace.update).toHaveBeenCalledWith({
+      // The span's update method should be called (not the trace's update)
+      expect(mockSpan.update).toHaveBeenCalledWith({
         output: expect.any(Object),
         errorInfo: undefined,
         tags: undefined,
         usage: undefined,
         metadata: undefined,
+        endTime: expect.any(Date),
       });
-      expect(mockTrace.end).toHaveBeenCalled();
     });
   });
 
@@ -259,6 +273,8 @@ describe("OpikCallbackHandler", () => {
 
     it("should handle chain errors", async () => {
       const mockTrace = createMockTrace();
+      const mockSpan = createMockSpan();
+      (mockTrace.span as ReturnType<typeof vi.fn>).mockReturnValue(mockSpan);
       (mockOpikClient.trace as ReturnType<typeof vi.fn>).mockReturnValue(
         mockTrace
       );
@@ -277,7 +293,8 @@ describe("OpikCallbackHandler", () => {
       const error = new Error("Test error");
       await handler.handleChainError(error, runId);
 
-      expect(mockTrace.update).toHaveBeenCalledWith({
+      // The span's update method should be called (not the trace's update)
+      expect(mockSpan.update).toHaveBeenCalledWith({
         output: undefined,
         errorInfo: {
           message: "Test error",
@@ -287,8 +304,8 @@ describe("OpikCallbackHandler", () => {
         tags: undefined,
         usage: undefined,
         metadata: undefined,
+        endTime: expect.any(Date),
       });
-      expect(mockTrace.end).toHaveBeenCalled();
     });
   });
 
