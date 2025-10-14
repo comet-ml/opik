@@ -13,6 +13,7 @@ type EnvironmentVariablesOverwrite = {
   OPIK_NEW_RELIC_APP_ID: string;
   OPIK_POSTHOG_KEY: string;
   OPIK_POSTHOG_HOST: string;
+  PRODUCTION: boolean;
 };
 
 declare global {
