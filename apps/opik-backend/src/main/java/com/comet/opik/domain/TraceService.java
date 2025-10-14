@@ -105,7 +105,7 @@ public interface TraceService {
 
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
-    Mono<TraceThread> getThreadById(UUID projectId, String threadId);
+    Mono<TraceThread> getThreadById(UUID projectId, String threadId, boolean truncate);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 
@@ -609,8 +609,8 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
-    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId) {
-        return dao.findThreadById(projectId, threadId)
+    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
+        return dao.findThreadById(projectId, threadId, truncate)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
     }
 

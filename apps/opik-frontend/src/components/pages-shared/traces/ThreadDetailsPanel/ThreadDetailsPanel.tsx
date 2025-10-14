@@ -176,7 +176,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       projectId,
       page: 1,
       size: 1000,
-      truncate: true,
+      truncate: false,
     },
     {
       placeholderData: keepPreviousData,

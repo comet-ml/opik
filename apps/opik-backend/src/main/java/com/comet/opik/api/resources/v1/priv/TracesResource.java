@@ -664,10 +664,10 @@ public class TracesResource {
         UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
                 workspaceId);
 
-        log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}'", projectId,
-                identifier.threadId(), workspaceId);
+        log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}' with truncate '{}'",
+                identifier.threadId(), projectId, workspaceId, identifier.truncate());
 
-        TraceThread thread = service.getThreadById(projectId, identifier.threadId())
+        TraceThread thread = service.getThreadById(projectId, identifier.threadId(), identifier.truncate())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
