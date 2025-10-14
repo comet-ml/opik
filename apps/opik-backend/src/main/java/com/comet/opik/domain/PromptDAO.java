@@ -97,6 +97,23 @@ interface PromptDAO {
             @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("""
+            SELECT
+                  p.*,
+                  (
+                    SELECT COUNT(pv.id)
+                      FROM prompt_versions pv
+                     WHERE pv.workspace_id = p.workspace_id
+                     AND pv.prompt_id = p.id
+                  ) AS version_count
+            FROM prompts AS p
+            WHERE workspace_id = :workspace_id
+            <if(ids)> AND id IN (<ids>) <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Prompt> findByIds(@Define("ids") @BindList("ids") Set<UUID> ids, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
              SELECT
                 count(id)
              FROM (

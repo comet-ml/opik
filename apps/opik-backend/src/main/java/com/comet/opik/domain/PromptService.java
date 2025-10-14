@@ -61,6 +61,8 @@ public interface PromptService {
 
     Prompt getById(UUID id);
 
+    List<Prompt> getByIds(Set<UUID> ids);
+
     PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
 
     PromptVersion getVersionById(UUID id);
@@ -428,6 +430,17 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
+    public List<Prompt> getByIds(@NonNull Set<UUID> ids) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            return promptDAO.findByIds(ids, workspaceId);
+        });
+    }
+
+    @Override
     public Mono<Map<UUID, PromptVersion>> findVersionByIds(@NonNull Set<UUID> ids) {
 
         if (ids.isEmpty()) {
@@ -623,7 +636,7 @@ class PromptServiceImpl implements PromptService {
                 .eventType(PROMPT_DELETED)
                 .userName(userName)
                 .workspaceId(workspaceId)
-                .payload(ids)
+                .payload(getByIds(ids))
                 .build());
     }
 }
