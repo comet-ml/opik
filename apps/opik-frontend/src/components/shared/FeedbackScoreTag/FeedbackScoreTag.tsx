@@ -25,6 +25,7 @@ type FeedbackScoreTagProps = {
   // Multi-value support
   valueByAuthor?: FeedbackScoreValueByAuthorMap;
   category?: string;
+  color?: string;
 };
 
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
@@ -37,12 +38,13 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   lastUpdatedBy,
   valueByAuthor,
   category,
+  color: customColor,
 }) => {
   const [openHoverCard, setOpenHoverCard] = useState(false);
 
   const color = useMemo(
-    () => TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
-    [label],
+    () => customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
+    [customColor, label],
   );
 
   const isRemovable = isFunction(onDelete);
