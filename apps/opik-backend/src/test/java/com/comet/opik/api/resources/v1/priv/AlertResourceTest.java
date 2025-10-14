@@ -1037,21 +1037,31 @@ class AlertResourceTest {
                     HttpStatus.SC_CREATED);
 
             // Create a prompt to trigger the event
-            var expectedPrompt = factory.manufacturePojo(Prompt.class)
+            var prompt = factory.manufacturePojo(Prompt.class)
                     .toBuilder()
                     .versionCount(0L)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
                     .build();
-            var promptId = promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
+            var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
+            var actualPrompt = promptResourceClient.getPrompt(promptId, mock.getLeft(), mock.getRight());
+
             // Now delete the prompt to trigger the deletion event
             deleteAction.accept(promptId, mock.getRight(), mock.getLeft());
 
             var payload = verifyWebhookCalledAndGetPayload(alert);
-            Set<UUID> ids = JsonUtils.readCollectionValue(payload, Set.class, UUID.class);
+            List<Prompt> prompts = JsonUtils.readCollectionValue(payload, List.class, Prompt.class);
 
-            assertThat(ids).hasSize(1);
-            assertThat(ids).contains(promptId);
+            assertThat(prompts).hasSize(1);
+            assertThat(prompts.getFirst())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(actualPrompt);
         }
 
         Stream<Arguments> testDeletePromptEvent__whenWebhookServerReceivesAlert() {

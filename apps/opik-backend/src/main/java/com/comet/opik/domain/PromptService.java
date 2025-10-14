@@ -319,6 +319,8 @@ class PromptServiceImpl implements PromptService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        var prompt = getById(id);
+
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
@@ -337,7 +339,7 @@ class PromptServiceImpl implements PromptService {
             return null;
         });
 
-        postPromptsDeletedEvent(Set.of(id), workspaceId, userName);
+        postPromptsDeletedEvent(List.of(prompt), workspaceId, userName);
     }
 
     @Override
@@ -347,6 +349,8 @@ class PromptServiceImpl implements PromptService {
             return;
         }
 
+        var prompts = getByIds(ids);
+
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -355,7 +359,7 @@ class PromptServiceImpl implements PromptService {
             return null;
         });
 
-        postPromptsDeletedEvent(ids, workspaceId, userName);
+        postPromptsDeletedEvent(prompts, workspaceId, userName);
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
@@ -631,12 +635,12 @@ class PromptServiceImpl implements PromptService {
                 .build());
     }
 
-    private void postPromptsDeletedEvent(Set<UUID> ids, String workspaceId, String userName) {
+    private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String userName) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_DELETED)
                 .userName(userName)
                 .workspaceId(workspaceId)
-                .payload(getByIds(ids))
+                .payload(prompts)
                 .build());
     }
 }

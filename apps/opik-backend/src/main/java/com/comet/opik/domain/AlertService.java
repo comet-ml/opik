@@ -201,7 +201,8 @@ class AlertServiceImpl implements AlertService {
         String userName = requestContext.get().getUserName();
 
         var event = mapAlertToWebhookEvent(alert, workspaceId, userName);
-        String requestBody = JsonUtils.writeValueAsString(event);
+        String requestBody = JsonUtils
+                .writeValueAsString(event.toBuilder().url(null).headers(null).secret(null).build());
 
         return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
@@ -248,7 +249,8 @@ class AlertServiceImpl implements AlertService {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
-                "metadata", "metadata related to the event",
+                "userNames", Set.of(userName),
+                "metadata", getTestPayload(eventType),
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
@@ -266,6 +268,10 @@ class AlertServiceImpl implements AlertService {
                 .workspaceId(workspaceId)
                 .createdAt(Instant.now())
                 .build();
+    }
+
+    Set<String> getTestPayload(AlertEventType eventType) {
+        return null;
     }
 
     private void deleteBatch(Handle handle, Set<UUID> ids) {

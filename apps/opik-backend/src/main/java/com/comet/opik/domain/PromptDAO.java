@@ -97,17 +97,51 @@ interface PromptDAO {
             @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("""
-            SELECT
+            WITH selected_prompts AS (
+            	SELECT
                   p.*,
                   (
                     SELECT COUNT(pv.id)
                       FROM prompt_versions pv
-                     WHERE pv.workspace_id = p.workspace_id
-                     AND pv.prompt_id = p.id
+                      WHERE pv.workspace_id = p.workspace_id
+                      AND pv.prompt_id = p.id
                   ) AS version_count
-            FROM prompts AS p
-            WHERE workspace_id = :workspace_id
-            <if(ids)> AND id IN (<ids>) <endif>
+            	FROM prompts AS p
+            	WHERE workspace_id = :workspace_id
+            	<if(ids)> AND id IN (<ids>) <endif>
+            ), latest_versions AS (
+            	SELECT
+              JSON_OBJECT(
+                'id', id,
+                'prompt_id', prompt_id,
+                'commit', commit,
+                'template', template,
+                'metadata', metadata,
+                'change_description', change_description,
+                'type', type,
+                'created_at', created_at,
+                'created_by', created_by,
+                'last_updated_at', last_updated_at,
+                'last_updated_by', last_updated_by
+              ) AS latest_version,
+              prompt_id
+              FROM (
+                SELECT
+                  pv.*,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY pv.prompt_id
+                    ORDER BY pv.id DESC
+                  ) AS rn
+                FROM prompt_versions pv
+                WHERE pv.workspace_id = :workspace_id
+                  <if(ids)> AND pv.prompt_id IN (<ids>) <endif>
+              ) ranked
+              WHERE ranked.rn = 1
+            )
+            SELECT sp.*, lv.latest_version
+            FROM selected_prompts sp
+            LEFT JOIN latest_versions lv
+            ON sp.id = lv.prompt_id
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
