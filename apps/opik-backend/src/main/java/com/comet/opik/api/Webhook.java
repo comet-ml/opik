@@ -1,8 +1,10 @@
 package com.comet.opik.api;
 
+import com.comet.opik.utils.EncryptionDeserializer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -27,7 +29,7 @@ public record Webhook(
                 Alert.View.Write.class}) @NotBlank String url,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) @Size(max = 250) String secretToken,
+                Alert.View.Write.class}) @Size(max = 250) @JsonDeserialize(using = EncryptionDeserializer.class) String secretToken,
 
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) Map<@NotBlank String, @NotBlank String> headers,

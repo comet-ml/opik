@@ -87,7 +87,6 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
     private static final String WEBHOOK_URL_DB = "webhook_url";
-    private static final String WEBHOOK_SECRET_TOKEN_DB = "webhook_secret_token";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -313,7 +312,6 @@ public class FilterQueryBuilder {
                     .put(AlertField.ID, ID_DB)
                     .put(AlertField.NAME, NAME_DB)
                     .put(AlertField.WEBHOOK_URL, WEBHOOK_URL_DB)
-                    .put(AlertField.WEBHOOK_SECRET_TOKEN, WEBHOOK_SECRET_TOKEN_DB)
                     .put(AlertField.CREATED_AT, CREATED_AT_DB)
                     .put(AlertField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(AlertField.CREATED_BY, CREATED_BY_DB)
@@ -458,7 +456,6 @@ public class FilterQueryBuilder {
                 AlertField.ID,
                 AlertField.NAME,
                 AlertField.WEBHOOK_URL,
-                AlertField.WEBHOOK_SECRET_TOKEN,
                 AlertField.CREATED_AT,
                 AlertField.LAST_UPDATED_AT,
                 AlertField.CREATED_BY,

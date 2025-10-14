@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 
 import java.io.IOException;
 
-public class ProviderApiKeyDeserializer extends JsonDeserializer<String> {
+public class EncryptionDeserializer extends JsonDeserializer<String> {
 
     @Override
     public String deserialize(JsonParser parser, DeserializationContext ctx) throws IOException {

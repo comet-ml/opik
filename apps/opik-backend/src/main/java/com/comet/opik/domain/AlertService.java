@@ -248,6 +248,7 @@ class AlertServiceImpl implements AlertService {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
+                "metadata", "metadata related to the event",
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
@@ -260,6 +261,7 @@ class AlertServiceImpl implements AlertService {
                 .alertId(alertId)
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
+                .secret(alert.webhook().secretToken())
                 .maxRetries(1)
                 .workspaceId(workspaceId)
                 .userName(userName)

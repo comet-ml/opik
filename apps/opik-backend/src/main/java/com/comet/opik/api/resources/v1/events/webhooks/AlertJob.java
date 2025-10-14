@@ -193,6 +193,7 @@ public class AlertJob extends Job {
                 alert.webhook().url(),
                 payload,
                 Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()),
+                alert.webhook().secretToken(),
                 webhookConfig.getMaxRetries()) // maxRetries
                 .doOnSuccess(webhookId -> log.info(
                         "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",

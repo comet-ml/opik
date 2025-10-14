@@ -1,6 +1,6 @@
 package com.comet.opik.api;
 
-import com.comet.opik.utils.ProviderApiKeyDeserializer;
+import com.comet.opik.utils.EncryptionDeserializer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -17,7 +17,7 @@ import java.util.Map;
 public record ProviderApiKeyUpdate(
         @JsonView( {
                 ProviderApiKey.View.Public.class,
-                ProviderApiKey.View.Write.class}) @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey,
+                ProviderApiKey.View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) @Size(max = 150) String name,
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) Map<String, String> headers,
         @JsonView({ProviderApiKey.View.Public.class,
