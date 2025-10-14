@@ -653,3 +653,83 @@ div.cm-theme div.cm-search.cm-panel {
     @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
   }
 }
+
+/* Collapsible headings styles */
+.collapsible-heading {
+  @apply border border-border rounded-lg mb-4;
+
+  /* Summary styling */
+  summary.collapsible-heading-summary {
+    @apply cursor-pointer p-4 hover:bg-muted/50 transition-colors;
+    list-style: none; /* Remove default arrow */
+
+    /* Custom arrow */
+    &::before {
+      content: "▶";
+      @apply inline-block mr-2 text-muted-foreground transition-transform duration-200;
+    }
+
+    /* Rotate arrow when open */
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  /* Content wrapper */
+  .collapsible-heading-content {
+    @apply p-4 pt-0 border-t border-border;
+  }
+
+  /* When open, rotate arrow */
+  &[open] summary.collapsible-heading-summary::before {
+    transform: rotate(90deg);
+  }
+
+  /* Dark theme adjustments */
+  .dark & {
+    @apply border-border;
+
+    summary.collapsible-heading-summary {
+      @apply hover:bg-muted/30;
+    }
+  }
+}
+
+/* Specific styling for collapsible headings in markdown */
+.comet-markdown .collapsible-heading {
+  /* Ensure proper spacing with other markdown elements */
+  margin: 1rem 0;
+
+  /* Style headings inside collapsible sections */
+  .collapsible-heading-content {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      @apply mt-4 mb-2;
+
+      &:first-child {
+        @apply mt-0;
+      }
+    }
+
+    p {
+      @apply mb-2;
+
+      &:last-child {
+        @apply mb-0;
+      }
+    }
+
+    ul,
+    ol {
+      @apply mb-2;
+
+      &:last-child {
+        @apply mb-0;
+      }
+    }
+  }
+}

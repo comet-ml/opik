@@ -4,3 +4,4 @@ export * from "./textExtraction";
 export * from "./jsonTableUtils";
 export * from "./arrayExtraction";
 export * from "./prettifyMessage";
+export * from "./conversationMarkdown";
