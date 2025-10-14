@@ -3,20 +3,28 @@ title: Multi-Metric Optimization
 description: Learn how to optimize your agents using multiple evaluation metrics simultaneously with composite objectives.
 ---
 
-# Multi-Metric Optimization
-
 When optimizing AI agents, you often need to balance multiple quality dimensions simultaneously. Multi-metric optimization allows you to combine several evaluation metrics with customizable weights to create a composite objective function.
-You can always do it yourself inside your custom metric function, however, if you do it via the Opik Optimizer special API, you
-will be able get all of the components of your composite metric logged to Opik platform. As a result, you will be able
-to review not only the final score, but also all of the sub-scores for your optimization trials and specific trial items (traces).
+
+## Why Use Multi-Metric Optimization?
+
+While you can implement metric combinations within a custom metric function, using Opik Optimizer's `MultiMetricObjective` API provides additional benefits:
+
+- **Automatic logging** of all component metrics to the Opik platform
+- **Individual tracking** of each sub-metric alongside the composite score
+- **Detailed visibility** into how each metric contributes to optimization
+- **Trial-level insights** for both aggregate and individual trace performance
+
+This visibility helps you understand trade-offs between different quality dimensions during optimization.
 
 ## Basic Setup
+
+In this guide, we'll use the **HotPot QA dataset** to demonstrate multi-metric optimization. The example optimizes a question-answering agent that uses Wikipedia search to balance both accuracy and relevance.
 
 To use multi-metric optimization, you need to:
 
 1. Define multiple metric functions
-2. Create a `MultiMetricObjective` class instance, using your functions and weights
-3. Pass it to your optimizer as a metric to optimize for
+2. Create a `MultiMetricObjective` class instance using your functions and weights
+3. Pass it to your optimizer as the metric to optimize for
 
 ### Step 1: Define Your Metrics
 
@@ -56,10 +64,13 @@ multi_metric_objective = opik_optimizer.MultiMetricObjective(
 )
 ```
 
-The weights determine the relative importance of each metric:
-- `weights=[0.4, 0.6]` means the first metric contributes 40% and the second 60% to the final score
+**Understanding Weights:**
+
+The `weights` parameter controls the relative importance of each metric:
+
+- `weights=[0.4, 0.6]` → First metric contributes 40%, second contributes 60%
 - Higher weights emphasize those metrics during optimization
-- Weights are not required to sum up to 1, you can set any values.
+- Weights don't need to sum to 1—use any values that represent your priorities
 
 ### Step 3: Use with Optimizer
 
@@ -186,30 +197,37 @@ When you run multi-metric optimization, Opik tracks and displays both the compos
 
 The optimization progress chart shows how your composite metric and individual metrics evolve over trials:
 
-![Multi-metric optimization progress chart](/img/agent_optimization/multi_metric_optimization/progress_chart.png)
+<Frame>
+  <img src="/img/agent_optimization/multi_metric_optimization/progress_chart.png" alt="Multi-metric optimization progress chart" />
+</Frame>
 
-The chart displays:
-- **Composite metric** (my_composite_metric): The weighted combination of all metrics
-- **Individual metrics** (levenshtein_ratio, answer_relevance_score): Each component metric tracked separately
-- **Trial progression**: How metrics improve over time
+**What you'll see:**
 
-This allows you to see not just the overall optimization progress, but also how each individual metric contributes to the final score.
+- **Composite metric** (`my_composite_metric`) — The weighted combination of all metrics
+- **Individual metrics** (`levenshtein_ratio`, `answer_relevance_score`) — Each component tracked separately
+- **Trial progression** — Metric evolution over time
+
+This lets you see not just overall optimization progress, but how each metric contributes to the final score.
 
 ### Trial Items View
 
-You can also view individual trial items with their metric breakdowns:
+View individual trial items with detailed metric breakdowns:
 
-![Trial items with multi-metric scores](/img/agent_optimization/multi_metric_optimization/trial_items.png)
+<Frame>
+  <img src="/img/agent_optimization/multi_metric_optimization/trial_items.png" alt="Trial items with multi-metric scores" />
+</Frame>
 
-For each trial item, you can see:
-- The composite metric score
+**What you'll see:**
+
+- Composite metric score for each trial
 - Individual scores for each component metric
-- How different prompts perform across all metrics
+- Performance comparison across different prompts
 
-This detailed view helps you understand:
+**Insights you'll gain:**
+
 - Which metrics are improving or degrading
 - Trade-offs between different quality dimensions
-- Whether the weight balance is appropriate for your use case
+- Whether your weight balance is appropriate
 
 ## Next Steps
 
