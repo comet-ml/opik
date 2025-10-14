@@ -8,6 +8,10 @@ automatically group related traces into conversation threads using parameters su
 This guide will walk you through the process of evaluating and optimizing conversation threads in Opik using
 the `evaluate_threads` function in the Python SDK.
 
+<Note>
+For complete API reference documentation, see the [`evaluate_threads` API reference](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/evaluate_threads.html).
+</Note>
+
 ## Using the Python SDK
 
 The Python SDK provides a simple and efficient way to evaluate and optimize conversation threads using the
@@ -38,6 +42,69 @@ results = evaluate_threads(
     trace_output_transform=lambda x: x["output"],
 )
 ```
+
+### Understanding the Transform Arguments
+
+Threads consist of multiple traces, and each trace has an input and output. In practice, these typically contain user messages and agent responses. However, trace inputs and outputs are rarely just simple strings—they are usually complex data structures whose exact format depends on your agent framework.
+
+To handle this complexity, you need to provide `trace_input_transform` and `trace_output_transform` functions. These are **critical parameters** that tell Opik how to extract the actual message content from your framework-specific trace structure.
+
+#### Why Transform Functions Are Needed
+
+Different agent frameworks structure their trace data differently:
+- **LangChain** might store messages in `{"messages": [{"content": "..."}]}`
+- **CrewAI** might use `{"task": {"description": "..."}}`
+- **Custom implementations** can have any structure you've defined
+
+Without transform functions, Opik wouldn't know where to find the actual user questions and agent responses within your trace data.
+
+#### How Transform Functions Work
+
+Using these functions, the Opik evaluation engine will convert your threads chosen for evaluation into the standardized format expected by all Opik thread evaluation metrics:
+
+```json
+[
+    {
+        "role": "user",
+        "content": "input string from trace 1"
+    },
+    {
+        "role": "assistant",
+        "content": "output string from trace 1"
+    },
+    {
+        "role": "user",
+        "content": "input string from trace 2"
+    },
+    {
+        "role": "assistant",
+        "content": "output string from trace 2"
+    }
+]
+```
+
+**Example:**
+
+If your trace input has the following structure:
+
+```json
+{
+    "content": {
+        "user_question": "Tell me about your service?"
+    },
+    "metadata": {...}
+}
+```
+
+Then your `trace_input_transform` should be:
+
+```python
+lambda x: x["content"]["user_question"]
+```
+
+<Tip>
+Don't want to deal with transformations because your traces don't have a consistent format? Try using LLM-based transformations, language models are good at this!.
+</Tip>
 
 #### Using filter string
 
