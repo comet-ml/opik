@@ -40,6 +40,7 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import DatasetExperimentsPage from "@/components/pages/DatasetPage/DatasetExperimentPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -300,6 +301,15 @@ const datasetItemsRoute = createRoute({
   },
 });
 
+const datasetExperimentRoute = createRoute({
+  path: "/experiments",
+  getParentRoute: () => datasetRoute,
+  component: DatasetExperimentsPage,
+  staticData: {
+    title: "Experiments",
+  },
+});
+
 // ----------- prompts
 const promptsRoute = createRoute({
   path: "/prompts",
@@ -450,7 +460,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,
-        datasetRoute.addChildren([datasetItemsRoute]),
+        datasetRoute.addChildren([datasetItemsRoute, datasetExperimentRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
       redirectRoute.addChildren([
