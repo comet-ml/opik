@@ -22,6 +22,7 @@ export type MenuItem = {
   icon: LucideIcon;
   label: string;
   count?: string;
+  showIndicator?: string;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
@@ -36,6 +37,7 @@ interface SidebarMenuItemProps {
   item: MenuItem;
   expanded: boolean;
   count?: number;
+  hasIndicator?: boolean;
   compact?: boolean;
 }
 
@@ -94,10 +96,12 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   item,
   expanded,
   count,
+  hasIndicator,
   compact = false,
 }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const hasCount = item.count && isNumber(count);
+  const showIndicatorBadge = item.showIndicator && hasIndicator;
   const isFeatureEnabled = useIsFeatureEnabled(item.featureFlag!);
 
   if (item.featureFlag && !isFeatureEnabled) {
@@ -111,7 +115,13 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
         <>
           <div className="grow truncate">{item.label}</div>
           {hasCount && <div className="h-6 shrink-0 leading-6">{count}</div>}
+          {showIndicatorBadge && (
+            <div className="size-2 shrink-0 rounded-full bg-[var(--color-green)]" />
+          )}
         </>
+      )}
+      {!expanded && showIndicatorBadge && (
+        <div className="absolute right-1 top-1 size-2 rounded-full bg-[var(--color-green)]" />
       )}
     </>
   );
