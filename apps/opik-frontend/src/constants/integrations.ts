@@ -375,16 +375,17 @@ export const INTEGRATIONS: Integration[] = [
   //     "pip install --upgrade --quiet opik pydantic-ai logfire 'logfire[httpx]'",
   //   isHidden: true,
   // },
-  {
-    id: "smolagents",
-    title: "Smolagents",
-    description: "Frameworks & tools",
-    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
-    icon: smolagentsLogoUrl,
-    code: smolagentsCode,
-    installCommand: "pip install -U opik 'smolagents[telemetry,toolkit]'",
-    docsLink: buildDocsUrl("/integrations/smolagents"),
-  },
+  // Replaced with "View all integrations" card in the grid
+  // {
+  //   id: "smolagents",
+  //   title: "Smolagents",
+  //   description: "Frameworks & tools",
+  //   category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+  //   icon: smolagentsLogoUrl,
+  //   code: smolagentsCode,
+  //   installCommand: "pip install -U opik 'smolagents[telemetry,toolkit]'",
+  //   docsLink: buildDocsUrl("/integrations/smolagents"),
+  // },
   // TODO: Outdated code
   // {
   //   id: "strands-agents",

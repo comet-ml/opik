@@ -4,6 +4,7 @@ import { IntegrationExplorerProvider } from "./IntegrationExplorerContext";
 import IntegrationSearch from "./IntegrationSearch";
 import IntegrationQuickInstall from "./IntegrationQuickInstall";
 import IntegrationTypeScriptSDK from "./IntegrationTypeScriptSDK";
+import IntegrationDocumentation from "./IntegrationDocumentation";
 import IntegrationGetHelp from "./IntegrationGetHelp";
 import IntegrationCopyApiKey from "./IntegrationCopyApiKey";
 import IntegrationTabs from "./IntegrationTabs";
@@ -11,23 +12,30 @@ import IntegrationGrid from "./IntegrationGrid";
 
 export type IntegrationExplorerProps = {
   children: React.ReactNode;
+  source?: string;
 };
 
 const IntegrationExplorer: React.FunctionComponent<IntegrationExplorerProps> & {
   Search: typeof IntegrationSearch;
   QuickInstall: typeof IntegrationQuickInstall;
   TypeScriptSDK: typeof IntegrationTypeScriptSDK;
+  Documentation: typeof IntegrationDocumentation;
   GetHelp: typeof IntegrationGetHelp;
   CopyApiKey: typeof IntegrationCopyApiKey;
   Tabs: typeof IntegrationTabs;
   Grid: typeof IntegrationGrid;
-} = ({ children }) => {
-  return <IntegrationExplorerProvider>{children}</IntegrationExplorerProvider>;
+} = ({ children, source }) => {
+  return (
+    <IntegrationExplorerProvider source={source}>
+      {children}
+    </IntegrationExplorerProvider>
+  );
 };
 
 IntegrationExplorer.Search = IntegrationSearch;
 IntegrationExplorer.QuickInstall = IntegrationQuickInstall;
 IntegrationExplorer.TypeScriptSDK = IntegrationTypeScriptSDK;
+IntegrationExplorer.Documentation = IntegrationDocumentation;
 IntegrationExplorer.GetHelp = IntegrationGetHelp;
 IntegrationExplorer.CopyApiKey = IntegrationCopyApiKey;
 IntegrationExplorer.Tabs = IntegrationTabs;

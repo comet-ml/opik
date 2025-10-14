@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { BookOpen, Plus } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import IntegrationCard from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
@@ -8,7 +8,7 @@ import RequestIntegrationDialog from "@/components/pages-shared/onboarding/Integ
 import IntegrationDetailsDialog from "@/components/pages-shared/onboarding/IntegrationExplorer/components/IntegrationDetailsDialog";
 import { useIntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 import { getIntegrationsByCategory } from "@/constants/integrations";
-import { cn } from "@/lib/utils";
+import { buildDocsUrl, cn } from "@/lib/utils";
 
 type IntegrationGridProps = {
   className?: string;
@@ -22,6 +22,7 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
     searchText,
     selectedIntegrationId,
     setSelectedIntegrationId,
+    source,
   } = useIntegrationExplorer();
   const [requestIntegrationDialogOpen, setRequestIntegrationDialogOpen] =
     useState(false);
@@ -101,6 +102,27 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
             onClick={() => setSelectedIntegrationId(integration.id)}
           />
         ))}
+
+        <a
+          href={buildDocsUrl(
+            "/integrations/overview",
+            "&utm_source=opik_frontend&utm_medium=integration_grid&utm_campaign=integrations_docs&utm_content=integration_card",
+          )}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-fs-element={`IntegrationsOverviewDocsLink${source ? `-${source}` : ""}`}
+          id={`integrations-overview-docs-link${source ? `-${source}` : ""}`}
+        >
+          <IntegrationCard
+            title="View all integrations"
+            description="60+ integrations across all major languages"
+            icon={
+              <div className="flex size-[40px] items-center justify-center rounded-lg bg-primary/10">
+                <BookOpen className="size-5 text-primary" />
+              </div>
+            }
+          />
+        </a>
 
         <IntegrationCard
           title="Request integration"
