@@ -167,7 +167,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 thread_id=message.thread_id,
                 last_updated_at=message.last_updated_at,
                 feedback_scores=None,
-                spans=[],
+                spans=None,
             )
 
             self._save_trace(trace)
@@ -194,7 +194,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 project_name=message.project_name,
                 thread_id=message.thread_id,
                 last_updated_at=message.last_updated_at,
-                spans=[],
+                spans=None,
                 feedback_scores=None,
                 error_info=error_info,
             )
@@ -218,7 +218,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 error_info=message.error_info,
                 total_cost=message.total_cost,
                 last_updated_at=message.last_updated_at,
-                spans=[],
+                spans=None,
                 feedback_scores=None,
             )
 
@@ -252,7 +252,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 provider=message.provider,
                 total_cost=message.total_estimated_cost,
                 last_updated_at=message.last_updated_at,
-                spans=[],
+                spans=None,
                 feedback_scores=None,
                 error_info=error_info,
             )
@@ -364,7 +364,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         tags: Optional[List[str]],
         metadata: Optional[Dict[str, Any]],
         end_time: Optional[datetime.datetime],
-        spans: List[models.SpanModel],
+        spans: Optional[List[models.SpanModel]],
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
@@ -418,7 +418,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         usage: Optional[Dict[str, Any]],
         end_time: Optional[datetime.datetime],
         project_name: str,
-        spans: List[models.SpanModel],
+        spans: Optional[List[models.SpanModel]],
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         model: Optional[str],
         provider: Optional[str],

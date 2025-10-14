@@ -26,12 +26,17 @@ class LocalEmulatorMessageProcessor(
         tags: Optional[List[str]],
         metadata: Optional[Dict[str, Any]],
         end_time: Optional[datetime.datetime],
-        spans: List[models.SpanModel],
+        spans: Optional[List[models.SpanModel]],
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
         last_updated_at: Optional[datetime.datetime] = None,
     ) -> models.TraceModel:
+        if spans is None:
+            spans = []
+        if feedback_scores is None:
+            feedback_scores = []
+
         return models.TraceModel(
             id=trace_id,
             start_time=start_time,
@@ -62,7 +67,7 @@ class LocalEmulatorMessageProcessor(
         usage: Optional[Dict[str, Any]],
         end_time: Optional[datetime.datetime],
         project_name: str,
-        spans: List[models.SpanModel],
+        spans: Optional[List[models.SpanModel]],
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         model: Optional[str],
         provider: Optional[str],
@@ -70,6 +75,11 @@ class LocalEmulatorMessageProcessor(
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
     ) -> models.SpanModel:
+        if spans is None:
+            spans = []
+        if feedback_scores is None:
+            feedback_scores = []
+
         return models.SpanModel(
             id=span_id,
             start_time=start_time,
