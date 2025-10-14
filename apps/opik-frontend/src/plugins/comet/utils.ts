@@ -5,6 +5,10 @@ export const isProduction = () => {
   return Boolean(window.environmentVariablesOverwrite?.PRODUCTION);
 };
 
+export const isOnPremise = () => {
+  return Boolean(window.environmentVariablesOverwrite?.ON_PREMISE);
+};
+
 export const buildUrl = (
   path: string,
   workspaceName?: string,
