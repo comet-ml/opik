@@ -11,11 +11,13 @@ import { logger } from "@/utils/logger";
 import { serialization } from "@/rest_api";
 import { getExperimentUrlById } from "@/utils/url";
 import { DEFAULT_CONFIG } from "@/config/Config";
+import type { Prompt } from "@/prompt/Prompt";
 
 export interface ExperimentData {
   id?: string;
   name?: string;
   datasetName: string;
+  prompts?: Prompt[];
 }
 
 /**
@@ -25,18 +27,20 @@ export class Experiment {
   public readonly id: string;
   public readonly name?: string;
   public readonly datasetName: string;
+  public readonly prompts?: Prompt[];
 
   /**
    * Creates a new Experiment instance.
    * This should not be created directly, use static factory methods instead.
    */
   constructor(
-    { id, name, datasetName }: ExperimentData,
+    { id, name, datasetName, prompts }: ExperimentData,
     private opik: OpikClient
   ) {
     this.id = id || generateId();
     this.name = name;
     this.datasetName = datasetName;
+    this.prompts = prompts;
   }
 
   /**
