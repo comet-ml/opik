@@ -9,7 +9,7 @@ AlertTriggerPublicEventType = typing.Union[
         "trace_thread:feedback_score",
         "prompt:created",
         "prompt:committed",
-        "span:guardrails_triggered",
+        "trace:guardrails_triggered",
         "prompt:deleted",
     ],
     typing.Any,
