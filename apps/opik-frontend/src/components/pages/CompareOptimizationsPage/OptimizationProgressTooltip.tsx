@@ -121,7 +121,9 @@ const OptimizationProgressTooltip = React.forwardRef<
                           <div
                             className="size-2 shrink-0 rounded-full"
                             style={
-                              { backgroundColor: scoreColor } as React.CSSProperties
+                              {
+                                backgroundColor: scoreColor,
+                              } as React.CSSProperties
                             }
                           />
                           <div className="flex flex-1 items-center justify-between gap-2 leading-none">
