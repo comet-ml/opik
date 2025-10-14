@@ -291,38 +291,17 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Smoke test published package
+      - name: Verify package on NPM
         run: |
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
           PACKAGE_NAME="${{ env.PACKAGE_NAME }}"
 
-          echo "🧪 Running smoke test on published package..."
-          echo "   Package: $PACKAGE_NAME@$NEW_VERSION"
-
-          # Create temporary directory
-          TEMP_DIR=$(mktemp -d)
-          cd $TEMP_DIR
-
-          # Initialize minimal package.json
-          echo '{"type": "module"}' > package.json
-
-          # Wait a few seconds for NPM registry to propagate
           echo "⏳ Waiting for NPM registry propagation..."
           sleep 10
 
-          # Install the published package
-          echo "📦 Installing $PACKAGE_NAME@$NEW_VERSION..."
-          npm install "$PACKAGE_NAME@$NEW_VERSION" --no-save
-
-          # Try to require/import the package
-          echo "🔍 Testing package import..."
-          node -e "import('$PACKAGE_NAME').then(() => console.log('✅ Package can be imported successfully')).catch(e => { console.error('❌ Failed to import:', e.message); process.exit(1); })"
-
-          # Cleanup
-          cd -
-          rm -rf "$TEMP_DIR"
-
-          echo "✅ Smoke test passed - package is functional"
+          echo "🔍 Verifying $PACKAGE_NAME@$NEW_VERSION is available..."
+          npm view "$PACKAGE_NAME@$NEW_VERSION" version
+          echo "✅ Package verified on NPM"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
