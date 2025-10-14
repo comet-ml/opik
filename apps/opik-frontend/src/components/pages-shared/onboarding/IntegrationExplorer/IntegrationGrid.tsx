@@ -117,7 +117,7 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
         >
           <IntegrationCard
             title="View all integrations"
-            description="60+ integrations across all major languages"
+            description="Discover 60+ ways to connect"
             icon={
               <div className="flex size-[40px] items-center justify-center rounded-lg bg-primary/10">
                 <BookOpen className="size-5 text-primary" />

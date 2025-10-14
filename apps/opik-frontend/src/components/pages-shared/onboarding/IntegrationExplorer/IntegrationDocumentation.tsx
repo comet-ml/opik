@@ -17,7 +17,7 @@ const IntegrationDocumentation: React.FC = () => {
     >
       <IntegrationCard
         title="View all integrations"
-        description="60+ integrations across all major languages"
+        description="Discover 60+ ways to connect"
         size="lg"
         icon={
           <div className="flex size-[32px] items-center justify-center rounded-lg bg-primary/10">
