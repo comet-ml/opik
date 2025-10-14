@@ -4,7 +4,7 @@ import {
   createCollapsibleSection,
   isCollapsibleHeading,
   extractCollapsibleHeadingText,
-} from "../remarkCollapsibleHeadings";
+} from "./remarkCollapsibleHeadings";
 
 describe("remarkCollapsibleHeadings", () => {
   describe("makeHeadingsCollapsible", () => {
