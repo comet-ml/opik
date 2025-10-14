@@ -30,4 +30,3 @@ const IntegrationDocumentation: React.FC = () => {
 };
 
 export default IntegrationDocumentation;
-

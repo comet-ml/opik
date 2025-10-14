@@ -110,7 +110,9 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
           )}
           target="_blank"
           rel="noopener noreferrer"
-          data-fs-element={`IntegrationsOverviewDocsLink${source ? `-${source}` : ""}`}
+          data-fs-element={`IntegrationsOverviewDocsLink${
+            source ? `-${source}` : ""
+          }`}
           id={`integrations-overview-docs-link${source ? `-${source}` : ""}`}
         >
           <IntegrationCard
