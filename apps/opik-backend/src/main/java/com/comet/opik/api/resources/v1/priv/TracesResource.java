@@ -665,9 +665,9 @@ public class TracesResource {
                 workspaceId);
 
         log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}' with truncate '{}'",
-                identifier.threadId(), projectId, workspaceId, identifier.shouldTruncate());
+                identifier.threadId(), projectId, workspaceId, identifier.truncate());
 
-        TraceThread thread = service.getThreadById(projectId, identifier.threadId(), identifier.shouldTruncate())
+        TraceThread thread = service.getThreadById(projectId, identifier.threadId(), identifier.truncate())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

@@ -2283,8 +2283,8 @@ class TraceDAOImpl implements TraceDAO {
                 t.start_time as start_time,
                 t.end_time as end_time,
                 t.duration as duration,
-                <if(truncate)> replaceRegexpAll(t.truncated_first_message, '<truncate>', '"[image]"') as first_message <else> t.first_message as first_message<endif>,
-                <if(truncate)> replaceRegexpAll(t.truncated_last_message, '<truncate>', '"[image]"') as last_message <else> t.last_message as last_message<endif>,
+                <if(truncate)> t.truncated_first_message as first_message <else> t.first_message as first_message<endif>,
+                <if(truncate)> t.truncated_last_message as last_message <else> t.last_message as last_message<endif>,
                 <if(truncate)> t.first_message_length >= t.first_message_truncation_threshold as first_message_truncated <else> false as first_message_truncated <endif>,
                 <if(truncate)> t.last_message_length >= t.last_message_truncation_threshold as last_message_truncated <else> false as last_message_truncated <endif>,
                 t.number_of_messages as number_of_messages,
@@ -3386,7 +3386,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<TraceThread> findThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return asyncTemplate.nonTransaction(connection -> {
             ST template = new ST(SELECT_TRACES_THREAD_BY_ID);
-            template = ImageUtils.addTruncateToTemplate(template, truncate);
+            template.add("truncate", truncate);
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)

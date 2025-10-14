@@ -10059,6 +10059,58 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("when trace thread is retrieved with truncate parameter, then messages are truncated accordingly")
+        void getTraceThread__whenTruncateParameter__thenMessagesAreTruncatedAccordingly() {
+
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            // Create a long message that exceeds the truncation threshold of 10001 characters
+            var longMessage = "x".repeat(15000);
+            var longInput = "{\"content\": \"" + longMessage + "\"}";
+            var longOutput = "{\"result\": \"" + longMessage + "\"}";
+
+            var trace1 = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString(longInput))
+                    .build();
+
+            var trace2 = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .output(JsonUtils.getJsonNodeFromString(longOutput))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            // Test with truncate=false (default behavior) - should return full messages
+            var threadWithoutTruncate = traceResourceClient.getTraceThread(threadId, projectId, false, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(threadWithoutTruncate.firstMessage()).isNotNull();
+            assertThat(threadWithoutTruncate.lastMessage()).isNotNull();
+            assertThat(threadWithoutTruncate.firstMessage().toString()).contains(longMessage);
+            assertThat(threadWithoutTruncate.lastMessage().toString()).contains(longMessage);
+
+            // Test with truncate=true - should return truncated messages
+            var threadWithTruncate = traceResourceClient.getTraceThread(threadId, projectId, true, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(threadWithTruncate.firstMessage()).isNotNull();
+            assertThat(threadWithTruncate.lastMessage()).isNotNull();
+            // Truncated messages should be significantly shorter than the original
+            assertThat(threadWithTruncate.firstMessage().toString().length()).isLessThan(longInput.length());
+            assertThat(threadWithTruncate.lastMessage().toString().length()).isLessThan(longOutput.length());
+            // Truncated messages should be around 10001 characters (the threshold) plus some JSON formatting overhead
+            // Allow up to 10% overhead for JSON serialization
+            assertThat(threadWithTruncate.firstMessage().toString().length()).isLessThan(11000);
+            assertThat(threadWithTruncate.lastMessage().toString().length()).isLessThan(11000);
+        }
+
+        @Test
         @DisplayName("when trace thread does not exist, then return not found")
         void getTraceThread__whenTraceThreadDoesNotExist__thenReturnNotFound() {
             var threadId = UUID.randomUUID().toString();
