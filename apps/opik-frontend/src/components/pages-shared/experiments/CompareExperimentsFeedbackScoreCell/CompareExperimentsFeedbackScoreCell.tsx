@@ -12,15 +12,15 @@ import {
   getIsMultiValueFeedbackScore,
 } from "@/lib/feedback-scores";
 import FeedbackScoreCellValue from "@/components/shared/DataTableCells/FeedbackScoreCellValue";
+import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 
 const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
 > = (context) => {
   const experimentCompare = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { feedbackKey, colorMap } = (custom ?? {}) as CustomMeta & {
-    colorMap?: Record<string, string>;
-  };
+  const { feedbackKey, colorMap } = (custom ?? {}) as CustomMeta &
+    FeedbackScoreCustomMeta;
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(

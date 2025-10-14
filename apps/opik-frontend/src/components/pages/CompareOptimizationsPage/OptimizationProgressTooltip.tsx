@@ -1,5 +1,6 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
+import sortBy from "lodash/sortBy";
 import { getPayloadConfigFromPayload, useChart } from "@/components/ui/chart";
 import {
   Tooltip,
@@ -35,9 +36,9 @@ const OptimizationProgressTooltip = React.forwardRef<
   }
 
   const firstItem = payload[0];
-  const allFeedbackScores = (firstItem?.payload?.allFeedbackScores || []).sort(
-    (a: { name: string; value: number }, b: { name: string; value: number }) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  const allFeedbackScores = sortBy(
+    firstItem?.payload?.allFeedbackScores || [],
+    (score: { name: string; value: number }) => score.name.toLowerCase(),
   );
 
   // Filter payload to only show the main objective (not secondary scores)
@@ -118,12 +119,9 @@ const OptimizationProgressTooltip = React.forwardRef<
                           className="flex h-6 w-full flex-wrap items-center gap-1.5 px-2"
                         >
                           <div
-                            className="size-2 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
+                            className="size-2 shrink-0 rounded-full"
                             style={
-                              {
-                                "--color-bg": scoreColor,
-                                "--color-border": scoreColor,
-                              } as React.CSSProperties
+                              { backgroundColor: scoreColor } as React.CSSProperties
                             }
                           />
                           <div className="flex flex-1 items-center justify-between gap-2 leading-none">

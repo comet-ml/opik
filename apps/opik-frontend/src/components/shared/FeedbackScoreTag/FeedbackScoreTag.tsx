@@ -25,7 +25,7 @@ type FeedbackScoreTagProps = {
   // Multi-value support
   valueByAuthor?: FeedbackScoreValueByAuthorMap;
   category?: string;
-  color?: string; // Optional custom color
+  color?: string;
 };
 
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({

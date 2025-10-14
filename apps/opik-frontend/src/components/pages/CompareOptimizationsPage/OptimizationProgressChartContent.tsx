@@ -42,7 +42,7 @@ const OptimizationProgressChartContent: React.FC<
   OptimizationProgressChartContentProps
 > = ({ chartData, bestEntityId }) => {
   const { objectiveName, data } = chartData;
-  const [, setActiveLine] = useState<string | null>(null);
+  const [activeLine, setActiveLine] = useState<string | null>(null);
   const [position, setPosition] = useState<
     { x: number; y: number } | undefined
   >();
@@ -76,7 +76,7 @@ const OptimizationProgressChartContent: React.FC<
 
   // Collect all values (main objective + secondary scores) for Y-axis scaling
   const values = useMemo(() => {
-    const allValues: (number | null)[] = [];
+    const allValues: DataRecord["value"][] = [];
     data.forEach((record) => {
       // Main objective value
       allValues.push(record.value);
@@ -292,12 +292,16 @@ const OptimizationProgressChartContent: React.FC<
             dataKey={(record) => record.value}
             name={config[objectiveName].label as string}
             stroke={mainObjectiveColor}
-            fillOpacity={1}
+            fillOpacity={
+              activeLine === null || activeLine === objectiveName ? 1 : 0.2
+            }
             fill="url(#area)"
             dot={renderMainDot}
             activeDot={{ strokeWidth: 2, stroke: "white" }}
             strokeWidth={2.5}
-            strokeOpacity={1}
+            strokeOpacity={
+              activeLine === null || activeLine === objectiveName ? 1 : 0.2
+            }
             animationDuration={100}
             connectNulls={false}
           />
@@ -305,6 +309,8 @@ const OptimizationProgressChartContent: React.FC<
           {/* Secondary score lines with subtle styling */}
           {secondaryScoreNames.map((scoreName) => {
             const scoreColor = config[scoreName].color as string;
+            const isHighlighted = activeLine === scoreName;
+            const isDimmed = activeLine !== null && activeLine !== scoreName;
             return (
               <Area
                 type="linear"
@@ -316,8 +322,8 @@ const OptimizationProgressChartContent: React.FC<
                 fill="transparent"
                 dot={renderSecondaryDot}
                 activeDot={{ strokeWidth: 1.5, stroke: "white", r: 5 }}
-                strokeWidth={1.0}
-                strokeOpacity={0.5}
+                strokeWidth={isHighlighted ? 1.5 : 1.0}
+                strokeOpacity={isDimmed ? 0.15 : isHighlighted ? 0.8 : 0.5}
                 animationDuration={100}
                 connectNulls={false}
               />
