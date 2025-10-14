@@ -2,7 +2,7 @@ import logging
 import asyncio
 from typing import Any
 
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn
 from opik.evaluation.evaluation_result import EvaluationResult
 from .types import (
     RootCauseAnalysis,
@@ -305,7 +305,9 @@ Scores:
                 except Exception as exc:
                     logger.error(f"Batch {batch_num} failed: {exc}")
                     if progress and task_id is not None:
-                        progress.update(task_id, advance=1)  # Update progress bar even on error
+                        progress.update(
+                            task_id, advance=1
+                        )  # Update progress bar even on error
                     raise
 
         # Run all tasks with semaphore control and rich progress bar
@@ -322,12 +324,18 @@ Scores:
                     "Processing batches", total=len(batch_tasks)
                 )
                 results = await asyncio.gather(
-                    *[run_with_semaphore(num, task, progress, task_id) for num, task in batch_tasks]
+                    *[
+                        run_with_semaphore(num, task, progress, task_id)
+                        for num, task in batch_tasks
+                    ]
                 )
         else:
             # No progress bar in non-verbose mode
             results = await asyncio.gather(
-                *[run_with_semaphore(num, task, None, None) for num, task in batch_tasks]
+                *[
+                    run_with_semaphore(num, task, None, None)
+                    for num, task in batch_tasks
+                ]
             )
 
         # Sort by batch number to maintain order

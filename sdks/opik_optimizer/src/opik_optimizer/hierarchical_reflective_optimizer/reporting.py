@@ -318,7 +318,9 @@ def display_optimization_iteration(iteration: int, verbose: int = 1) -> Iterator
     if verbose >= 1:
         console.print(Text("│"))
         console.print(Text("│"))
-        console.print(Text("│ ").append(Text(f"Iteration {iteration}", style="bold cyan")))
+        console.print(
+            Text("│ ").append(Text(f"Iteration {iteration}", style="bold cyan"))
+        )
 
     class Reporter:
         def iteration_complete(self, best_score: float, improved: bool) -> None:
@@ -355,7 +357,9 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
     if verbose >= 1:
         console.print(Text("│   "))
         console.print(
-            Text("│   ").append(Text("Analyzing root cause of failed evaluation items", style="cyan"))
+            Text("│   ").append(
+                Text("Analyzing root cause of failed evaluation items", style="cyan")
+            )
         )
 
     class Reporter:
@@ -383,7 +387,9 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
 def display_batch_synthesis(num_batches: int, verbose: int = 1) -> Iterator[Any]:
     """Context manager to display message during batch synthesis."""
     if verbose >= 1:
-        console.print(Text("│   ").append(Text("Synthesizing failure modes", style="cyan")))
+        console.print(
+            Text("│   ").append(Text("Synthesizing failure modes", style="cyan"))
+        )
 
     class Reporter:
         def set_completed(self, num_unified_modes: int) -> None:
@@ -424,9 +430,7 @@ def display_hierarchical_synthesis(
     rendered_panel = capture.get()
 
     # Prefix each line with '│ ', preserving ANSI styles
-    prefixed_output = "\n".join(
-        f"│ {line}" for line in rendered_panel.splitlines()
-    )
+    prefixed_output = "\n".join(f"│ {line}" for line in rendered_panel.splitlines())
 
     # Print the prefixed output (will include colors)
     console.print(prefixed_output, highlight=False)
@@ -456,9 +460,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
     rendered_header = capture.get()
 
     # Prefix each line with '│   ', preserving ANSI styles
-    prefixed_output = "\n".join(
-        f"│   {line}" for line in rendered_header.splitlines()
-    )
+    prefixed_output = "\n".join(f"│   {line}" for line in rendered_header.splitlines())
 
     # Print the prefixed output (will include colors)
     console.print(prefixed_output, highlight=False)
@@ -507,7 +509,11 @@ def display_prompt_improvement(
     if verbose >= 1:
         console.print(Text("│"))
         console.print(Text("│   "))
-        console.print(Text("│   ").append(Text(f"Addressing: {failure_mode_name}", style="bold cyan")))
+        console.print(
+            Text("│   ").append(
+                Text(f"Addressing: {failure_mode_name}", style="bold cyan")
+            )
+        )
 
     class Reporter:
         def set_reasoning(self, reasoning: str) -> None:
@@ -559,7 +565,9 @@ def display_improvement_reasoning(
 
     console.print(Text("│"))
     console.print(Text("│   "))
-    console.print(Text("│   ").append(Text(f"Addressing: {failure_mode_name}", style="bold cyan")))
+    console.print(
+        Text("│   ").append(Text(f"Addressing: {failure_mode_name}", style="bold cyan"))
+    )
 
     reasoning_content = Text()
     reasoning_content.append("Improvement Strategy:\n", style="cyan")
@@ -581,9 +589,7 @@ def display_improvement_reasoning(
     rendered_panel = capture.get()
 
     # Prefix each line with '│     ', preserving ANSI styles
-    prefixed_output = "\n".join(
-        f"│     {line}" for line in rendered_panel.splitlines()
-    )
+    prefixed_output = "\n".join(f"│     {line}" for line in rendered_panel.splitlines())
 
     # Print the prefixed output (will include colors)
     console.print(prefixed_output, highlight=False)
@@ -648,7 +654,9 @@ def display_optimized_prompt_diff(
         )
     else:
         console.print(
-            Text("│   ").append(Text(f"No improvement found (score: {best_score:.4f})", style="yellow"))
+            Text("│   ").append(
+                Text(f"No improvement found (score: {best_score:.4f})", style="yellow")
+            )
         )
 
     console.print(Text("│"))
@@ -674,7 +682,9 @@ def display_optimized_prompt_diff(
 
         # Handle added messages
         if not initial_msg:
-            console.print(Text("│     ").append(Text(f"{role}: (added)", style="green bold")))
+            console.print(
+                Text("│     ").append(Text(f"{role}: (added)", style="green bold"))
+            )
             for line in optimized_content.splitlines():
                 console.print(Text("│       ").append(Text(f"+{line}", style="green")))
             console.print(Text("│"))
@@ -682,7 +692,9 @@ def display_optimized_prompt_diff(
 
         # Handle removed messages
         if not optimized_msg:
-            console.print(Text("│     ").append(Text(f"{role}: (removed)", style="red bold")))
+            console.print(
+                Text("│     ").append(Text(f"{role}: (removed)", style="red bold"))
+            )
             for line in initial_content.splitlines():
                 console.print(Text("│       ").append(Text(f"-{line}", style="red")))
             console.print(Text("│"))
@@ -691,7 +703,9 @@ def display_optimized_prompt_diff(
         # Check if there are changes
         if initial_content == optimized_content:
             # No changes in this message
-            console.print(Text("│     ").append(Text(f"{role}: (unchanged)", style="dim")))
+            console.print(
+                Text("│     ").append(Text(f"{role}: (unchanged)", style="dim"))
+            )
             continue
 
         # Generate unified diff

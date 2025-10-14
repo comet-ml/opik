@@ -738,7 +738,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Prepare details for the result
         details = {
             "model": best_prompt.model or self.model,
-            "temperature": (best_prompt.model_kwargs or {}).get("temperature") or self.model_kwargs.get("temperature"),
+            "temperature": (best_prompt.model_kwargs or {}).get("temperature")
+            or self.model_kwargs.get("temperature"),
             "reasoning_model": self.reasoning_model,
             "num_threads": self.num_threads,
             "max_parallel_batches": self.max_parallel_batches,
