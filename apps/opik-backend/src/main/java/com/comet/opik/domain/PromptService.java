@@ -6,6 +6,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
@@ -14,6 +15,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -34,6 +36,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
+import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
+import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
 import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -85,6 +90,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull EventBus eventBus;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
@@ -111,6 +117,12 @@ class PromptServiceImpl implements PromptService {
                     .handle(() -> createPromptVersionFromPromptRequest(createdPrompt, workspaceId, promptRequest))
                     .withRetry(3, this::newVersionConflict);
         }
+
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_CREATED)
+                .workspaceId(workspaceId)
+                .payload(createdPrompt)
+                .build());
 
         return createdPrompt;
     }
@@ -250,14 +262,22 @@ class PromptServiceImpl implements PromptService {
                     .commit(commit)
                     .build();
 
-            return savePromptVersion(workspaceId, promptVersion);
+            var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
+            postPromptCommittedEvent(savedPromptVersion, workspaceId);
+
+            return savedPromptVersion;
         });
 
         if (createPromptVersion.version().commit() != null) {
             return handler.withError(this::newVersionConflict);
         } else {
             // only retry if commit is not provided
-            return handler.onErrorDo(() -> retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName));
+            return handler.onErrorDo(() -> {
+                var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
+                postPromptCommittedEvent(savedPromptVersion, workspaceId);
+
+                return savedPromptVersion;
+            });
         }
     }
 
@@ -312,6 +332,8 @@ class PromptServiceImpl implements PromptService {
 
             return null;
         });
+
+        postPromptsDeletedEvent(Set.of(id), workspaceId);
     }
 
     @Override
@@ -327,6 +349,8 @@ class PromptServiceImpl implements PromptService {
             handle.attach(PromptDAO.class).delete(ids, workspaceId);
             return null;
         });
+
+        postPromptsDeletedEvent(ids, workspaceId);
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
@@ -580,5 +604,21 @@ class PromptServiceImpl implements PromptService {
                     return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
                             .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
                 })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId) {
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_COMMITTED)
+                .workspaceId(workspaceId)
+                .payload(promptVersion)
+                .build());
+    }
+
+    private void postPromptsDeletedEvent(Set<UUID> ids, String workspaceId) {
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_DELETED)
+                .workspaceId(workspaceId)
+                .payload(ids)
+                .build());
     }
 }

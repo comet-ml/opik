@@ -3160,7 +3160,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3232,12 +3240,13 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: truncate
+      - name: strip_attachments
         in: query
         schema:
           type: boolean
-          description: "If true, returns references; if false, returns reinjected\
-            \ base64. Matches traces endpoint for consistency and API discoverability."
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
           default: false
       responses:
         "200":
@@ -3646,7 +3655,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3712,11 +3729,13 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: truncate
+      - name: strip_attachments
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
           default: false
       responses:
         "200":
@@ -4058,7 +4077,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: Truncate image included in the messages
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: filters
         in: query
         schema:
@@ -4748,7 +4775,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4864,7 +4891,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -5000,7 +5027,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -10853,9 +10880,6 @@ components:
       - value
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -10881,6 +10905,9 @@ components:
           - online_scoring
         author:
           type: string
+        id:
+          type: string
+          format: uuid
     SpanFilter_Public:
       type: object
       properties:
@@ -11376,9 +11403,6 @@ components:
       - value
       type: object
       properties:
-        thread_id:
-          minLength: 1
-          type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -11403,6 +11427,9 @@ components:
           - sdk
           - online_scoring
         author:
+          type: string
+        thread_id:
+          minLength: 1
           type: string
     FeedbackScoreBatchThread:
       required:
@@ -11463,8 +11490,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceSearchStreamRequest_Public:
       type: object
       properties:
@@ -11489,8 +11521,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceUpdate:
       type: object
       properties:

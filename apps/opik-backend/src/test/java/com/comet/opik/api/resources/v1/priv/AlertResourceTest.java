@@ -1,8 +1,18 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.Guardrail;
+import com.comet.opik.api.Project;
+import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
@@ -17,11 +27,18 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
+import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.events.webhooks.AlertEventEvaluationService;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -29,9 +46,13 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.function.TriConsumer;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.HttpStatus;
+import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.eclipse.jetty.http.HttpHeader;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -48,6 +69,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -65,7 +87,16 @@ import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
+import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
+import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
+import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
+import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -86,7 +117,7 @@ class AlertResourceTest {
 
     private static final String[] ALERT_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "webhook.name", "webhook.createdAt", "webhook.lastUpdatedAt",
+            "lastUpdatedBy", "webhook.name", "webhook.secretToken", "webhook.createdAt", "webhook.lastUpdatedAt",
             "webhook.createdBy", "webhook.lastUpdatedBy", "triggers"};
 
     private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
@@ -126,10 +157,19 @@ class AlertResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private AlertResourceClient alertResourceClient;
+    private PromptResourceClient promptResourceClient;
+    private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
+    private GuardrailsResourceClient guardrailsResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
+        String baseUrl = TestUtils.getBaseUrl(client);
         this.alertResourceClient = new AlertResourceClient(client);
+        promptResourceClient = new PromptResourceClient(client, baseUrl, factory);
+        projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
+        traceResourceClient = new TraceResourceClient(client, baseUrl);
+        guardrailsResourceClient = new GuardrailsResourceClient(client, baseUrl);
 
         ClientSupportUtils.config(client);
 
@@ -240,36 +280,36 @@ class AlertResourceTest {
             return Stream.of(
                     // Name validation
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name(null).build(),
+                            generateAlert().toBuilder().name(null).build(),
                             422,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name("").build(),
+                            generateAlert().toBuilder().name("").build(),
                             422,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name("   ").build(),
+                            generateAlert().toBuilder().name("   ").build(),
                             422,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().name("a".repeat(256)).build(),
+                            generateAlert().toBuilder().name("a".repeat(256)).build(),
                             422,
                             new ErrorMessage(List.of("name size must be between 0 and 255")),
                             ErrorMessage.class),
 
                     // WebhookId validation
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().webhook(null).build(),
+                            generateAlert().toBuilder().webhook(null).build(),
                             422,
                             new ErrorMessage(List.of("webhook must not be null")),
                             ErrorMessage.class),
 
                     // Invalid UUID version
                     arguments(
-                            factory.manufacturePojo(Alert.class).toBuilder().id(UUID.randomUUID()).build(),
+                            generateAlert().toBuilder().id(UUID.randomUUID()).build(),
                             HttpStatus.SC_BAD_REQUEST,
                             new ErrorMessage(List.of("Alert id must be a version 7 UUID")),
                             ErrorMessage.class));
@@ -308,7 +348,7 @@ class AlertResourceTest {
             var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            compareAlerts(alert, actualAlert);
+            compareAlerts(alert, actualAlert, true);
         }
 
         @Test
@@ -350,7 +390,7 @@ class AlertResourceTest {
             var actualUpdatedAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_OK);
 
-            compareAlerts(updatedAlert, actualUpdatedAlert);
+            compareAlerts(updatedAlert, actualUpdatedAlert, true);
         }
 
         @Test
@@ -384,7 +424,7 @@ class AlertResourceTest {
             List<Alert> expectedAlerts = List.of(alert);
 
             findAlertsAndAssertPage(expectedAlerts, mock.getLeft(), mock.getRight(), expectedAlerts.size(), 1, null,
-                    null);
+                    null, true);
         }
 
         @Test
@@ -402,7 +442,7 @@ class AlertResourceTest {
             List<Alert> expectedAlerts = alerts.reversed();
 
             findAlertsAndAssertPage(expectedAlerts, mock.getLeft(), mock.getRight(), expectedAlerts.size(), 1, null,
-                    null);
+                    null, true);
         }
 
         @Test
@@ -420,8 +460,8 @@ class AlertResourceTest {
             List<Alert> alertPage1 = alerts.reversed().subList(0, 10);
             List<Alert> alertPage2 = alerts.reversed().subList(10, 20);
 
-            findAlertsAndAssertPage(alertPage1, mock.getLeft(), mock.getRight(), alerts.size(), 1, null, null);
-            findAlertsAndAssertPage(alertPage2, mock.getLeft(), mock.getRight(), alerts.size(), 2, null, null);
+            findAlertsAndAssertPage(alertPage1, mock.getLeft(), mock.getRight(), alerts.size(), 1, null, null, true);
+            findAlertsAndAssertPage(alertPage2, mock.getLeft(), mock.getRight(), alerts.size(), 2, null, null, true);
         }
 
         @ParameterizedTest
@@ -442,7 +482,7 @@ class AlertResourceTest {
                     .toList();
 
             findAlertsAndAssertPage(expectedAlerts, mock.getLeft(), mock.getRight(), expectedAlerts.size(), 1,
-                    List.of(sorting), null);
+                    List.of(sorting), null, false);
         }
 
         private Stream<Arguments> findAlerts__whenSortingByValidFields__thenReturnAlertsSorted() {
@@ -519,16 +559,7 @@ class AlertResourceTest {
                             SortingField.builder().field(SortableFields.WEBHOOK_URL).direction(Direction.ASC).build()),
                     Arguments.of(
                             webhookUrlComparator.reversed(),
-                            SortingField.builder().field(SortableFields.WEBHOOK_URL).direction(Direction.DESC).build()),
-
-                    // WEBHOOK_SECRET_TOKEN field sorting
-                    Arguments.of(
-                            webhookSecretTokenComparator,
-                            SortingField.builder().field(SortableFields.WEBHOOK_SECRET_TOKEN).direction(Direction.ASC)
-                                    .build()),
-                    Arguments.of(
-                            webhookSecretTokenComparator.reversed(),
-                            SortingField.builder().field(SortableFields.WEBHOOK_SECRET_TOKEN).direction(Direction.DESC)
+                            SortingField.builder().field(SortableFields.WEBHOOK_URL).direction(Direction.DESC)
                                     .build()));
         }
 
@@ -553,7 +584,7 @@ class AlertResourceTest {
             AlertFilter filter = getFilter.apply(alerts);
 
             findAlertsAndAssertPage(expectedAlerts.reversed(), mock.getLeft(), mock.getRight(), expectedAlerts.size(),
-                    1, null, List.of(filter));
+                    1, null, List.of(filter), false);
         }
 
         private Stream<Arguments> getValidFilters() {
@@ -593,7 +624,7 @@ class AlertResourceTest {
                             (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
                                     .field(AlertField.NAME)
                                     .operator(Operator.STARTS_WITH)
-                                    .value(alerts.getFirst().name().substring(0, 3))
+                                    .value(alerts.getFirst().name().substring(0, 2))
                                     .build(),
                             (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
                     Arguments.of(
@@ -631,29 +662,6 @@ class AlertResourceTest {
                                     .field(AlertField.WEBHOOK_URL)
                                     .operator(Operator.CONTAINS)
                                     .value(alerts.getFirst().webhook().url().substring(5, 10))
-                                    .build(),
-                            (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
-
-                    // WEBHOOK_SECRET_TOKEN field filtering
-                    Arguments.of(
-                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
-                                    .field(AlertField.WEBHOOK_SECRET_TOKEN)
-                                    .operator(Operator.EQUAL)
-                                    .value(alerts.getFirst().webhook().secretToken())
-                                    .build(),
-                            (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
-                    Arguments.of(
-                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
-                                    .field(AlertField.WEBHOOK_SECRET_TOKEN)
-                                    .operator(Operator.NOT_EQUAL)
-                                    .value(alerts.getFirst().webhook().secretToken())
-                                    .build(),
-                            (Function<List<Alert>, List<Alert>>) alerts -> alerts.subList(1, alerts.size())),
-                    Arguments.of(
-                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
-                                    .field(AlertField.WEBHOOK_SECRET_TOKEN)
-                                    .operator(Operator.CONTAINS)
-                                    .value(alerts.getFirst().webhook().secretToken().substring(2, 5))
                                     .build(),
                             (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
 
@@ -748,8 +756,8 @@ class AlertResourceTest {
             var mock = prepareMockWorkspace();
 
             // Create multiple alerts
-            var alert1 = factory.manufacturePojo(Alert.class);
-            var alert2 = factory.manufacturePojo(Alert.class);
+            var alert1 = generateAlert();
+            var alert2 = generateAlert();
             var createdAlertId1 = alertResourceClient.createAlert(alert1, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
             var createdAlertId2 = alertResourceClient.createAlert(alert2, mock.getLeft(), mock.getRight(),
@@ -934,6 +942,585 @@ class AlertResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Test Alert Events:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TestAlertEvents {
+
+        private WireMockServer externalWebhookServer;
+        private static final String WEBHOOK_PATH = "/webhook";
+        private String webhookUrl;
+
+        private static final String[] IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM = {"id", "projectId", "projectName",
+                "createdAt",
+                "lastUpdatedAt", "createdBy", "lastUpdatedBy", "author"};
+
+        @BeforeAll
+        void setUpAll() {
+            externalWebhookServer = new WireMockServer(0);
+            externalWebhookServer.start();
+        }
+
+        @AfterAll
+        void tearDownAll() {
+            if (externalWebhookServer != null) {
+                externalWebhookServer.stop();
+            }
+        }
+
+        @BeforeEach
+        void setUp() {
+            externalWebhookServer.resetAll();
+
+            // Setup WireMock to return successful response
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
+        }
+
+        @Test
+        @DisplayName("Success: should successfully send prompt creation event to webhook")
+        void testCreatePromptEvent__whenWebhookServerReceivesAlert() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with webhook
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_CREATED)
+                    .build());
+
+            // First create an alert for the event
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a prompt to trigger the event
+            var expectedPrompt = factory.manufacturePojo(Prompt.class)
+                    .toBuilder()
+                    .versionCount(0L)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
+
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            Prompt prompt = JsonUtils.readValue(payload, Prompt.class);
+
+            assertThat(prompt)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPrompt);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Success: should successfully send prompt deletion event to webhook")
+        void testDeletePromptEvent__whenWebhookServerReceivesAlert(TriConsumer<UUID, String, String> deleteAction) {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with webhook
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_DELETED)
+                    .build());
+
+            // First create an alert for the event
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a prompt to trigger the event
+            var expectedPrompt = factory.manufacturePojo(Prompt.class)
+                    .toBuilder()
+                    .versionCount(0L)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            var promptId = promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
+            // Now delete the prompt to trigger the deletion event
+            deleteAction.accept(promptId, mock.getRight(), mock.getLeft());
+
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            Set<UUID> ids = JsonUtils.readCollectionValue(payload, Set.class, UUID.class);
+
+            assertThat(ids).hasSize(1);
+            assertThat(ids).contains(promptId);
+        }
+
+        Stream<Arguments> testDeletePromptEvent__whenWebhookServerReceivesAlert() {
+            return Stream.of(
+                    Arguments.of(
+                            (TriConsumer<UUID, String, String>) (promptId, workspace, apiKey) -> promptResourceClient
+                                    .deletePrompt(promptId, apiKey, workspace)),
+                    Arguments.of(
+                            (TriConsumer<UUID, String, String>) (promptId, workspace, apiKey) -> promptResourceClient
+                                    .deletePromptBatch(Set.of(promptId), apiKey, workspace)));
+        }
+
+        @Test
+        @DisplayName("Success: should successfully send prompt commit event to webhook")
+        void testPromptCommitEvent__whenWebhookServerReceivesAlert() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with webhook
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_COMMITTED)
+                    .build());
+
+            // First create an alert for the event
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a prompt and commit to trigger the event
+            var expectedPrompt = factory.manufacturePojo(Prompt.class);
+            var expectedPromptVersion = promptResourceClient.createPromptVersion(expectedPrompt, mock.getLeft(),
+                    mock.getRight());
+
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            PromptVersion promptVersion = JsonUtils.readValue(payload, PromptVersion.class);
+
+            assertThat(promptVersion)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPromptVersion);
+        }
+
+        private Alert createAlertForEvent(AlertTrigger alertTrigger) {
+            var alert = generateAlert();
+            var webhook = alert.webhook().toBuilder()
+                    .url(webhookUrl)
+                    .build();
+            return alert.toBuilder()
+                    .webhook(webhook)
+                    .triggers(List.of(alertTrigger))
+                    .enabled(true)
+                    .build();
+        }
+
+        @ParameterizedTest
+        @MethodSource("traceFeedbackScoreProjectScopeProvider")
+        @DisplayName("when single trace feedback score is created, then webhook is called based on project scope")
+        void whenSingleTraceFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(
+                Function<UUID, AlertTrigger> getAlertTrigger) {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with or without project scope configuration
+            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a trace
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create a feedback score
+            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .source(ScoreSource.SDK)
+                    .build();
+            traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<FeedbackScoreBatchItem> feedbackScores = JsonUtils.readCollectionValue(
+                    payload, List.class, FeedbackScoreBatchItem.class);
+
+            assertThat(feedbackScores).hasSize(1);
+            FeedbackScoreBatchItem actualScore = feedbackScores.getFirst();
+
+            // Assert feedback score details using recursive comparison
+            assertThat(actualScore)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(Comparator.naturalOrder(), Instant.class)
+                                    .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
+                                    .build())
+                    .isEqualTo(feedbackScore);
+
+            assertThat(actualScore.id()).isEqualTo(trace.id());
+            assertThat(actualScore.author()).isEqualTo(USER);
+        }
+
+        static Stream<Arguments> traceFeedbackScoreProjectScopeProvider() {
+            return Stream.of(
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .build()),
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(
+                                    AlertTriggerConfig.builder()
+                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                            .configValue(Map.of(
+                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
+                                            .build()))
+                            .build()));
+        }
+
+        @Test
+        @DisplayName("when batch of trace feedback scores is created, then webhook is called")
+        void whenBatchOfTraceFeedbackScoresIsCreated_thenWebhookIsCalled() {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert for feedback score events
+            var alertTrigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .build();
+            var alert = createAlertForEvent(alertTrigger);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a trace
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create a batch of feedback scores
+            List<FeedbackScoreBatchItem> feedbackScores = PodamFactoryUtils
+                    .manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+                    .stream()
+                    .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
+                            .source(ScoreSource.SDK)
+                            .id(trace.id())
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traceResourceClient.feedbackScores(feedbackScores, mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<FeedbackScoreBatchItem> actualFeedbackScores = JsonUtils.readCollectionValue(
+                    payload, List.class, FeedbackScoreBatchItem.class);
+
+            assertThat(actualFeedbackScores).hasSize(feedbackScores.size());
+
+            // Assert feedback score details using recursive comparison
+            assertThat(actualFeedbackScores)
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(feedbackScores);
+
+            actualFeedbackScores.forEach(actualScore -> {
+                assertThat(actualScore.id()).isEqualTo(trace.id());
+                assertThat(actualScore.author()).isEqualTo(USER);
+            });
+        }
+
+        @ParameterizedTest
+        @MethodSource("traceThreadFeedbackScoreProjectScopeProvider")
+        @DisplayName("when single trace thread feedback score is created, then webhook is called based on project scope")
+        void whenSingleTraceThreadFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(
+                Function<UUID, AlertTrigger> getAlertTrigger) {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, mock.getLeft(), mock.getRight());
+
+            // Create an alert with or without project scope configuration
+            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a thread with multiple traces
+            var threadId = UUID.randomUUID().toString();
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .threadId(threadId)
+                            .projectName(project.name())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, mock.getLeft(), mock.getRight());
+
+            // Wait for the thread to be created
+            Awaitility.await().untilAsserted(() -> {
+                var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(), mock.getRight());
+                assertThat(thread.threadModelId()).isNotNull();
+            });
+
+            // Get the thread
+            var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(), mock.getRight());
+
+            // Close thread
+            traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
+                    mock.getRight());
+
+            // Create a feedback score for the thread
+            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
+                    .threadId(thread.id())
+                    .projectName(project.name())
+                    .name(feedbackScore.name())
+                    .value(feedbackScore.value())
+                    .reason(feedbackScore.reason())
+                    .source(feedbackScore.source())
+                    .build();
+
+            traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<FeedbackScoreBatchItemThread> feedbackScores = JsonUtils.readCollectionValue(
+                    payload, List.class, FeedbackScoreBatchItemThread.class);
+
+            assertThat(feedbackScores).hasSize(1);
+            FeedbackScoreBatchItemThread actualScore = feedbackScores.getFirst();
+
+            // Assert feedback score details using recursive comparison
+            assertThat(actualScore)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(Comparator.naturalOrder(), Instant.class)
+                                    .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
+                                    .build())
+                    .isEqualTo(feedbackScoreBatchItem);
+
+            assertThat(actualScore.threadId()).isEqualTo(thread.id());
+            assertThat(actualScore.author()).isEqualTo(USER);
+        }
+
+        static Stream<Arguments> traceThreadFeedbackScoreProjectScopeProvider() {
+            return Stream.of(
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
+                            .build()),
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(
+                                    AlertTriggerConfig.builder()
+                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                            .configValue(Map.of(
+                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
+                                            .build()))
+                            .build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("traceErrorsProjectScopeProvider")
+        @DisplayName("when single trace with error is created, then webhook is called based on project scope")
+        void whenSingleTraceWithErrorIsCreated_thenWebhookIsCalledBasedOnProjectScope(
+                Function<UUID, AlertTrigger> getAlertTrigger) {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with or without project scope configuration
+            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a trace with error
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Trace> traces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
+
+            assertThat(traces).hasSize(1);
+            Trace actualTrace = traces.getFirst();
+
+            assertThat(actualTrace)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
+                                    .build())
+                    .isEqualTo(trace);
+
+            assertThat(actualTrace.projectName()).isEqualTo(projectName);
+            assertThat(actualTrace.projectId()).isEqualTo(projectId);
+        }
+
+        static Stream<Arguments> traceErrorsProjectScopeProvider() {
+            return Stream.of(
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_ERRORS)
+                            .build()),
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_ERRORS)
+                            .triggerConfigs(List.of(
+                                    AlertTriggerConfig.builder()
+                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                            .configValue(Map.of(
+                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
+                                            .build()))
+                            .build()));
+        }
+
+        @Test
+        @DisplayName("when batch of traces with errors is created, then webhook is called")
+        void whenBatchOfTracesWithErrorsIsCreated_thenWebhookIsCalled() {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert for trace errors
+            var alertTrigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_ERRORS)
+                    .build();
+            var alert = createAlertForEvent(alertTrigger);
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a batch of traces with errors
+            List<Trace> tracesWithErrors = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .visibilityMode(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Trace> actualTraces = JsonUtils.readCollectionValue(payload, List.class, Trace.class);
+
+            assertThat(actualTraces).hasSize(tracesWithErrors.size());
+
+            actualTraces.forEach(actualTrace -> {
+                assertThat(actualTrace.projectName()).isEqualTo(projectName);
+                assertThat(actualTrace.projectId()).isEqualTo(projectId);
+            });
+
+            assertThat(actualTraces)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(IGNORED_FIELDS_TRACES)
+                                    .build())
+                    .ignoringCollectionOrder()
+                    .isEqualTo(tracesWithErrors);
+        }
+
+        @ParameterizedTest
+        @MethodSource("traceGuardrailsTriggeredProjectScopeProvider")
+        @DisplayName("when guardrails are triggered for a trace, then webhook is called based on project scope")
+        void whenGuardrailsAreTriggeredForTrace_thenWebhookIsCalledBasedOnProjectScope(
+                Function<UUID, AlertTrigger> getAlertTrigger) {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with or without project scope configuration
+            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Create a trace
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create guardrails for the trace
+            Guardrail guardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(trace.id())
+                    .secondaryId(UUID.randomUUID())
+                    .projectName(projectName)
+                    .result(GuardrailResult.FAILED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrail), mock.getLeft(), mock.getRight());
+
+            // Wait for webhook call and verify
+            var payload = verifyWebhookCalledAndGetPayload(alert);
+            List<Guardrail> guardrails = JsonUtils.readCollectionValue(payload, List.class, Guardrail.class);
+
+            assertThat(guardrails).hasSize(1);
+            Guardrail actualGuardrail = guardrails.getFirst();
+
+            // Assert guardrail details using recursive comparison
+            assertThat(actualGuardrail)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields("id", "projectId")
+                                    .build())
+                    .isEqualTo(guardrail);
+        }
+
+        static Stream<Arguments> traceGuardrailsTriggeredProjectScopeProvider() {
+            return Stream.of(
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                            .build()),
+                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                            .triggerConfigs(List.of(
+                                    AlertTriggerConfig.builder()
+                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                                            .configValue(Map.of(
+                                                    AlertEventEvaluationService.PROJECT_SCOPE_CONFIG_KEY,
+                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
+                                            .build()))
+                            .build()));
+        }
+
+        private String verifyWebhookCalledAndGetPayload(Alert alert) {
+            // Wait for the webhook event to be sent
+            Awaitility.await().untilAsserted(() -> {
+                var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                assertThat(requests).hasSize(1);
+            });
+
+            var actualRequest = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH))).get(0);
+
+            String actualRequestBody = actualRequest.getBodyAsString();
+
+            assertThat(actualRequest.header(HttpHeaders.AUTHORIZATION).firstValue())
+                    .isEqualTo(alert.webhook().secretToken());
+
+            // Get sent event and verify it's payload
+            WebhookEvent<Map<String, Object>> actualEvent = JsonUtils.readValue(actualRequestBody, WebhookEvent.class);
+            List<String> payloads = (List<String>) actualEvent.getPayload().get("metadata");
+            assertThat(payloads).hasSize(1);
+
+            return payloads.getFirst();
+        }
+    }
+
     private Pair<String, String> prepareMockWorkspace() {
         String workspaceName = UUID.randomUUID().toString();
         String apiKey = UUID.randomUUID().toString();
@@ -944,7 +1531,7 @@ class AlertResourceTest {
         return Pair.of(apiKey, workspaceName);
     }
 
-    private void compareAlerts(Alert expected, Alert actual) {
+    private void compareAlerts(Alert expected, Alert actual, boolean decryptSecretToken) {
         var preparedExpected = prepareForComparison(expected, true);
         var preparedActual = prepareForComparison(actual, false);
 
@@ -959,6 +1546,13 @@ class AlertResourceTest {
                 .ignoringFields(TRIGGER_IGNORED_FIELDS)
                 .ignoringCollectionOrder()
                 .isEqualTo(preparedExpected.triggers());
+
+        if (decryptSecretToken) {
+            // We should decrypt secretToken in order to compare, since it encrypts on deserialization
+            assertThat(decrypt(actual.webhook().secretToken())).isEqualTo(maskApiKey(expected.webhook().secretToken()));
+        } else {
+            assertThat(actual.webhook().secretToken()).isEqualTo(expected.webhook().secretToken());
+        }
 
         for (int i = 0; i < preparedActual.triggers().size(); i++) {
             var actualTrigger = preparedActual.triggers().get(i);
@@ -999,6 +1593,7 @@ class AlertResourceTest {
         var webhook = alert.webhook().toBuilder()
                 .createdBy(null)
                 .createdAt(null)
+                .secretToken(UUID.randomUUID().toString())
                 .build();
 
         var triggers = alert.triggers().stream()
@@ -1062,7 +1657,8 @@ class AlertResourceTest {
     }
 
     private void findAlertsAndAssertPage(List<Alert> expectedAlerts, String apiKey, String workspaceName,
-            int expectedTotal, int page, List<SortingField> sortingFields, List<AlertFilter> filters) {
+            int expectedTotal, int page, List<SortingField> sortingFields, List<AlertFilter> filters,
+            boolean decryptSecretToken) {
 
         // Always add size parameter - default to expectedAlerts.size() if not 0
         int size = expectedAlerts.isEmpty() ? 10 : expectedAlerts.size();
@@ -1078,7 +1674,7 @@ class AlertResourceTest {
         assertSortableFields(alertPage);
 
         for (int i = 0; i < alertPage.content().size(); i++) {
-            compareAlerts(expectedAlerts.get(i), alertPage.content().get(i));
+            compareAlerts(expectedAlerts.get(i), alertPage.content().get(i), decryptSecretToken);
         }
     }
 
@@ -1090,7 +1686,6 @@ class AlertResourceTest {
                 SortableFields.LAST_UPDATED_AT,
                 SortableFields.CREATED_BY,
                 SortableFields.LAST_UPDATED_BY,
-                SortableFields.WEBHOOK_URL,
-                SortableFields.WEBHOOK_SECRET_TOKEN);
+                SortableFields.WEBHOOK_URL);
     }
 }

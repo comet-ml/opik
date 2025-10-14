@@ -30,6 +30,12 @@ export type WizardOptions = {
    * Whether to select the default option for all questions automatically.
    */
   default: boolean;
+
+  /**
+   * Whether to configure for local deployment.
+   * When true, skips API key and workspace prompts and uses local defaults.
+   */
+  useLocal?: boolean;
 };
 
 export interface Feature {

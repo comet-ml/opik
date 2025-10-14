@@ -16,6 +16,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
@@ -55,6 +56,8 @@ public interface AlertService {
     Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     Alert getById(UUID id);
+
+    List<Alert> findAllByWorkspaceAndEventType(String workspaceId, AlertEventType eventType);
 
     Alert getByIdAndWorkspace(UUID id, String workspaceId);
 
@@ -159,6 +162,17 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventType", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspaceAndEventType(@NonNull String workspaceId, @NonNull AlertEventType eventType) {
+        log.info("Fetching all enabled alerts for workspace '{}', eventType '{}'", workspaceId, eventType);
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+
+            return alertDAO.findByWorkspaceAndEventType(workspaceId, eventType.getValue());
+        });
+    }
+
+    @Override
     public Alert getByIdAndWorkspace(@NonNull UUID id, @NonNull String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
@@ -223,16 +237,18 @@ class AlertServiceImpl implements AlertService {
 
     private WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId, String userName) {
         String eventId = idGenerator.generateId().toString();
-        var eventType = alert.triggers().isEmpty()
+        var eventType = CollectionUtils.isEmpty(alert.triggers())
                 ? AlertEventType.TRACE_ERRORS
                 : alert.triggers().getFirst().eventType();
         Set<String> eventIds = Set.of(idGenerator.generateId().toString()); // Dummy event ID for test
+        var alertId = alert.id() == null ? idGenerator.generateId() : alert.id();
 
         Map<String, Object> payload = Map.of(
-                "alertId", alert.id().toString(),
+                "alertId", alertId,
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
+                "metadata", "metadata related to the event",
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
@@ -242,9 +258,10 @@ class AlertServiceImpl implements AlertService {
                 .id(eventId)
                 .url(alert.webhook().url())
                 .eventType(eventType)
-                .alertId(alert.id())
+                .alertId(alertId)
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
+                .secret(alert.webhook().secretToken())
                 .maxRetries(1)
                 .workspaceId(workspaceId)
                 .userName(userName)
