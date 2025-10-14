@@ -265,7 +265,7 @@ export class OpikCallbackHandler
     runName?: string
   ): Promise<void> {
     logger.debug(`handleLLMStart runId - ${runId}, parentRunId ${parentRunId}`);
-    logger.info(`STARTING TRACE FOR LLM ${llm.id.at(-1)?.toString()}`);
+
     this.startTracing({
       runId,
       parentRunId,
@@ -300,9 +300,7 @@ export class OpikCallbackHandler
     parentRunId?: string,
     tags?: string[]
   ): Promise<void> {
-    logger.debug(
-      `handleLLMEnd runId - ${runId}, parentRunId ${parentRunId}, output ${JSON.stringify(output)}`
-    );
+    logger.debug(`handleLLMEnd runId - ${runId}, parentRunId ${parentRunId}`);
     const { llmOutput, generations, ...metadata } = output;
 
     const tokenUsage =
