@@ -1,0 +1,54 @@
+import React, { useMemo } from "react";
+import { ALERT_EVENT_TYPE } from "@/types/alerts";
+import useWebhookExamplesQuery from "@/api/alerts/useWebhookExamplesQuery";
+import CodeHighlighter, {
+  SUPPORTED_LANGUAGE,
+} from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import Loader from "@/components/shared/Loader/Loader";
+
+type WebhookPayloadExampleProps = {
+  eventType: ALERT_EVENT_TYPE;
+  actionButton?: React.ReactNode;
+};
+
+const WebhookPayloadExample: React.FunctionComponent<
+  WebhookPayloadExampleProps
+> = ({ eventType, actionButton }) => {
+  const { data: examples, isPending } = useWebhookExamplesQuery();
+
+  const formattedPayload = useMemo(() => {
+    if (!examples || !examples.response_examples?.[eventType]) {
+      return "";
+    }
+
+    return JSON.stringify(examples.response_examples[eventType], null, 2);
+  }, [examples, eventType]);
+
+  if (isPending) {
+    return <Loader className="min-h-32" />;
+  }
+
+  if (!formattedPayload) {
+    return (
+      <div className="comet-body-s rounded-md border bg-primary-foreground p-3 text-muted-foreground">
+        No example available for this event type
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-primary-foreground">
+      <div className="flex h-10 items-center justify-between border-b border-border px-4">
+        <span>Payload</span>
+        {actionButton && <div>{actionButton}</div>}
+      </div>
+      <CodeHighlighter
+        data={formattedPayload}
+        copyData={formattedPayload}
+        language={SUPPORTED_LANGUAGE.json}
+      />
+    </div>
+  );
+};
+
+export default WebhookPayloadExample;
