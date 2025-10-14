@@ -39,6 +39,56 @@ results = evaluate_threads(
 )
 ```
 
+### Understanding the transform arguments
+
+Threads consist of multiple traces, and each trace has an input and output. In practice, these typically contain user messages and agent responses. However, trace inputs and outputs are rarely just simple strings—they are usually complex data structures whose exact format depends on your agent framework.
+
+To handle this complexity, you need to provide `trace_input_transform` and `trace_output_transform` functions. Using these functions, the Opik evaluation engine will convert your threads chosen for evaluation into the standardized format expected by all Opik thread evaluation metrics:
+
+```json
+[
+    {
+        "role": "user",
+        "content": "input string from trace 1"
+    },
+    {
+        "role": "assistant",
+        "content": "output string from trace 1"
+    },
+    {
+        "role": "user",
+        "content": "input string from trace 2"
+    },
+    {
+        "role": "assistant",
+        "content": "output string from trace 2"
+    }
+]
+```
+
+**Example:**
+
+If your trace input has the following structure:
+
+```json
+{
+    "content": {
+        "user_question": "Tell me about your service?"
+    },
+    "metadata": {...}
+}
+```
+
+Then your `trace_input_transform` should be:
+
+```python
+lambda x: x["content"]["user_question"]
+```
+
+<Tip>
+Don't want to deal with transformations because your traces don't have a consistent format? Try using LLMs to extract the relevant information!
+</Tip>
+
 #### Using filter string
 
 The `evaluate_threads` function takes a filter string as an argument. This string is used to select the threads that
