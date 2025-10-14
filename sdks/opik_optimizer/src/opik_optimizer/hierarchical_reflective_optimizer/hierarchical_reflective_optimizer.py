@@ -424,7 +424,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | None,
         attempt: int,
         max_attempts: int,
-    ) -> tuple[chat_prompt.ChatPrompt, float]:
+    ) -> tuple[chat_prompt.ChatPrompt, float, EvaluationResult]:
         """
         Generate and evaluate a single improvement attempt for a failure mode.
 
@@ -441,7 +441,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             max_attempts: Total number of attempts
 
         Returns:
-            Tuple of (improved_prompt, improved_score)
+            Tuple of (improved_prompt, improved_score, improved_experiment_result)
         """
         # Generate improvement with progress indication
         with reporting.display_prompt_improvement(
@@ -492,7 +492,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             ) / len(improved_experiment_result.test_results)
             improved_reporter.set_score(improved_score)
 
-        return improved_chat_prompt, improved_score
+        return improved_chat_prompt, improved_score, improved_experiment_result
 
     def optimize_prompt(
         self,
@@ -617,7 +617,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
                     for attempt in range(1, max_attempts + 1):
                         # Generate and evaluate improvement
-                        improved_chat_prompt, improved_score = (
+                        improved_chat_prompt, improved_score, improved_experiment_result = (
                             self._generate_and_evaluate_improvement(
                                 root_cause=root_cause,
                                 best_prompt=best_prompt,
@@ -674,17 +674,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                         best_score = improved_score
                         best_prompt = improved_chat_prompt
                         best_messages = improved_chat_prompt.get_messages()
+                        experiment_result = improved_experiment_result
                         logger.info(
                             f"Updated best prompt after addressing '{root_cause.name}'"
-                        )
-
-                        # Re-evaluate the new best prompt to get experiment_result for next iteration
-                        experiment_result = self._evaluate_prompt(
-                            prompt=best_prompt,
-                            dataset=dataset,
-                            metric=metric,
-                            optimization_id=optimization.id,
-                            n_samples=n_samples,
                         )
                     else:
                         logger.debug(
