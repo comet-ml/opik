@@ -50,19 +50,19 @@ def evaluate_threads(
         trace_input_transform: Function to transform trace input JSON to string representation.
             This function extracts the relevant user message from your trace's input structure.
             The function receives the raw trace input as a dictionary and should return a string.
-            
-            Example: If your trace input is {"content": {"user_question": "Hello"}}, 
+
+            Example: If your trace input is {"content": {"user_question": "Hello"}},
             use: lambda x: x["content"]["user_question"]
-            
+
             This transformation is essential because trace inputs vary by framework, but metrics
             expect a standardized string format representing the user's message.
         trace_output_transform: Function to transform trace output JSON to string representation.
             This function extracts the relevant agent response from your trace's output structure.
             The function receives the raw trace output as a dictionary and should return a string.
-            
+
             Example: If your trace output is {"response": {"text": "Hi there"}},
             use: lambda x: x["response"]["text"]
-            
+
             This transformation is essential because trace outputs vary by framework, but metrics
             expect a standardized string format representing the agent's response.
         verbose: Verbosity level for progress reporting (0=silent, 1=progress).
