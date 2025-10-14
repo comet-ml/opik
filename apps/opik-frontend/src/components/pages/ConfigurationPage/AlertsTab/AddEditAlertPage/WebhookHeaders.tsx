@@ -13,7 +13,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { Description } from "@/components/ui/description";
 import { AlertFormType } from "./schema";
 
 type WebhookHeadersProps = {
@@ -32,25 +32,25 @@ const WebhookHeaders: React.FC<WebhookHeadersProps> = ({ form }) => {
 
   return (
     <div className="flex flex-col gap-3">
-      <Label className="flex items-center gap-1">
-        Headers
-        <ExplainerIcon description="Optional HTTP headers to include in webhook requests" />
-      </Label>
+      <div className="flex flex-col gap-1">
+        <Label>Headers (optional)</Label>
+        <Description>
+          Specify custom HTTP headers to include with each webhook request. Use
+          them for authentication, content type specification, or any other
+          required metadata.
+        </Description>
+      </div>
 
       {headerFields.length > 0 && (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center">
             <div className="flex-1">
-              <Label className="comet-body-s-accented text-foreground">
-                Key
-              </Label>
+              <Label className="comet-body-s-accented">Key</Label>
             </div>
             <div className="flex-1">
-              <Label className="comet-body-s-accented text-foreground">
-                Value
-              </Label>
+              <Label className="comet-body-s-accented">Value</Label>
             </div>
-            <div className="size-10"></div>
+            <div className="w-10"></div>
           </div>
 
           {headerFields.map((header, index) => (

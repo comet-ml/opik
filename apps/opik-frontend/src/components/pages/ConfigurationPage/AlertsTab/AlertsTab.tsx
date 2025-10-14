@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import { useNavigate } from "@tanstack/react-router";
 
 import useAlertsList from "@/api/alerts/useAlertsList";
 import AlertsRowActionsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsRowActionsCell";
@@ -41,7 +42,6 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
 import AlertsActionsPanel from "@/components/pages/ConfigurationPage/AlertsTab/AlertsActionsPanel";
-import AddEditAlertDialog from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertDialog/AddEditAlertDialog";
 
 export const getRowId = (a: Alert) => a.id!;
 
@@ -145,9 +145,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 
 const AlertsTab: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const newAlertDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const navigate = useNavigate();
 
   const [search = "", setSearch] = useQueryParam("alerts_search", StringParam, {
     updateType: "replaceIn",
@@ -262,9 +260,12 @@ const AlertsTab: React.FunctionComponent = () => {
   );
 
   const handleNewAlertClick = useCallback(() => {
-    setOpenDialog(true);
-    newAlertDialogKeyRef.current = newAlertDialogKeyRef.current + 1;
-  }, []);
+    navigate({
+      to: "/$workspaceName/configuration/alerts/new",
+      params: { workspaceName },
+      search: (prev) => prev, // Preserve existing search params
+    });
+  }, [navigate, workspaceName]);
 
   if (isPending) {
     return <Loader />;
@@ -333,11 +334,6 @@ const AlertsTab: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddEditAlertDialog
-        key={newAlertDialogKeyRef.current}
-        open={openDialog}
-        setOpen={setOpenDialog}
-      />
     </div>
   );
 };
