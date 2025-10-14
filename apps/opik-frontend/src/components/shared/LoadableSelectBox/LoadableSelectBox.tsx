@@ -121,13 +121,6 @@ export const LoadableSelectBox = ({
       return selectAllLabel;
     }
 
-    console.log(
-      multiselect,
-      selectAllLabel,
-      options.length,
-      selectedOptions.length,
-    );
-
     return selectedOptions.map((o) => o.label).join(", ");
   }, [multiselect, options.length, selectAllLabel, selectedOptions]);
 
