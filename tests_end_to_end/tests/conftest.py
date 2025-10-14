@@ -575,7 +575,7 @@ def log_threads_with_decorator():
 
     for thread in thread_configs:
         for input, output in zip(thread["inputs"], thread["outputs"]):
-            chat_message(input, output, thread["thread_id"])
+            chat_message(input, thread["thread_id"])
     yield thread_configs
 
 
