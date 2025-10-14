@@ -91,6 +91,9 @@ export const isStringMarkdown = (string: unknown): boolean => {
     // Footnote references and definitions
     /\[\^.+?]/, // footnote references
     /^\[\^.+?]:/m, // footnote definitions
+
+    // HTML tags (for conversation rendering)
+    /<[^>]+>/, // any HTML tag
   ];
 
   // Check for markdown patterns
