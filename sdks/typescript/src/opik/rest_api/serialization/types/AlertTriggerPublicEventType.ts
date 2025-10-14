@@ -15,7 +15,7 @@ export const AlertTriggerPublicEventType: core.serialization.Schema<
     "trace_thread:feedback_score",
     "prompt:created",
     "prompt:committed",
-    "span:guardrails_triggered",
+    "trace:guardrails_triggered",
     "prompt:deleted",
 ]);
 
@@ -26,6 +26,6 @@ export declare namespace AlertTriggerPublicEventType {
         | "trace_thread:feedback_score"
         | "prompt:created"
         | "prompt:committed"
-        | "span:guardrails_triggered"
+        | "trace:guardrails_triggered"
         | "prompt:deleted";
 }

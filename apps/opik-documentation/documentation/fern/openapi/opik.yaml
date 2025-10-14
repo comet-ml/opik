@@ -4775,7 +4775,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4891,7 +4891,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -5027,7 +5027,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
