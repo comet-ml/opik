@@ -13,43 +13,43 @@ export interface TriggerConfig {
 }
 
 export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
-  [ALERT_EVENT_TYPE["trace:errors"]]: {
+  [ALERT_EVENT_TYPE.trace_errors]: {
     title: "New error in trace",
     description:
       "Triggered when a new error is detected in a trace within the selected projects.",
     hasScope: true,
   },
-  [ALERT_EVENT_TYPE["span:guardrails_triggered"]]: {
+  [ALERT_EVENT_TYPE.trace_guardrails_triggered]: {
     title: "Guardrail triggered",
     description:
       "Triggered when a guardrail event occurs in any trace within the selected projects.",
     hasScope: true,
   },
-  [ALERT_EVENT_TYPE["trace:feedback_score"]]: {
+  [ALERT_EVENT_TYPE.trace_feedback_score]: {
     title: "New score added to trace",
     description:
       "Triggered when a new feedback score is added to a trace in the selected projects.",
     hasScope: true,
   },
-  [ALERT_EVENT_TYPE["trace_thread:feedback_score"]]: {
+  [ALERT_EVENT_TYPE.trace_thread_feedback_score]: {
     title: "New score added to thread",
     description:
       "Triggered when a new feedback score is added to a thread in the selected projects.",
     hasScope: true,
   },
-  [ALERT_EVENT_TYPE["prompt:created"]]: {
+  [ALERT_EVENT_TYPE.prompt_created]: {
     title: "New prompt added",
     description:
       "Triggered when a new prompt is created or saved in the workspace's prompt library",
     hasScope: false,
   },
-  [ALERT_EVENT_TYPE["prompt:committed"]]: {
+  [ALERT_EVENT_TYPE.prompt_committed]: {
     title: "New prompt version created",
     description:
       "Triggered when a new commit (version) is added to any prompt in the workspace's prompt library.",
     hasScope: false,
   },
-  [ALERT_EVENT_TYPE["prompt:deleted"]]: {
+  [ALERT_EVENT_TYPE.prompt_deleted]: {
     title: "Prompt deleted",
     description:
       "Triggered when a prompt is removed from the workspace's prompt library.",

@@ -4,13 +4,13 @@ import { Alert, ALERT_EVENT_TYPE } from "@/types/alerts";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 
 const EVENT_TYPE_LABELS: Record<ALERT_EVENT_TYPE, string> = {
-  [ALERT_EVENT_TYPE["trace:errors"]]: "New error in trace",
-  [ALERT_EVENT_TYPE["span:guardrails_triggered"]]: "Guardrail triggered",
-  [ALERT_EVENT_TYPE["prompt:created"]]: "Prompt created",
-  [ALERT_EVENT_TYPE["prompt:committed"]]: "Prompt committed",
-  [ALERT_EVENT_TYPE["prompt:deleted"]]: "Prompt deleted",
-  [ALERT_EVENT_TYPE["trace:feedback_score"]]: "Trace score",
-  [ALERT_EVENT_TYPE["trace_thread:feedback_score"]]: "Thread score",
+  [ALERT_EVENT_TYPE.trace_errors]: "New error in trace",
+  [ALERT_EVENT_TYPE.trace_guardrails_triggered]: "Guardrail triggered",
+  [ALERT_EVENT_TYPE.prompt_created]: "Prompt created",
+  [ALERT_EVENT_TYPE.prompt_committed]: "Prompt committed",
+  [ALERT_EVENT_TYPE.prompt_deleted]: "Prompt deleted",
+  [ALERT_EVENT_TYPE.trace_feedback_score]: "Trace score",
+  [ALERT_EVENT_TYPE.trace_thread_feedback_score]: "Thread score",
 };
 
 const AlertsEventsCell = (context: CellContext<Alert, unknown>) => {
