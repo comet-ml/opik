@@ -1,11 +1,11 @@
 export enum ALERT_EVENT_TYPE {
-  "trace:errors" = "trace:errors",
-  "trace:feedback_score" = "trace:feedback_score",
-  "trace_thread:feedback_score" = "trace_thread:feedback_score",
-  "prompt:created" = "prompt:created",
-  "prompt:committed" = "prompt:committed",
-  "span:guardrails_triggered" = "span:guardrails_triggered",
-  "prompt:deleted" = "prompt:deleted",
+  trace_errors = "trace:errors",
+  trace_feedback_score = "trace:feedback_score",
+  trace_thread_feedback_score = "trace_thread:feedback_score",
+  prompt_created = "prompt:created",
+  prompt_committed = "prompt:committed",
+  trace_guardrails_triggered = "trace:guardrails_triggered",
+  prompt_deleted = "prompt:deleted",
 }
 
 export enum ALERT_TRIGGER_CONFIG_TYPE {
