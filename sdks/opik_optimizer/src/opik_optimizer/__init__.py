@@ -19,6 +19,7 @@ from .mipro_optimizer import MiproOptimizer
 from .hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
+from .multi_metric_objective import MultiMetricObjective
 from .parameter_optimizer import (
     ParameterOptimizer,
     ParameterSearchSpace,
@@ -48,6 +49,7 @@ __all__ = [
     "setup_logging",
     "datasets",
     "TaskConfig",
+    "MultiMetricObjective",
     "ParameterSearchSpace",
     "ParameterSpec",
     "ParameterType",
