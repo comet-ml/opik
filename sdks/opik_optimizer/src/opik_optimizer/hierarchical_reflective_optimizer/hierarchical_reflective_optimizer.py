@@ -617,19 +617,21 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
                     for attempt in range(1, max_attempts + 1):
                         # Generate and evaluate improvement
-                        improved_chat_prompt, improved_score, improved_experiment_result = (
-                            self._generate_and_evaluate_improvement(
-                                root_cause=root_cause,
-                                best_prompt=best_prompt,
-                                best_score=best_score,
-                                prompt=prompt,
-                                dataset=dataset,
-                                metric=metric,
-                                optimization_id=optimization.id,
-                                n_samples=n_samples,
-                                attempt=attempt,
-                                max_attempts=max_attempts,
-                            )
+                        (
+                            improved_chat_prompt,
+                            improved_score,
+                            improved_experiment_result,
+                        ) = self._generate_and_evaluate_improvement(
+                            root_cause=root_cause,
+                            best_prompt=best_prompt,
+                            best_score=best_score,
+                            prompt=prompt,
+                            dataset=dataset,
+                            metric=metric,
+                            optimization_id=optimization.id,
+                            n_samples=n_samples,
+                            attempt=attempt,
+                            max_attempts=max_attempts,
                         )
 
                         # Check if we got improvement
