@@ -1,5 +1,5 @@
 import abc
-from typing import Any, List, Union, Optional
+from typing import Any, List, Optional, Union
 
 import opik
 import opik.config as opik_config
