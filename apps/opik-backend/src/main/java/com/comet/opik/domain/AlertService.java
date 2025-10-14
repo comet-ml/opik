@@ -264,7 +264,6 @@ class AlertServiceImpl implements AlertService {
                 .secret(alert.webhook().secretToken())
                 .maxRetries(1)
                 .workspaceId(workspaceId)
-                .userName(userName)
                 .createdAt(Instant.now())
                 .build();
     }

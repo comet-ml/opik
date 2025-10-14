@@ -160,12 +160,12 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
-                                        raiseAlertEventIfApplicable(List.of(savedTrace), workspaceId);
+                                        raiseAlertEventIfApplicable(List.of(savedTrace), workspaceId, userName);
                                     }));
                 }));
     }
 
-    private void raiseAlertEventIfApplicable(List<Trace> traces, String workspaceId) {
+    private void raiseAlertEventIfApplicable(List<Trace> traces, String workspaceId, String userName) {
         if (CollectionUtils.isEmpty(traces)) {
             return;
         }
@@ -179,6 +179,7 @@ class TraceServiceImpl implements TraceService {
             eventBus.post(AlertEvent.builder()
                     .eventType(TRACE_ERRORS)
                     .workspaceId(workspaceId)
+                    .userName(userName)
                     .projectId(projectId)
                     .payload(tracesWithErrors)
                     .build());
@@ -227,13 +228,13 @@ class TraceServiceImpl implements TraceService {
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(__ -> {
                                         eventBus.post(new TracesCreated(traces, workspaceId, userName));
-                                        raiseAlertEventIfApplicableForBatch(traces, workspaceId);
+                                        raiseAlertEventIfApplicableForBatch(traces, workspaceId, userName);
                                     }));
                 }));
     }
 
     // Traces could belong to different projects
-    private void raiseAlertEventIfApplicableForBatch(List<Trace> traces, String workspaceId) {
+    private void raiseAlertEventIfApplicableForBatch(List<Trace> traces, String workspaceId, String userName) {
         if (CollectionUtils.isEmpty(traces)) {
             return;
         }
@@ -241,7 +242,7 @@ class TraceServiceImpl implements TraceService {
         traces.stream()
                 .collect(Collectors.groupingBy(Trace::projectId))
                 .values()
-                .forEach(tracesPerProject -> raiseAlertEventIfApplicable(tracesPerProject, workspaceId));
+                .forEach(tracesPerProject -> raiseAlertEventIfApplicable(tracesPerProject, workspaceId, userName));
     }
 
     private List<Trace> dedupTraces(List<Trace> initialTraces) {

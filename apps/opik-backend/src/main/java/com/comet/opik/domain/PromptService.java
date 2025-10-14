@@ -120,6 +120,7 @@ class PromptServiceImpl implements PromptService {
 
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_CREATED)
+                .userName(userName)
                 .workspaceId(workspaceId)
                 .payload(createdPrompt)
                 .build());
@@ -263,7 +264,7 @@ class PromptServiceImpl implements PromptService {
                     .build();
 
             var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
-            postPromptCommittedEvent(savedPromptVersion, workspaceId);
+            postPromptCommittedEvent(savedPromptVersion, workspaceId, userName);
 
             return savedPromptVersion;
         });
@@ -274,7 +275,7 @@ class PromptServiceImpl implements PromptService {
             // only retry if commit is not provided
             return handler.onErrorDo(() -> {
                 var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
-                postPromptCommittedEvent(savedPromptVersion, workspaceId);
+                postPromptCommittedEvent(savedPromptVersion, workspaceId, userName);
 
                 return savedPromptVersion;
             });
@@ -314,6 +315,7 @@ class PromptServiceImpl implements PromptService {
     @Override
     public void delete(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
@@ -333,7 +335,7 @@ class PromptServiceImpl implements PromptService {
             return null;
         });
 
-        postPromptsDeletedEvent(Set.of(id), workspaceId);
+        postPromptsDeletedEvent(Set.of(id), workspaceId, userName);
     }
 
     @Override
@@ -344,13 +346,14 @@ class PromptServiceImpl implements PromptService {
         }
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             handle.attach(PromptDAO.class).delete(ids, workspaceId);
             return null;
         });
 
-        postPromptsDeletedEvent(ids, workspaceId);
+        postPromptsDeletedEvent(ids, workspaceId, userName);
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
@@ -606,17 +609,19 @@ class PromptServiceImpl implements PromptService {
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId) {
+    private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String userName) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
+                .userName(userName)
                 .payload(promptVersion)
                 .build());
     }
 
-    private void postPromptsDeletedEvent(Set<UUID> ids, String workspaceId) {
+    private void postPromptsDeletedEvent(Set<UUID> ids, String workspaceId, String userName) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_DELETED)
+                .userName(userName)
                 .workspaceId(workspaceId)
                 .payload(ids)
                 .build());

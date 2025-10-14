@@ -110,7 +110,8 @@ public class WebhookHttpClient {
                 }
 
                 // Serialize payload using JsonUtils.MAPPER to handle Instant fields properly
-                var jsonPayload = JsonUtils.writeValueAsString(event);
+                var jsonPayload = JsonUtils
+                        .writeValueAsString(event.toBuilder().url(null).headers(null).secret(null).build());
                 var entity = Entity.entity(jsonPayload, MediaType.APPLICATION_JSON);
 
                 // Set timeout properties
