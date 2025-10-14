@@ -16,7 +16,7 @@ class TestDownloadCommand:
     def test_download_command_help(self):
         """Test that the download command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["download", "--help"])
+        result = runner.invoke(cli, ["export", "--help"])
         assert result.exit_code == 0
         assert (
             "Download data from a workspace or workspace/project to local files"
@@ -54,13 +54,13 @@ class TestDownloadCommand:
         mock_client.search_traces.return_value = [mock_trace]
         mock_client.search_spans.return_value = [mock_span]
 
-        with patch("opik.cli.download.opik", mock_opik):
+        with patch("opik.cli.export.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
                 result = runner.invoke(
                     cli,
                     [
-                        "download",
+                        "export",
                         "default/test_project",
                         "--path",
                         temp_dir,
@@ -70,7 +70,7 @@ class TestDownloadCommand:
                 )
 
                 assert result.exit_code == 0
-                assert "Successfully downloaded 1 items" in result.output
+                assert "Successfully exported 1 items" in result.output
 
                 # Check that files were created
                 # The download command creates workspace/project_name structure
@@ -94,11 +94,11 @@ class TestDownloadCommand:
         mock_opik.Opik.return_value = mock_client
         mock_client.search_traces.return_value = []
 
-        with patch("opik.cli.download.opik", mock_opik):
+        with patch("opik.cli.export.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["download", "default/empty_project", "--path", temp_dir]
+                    cli, ["export", "default/empty_project", "--path", temp_dir]
                 )
 
                 assert result.exit_code == 0
@@ -143,13 +143,13 @@ class TestDownloadCommand:
         mock_client.search_traces.return_value = [mock_trace]
         mock_client.search_spans.return_value = [mock_span]
 
-        with patch("opik.cli.download.opik", mock_opik):
+        with patch("opik.cli.export.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
                 result = runner.invoke(
                     cli,
                     [
-                        "download",
+                        "export",
                         "test_workspace",
                         "--path",
                         temp_dir,
@@ -160,7 +160,7 @@ class TestDownloadCommand:
 
                 assert result.exit_code == 0
                 assert (
-                    "Downloading data from workspace: test_workspace (all projects)"
+                    "Exporting data from workspace: test_workspace (all projects)"
                     in result.output
                 )
                 assert "Found 1 projects in workspace" in result.output
@@ -209,13 +209,13 @@ class TestDownloadCommand:
         mock_client.search_traces.return_value = [mock_trace1, mock_trace2]
         mock_client.search_spans.return_value = [mock_span]
 
-        with patch("opik.cli.download.opik", mock_opik):
+        with patch("opik.cli.export.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
                 result = runner.invoke(
                     cli,
                     [
-                        "download",
+                        "export",
                         "default/test_project",
                         "--path",
                         temp_dir,
@@ -263,13 +263,13 @@ class TestDownloadCommand:
         mock_client.search_traces.return_value = [mock_trace]
         mock_client.search_spans.return_value = [mock_span]
 
-        with patch("opik.cli.download.opik", mock_opik):
+        with patch("opik.cli.export.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 runner = CliRunner()
                 result = runner.invoke(
                     cli,
                     [
-                        "download",
+                        "export",
                         "default/test_project",
                         "--path",
                         temp_dir,
@@ -294,7 +294,7 @@ class TestUploadCommand:
     def test_upload_command_help(self):
         """Test that the upload command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["upload", "--help"])
+        result = runner.invoke(cli, ["import", "--help"])
         assert result.exit_code == 0
         assert (
             "Upload data from local files to a workspace or workspace/project"
@@ -314,7 +314,7 @@ class TestUploadCommand:
         mock_client.trace.return_value = mock_trace_obj
         mock_client.span.return_value = MagicMock()
 
-        with patch("opik.cli.upload.opik", mock_opik):
+        with patch("opik.cli.import_command.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Create test data directory structure
                 project_dir = Path(temp_dir) / "test_project"
@@ -356,11 +356,11 @@ class TestUploadCommand:
 
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["upload", str(project_dir), "default/test_project"]
+                    cli, ["import", str(project_dir), "default/test_project"]
                 )
 
                 assert result.exit_code == 0
-                assert "Successfully uploaded 1 items" in result.output
+                assert "Successfully imported 1 items" in result.output
 
                 # Verify that the client methods were called
                 mock_client.trace.assert_called_once()
@@ -372,7 +372,7 @@ class TestUploadCommand:
         mock_client = MagicMock()
         mock_opik.Opik.return_value = mock_client
 
-        with patch("opik.cli.upload.opik", mock_opik):
+        with patch("opik.cli.import_command.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Create test data directory structure
                 project_dir = Path(temp_dir) / "test_project"
@@ -398,7 +398,7 @@ class TestUploadCommand:
                 result = runner.invoke(
                     cli,
                     [
-                        "upload",
+                        "import",
                         str(project_dir),
                         "default/test_project",
                         "--dry-run",
@@ -406,8 +406,8 @@ class TestUploadCommand:
                 )
 
                 assert result.exit_code == 0
-                assert "Dry run complete: Would upload 1 items" in result.output
-                assert "Dry run mode - no data will be uploaded" in result.output
+                assert "Dry run complete: Would import 1 items" in result.output
+                assert "Dry run mode - no data will be imported" in result.output
 
                 # Verify that no actual upload methods were called
                 mock_client.trace.assert_not_called()
@@ -419,7 +419,7 @@ class TestUploadCommand:
             nonexistent_dir = Path(temp_dir) / "nonexistent"
             runner = CliRunner()
             result = runner.invoke(
-                cli, ["upload", str(nonexistent_dir), "default/test_project"]
+                cli, ["import", str(nonexistent_dir), "default/test_project"]
             )
 
             assert result.exit_code == 1
@@ -434,7 +434,7 @@ class TestUploadCommand:
 
             runner = CliRunner()
             result = runner.invoke(
-                cli, ["upload", str(project_dir), "default/test_project"]
+                cli, ["import", str(project_dir), "default/test_project"]
             )
 
             assert result.exit_code == 0
@@ -461,7 +461,7 @@ class TestUploadCommand:
         mock_client.trace.return_value = mock_trace_obj
         mock_client.span.return_value = MagicMock()
 
-        with patch("opik.cli.upload.opik", mock_opik):
+        with patch("opik.cli.import_command.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Create test data directory structure
                 project_dir = Path(temp_dir) / "test_project"
@@ -503,7 +503,7 @@ class TestUploadCommand:
 
                 runner = CliRunner()
                 result = runner.invoke(
-                    cli, ["upload", str(project_dir), "test_workspace"]
+                    cli, ["import", str(project_dir), "test_workspace"]
                 )
 
                 assert result.exit_code == 0
@@ -530,7 +530,7 @@ class TestUploadCommand:
         mock_client.trace.return_value = mock_trace_obj
         mock_client.span.return_value = MagicMock()
 
-        with patch("opik.cli.upload.opik", mock_opik):
+        with patch("opik.cli.import_command.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Create test data directory structure
                 project_dir = Path(temp_dir) / "test_project"
@@ -570,7 +570,7 @@ class TestUploadCommand:
                 result = runner.invoke(
                     cli,
                     [
-                        "upload",
+                        "import",
                         str(project_dir),
                         "default/test_project",
                         "--name",
@@ -579,7 +579,7 @@ class TestUploadCommand:
                 )
 
                 assert result.exit_code == 0
-                assert "Successfully uploaded 1 items" in result.output
+                assert "Successfully imported 1 items" in result.output
 
                 # Verify that only one trace was uploaded (the matching one)
                 mock_client.trace.assert_called_once()
@@ -590,7 +590,7 @@ class TestUploadCommand:
         mock_client = MagicMock()
         mock_opik.Opik.return_value = mock_client
 
-        with patch("opik.cli.upload.opik", mock_opik):
+        with patch("opik.cli.import_command.opik", mock_opik):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Create test data directory structure
                 project_dir = Path(temp_dir) / "test_project"
@@ -616,7 +616,7 @@ class TestUploadCommand:
                 result = runner.invoke(
                     cli,
                     [
-                        "upload",
+                        "import",
                         str(project_dir),
                         "default/test_project",
                         "--name",
@@ -643,8 +643,8 @@ class TestCLIIntegration:
         result = runner.invoke(cli, ["--help"])
         assert result.exit_code == 0
         assert "CLI tool for Opik" in result.output
-        assert "download" in result.output
-        assert "upload" in result.output
+        assert "export" in result.output
+        assert "import" in result.output
 
     def test_cli_version(self):
         """Test that the CLI shows version."""

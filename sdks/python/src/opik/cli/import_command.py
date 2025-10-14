@@ -28,17 +28,17 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return False
 
 
-def _upload_traces(
+def _import_traces(
     client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
 ) -> int:
-    """Upload traces from JSON files."""
+    """Import traces from JSON files."""
     trace_files = list(project_dir.glob("trace_*.json"))
 
     if not trace_files:
         console.print(f"[yellow]No trace files found in {project_dir}[/yellow]")
         return 0
 
-    uploaded_count = 0
+    imported_count = 0
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -60,10 +60,10 @@ def _upload_traces(
                     console.print(
                         f"[blue]Would upload trace: {trace_data['trace']['id']}[/blue]"
                     )
-                    uploaded_count += 1
+                    imported_count += 1
                     progress.update(
                         task,
-                        description=f"Processed {uploaded_count}/{len(trace_files)} traces",
+                        description=f"Imported {imported_count}/{len(trace_files)} traces",
                     )
                     continue
 
@@ -165,32 +165,32 @@ def _upload_traces(
                     # Store the mapping of old ID to new ID
                     span_id_mapping[old_span_id] = new_span.id
 
-                uploaded_count += 1
+                imported_count += 1
                 progress.update(
                     task,
-                    description=f"Uploaded {uploaded_count}/{len(trace_files)} traces",
+                    description=f"Imported {imported_count}/{len(trace_files)} traces",
                 )
 
             except Exception as e:
                 console.print(
-                    f"[red]Error uploading trace from {trace_file.name}: {e}[/red]"
+                    f"[red]Error importing trace from {trace_file.name}: {e}[/red]"
                 )
                 continue
 
-    return uploaded_count
+    return imported_count
 
 
-def _upload_datasets(
+def _import_datasets(
     client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
 ) -> int:
-    """Upload datasets from JSON files."""
+    """Import datasets from JSON files."""
     dataset_files = list(project_dir.glob("dataset_*.json"))
 
     if not dataset_files:
         console.print(f"[yellow]No dataset files found in {project_dir}[/yellow]")
         return 0
 
-    uploaded_count = 0
+    imported_count = 0
     for dataset_file in dataset_files:
         try:
             with open(dataset_file, "r", encoding="utf-8") as f:
@@ -205,7 +205,7 @@ def _upload_datasets(
                 console.print(
                     f"[blue]Would upload dataset: {dataset_data['name']}[/blue]"
                 )
-                uploaded_count += 1
+                imported_count += 1
                 continue
 
             # Check if dataset already exists
@@ -214,7 +214,7 @@ def _upload_datasets(
                 console.print(
                     f"[yellow]Dataset '{dataset_data['name']}' already exists, skipping...[/yellow]"
                 )
-                uploaded_count += 1
+                imported_count += 1
                 continue
             except ApiError as e:
                 if e.status_code == 404:
@@ -241,28 +241,28 @@ def _upload_datasets(
                     ]
                 )
 
-            uploaded_count += 1
+            imported_count += 1
 
         except Exception as e:
             console.print(
-                f"[red]Error uploading dataset from {dataset_file.name}: {e}[/red]"
+                f"[red]Error importing dataset from {dataset_file.name}: {e}[/red]"
             )
             continue
 
-    return uploaded_count
+    return imported_count
 
 
-def _upload_experiments(
+def _import_experiments(
     client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
 ) -> int:
-    """Upload experiments from JSON files."""
+    """Import experiments from JSON files."""
     experiment_files = list(project_dir.glob("experiment_*.json"))
 
     if not experiment_files:
         console.print(f"[yellow]No experiment files found in {project_dir}[/yellow]")
         return 0
 
-    uploaded_count = 0
+    imported_count = 0
     for experiment_file in experiment_files:
         try:
             with open(experiment_file, "r", encoding="utf-8") as f:
@@ -279,7 +279,7 @@ def _upload_experiments(
                 console.print(
                     f"[blue]Would upload experiment: {experiment_data['name']}[/blue]"
                 )
-                uploaded_count += 1
+                imported_count += 1
                 continue
 
             # Check if experiment already exists
@@ -290,7 +290,7 @@ def _upload_experiments(
                 console.print(
                     f"[yellow]Experiment '{experiment_data['name']}' already exists, skipping...[/yellow]"
                 )
-                uploaded_count += 1
+                imported_count += 1
                 continue
 
             # Create experiment with basic metadata
@@ -306,28 +306,28 @@ def _upload_experiments(
             console.print(
                 f"[green]Created experiment: {experiment_data['name']}[/green]"
             )
-            uploaded_count += 1
+            imported_count += 1
 
         except Exception as e:
             console.print(
-                f"[red]Error uploading experiment from {experiment_file.name}: {e}[/red]"
+                f"[red]Error importing experiment from {experiment_file.name}: {e}[/red]"
             )
             continue
 
-    return uploaded_count
+    return imported_count
 
 
-def _upload_prompts(
+def _import_prompts(
     client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
 ) -> int:
-    """Upload prompts from JSON files."""
+    """Import prompts from JSON files."""
     prompt_files = list(project_dir.glob("prompt_*.json"))
 
     if not prompt_files:
         console.print(f"[yellow]No prompt files found in {project_dir}[/yellow]")
         return 0
 
-    uploaded_count = 0
+    imported_count = 0
     for prompt_file in prompt_files:
         try:
             with open(prompt_file, "r", encoding="utf-8") as f:
@@ -342,7 +342,7 @@ def _upload_prompts(
                 console.print(
                     f"[blue]Would upload prompt: {prompt_data['name']}[/blue]"
                 )
-                uploaded_count += 1
+                imported_count += 1
                 continue
 
             # Create prompt
@@ -352,18 +352,18 @@ def _upload_prompts(
                 metadata=prompt_data["current_version"].get("metadata"),
             )
 
-            uploaded_count += 1
+            imported_count += 1
 
         except Exception as e:
             console.print(
-                f"[red]Error uploading prompt from {prompt_file.name}: {e}[/red]"
+                f"[red]Error importing prompt from {prompt_file.name}: {e}[/red]"
             )
             continue
 
-    return uploaded_count
+    return imported_count
 
 
-@click.command()
+@click.command(name="import")
 @click.argument(
     "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
 )
@@ -371,7 +371,7 @@ def _upload_prompts(
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what would be uploaded without actually uploading.",
+    help="Show what would be imported without actually importing.",
 )
 @click.option(
     "--all",
@@ -400,7 +400,7 @@ def _upload_prompts(
     type=str,
     help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, experiment names, or prompt names.",
 )
-def upload(
+def import_data(
     workspace_folder: str,
     workspace_name: str,
     dry_run: bool,
@@ -413,25 +413,25 @@ def upload(
     Upload data from local files to a workspace or workspace/project.
 
     This command reads data from JSON files in the specified workspace folder
-    and uploads them to the specified workspace or project.
+    and imports them to the specified workspace or project.
 
     Note: Thread metadata is automatically calculated from traces with the same thread_id,
-    so threads don't need to be uploaded separately.
+    so threads don't need to be imported separately.
 
-    WORKSPACE_FOLDER: Directory containing JSON files to upload.
-    WORKSPACE_NAME: Either a workspace name (e.g., "my-workspace") to upload to all projects,
-                   or workspace/project (e.g., "my-workspace/my-project") to upload to a specific project.
+    WORKSPACE_FOLDER: Directory containing JSON files to import.
+    WORKSPACE_NAME: Either a workspace name (e.g., "my-workspace") to import to all projects,
+                   or workspace/project (e.g., "my-workspace/my-project") to import to a specific project.
     """
     try:
         # Parse workspace/project from the argument
         if "/" in workspace_name:
             workspace, project_name = workspace_name.split("/", 1)
-            upload_to_specific_project = True
+            import_to_specific_project = True
         else:
             # Only workspace specified - upload to all projects
             workspace = workspace_name
             project_name = None
-            upload_to_specific_project = False
+            import_to_specific_project = False
 
         # Initialize Opik client with workspace
         client = opik.Opik(workspace=workspace)
@@ -458,7 +458,7 @@ def upload(
 
         console.print(f"[green]Uploading data from {project_dir}[/green]")
 
-        if upload_to_specific_project:
+        if import_to_specific_project:
             console.print(
                 f"[blue]Uploading to workspace: {workspace}, project: {project_name}[/blue]"
             )
@@ -476,13 +476,13 @@ def upload(
         ]
 
         if project_specific and workspace_data:
-            if upload_to_specific_project:
+            if import_to_specific_project:
                 console.print(
-                    f"[yellow]Note: {', '.join(project_specific)} will be uploaded to project '{project_name}', {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                    f"[yellow]Note: {', '.join(project_specific)} will be imported to project '{project_name}', {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
                 )
             else:
                 console.print(
-                    f"[yellow]Note: {', '.join(project_specific)} will be uploaded to all projects, {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                    f"[yellow]Note: {', '.join(project_specific)} will be imported to all projects, {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
                 )
         elif workspace_data:
             console.print(
@@ -490,50 +490,50 @@ def upload(
             )
 
         if dry_run:
-            console.print("[yellow]Dry run mode - no data will be uploaded[/yellow]")
+            console.print("[yellow]Dry run mode - no data will be imported[/yellow]")
 
-        if upload_to_specific_project:
+        if import_to_specific_project:
             # Upload to specific project
             # Create a new client instance with the specific project name
             assert project_name is not None  # Type narrowing for mypy
             client = opik.Opik(workspace=workspace, project_name=project_name)
 
             # Upload each data type
-            total_uploaded = 0
+            total_imported = 0
 
             # Upload traces
             if "traces" in data_types:
                 console.print("[blue]Uploading traces...[/blue]")
-                traces_uploaded = _upload_traces(client, project_dir, dry_run, name)
-                total_uploaded += traces_uploaded
+                traces_imported = _import_traces(client, project_dir, dry_run, name)
+                total_imported += traces_imported
 
             # Upload datasets
             if "datasets" in data_types:
                 console.print("[blue]Uploading datasets...[/blue]")
-                datasets_uploaded = _upload_datasets(client, project_dir, dry_run, name)
-                total_uploaded += datasets_uploaded
+                datasets_imported = _import_datasets(client, project_dir, dry_run, name)
+                total_imported += datasets_imported
 
             # Upload experiments
             if "experiments" in data_types:
                 console.print("[blue]Uploading experiments...[/blue]")
-                experiments_uploaded = _upload_experiments(
+                experiments_imported = _import_experiments(
                     client, project_dir, dry_run, name
                 )
-                total_uploaded += experiments_uploaded
+                total_imported += experiments_imported
 
             # Upload prompts
             if "prompts" in data_types:
                 console.print("[blue]Uploading prompts...[/blue]")
-                prompts_uploaded = _upload_prompts(client, project_dir, dry_run, name)
-                total_uploaded += prompts_uploaded
+                prompts_imported = _import_prompts(client, project_dir, dry_run, name)
+                total_imported += prompts_imported
 
             if dry_run:
                 console.print(
-                    f"[green]Dry run complete: Would upload {total_uploaded} items[/green]"
+                    f"[green]Dry run complete: Would import {total_imported} items[/green]"
                 )
             else:
                 console.print(
-                    f"[green]Successfully uploaded {total_uploaded} items to project '{project_name}'[/green]"
+                    f"[green]Successfully imported {total_imported} items to project '{project_name}'[/green]"
                 )
         else:
             # Upload to all projects in workspace
@@ -553,31 +553,31 @@ def upload(
                 )
 
                 # Upload workspace-level data once (datasets, experiments, prompts)
-                total_uploaded = 0
+                total_imported = 0
 
                 # Upload datasets
                 if "datasets" in data_types:
                     console.print("[blue]Uploading datasets...[/blue]")
-                    datasets_uploaded = _upload_datasets(
+                    datasets_imported = _import_datasets(
                         client, project_dir, dry_run, name
                     )
-                    total_uploaded += datasets_uploaded
+                    total_imported += datasets_imported
 
                 # Upload experiments
                 if "experiments" in data_types:
                     console.print("[blue]Uploading experiments...[/blue]")
-                    experiments_uploaded = _upload_experiments(
+                    experiments_imported = _import_experiments(
                         client, project_dir, dry_run, name
                     )
-                    total_uploaded += experiments_uploaded
+                    total_imported += experiments_imported
 
                 # Upload prompts
                 if "prompts" in data_types:
                     console.print("[blue]Uploading prompts...[/blue]")
-                    prompts_uploaded = _upload_prompts(
+                    prompts_imported = _import_prompts(
                         client, project_dir, dry_run, name
                     )
-                    total_uploaded += prompts_uploaded
+                    total_imported += prompts_imported
 
                 # Upload traces to each project
                 if "traces" in data_types:
@@ -593,23 +593,23 @@ def upload(
                             workspace=workspace, project_name=project_name
                         )
 
-                        traces_uploaded = _upload_traces(
+                        traces_imported = _import_traces(
                             project_client, project_dir, dry_run, name
                         )
-                        total_uploaded += traces_uploaded
+                        total_imported += traces_imported
 
-                        if traces_uploaded > 0:
+                        if traces_imported > 0:
                             console.print(
-                                f"[green]Uploaded {traces_uploaded} traces to {project_name}[/green]"
+                                f"[green]Imported {traces_imported} traces to {project_name}[/green]"
                             )
 
                 if dry_run:
                     console.print(
-                        f"[green]Dry run complete: Would upload {total_uploaded} items to workspace '{workspace}'[/green]"
+                        f"[green]Dry run complete: Would import {total_imported} items to workspace '{workspace}'[/green]"
                     )
                 else:
                     console.print(
-                        f"[green]Successfully uploaded {total_uploaded} items to workspace '{workspace}'[/green]"
+                        f"[green]Successfully imported {total_imported} items to workspace '{workspace}'[/green]"
                     )
 
             except Exception as e:
