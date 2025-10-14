@@ -36,6 +36,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -81,6 +82,150 @@ class AlertServiceImpl implements AlertService {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryAlerts sortingFactory;
     private final @NonNull WebhookHttpClient webhookHttpClient;
+
+    private final static EnumMap<AlertEventType, String> TEST_PAYLOAD = new EnumMap<>(Map.of(
+            AlertEventType.TRACE_ERRORS,
+            """
+                        {
+                          "id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
+                          "name": "handle_query",
+                          "project_id": "0198ec68-6e06-7253-a20b-d35c9252b9ba",
+                          "project_name": "Demo Project",
+                          "start_time": "2025-08-27T17:06:36.740824Z",
+                          "end_time": "2025-08-27T17:06:41.039345Z",
+                          "input": {
+                            "query": "Who is our main contact at greenleaf tech?",
+                            "messages": [
+                              {
+                                "role": "user",
+                                "content": "Who is our main contact at greenleaf tech?"
+                              }
+                            ]
+                          },
+                          "output": {
+                            "response": "Your main contact at Greenleaf Tech is Jessica Lau, who serves as the Head of IT Procurement."
+                          },
+                          "error_info": {
+                            "exception_type": "ValidationException",
+                            "message": "Failed to validate contact information",
+                            "traceback": "Traceback (most recent call last):\\n  File \\"app.py\\", line 42, in handle_query\\n    validate_contact(contact)\\n  ValidationException: Failed to validate contact information"
+                          },
+                          "metadata": {
+                            "customer_id": "customer_123",
+                            "tool_call": "contact"
+                          },
+                          "tags": ["production", "contact-query"]
+                        }
+                    """,
+            AlertEventType.TRACE_FEEDBACK_SCORE,
+            """
+                    [
+                        {
+                          "id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
+                          "name": "User frustration",
+                          "value": 0.3,
+                          "reason": "The score is 0.3 because the User initially expressed mild frustration when the LLM couldn't provide the competitor's revenue",
+                          "category_name": "frustration",
+                          "source": "sdk",
+                          "author": "test-user"
+                        }
+                    ]
+                    """,
+            AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+            """
+                    [
+                        {
+                          "thread_id": "3b7c81e6-3e59-40b5-a465-67ea428d07e2",
+                          "name": "User frustration",
+                          "value": 0.0,
+                          "reason": "The score is 0.0 because the User's query was directly and accurately answered by the LLM, indicating a smooth and satisfactory interaction",
+                          "category_name": "frustration",
+                          "source": "sdk",
+                          "author": "test-user"
+                        }
+                    ]
+                    """,
+            AlertEventType.PROMPT_CREATED,
+            """
+                    {
+                      "id": "0198c90a-46ca-70e2-944d-cac10720ab66",
+                      "name": "Opik SDK Assistant - System Prompt",
+                      "description": "System prompt for Opik SDK assistant to help users with technical questions",
+                      "tags": ["system", "assistant"],
+                      "created_at": "2025-08-27T10:00:00Z",
+                      "created_by": "test-user",
+                      "last_updated_at": "2025-08-27T10:00:00Z",
+                      "last_updated_by": "test-user",
+                      "versions": [
+                              {
+                                  "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
+                                  "commit": "986afb80",
+                                  "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
+                                  "type": "mustache",
+                                  "created_at": "2025-08-27T10:00:00Z",
+                                  "created_by": "test-user"
+                              }
+                      ]
+                    }
+                    """,
+            AlertEventType.PROMPT_COMMITTED,
+            """
+                    {
+                      "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
+                      "prompt_id": "0198c90a-46ca-70e2-944d-cac10720ab66",
+                      "commit": "986afb80",
+                      "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
+                      "type": "mustache",
+                      "metadata": {
+                        "version": "1.0",
+                        "model": "gpt-4"
+                      },
+                      "created_at": "2025-08-27T10:00:00Z",
+                      "created_by": "test-user"
+                    }
+                    """,
+            AlertEventType.PROMPT_DELETED,
+            """
+                    [
+                        {
+                          "id": "0198c90a-46ca-70e2-944d-cac10720ab66",
+                          "name": "Old System Prompt",
+                          "description": "Deprecated system prompt that is no longer in use",
+                          "tags": ["deprecated"],
+                          "created_at": "2025-07-15T10:00:00Z",
+                          "created_by": "test-user",
+                          "last_updated_at": "2025-08-27T10:00:00Z",
+                          "last_updated_by": "test-user",
+                          "versions": [
+                                  {
+                                      "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
+                                      "commit": "986afb80",
+                                      "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
+                                      "type": "mustache",
+                                      "created_at": "2025-08-27T10:00:00Z",
+                                      "created_by": "test-user"
+                                  }
+                          ]
+                        }
+                    ]
+                    """,
+            AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
+            """
+                    [
+                        {
+                          "id": "0198ec7e-e999-7537-bbbb-fc5db24face8",
+                          "entity_id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
+                          "project_id": "0198ec68-6e06-7253-a20b-d35c9252b9ba",
+                          "project_name": "Demo Project",
+                          "name": "PII",
+                          "result": "FAILED",
+                          "details": {
+                            "detected_entities": ["EMAIL", "PHONE_NUMBER"],
+                            "message": "PII detected in response: email address and phone number"
+                          }
+                        }
+                    ]
+                    """));
 
     @Override
     public UUID create(@NonNull Alert alert) {
@@ -249,8 +394,8 @@ class AlertServiceImpl implements AlertService {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
-                "userNames", Set.of(userName),
-                "metadata", getTestPayload(eventType),
+                "userNames", Set.of("test-user"),
+                "metadata", Set.of(TEST_PAYLOAD.get(eventType)),
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
@@ -268,10 +413,6 @@ class AlertServiceImpl implements AlertService {
                 .workspaceId(workspaceId)
                 .createdAt(Instant.now())
                 .build();
-    }
-
-    Set<String> getTestPayload(AlertEventType eventType) {
-        return null;
     }
 
     private void deleteBatch(Handle handle, Set<UUID> ids) {

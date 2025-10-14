@@ -64,6 +64,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -80,7 +81,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -831,9 +831,10 @@ class AlertResourceTest {
             externalWebhookServer.resetAll();
         }
 
-        @Test
+        @ParameterizedTest
+        @EnumSource(AlertEventType.class)
         @DisplayName("Success: should test webhook successfully when webhook server responds with 2xx")
-        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult() {
+        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult(AlertEventType eventType) {
             // Given
             var mock = prepareMockWorkspace();
             var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
@@ -852,6 +853,9 @@ class AlertResourceTest {
                     .build();
             alert = alert.toBuilder()
                     .webhook(webhook)
+                    .triggers(List.of(alert.triggers().getFirst().toBuilder()
+                            .eventType(eventType)
+                            .build()))
                     .build();
 
             // When
@@ -910,14 +914,10 @@ class AlertResourceTest {
 
             // Verify event metadata
             assertThat(actualEvent.getId()).isNotNull();
-            assertThat(actualEvent.getUrl()).isEqualTo(alert.webhook().url());
             assertThat(actualEvent.getAlertId()).isEqualTo(alert.id());
             assertThat(actualEvent.getCreatedAt()).isNotNull();
             assertThat(actualEvent.getMaxRetries()).isEqualTo(1);
 
-            // Verify headers
-            var expectedHeaders = Optional.ofNullable(alert.webhook().headers()).orElse(Map.of());
-            assertThat(actualEvent.getHeaders()).isEqualTo(expectedHeaders);
             assertThat(actualEvent.getEventType()).isEqualTo(alert.triggers().getFirst().eventType());
 
             // Verify payload

@@ -172,6 +172,12 @@ class TraceServiceImpl implements TraceService {
 
         var tracesWithErrors = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
+                .map(trace -> trace.toBuilder()
+                        .createdBy(userName)
+                        .createdAt(Instant.now())
+                        .lastUpdatedBy(userName)
+                        .lastUpdatedAt(Instant.now())
+                        .build())
                 .toList();
 
         if (CollectionUtils.isNotEmpty(tracesWithErrors)) {
