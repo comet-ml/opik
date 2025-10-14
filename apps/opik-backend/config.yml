@@ -546,6 +546,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not Optimization Studio is enabled
+  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

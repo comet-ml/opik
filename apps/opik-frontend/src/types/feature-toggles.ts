@@ -8,4 +8,5 @@ export enum FeatureToggleKeys {
   WELCOME_WIZARD_ENABLED = "welcome_wizard_enabled",
   CSV_UPLOAD_ENABLED = "csv_upload_enabled",
   EXPORT_ENABLED = "export_enabled",
+  OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
 }
