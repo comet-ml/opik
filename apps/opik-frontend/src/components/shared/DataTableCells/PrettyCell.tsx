@@ -5,6 +5,7 @@ import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
+import { containsHTML } from "@/lib/utils";
 import useLocalStorageState from "use-local-storage-state";
 import sanitizeHtml from "sanitize-html";
 
@@ -82,10 +83,10 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
-    // Strip HTML tags from prettified content to show clean plain text
-    const displayMessage = response.prettified
-      ? stripHtmlTags(message)
-      : message;
+    // Strip HTML tags from prettified content, but only if it contains actual HTML markup
+    // Uses containsHTML utility to distinguish between real HTML and text with angle brackets
+    const hasValidHtmlTags = response.prettified && containsHTML(message);
+    const displayMessage = hasValidHtmlTags ? stripHtmlTags(message) : message;
 
     if (isSmall) {
       return (
