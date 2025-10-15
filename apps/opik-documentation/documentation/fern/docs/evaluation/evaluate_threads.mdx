@@ -19,6 +19,9 @@ The Python SDK provides a simple and efficient way to evaluate and optimize conv
 evaluation, a list of metrics to apply to each thread, and it returns a `ThreadsEvaluationResult` object
 containing the evaluation results and feedback scores.
 
+Most importantly, this function **automatically uploads the feedback scores to your traces in Opik!**
+So, once evaluation is completed, you can also [see the results in the UI](#using-opik-ui-to-view-results).
+
 To run the threads evaluation, you can use the following code:
 
 ```python
@@ -193,6 +196,7 @@ This collaborative approach is especially valuable for conversational threads wh
 #### Using Opik UI to view results
 
 Once the evaluation is complete, you can access the evaluation results in the Opik UI.
+Not only you will be able to see the score values, but the LLM-judge reasoning behind these values too!
 
 <Frame>
   <img src="/img/evaluation/threads_user_frustration_score.png" />
