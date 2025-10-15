@@ -227,7 +227,7 @@ class EvaluationEngine:
         # create span evaluation tasks from LLM tasks evaluation results and evaluate them in parallel
         span_evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
-                self._evaluate_task_result_span,
+                self._evaluate_llm_task_result_span,
                 evaluation_task_result=test_result_,
                 trace_trees=trace_trees,
             )
@@ -241,7 +241,7 @@ class EvaluationEngine:
             desc="LLM task spans evaluation",
         )
 
-    def _evaluate_task_result_span(
+    def _evaluate_llm_task_result_span(
         self,
         evaluation_task_result: test_result.TestResult,
         trace_trees: List[models.TraceModel],
@@ -269,16 +269,41 @@ class EvaluationEngine:
             raise ValueError(
                 f"No evaluation span found for test result: {evaluation_task_result}"
             )
+        with helpers.evaluate_llm_task_result_spans_context(
+            trace_data=trace.TraceData(
+                id=trace_id,
+                name=task_trace.name,
+                start_time=task_trace.start_time,
+                metadata=task_trace.metadata,
+                input=task_trace.input,
+                output=task_trace.output,
+                tags=task_trace.tags,
+                project_name=self._project_name,
+                created_by="evaluation",
+                error_info=task_trace.error_info,
+                thread_id=task_trace.thread_id,
+            ),
+            client=self._client,
+        ):
+            score_results = self._score_llm_task_result_span(
+                trace_id=trace_id, evaluation_span=evaluation_span
+            )
+            # append scores to the input test result
+            evaluation_task_result.score_results += score_results
+            return evaluation_task_result
 
+    @opik.track(name="llm_span_metrics_calculation")
+    def _score_llm_task_result_span(
+        self,
+        trace_id: str,
+        evaluation_span: models.SpanModel,
+    ) -> List[score_result.ScoreResult]:
         score_kwargs = {EVALUATION_SPAN_PARAMETER_NAME: evaluation_span}
         score_results = _scores_by_metrics(
             scoring_metrics=self._task_span_scoring_metrics,
             score_kwargs=score_kwargs,
             scoring_key_mapping=self._scoring_key_mapping,
         )
-
-        # append scores to the input test result
-        evaluation_task_result.score_results += score_results
 
         # log feedback scores
         rest_operations.log_test_result_feedback_scores(
@@ -287,7 +312,7 @@ class EvaluationEngine:
             trace_id=trace_id,
             project_name=self._project_name,
         )
-        return evaluation_task_result
+        return score_results
 
     def evaluate_test_cases(
         self,
