@@ -25,6 +25,7 @@ import {
   MAX_URL_VALIDATION_RETRIES,
 } from './api-helpers';
 import { analytics } from './analytics';
+import { maskApiKey } from './mask';
 
 // interface ProjectData {
 //   projectApiKey: string;
@@ -317,7 +318,7 @@ export async function installPackage({
             fs.writeFileSync(
               join(
                 process.cwd(),
-                `opik-configure-installation-error-${Date.now()}.log`,
+                `opik-ts-installation-error-${Date.now()}.log`,
               ),
               JSON.stringify({
                 stdout,
@@ -339,7 +340,7 @@ export async function installPackage({
       `${chalk.red(
         'Encountered the following error during installation:',
       )}\n\n${String(e)}\n\n${chalk.dim(
-        `The opik-configure has created a \`opik-configure-installation-error-*.log\` file. If you think this issue is caused by the opik-configure, create an issue on GitHub and include the log file's content:\n${ISSUES_URL}`,
+        `The opik-ts has created a \`opik-ts-installation-error-*.log\` file. If you think this issue is caused by the opik-ts, create an issue on GitHub and include the log file's content:\n${ISSUES_URL}`,
       )}`,
     );
     await abort();
@@ -678,9 +679,12 @@ async function handleSelfHostedDeploymentConfig(): Promise<string> {
  * Use this function to get project data for the CLI.
  *
  * @param options CLI options
+ * @param options.useLocal If true, skips prompts and configures for local deployment
  * @returns project data (token, url)
  */
-export async function getOrAskForProjectData(): Promise<{
+export async function getOrAskForProjectData(options?: {
+  useLocal?: boolean;
+}): Promise<{
   wizardHash: string;
   host: string;
   projectApiKey: string;
@@ -689,6 +693,37 @@ export async function getOrAskForProjectData(): Promise<{
   deploymentType: DeploymentType;
 }> {
   const cloudUrl = getCloudUrl();
+
+  // If --use-local flag is set, skip prompts and use local defaults
+  if (options?.useLocal) {
+    const projectName = await abortIfCancelled(
+      clack.text({
+        message: 'Enter your project name (optional)',
+        placeholder: 'Default Project',
+        defaultValue: 'Default Project',
+      }),
+      'nodejs' as Integration,
+    );
+
+    const wizardHash = 'terminal-input-' + Date.now();
+
+    analytics.setDistinctId(wizardHash);
+    analytics.capture('project data configured', {
+      hasApiKey: false,
+      deploymentType: DeploymentType.LOCAL,
+      workspaceName: 'default',
+      useLocal: true,
+    });
+
+    return {
+      wizardHash,
+      host: DEFAULT_LOCAL_URL,
+      projectApiKey: '',
+      workspaceName: 'default',
+      projectName: projectName || 'Default Project',
+      deploymentType: DeploymentType.LOCAL,
+    };
+  }
 
   // Step 1: Check if local Opik is running
   const isLocalRunning = await isOpikAccessible(DEFAULT_LOCAL_URL, 3000);
@@ -764,9 +799,8 @@ export async function getOrAskForProjectData(): Promise<{
       );
 
       projectApiKey = await abortIfCancelled(
-        clack.text({
+        clack.password({
           message: 'Enter your Opik API key',
-          placeholder: '...',
           validate: (value: string) => {
             if (!value || value.trim() === '') {
               return 'API key is required';
@@ -1262,9 +1296,7 @@ export async function checkAndAskToUpdateConfig(
     Object.entries(variableValues).forEach(([key, value]) => {
       // Mask sensitive values (API keys) but show workspace and project name
       const displayValue =
-        key === OPIK_ENV_VARS.API_KEY && value.length > 8
-          ? `${value.substring(0, 4)}...${value.substring(value.length - 4)}`
-          : value;
+        key === OPIK_ENV_VARS.API_KEY ? maskApiKey(value) : value;
       clack.log.message(
         `  ${chalk.cyan(key)}: ${chalk.dim(displayValue || '(empty)')}`,
       );

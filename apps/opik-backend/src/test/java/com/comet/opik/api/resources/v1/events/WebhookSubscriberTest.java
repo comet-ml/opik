@@ -188,7 +188,6 @@ class WebhookSubscriberTest {
                 .eventType(AlertEventType.PROMPT_CREATED)
                 .alertId(UUID.randomUUID())
                 .workspaceId(WORKSPACE_ID)
-                .userName(USER_NAME)
                 .url(url)
                 .payload(Map.of("message", "test payload", "timestamp", Instant.now().toString()))
                 .createdAt(Instant.now())

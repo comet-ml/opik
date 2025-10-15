@@ -280,6 +280,7 @@ class BaseOptimizer(ABC):
         agent_config["project_name"] = getattr(prompt, "project_name", None)
         agent_config["model"] = getattr(prompt, "model", None) or self.model
         agent_config["tools"] = self._serialize_tools(prompt)
+        agent_config["optimizer"] = self.__class__.__name__
         return self._drop_none(agent_config)
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
@@ -341,6 +342,7 @@ class BaseOptimizer(ABC):
             "metric": getattr(metric, "__name__", str(metric)),
             "dataset": getattr(dataset, "name", None),
             "dataset_id": dataset_id,
+            "optimizer": self.__class__.__name__,
             "optimizer_metadata": self._build_optimizer_metadata(),
             "tool_signatures": self._summarize_tool_signatures(prompt),
             "configuration": {

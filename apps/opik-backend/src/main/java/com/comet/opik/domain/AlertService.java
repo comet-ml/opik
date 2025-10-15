@@ -5,6 +5,7 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.Webhook;
+import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
@@ -16,6 +17,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
@@ -35,6 +37,9 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,11 +61,15 @@ public interface AlertService {
 
     Alert getById(UUID id);
 
+    List<Alert> findAllByWorkspaceAndEventType(String workspaceId, AlertEventType eventType);
+
     Alert getByIdAndWorkspace(UUID id, String workspaceId);
 
     void deleteBatch(Set<UUID> ids);
 
     WebhookTestResult testWebhook(Alert alert);
+
+    WebhookExamples getWebhookExamples();
 }
 
 @Slf4j
@@ -78,6 +87,160 @@ class AlertServiceImpl implements AlertService {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryAlerts sortingFactory;
     private final @NonNull WebhookHttpClient webhookHttpClient;
+
+    private final static EnumMap<AlertEventType, String> TEST_PAYLOAD = new EnumMap<>(Map.of(
+            AlertEventType.TRACE_ERRORS,
+            """
+                        {
+                          "id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
+                          "name": "handle_query",
+                          "project_id": "0198ec68-6e06-7253-a20b-d35c9252b9ba",
+                          "project_name": "Demo Project",
+                          "start_time": "2025-08-27T17:06:36.740824Z",
+                          "end_time": "2025-08-27T17:06:41.039345Z",
+                          "input": {
+                            "query": "Who is our main contact at greenleaf tech?",
+                            "messages": [
+                              {
+                                "role": "user",
+                                "content": "Who is our main contact at greenleaf tech?"
+                              }
+                            ]
+                          },
+                          "output": {
+                            "response": "Your main contact at Greenleaf Tech is Jessica Lau, who serves as the Head of IT Procurement."
+                          },
+                          "error_info": {
+                            "exception_type": "ValidationException",
+                            "message": "Failed to validate contact information",
+                            "traceback": "Traceback (most recent call last):\\n  File \\"app.py\\", line 42, in handle_query\\n    validate_contact(contact)\\n  ValidationException: Failed to validate contact information"
+                          },
+                          "metadata": {
+                            "customer_id": "customer_123",
+                            "tool_call": "contact"
+                          },
+                          "tags": ["production", "contact-query"]
+                        }
+                    """,
+            AlertEventType.TRACE_FEEDBACK_SCORE,
+            """
+                    [
+                        {
+                          "id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
+                          "name": "User frustration",
+                          "value": 0.3,
+                          "reason": "The score is 0.3 because the User initially expressed mild frustration when the LLM couldn't provide the competitor's revenue",
+                          "category_name": "frustration",
+                          "source": "sdk",
+                          "author": "test-user"
+                        }
+                    ]
+                    """,
+            AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+            """
+                    [
+                        {
+                          "thread_id": "3b7c81e6-3e59-40b5-a465-67ea428d07e2",
+                          "name": "User frustration",
+                          "value": 0.0,
+                          "reason": "The score is 0.0 because the User's query was directly and accurately answered by the LLM, indicating a smooth and satisfactory interaction",
+                          "category_name": "frustration",
+                          "source": "sdk",
+                          "author": "test-user"
+                        }
+                    ]
+                    """,
+            AlertEventType.PROMPT_CREATED,
+            """
+                    {
+                      "id": "0198c90a-46ca-70e2-944d-cac10720ab66",
+                      "name": "Opik SDK Assistant - System Prompt",
+                      "description": "System prompt for Opik SDK assistant to help users with technical questions",
+                      "tags": ["system", "assistant"],
+                      "created_at": "2025-08-27T10:00:00Z",
+                      "created_by": "test-user",
+                      "last_updated_at": "2025-08-27T10:00:00Z",
+                      "last_updated_by": "test-user",
+                      "versions": [
+                              {
+                                  "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
+                                  "commit": "986afb80",
+                                  "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
+                                  "type": "mustache",
+                                  "created_at": "2025-08-27T10:00:00Z",
+                                  "created_by": "test-user"
+                              }
+                      ]
+                    }
+                    """,
+            AlertEventType.PROMPT_COMMITTED,
+            """
+                    {
+                      "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
+                      "prompt_id": "0198c90a-46ca-70e2-944d-cac10720ab66",
+                      "commit": "986afb80",
+                      "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
+                      "type": "mustache",
+                      "metadata": {
+                        "version": "1.0",
+                        "model": "gpt-4"
+                      },
+                      "created_at": "2025-08-27T10:00:00Z",
+                      "created_by": "test-user"
+                    }
+                    """,
+            AlertEventType.PROMPT_DELETED,
+            """
+                    [
+                        {
+                          "id": "0198c90a-46ca-70e2-944d-cac10720ab66",
+                          "name": "Old System Prompt",
+                          "description": "Deprecated system prompt that is no longer in use",
+                          "tags": ["deprecated"],
+                          "created_at": "2025-07-15T10:00:00Z",
+                          "created_by": "test-user",
+                          "last_updated_at": "2025-08-27T10:00:00Z",
+                          "last_updated_by": "test-user",
+                          "versions": [
+                                  {
+                                      "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
+                                      "commit": "986afb80",
+                                      "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
+                                      "type": "mustache",
+                                      "created_at": "2025-08-27T10:00:00Z",
+                                      "created_by": "test-user"
+                                  }
+                          ]
+                        }
+                    ]
+                    """,
+            AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
+            """
+                    [
+                        {
+                          "id": "0198ec7e-e999-7537-bbbb-fc5db24face8",
+                          "entity_id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
+                          "project_id": "0198ec68-6e06-7253-a20b-d35c9252b9ba",
+                          "project_name": "Demo Project",
+                          "name": "PII",
+                          "result": "FAILED",
+                          "details": {
+                            "detected_entities": ["EMAIL", "PHONE_NUMBER"],
+                            "message": "PII detected in response: email address and phone number"
+                          }
+                        }
+                    ]
+                    """));
+
+    private static final Alert DUMMY_ALERT = Alert.builder()
+            .id(UUID.fromString("01234567-89ab-cdef-0123-456789abcdef"))
+            .name("Example Alert")
+            .enabled(true)
+            .webhook(Webhook.builder()
+                    .build())
+            .build();
+
+    private static final WebhookExamples WEBHOOK_EXAMPLES = prepareWebhookPayloadExamples();
 
     @Override
     public UUID create(@NonNull Alert alert) {
@@ -159,6 +322,17 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
+    @Cacheable(name = "alert_find_all_per_workspace", key = "$workspaceId +'-'+ $eventType", returnType = Alert.class, wrapperType = List.class)
+    public List<Alert> findAllByWorkspaceAndEventType(@NonNull String workspaceId, @NonNull AlertEventType eventType) {
+        log.info("Fetching all enabled alerts for workspace '{}', eventType '{}'", workspaceId, eventType);
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            AlertDAO alertDAO = handle.attach(AlertDAO.class);
+
+            return alertDAO.findByWorkspaceAndEventType(workspaceId, eventType.getValue());
+        });
+    }
+
+    @Override
     public Alert getByIdAndWorkspace(@NonNull UUID id, @NonNull String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
@@ -186,8 +360,9 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        var event = mapAlertToWebhookEvent(alert, workspaceId, userName);
-        String requestBody = JsonUtils.writeValueAsString(event);
+        var event = mapAlertToWebhookEvent(alert, workspaceId);
+        String requestBody = JsonUtils
+                .writeValueAsString(event.toBuilder().url(null).headers(null).secret(null).build());
 
         return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
@@ -221,18 +396,26 @@ class AlertServiceImpl implements AlertService {
                 .block();
     }
 
-    private WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId, String userName) {
-        String eventId = idGenerator.generateId().toString();
-        var eventType = alert.triggers().isEmpty()
+    @Override
+    public WebhookExamples getWebhookExamples() {
+        return WEBHOOK_EXAMPLES;
+    }
+
+    private static WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId) {
+        String eventId = "0198ec7e-e844-7537-aaaa-fc5db24dcce7";
+        var eventType = CollectionUtils.isEmpty(alert.triggers())
                 ? AlertEventType.TRACE_ERRORS
                 : alert.triggers().getFirst().eventType();
-        Set<String> eventIds = Set.of(idGenerator.generateId().toString()); // Dummy event ID for test
+        Set<String> eventIds = Set.of("0198ec7e-e844-7537-aaaa-fc5db24fb547");
+        var alertId = alert.id() == null ? UUID.fromString("0198ec7e-e844-7537-aaaa-fc5dd35fb547") : alert.id();
 
         Map<String, Object> payload = Map.of(
-                "alertId", alert.id().toString(),
+                "alertId", alertId,
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
+                "userNames", Set.of("test-user"),
+                "metadata", Set.of(TEST_PAYLOAD.get(eventType)),
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
@@ -242,12 +425,12 @@ class AlertServiceImpl implements AlertService {
                 .id(eventId)
                 .url(alert.webhook().url())
                 .eventType(eventType)
-                .alertId(alert.id())
+                .alertId(alertId)
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
+                .secret(alert.webhook().secretToken())
                 .maxRetries(1)
                 .workspaceId(workspaceId)
-                .userName(userName)
                 .createdAt(Instant.now())
                 .build();
     }
@@ -358,6 +541,29 @@ class AlertServiceImpl implements AlertService {
                 .createdBy(Optional.ofNullable(config.createdBy()).orElse(userName))
                 .createdAt(alert.createdAt()) // will be null for new alert, and not null for update
                 .lastUpdatedBy(userName)
+                .build();
+    }
+
+    private static WebhookExamples prepareWebhookPayloadExamples() {
+        Map<AlertEventType, String> examples = new HashMap<>();
+
+        Arrays.stream(AlertEventType.values())
+                .forEach(eventType -> {
+                    var alert = DUMMY_ALERT.toBuilder()
+                            .triggers(List.of(
+                                    AlertTrigger.builder()
+                                            .eventType(eventType)
+                                            .build()))
+                            .build();
+
+                    var webhookEvent = mapAlertToWebhookEvent(alert, "demo-workspace-id");
+                    String requestBody = JsonUtils
+                            .writeValueAsString(webhookEvent.toBuilder().url(null).headers(null).secret(null).build());
+                    examples.put(eventType, requestBody);
+                });
+
+        return WebhookExamples.builder()
+                .responseExamples(examples)
                 .build();
     }
 }

@@ -50,6 +50,12 @@ public interface AttachmentService {
 
     void uploadAttachment(AttachmentInfo attachmentInfo, byte[] data, String workspaceId, String userName);
 
+    /**
+     * Internal method for backend async uploads - works for both MinIO and S3.
+     * Bypasses the frontend restriction that requires presigned URLs for S3.
+     */
+    void uploadAttachmentInternal(AttachmentInfo attachmentInfo, byte[] data, String workspaceId, String userName);
+
     InputStream downloadAttachment(AttachmentInfo attachmentInfo, String workspaceId);
 
     Mono<Attachment.AttachmentPage> list(int page, int size, AttachmentSearchCriteria criteria, String baseUrlEncoded);
@@ -147,6 +153,18 @@ class AttachmentServiceImpl implements AttachmentService {
                     "Direct attachment upload is forbidden for S3, please use multi-part upload with presigned urls",
                     Response.Status.FORBIDDEN);
         }
+
+        // Delegate to internal method for actual upload logic
+        uploadAttachmentInternal(attachmentInfo, data, workspaceId, userName);
+    }
+
+    /**
+     * Internal method for backend async uploads - works for both MinIO and S3
+     * Does not enforce the presigned URL restriction that applies to frontend uploads
+     */
+    @Override
+    public void uploadAttachmentInternal(@NonNull AttachmentInfo attachmentInfo, byte[] data,
+            @NonNull String workspaceId, @NonNull String userName) {
 
         attachmentInfo = attachmentInfo.toBuilder()
                 .containerId(getProjectIdByName(attachmentInfo.projectName(), workspaceId, userName))

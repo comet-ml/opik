@@ -240,6 +240,7 @@ export class Spans {
             type: type_,
             filters,
             truncate,
+            stripAttachments,
             sorting,
             exclude,
         } = request;
@@ -276,6 +277,10 @@ export class Spans {
 
         if (truncate != null) {
             _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
         }
 
         if (sorting != null) {
@@ -540,10 +545,10 @@ export class Spans {
         request: OpikApi.GetSpanByIdRequest = {},
         requestOptions?: Spans.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.SpanPublic>> {
-        const { truncate } = request;
+        const { stripAttachments } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
-        if (truncate != null) {
-            _queryParams["truncate"] = truncate.toString();
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
         }
 
         const _response = await core.fetcher({
@@ -1255,10 +1260,10 @@ export class Spans {
      * @example
      *     await client.spans.scoreBatchOfSpans({
      *         scores: [{
-     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 id: "id"
      *             }]
      *     })
      */

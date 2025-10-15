@@ -35,6 +35,8 @@ public class AlertBucketService {
     private static final String BUCKET_KEY_PREFIX = "opik:alert_bucket:";
     private static final String BUCKET_INDEX_KEY = "opik:alert_bucket_index"; // ZSET: score=readyTimestamp, value=bucketKey
     private static final String EVENT_IDS_KEY = "eventIds";
+    private static final String PAYLOADS_KEY = "payloads";
+    private static final String USER_NAMES_KEY = "userNames";
     private static final String FIRST_SEEN_KEY = "firstSeen";
     private static final String WINDOW_SIZE_KEY = "windowSize";
     private static final String WORKSPACE_ID_KEY = "workspaceId";
@@ -52,33 +54,55 @@ public class AlertBucketService {
      * @param workspaceId the workspace ID for the alert
      * @param eventType the event type
      * @param eventId the event ID to add
+     * @param payload the event payload to add
+     * @param userName the user name associated with the event
      * @return Mono that completes when the event is added
      */
     public Mono<Void> addEventToBucket(
             @NonNull UUID alertId,
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
-            @NonNull String eventId) {
+            @NonNull String eventId,
+            @NonNull String payload,
+            @NonNull String userName) {
 
         String bucketKey = generateBucketKey(alertId, eventType);
         RMapReactive<String, String> bucket = redissonClient.getMap(bucketKey);
         long currentWindowSizeMillis = webhookConfig.getDebouncing().getWindowSize().toMilliseconds();
 
-        log.debug("Adding event '{}' to bucket '{}' for alert '{}' and type '{}'",
+        log.debug("Adding event '{}' with payload to bucket '{}' for alert '{}' and type '{}'",
                 eventId, bucketKey, alertId, eventType);
 
-        return bucket.get(EVENT_IDS_KEY)
-                .defaultIfEmpty("[]")
-                .map(json -> {
-                    Set<String> eventIds = JsonUtils.readCollectionValue(json, Set.class, String.class);
-                    return new HashSet<>(eventIds);
+        return Mono.zip(
+                bucket.get(EVENT_IDS_KEY).defaultIfEmpty("[]"),
+                bucket.get(PAYLOADS_KEY).defaultIfEmpty("[]"),
+                bucket.get(USER_NAMES_KEY).defaultIfEmpty("[]"))
+                .map(tuple -> {
+                    Set<String> eventIds = JsonUtils.readCollectionValue(tuple.getT1(), Set.class, String.class);
+                    Set<String> payloads = JsonUtils.readCollectionValue(tuple.getT2(), Set.class, String.class);
+                    Set<String> userNames = JsonUtils.readCollectionValue(tuple.getT3(), Set.class, String.class);
+                    return new Object[]{eventIds, payloads, userNames};
                 })
-                .flatMap(eventIds -> {
-                    eventIds.add(eventId);
-                    String updatedJson = JsonUtils.writeValueAsString(eventIds);
+                .flatMap(sets -> {
+                    @SuppressWarnings("unchecked")
+                    Set<String> eventIds = (Set<String>) sets[0];
+                    @SuppressWarnings("unchecked")
+                    Set<String> payloads = (Set<String>) sets[1];
+                    @SuppressWarnings("unchecked")
+                    Set<String> userNames = (Set<String>) sets[2];
 
-                    // Store updated event IDs
-                    return bucket.put(EVENT_IDS_KEY, updatedJson)
+                    eventIds.add(eventId);
+                    payloads.add(payload);
+                    userNames.add(userName);
+
+                    String updatedEventIdsJson = JsonUtils.writeValueAsString(eventIds);
+                    String updatedPayloadsJson = JsonUtils.writeValueAsString(payloads);
+                    String updatedUserNamesJson = JsonUtils.writeValueAsString(userNames);
+
+                    // Store updated event IDs, payloads, and user names
+                    return bucket.put(EVENT_IDS_KEY, updatedEventIdsJson)
+                            .then(bucket.put(PAYLOADS_KEY, updatedPayloadsJson))
+                            .then(bucket.put(USER_NAMES_KEY, updatedUserNamesJson))
                             .then(bucket.get(FIRST_SEEN_KEY).defaultIfEmpty(""))
                             .flatMap(firstSeen -> {
                                 if (firstSeen == null || firstSeen.isEmpty()) {
@@ -228,7 +252,7 @@ public class AlertBucketService {
     }
 
     /**
-     * Retrieves complete bucket data including event IDs, firstSeen timestamp, and window size.
+     * Retrieves complete bucket data including event IDs, payloads, user names, firstSeen timestamp, and window size.
      *
      * @param bucketKey the bucket key
      * @return Mono containing BucketData with all bucket information
@@ -238,29 +262,39 @@ public class AlertBucketService {
 
         return Mono.zip(
                 bucket.get(EVENT_IDS_KEY).defaultIfEmpty("[]"),
+                bucket.get(PAYLOADS_KEY).defaultIfEmpty("[]"),
+                bucket.get(USER_NAMES_KEY).defaultIfEmpty("[]"),
                 bucket.get(FIRST_SEEN_KEY),
                 bucket.get(WINDOW_SIZE_KEY),
                 bucket.get(WORKSPACE_ID_KEY))
                 .flatMap(tuple -> Mono.fromCallable(() -> {
                     String eventIdsJson = tuple.getT1();
-                    String firstSeenStr = tuple.getT2();
-                    String windowSizeStr = tuple.getT3();
-                    String workspaceId = tuple.getT4();
+                    String payloadsJson = tuple.getT2();
+                    String userNamesJson = tuple.getT3();
+                    String firstSeenStr = tuple.getT4();
+                    String windowSizeStr = tuple.getT5();
+                    String workspaceId = tuple.getT6();
 
                     Set<String> eventIds = JsonUtils.readCollectionValue(eventIdsJson, Set.class, String.class);
+                    Set<String> payloads = JsonUtils.readCollectionValue(payloadsJson, Set.class, String.class);
+                    Set<String> userNames = JsonUtils.readCollectionValue(userNamesJson, Set.class, String.class);
                     long firstSeen = Long.parseLong(firstSeenStr);
                     long windowSize = Long.parseLong(windowSizeStr);
 
                     return BucketData.builder()
                             .eventIds(new HashSet<>(eventIds))
+                            .payloads(new HashSet<>(payloads))
+                            .userNames(new HashSet<>(userNames))
                             .firstSeen(firstSeen)
                             .windowSize(windowSize)
                             .workspaceId(workspaceId)
                             .build();
                 }))
                 .doOnSuccess(
-                        data -> log.debug("Retrieved bucket data for '{}': {} events, firstSeen={}, windowSize={}ms",
-                                bucketKey, data.eventIds().size(), data.firstSeen(), data.windowSize()))
+                        data -> log.debug(
+                                "Retrieved bucket data for '{}': {} events, {} payloads, {} userNames, firstSeen={}, windowSize={}ms",
+                                bucketKey, data.eventIds().size(), data.payloads().size(), data.userNames().size(),
+                                data.firstSeen(), data.windowSize()))
                 .doOnError(error -> log.error("Failed to retrieve bucket data for '{}': {}",
                         bucketKey, error.getMessage(), error));
     }
@@ -269,7 +303,9 @@ public class AlertBucketService {
      * Data class to hold complete bucket information.
      */
     @Builder
-    public record BucketData(Set<String> eventIds, long firstSeen, long windowSize, String workspaceId) {
+    public record BucketData(@NonNull Set<String> eventIds, @NonNull Set<String> payloads,
+            @NonNull Set<String> userNames, long firstSeen, long windowSize,
+            @NonNull String workspaceId) {
     }
 
     /**

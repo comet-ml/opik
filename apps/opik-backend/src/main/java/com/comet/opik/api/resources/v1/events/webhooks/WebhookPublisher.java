@@ -34,27 +34,6 @@ public class WebhookPublisher {
     private final @NonNull IdGenerator idGenerator;
 
     /**
-     * Publishes a webhook event to the Redis stream for processing.
-     *
-     * @param eventType    The type of event
-     * @param alertId      The alert ID
-     * @param workspaceId  The workspace ID associated with the event
-     * @param webhookUrl   The URL to send the webhook to
-     * @param payload      The payload to include in the webhook
-     * @param headers      Optional custom headers to include in the HTTP request
-     * @return A Mono that completes when the event is published to the stream
-     */
-    public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
-            @NonNull UUID alertId,
-            @NonNull String workspaceId,
-            @NonNull String webhookUrl,
-            @NonNull T payload,
-            Map<String, String> headers) {
-        return publishWebhookEvent(eventType, alertId, workspaceId, webhookUrl, payload, headers,
-                webhookConfig.getMaxRetries());
-    }
-
-    /**
      * Publishes a webhook event to the Redis stream for processing with custom retry count.
      *
      * @param eventType    The type of event
@@ -72,6 +51,7 @@ public class WebhookPublisher {
             @NonNull String webhookUrl,
             @NonNull T payload,
             Map<String, String> headers,
+            String secretToken,
             int maxRetries) {
 
         if (!webhookConfig.isEnabled()) {
@@ -89,9 +69,9 @@ public class WebhookPublisher {
                 .alertId(alertId)
                 .payload(payload)
                 .headers(Optional.ofNullable(headers).orElse(Map.of()))
+                .secret(secretToken)
                 .maxRetries(maxRetries)
                 .workspaceId(workspaceId)
-                .userName("system")
                 .createdAt(Instant.now())
                 .build();
 

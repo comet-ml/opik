@@ -2,13 +2,17 @@ import React, { ReactNode, useMemo, useRef } from "react";
 import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
-import { cn, isStringMarkdown } from "@/lib/utils";
+import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
+import { isStringMarkdown } from "@/lib/utils";
+import { makeHeadingsCollapsible } from "@/lib/remarkCollapsibleHeadings";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
 import SyntaxHighlighterSearch from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
+
+const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
 
 export interface MarkdownHighlighterProps {
   searchValue?: string;
@@ -37,16 +41,58 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
     });
 
   const markdownPreview = useMemo(() => {
-    if (isNull(codeOutput.message)) return "";
+    if (isNull(codeOutput.message)) {
+      return <div className="comet-code text-muted-foreground">null</div>;
+    }
+
+    // Handle object messages - render as JSON table
+    if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
+      return (
+        <JsonKeyValueTable
+          data={codeOutput.message}
+          maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
+          localStorageKey="json-table-expanded-state"
+        />
+      );
+    }
+
+    // Handle structured result from prettifyMessage
+    if (
+      typeof codeOutput.message === "object" &&
+      codeOutput.message !== null &&
+      "renderType" in codeOutput.message
+    ) {
+      const structuredResult = codeOutput.message as {
+        renderType: string;
+        data: unknown;
+      };
+      if (structuredResult.renderType === "json-table") {
+        return (
+          <JsonKeyValueTable
+            data={structuredResult.data}
+            maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
+            localStorageKey="json-table-expanded-state"
+          />
+        );
+      }
+    }
 
     if (isStringMarkdown(codeOutput.message)) {
+      // Transform the markdown to make headings collapsible
+      const collapsibleMarkdown = makeHeadingsCollapsible(codeOutput.message, {
+        defaultOpen: false,
+        className: "collapsible-heading",
+        summaryClassName: "collapsible-heading-summary",
+        contentClassName: "collapsible-heading-content",
+      });
+
       return (
         <ReactMarkdown
-          className={cn("prose dark:prose-invert comet-markdown")}
+          className="comet-markdown comet-markdown-highlighter prose dark:prose-invert"
           remarkPlugins={[remarkBreaks, remarkGfm, searchPlugin]}
           rehypePlugins={[rehypeRaw]}
         >
-          {codeOutput.message}
+          {collapsibleMarkdown}
         </ReactMarkdown>
       );
     }
@@ -58,12 +104,24 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
     );
   }, [codeOutput.message, searchPlugin, searchPlainText]);
 
+  // Check if the content is a JSON table (not searchable)
+  const isJsonTable = useMemo(() => {
+    if (isNull(codeOutput.message)) return false;
+
+    // Handle object messages - render as JSON table
+    if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
+      return true;
+    }
+
+    return false;
+  }, [codeOutput.message]);
+
   return (
     <SyntaxHighlighterLayout
       leftHeader={modeSelector}
       rightHeader={
         <>
-          {withSearch && (
+          {withSearch && !isJsonTable && (
             <SyntaxHighlighterSearch
               searchValue={localSearchValue}
               onSearch={setLocalSearchValue}

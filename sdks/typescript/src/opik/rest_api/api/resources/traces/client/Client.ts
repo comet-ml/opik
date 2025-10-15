@@ -399,7 +399,7 @@ export class Traces {
         request: OpikApi.GetTracesByProjectRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePagePublic>> {
-        const { page, size, projectName, projectId, filters, truncate, sorting, exclude } = request;
+        const { page, size, projectName, projectId, filters, truncate, stripAttachments, sorting, exclude } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -423,6 +423,10 @@ export class Traces {
 
         if (truncate != null) {
             _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
         }
 
         if (sorting != null) {
@@ -678,10 +682,10 @@ export class Traces {
         request: OpikApi.GetTraceByIdRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePublic>> {
-        const { truncate } = request;
+        const { stripAttachments } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
-        if (truncate != null) {
-            _queryParams["truncate"] = truncate.toString();
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
         }
 
         const _response = await core.fetcher({
@@ -1968,7 +1972,7 @@ export class Traces {
         request: OpikApi.GetTraceThreadsRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TraceThreadPage>> {
-        const { page, size, projectName, projectId, truncate, filters, sorting } = request;
+        const { page, size, projectName, projectId, truncate, stripAttachments, filters, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -1988,6 +1992,10 @@ export class Traces {
 
         if (truncate != null) {
             _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
         }
 
         if (filters != null) {
@@ -2151,10 +2159,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfThreads({
      *         scores: [{
-     *                 threadId: "thread_id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 threadId: "thread_id"
      *             }]
      *     })
      */
@@ -2236,10 +2244,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfTraces({
      *         scores: [{
-     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 id: "id"
      *             }]
      *     })
      */

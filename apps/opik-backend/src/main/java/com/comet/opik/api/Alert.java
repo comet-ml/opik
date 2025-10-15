@@ -55,7 +55,7 @@ public record Alert(
         }
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record AlertPage(

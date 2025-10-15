@@ -72,6 +72,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
+- name: Welcome Wizard
+  description: Welcome wizard tracking resources
 - name: Workspaces
   description: Workspace related resources
 - name: Redirect
@@ -3158,7 +3160,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3230,12 +3240,13 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: truncate
+      - name: strip_attachments
         in: query
         schema:
           type: boolean
-          description: "If true, returns references; if false, returns reinjected\
-            \ base64. Matches traces endpoint for consistency and API discoverability."
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
           default: false
       responses:
         "200":
@@ -3644,7 +3655,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3710,11 +3729,13 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: truncate
+      - name: strip_attachments
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
           default: false
       responses:
         "200":
@@ -4056,7 +4077,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: Truncate image included in the messages
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: filters
         in: query
         schema:
@@ -4257,6 +4286,34 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/welcome-wizard:
+    get:
+      tags:
+      - Welcome Wizard
+      summary: Get welcome wizard tracking status
+      description: Get welcome wizard tracking status for the current workspace
+      operationId: getWelcomeWizardStatus
+      responses:
+        "200":
+          description: Welcome wizard tracking status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WelcomeWizardTracking"
+    post:
+      tags:
+      - Welcome Wizard
+      summary: Submit welcome wizard
+      description: Submit welcome wizard with user information
+      operationId: submitWelcomeWizard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WelcomeWizardSubmission"
+      responses:
+        "204":
+          description: Welcome wizard submitted successfully
   /v1/private/workspaces/costs/summaries:
     post:
       tags:
@@ -4718,7 +4775,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4834,7 +4891,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4970,7 +5027,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -10486,6 +10543,7 @@ components:
       - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
+      - welcomeWizardEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
@@ -10497,6 +10555,8 @@ components:
         opikAIEnabled:
           type: boolean
         alertsEnabled:
+          type: boolean
+        welcomeWizardEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -10820,9 +10880,6 @@ components:
       - value
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -10848,6 +10905,9 @@ components:
           - online_scoring
         author:
           type: string
+        id:
+          type: string
+          format: uuid
     SpanFilter_Public:
       type: object
       properties:
@@ -11295,6 +11355,8 @@ components:
         thread_id:
           minLength: 1
           type: string
+        truncate:
+          type: boolean
     TraceThreadPage:
       type: object
       properties:
@@ -11343,9 +11405,6 @@ components:
       - value
       type: object
       properties:
-        thread_id:
-          minLength: 1
-          type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -11370,6 +11429,9 @@ components:
           - sdk
           - online_scoring
         author:
+          type: string
+        thread_id:
+          minLength: 1
           type: string
     FeedbackScoreBatchThread:
       required:
@@ -11430,8 +11492,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceSearchStreamRequest_Public:
       type: object
       properties:
@@ -11456,8 +11523,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceUpdate:
       type: object
       properties:
@@ -11498,6 +11570,35 @@ components:
           type: array
           items:
             type: string
+    WelcomeWizardTracking:
+      type: object
+      properties:
+        completed:
+          type: boolean
+          description: Whether the welcome wizard has been completed
+    WelcomeWizardSubmission:
+      type: object
+      properties:
+        role:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: Optional user role
+        integrations:
+          type: array
+          description: List of integrations the user selected
+          items:
+            type: string
+            description: List of integrations the user selected
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional user email
+          format: email
+        join_beta_program:
+          type: boolean
+          description: Whether user wants to join beta programs
     Result:
       type: object
       properties:

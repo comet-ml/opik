@@ -13,7 +13,8 @@ import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 
 type DatasetItemsActionsPanelProps = {
-  datasetItems: DatasetItem[];
+  getDataForExport: () => Promise<DatasetItem[]>;
+  selectedDatasetItems: DatasetItem[];
   datasetId: string;
   datasetName: string;
   columnsToExport: string[];
@@ -23,7 +24,8 @@ type DatasetItemsActionsPanelProps = {
 const DatasetItemsActionsPanel: React.FunctionComponent<
   DatasetItemsActionsPanelProps
 > = ({
-  datasetItems,
+  getDataForExport,
+  selectedDatasetItems,
   datasetId,
   datasetName,
   columnsToExport,
@@ -36,22 +38,23 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] =
     useState<boolean>(false);
   const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
-  const disabled = !datasetItems?.length;
+  const disabled = !selectedDatasetItems?.length;
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
 
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
-      ids: datasetItems.map((i) => i.id),
+      ids: selectedDatasetItems.map((i) => i.id),
     });
-  }, [datasetItems, mutate]);
+  }, [selectedDatasetItems, mutate]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
     setGeneratedSamples(samples);
     setGeneratedSamplesDialogOpen(true);
   }, []);
 
-  const mapRowData = useCallback(() => {
+  const mapRowData = useCallback(async () => {
+    const datasetItems = await getDataForExport();
     return datasetItems.map((item) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         // Check if this column is a dynamic dataset column
@@ -65,7 +68,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         return acc;
       }, {});
     });
-  }, [datasetItems, columnsToExport, dynamicColumns]);
+  }, [getDataForExport, columnsToExport, dynamicColumns]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {

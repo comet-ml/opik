@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -25,6 +26,7 @@ import reactor.util.retry.Retry;
 
 import java.util.Map;
 
+import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -103,8 +105,13 @@ public class WebhookHttpClient {
                 requestBuilder.header(HttpHeaders.USER_AGENT, USER_AGENT_VALUE);
                 requestBuilder.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
 
+                if (StringUtils.isNotBlank(event.getSecret())) {
+                    requestBuilder.header(HttpHeaders.AUTHORIZATION, decrypt(event.getSecret()));
+                }
+
                 // Serialize payload using JsonUtils.MAPPER to handle Instant fields properly
-                var jsonPayload = JsonUtils.writeValueAsString(event);
+                var jsonPayload = JsonUtils
+                        .writeValueAsString(event.toBuilder().url(null).headers(null).secret(null).build());
                 var entity = Entity.entity(jsonPayload, MediaType.APPLICATION_JSON);
 
                 // Set timeout properties

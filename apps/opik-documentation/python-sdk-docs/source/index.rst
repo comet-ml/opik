@@ -160,6 +160,7 @@ You can learn more about the `opik` python SDK in the following sections:
    track
    configure
    opik_context/index
+   context_manager/index
 
 .. toctree::
    :caption: Integrations
@@ -184,6 +185,7 @@ You can learn more about the `opik` python SDK in the following sections:
    evaluation/evaluate
    evaluation/evaluate_prompt
    evaluation/evaluate_experiment
+   evaluation/evaluate_threads
    evaluation/metrics/index
 
 .. toctree::

@@ -1,7 +1,7 @@
 ---
 description: API design principles and consistency guidelines for the Python SDK
 globs: sdks/python/src/opik/**/*
-alwaysApply: true
+alwaysApply: false
 ---
 # Python SDK API Design Guidelines
 

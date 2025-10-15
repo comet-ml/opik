@@ -32,3 +32,5 @@ export * from "./projects/client/requests";
 export * from "./prompts/client/requests";
 export * from "./spans/client/requests";
 export * from "./traces/client/requests";
+export * as welcomeWizard from "./welcomeWizard";
+export * from "./welcomeWizard/client/requests";

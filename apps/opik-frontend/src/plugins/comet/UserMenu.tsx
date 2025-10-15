@@ -14,9 +14,8 @@ import {
   UserPlus,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
 
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -44,7 +43,7 @@ import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
-import { buildUrl } from "./utils";
+import { buildUrl, isOnPremise, isProduction } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
@@ -56,7 +55,7 @@ const UserMenu = () => {
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
-  const [openQuickstart, setOpenQuickstart] = useState(false);
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const hideUpgradeButton = matches.some(
     (match) => match.staticData?.hideUpgradeButton,
@@ -149,7 +148,13 @@ const UserMenu = () => {
   };
 
   const renderUpgradeButton = () => {
-    if (isOrganizationAdmin && !isAcademic && !hideUpgradeButton) {
+    if (
+      isProduction() &&
+      !isOnPremise() &&
+      isOrganizationAdmin &&
+      !isAcademic &&
+      !hideUpgradeButton
+    ) {
       return (
         <a
           href={buildUrl(
@@ -326,7 +331,7 @@ const UserMenu = () => {
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem
-              onClick={() => setOpenQuickstart(true)}
+              onClick={openQuickstart}
               className="cursor-pointer"
             >
               <GraduationCap className="mr-2 size-4" />
@@ -439,8 +444,6 @@ const UserMenu = () => {
       {renderUpgradeButton()}
       {renderAppSelector()}
       {renderUserMenu()}
-
-      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
     </div>
   );
 };
