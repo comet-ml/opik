@@ -6623,10 +6623,11 @@ class DatasetsResourceTest {
                     .build();
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            // Create Project A
+            // Create Project A and Project B
             var projectA = UUID.randomUUID().toString();
+            var projectB = UUID.randomUUID().toString();
 
-            // Create trace in Project A with spans
+            // Create trace in Project A
             var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectA)
                     .build();
@@ -6639,16 +6640,13 @@ class DatasetsResourceTest {
                     .build();
             createSpan(span1InProjectA, apiKey, workspaceName);
 
-            // ROOT CAUSE SIMULATION: Insert spans directly into ClickHouse for the SAME trace in Project B
-            // This creates a cross-project trace scenario
-            insertSpansForTraceInDifferentProject(workspaceId, trace1.id(), workspaceName, apiKey);
-
-            // Wait for ClickHouse to process the manually inserted span
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            // ROOT CAUSE SIMULATION: Create span in Project B for the SAME trace (trace1)
+            // This creates a cross-project trace scenario through the API
+            var span1InProjectB = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectB)
+                    .traceId(trace1.id())
+                    .build();
+            createSpan(span1InProjectB, apiKey, workspaceName);
 
             // Create another trace in Project A (no cross-project issue)
             var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
@@ -6722,74 +6720,6 @@ class DatasetsResourceTest {
                         .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
                         .isEqualTo(1);
             });
-        }
-
-        /**
-         * Simulates the production scenario where a trace has spans in multiple projects.
-         * This is the root cause of OPIK-2469: when GROUP BY includes project_id,
-         * the query returns multiple rows for the same trace_id, causing duplicates.
-         */
-        private void insertSpansForTraceInDifferentProject(String workspaceId, UUID traceId,
-                String workspaceName, String apiKey) {
-            try {
-                // Create Project B through the API (this ensures all related tables are properly populated)
-                var projectBName = UUID.randomUUID().toString();
-                var dummyTrace = factory.manufacturePojo(Trace.class).toBuilder()
-                        .projectName(projectBName)
-                        .build();
-                createAndAssert(dummyTrace, workspaceName, apiKey);
-
-                // Now insert spans directly into ClickHouse for the original trace but in Project B
-                // This creates the cross-project trace scenario
-                try (var connection = CLICKHOUSE.createConnection("?database=" + DATABASE_NAME)) {
-                    var statement = connection.createStatement();
-
-                    // Get the project ID for Project B by using the dummy trace we just created
-                    String getProjectIdSql = String.format(
-                            "SELECT project_id FROM traces WHERE workspace_id = '%s' AND id = '%s' LIMIT 1",
-                            workspaceId, dummyTrace.id());
-
-                    var resultSet = statement.executeQuery(getProjectIdSql);
-                    String projectBId = null;
-                    if (resultSet.next()) {
-                        projectBId = resultSet.getString(1);
-                    }
-                    resultSet.close();
-
-                    if (projectBId == null) {
-                        throw new RuntimeException("Could not find Project B ID");
-                    }
-
-                    // Insert spans into ClickHouse for the SAME trace (the original trace) but in Project B
-                    // This creates the cross-project trace scenario
-                    var spanId = GENERATOR.generate();
-                    var now = Instant.now().getEpochSecond();
-
-                    String insertSpanSql = String.format(
-                            """
-                                    INSERT INTO spans (
-                                        id, workspace_id, project_id, trace_id, parent_span_id,
-                                        type, name, start_time, end_time,
-                                        input, output, metadata, tags,
-                                        usage, total_estimated_cost,
-                                        created_at, last_updated_at, created_by, last_updated_by
-                                    ) VALUES (
-                                        '%s', '%s', '%s', '%s', '%s',
-                                        'general', 'test-span-project-b', toDateTime64(%d, 9), toDateTime64(%d, 9),
-                                        map('key', 'value'), map('result', 'success'), map(), [],
-                                        map('tokens', 100), 0.05,
-                                        %d, %d, 'test-user', 'test-user'
-                                    )
-                                    """,
-                            spanId, workspaceId, projectBId, traceId, GENERATOR.generate(),
-                            now, now + 1,
-                            now, now);
-
-                    statement.execute(insertSpanSql);
-                }
-            } catch (Exception exception) {
-                throw new RuntimeException("Failed to insert cross-project spans", exception);
-            }
         }
     }
 }
