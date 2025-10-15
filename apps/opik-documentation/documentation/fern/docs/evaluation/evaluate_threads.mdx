@@ -173,6 +173,11 @@ filter_string='feedback_scores.user_frustration_score >= 0.5'
 
 Where `user_frustration_score` is the name of the user frustration metric and `0.5` is the threshold value to filter by.
 
+<Tip>
+**Best practice**: If you are using SDK for thread evaluation, automate it by setting up a scheduled cron job with filters to regularly generate feedback scores for specific traces.
+</Tip>
+
+
 ## Multi-Value Feedback Scores for Threads
 
 **Team-based thread evaluation** enables multiple evaluators to score conversation threads independently, providing more reliable assessment of multi-turn dialogue quality.
@@ -184,10 +189,6 @@ Where `user_frustration_score` is the name of the user frustration metric and `0
 - **Thread-specific metrics** - Teams can collaboratively evaluate conversation-specific aspects like frustration levels, topic drift, and resolution success
 
 This collaborative approach is especially valuable for conversational threads where dialogue quality, context maintenance, and user experience assessment often require multiple expert perspectives.
-
-<Tip>
-**Best practice**: If you are using SDK for thread evaluation, automate it by setting up a scheduled cron job with filters to regularly generate feedback scores for specific traces.
-</Tip>
 
 #### Using Opik UI to view results
 
