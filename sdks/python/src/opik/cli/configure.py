@@ -61,7 +61,6 @@ def configure(use_local: bool, yes: bool) -> None:
                 automatic_approvals=automatic_approvals,
             )
         else:
-            LOGGER.error("Unknown deployment type was selected. Exiting.")
             raise click.ClickException("Unknown deployment type was selected. Exiting.")
 
         configurator.configure()
