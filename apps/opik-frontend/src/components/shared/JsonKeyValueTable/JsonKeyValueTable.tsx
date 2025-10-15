@@ -146,27 +146,64 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   // Initialize expanded state based on tableData - memoized to prevent unnecessary re-renders
   const initialExpanded = useMemo(() => {
     const expanded: ExpandedState = {};
-    tableData.forEach((_, index) => {
-      expanded[index.toString()] = true;
-    });
+
+    // Recursively expand all rows at all levels
+    const expandAllRows = (rows: JsonRowData[], parentPath: string = "") => {
+      rows.forEach((row, index) => {
+        const currentPath = parentPath
+          ? `${parentPath}.${index}`
+          : index.toString();
+        expanded[currentPath] = true;
+
+        // If this row is expandable, recursively expand its children
+        if (row.isExpandable) {
+          const value = row.value;
+          let childRows: JsonRowData[] = [];
+
+          if (isArray(value)) {
+            childRows = filterNullArrayItems(value).map((item, childIndex) => ({
+              key: `Item ${childIndex + 1}`,
+              value: item,
+              depth: row.depth + 1,
+              isExpandable: isObject(item) && row.depth + 1 < maxDepth,
+            }));
+          } else if (isObject(value)) {
+            childRows = filterNullObjectEntries(Object.entries(value)).map(
+              ([key, val]) => ({
+                key,
+                value: val,
+                depth: row.depth + 1,
+                isExpandable:
+                  isObject(val) && !isNull(val) && row.depth + 1 < maxDepth,
+              }),
+            );
+          }
+
+          if (childRows.length > 0) {
+            expandAllRows(childRows, currentPath);
+          }
+        }
+      });
+    };
+
+    expandAllRows(tableData);
     return expanded;
-  }, [tableData]);
+  }, [tableData, maxDepth]);
 
   // Use localStorage for persistence if localStorageKey is provided, otherwise use regular state
-  const [localStorageExpanded, setLocalStorageExpanded] =
-    useLocalStorageState<ExpandedState>(
-      localStorageKey || "json-table-expanded-state-fallback",
-      {
-        defaultValue: initialExpanded,
-      },
-    );
-  const [regularExpanded, setRegularExpanded] = useState<ExpandedState>(
-    () => initialExpanded,
+  const [, setLocalStorageExpanded] = useLocalStorageState<ExpandedState>(
+    localStorageKey || "json-table-expanded-state-fallback",
+    {
+      defaultValue: initialExpanded,
+    },
   );
+  const [, setRegularExpanded] = useState<ExpandedState>(() => initialExpanded);
 
+  // Always use the initialExpanded state to ensure all sections are expanded by default
+  // This overrides any existing localStorage values
   const [expanded, setExpanded] = localStorageKey
-    ? [localStorageExpanded, setLocalStorageExpanded]
-    : [regularExpanded, setRegularExpanded];
+    ? [initialExpanded, setLocalStorageExpanded]
+    : [initialExpanded, setRegularExpanded];
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
