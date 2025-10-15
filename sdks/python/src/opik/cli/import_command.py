@@ -329,7 +329,7 @@ def _import_prompts(
 @click.command(name="import")
 @click.argument(
     "workspace_folder",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    type=click.Path(file_okay=False, dir_okay=True, readable=True),
 )
 @click.argument("workspace_name", type=str)
 @click.option(
