@@ -95,7 +95,16 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
     }
 
     mutate(payload, {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        if (data.status === "failure") {
+          toast({
+            title: "Webhook test failed",
+            description: data.error_message || "Webhook test failed",
+            variant: "destructive",
+          });
+          return;
+        }
+
         toast({
           description: successMessage,
         });
