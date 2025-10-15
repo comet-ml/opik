@@ -22,7 +22,8 @@ pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 
 
-def test_litellm_completion_streaming__happyflow(fake_backend):
+@pytest.mark.parametrize("model,expected_provider", constants.TEST_MODELS_PARAMETRIZE)
+def test_litellm_completion_streaming__happyflow(fake_backend, model, expected_provider):
     """Test basic LiteLLM streaming completion tracking."""
     track_litellm()
 
@@ -32,7 +33,7 @@ def test_litellm_completion_streaming__happyflow(fake_backend):
     ]
 
     stream = litellm.completion(
-        model=MODEL_FOR_TESTS,
+        model=model,
         messages=messages,
         max_tokens=5,
         stream=True,
@@ -82,13 +83,13 @@ def test_litellm_completion_streaming__happyflow(fake_backend):
                         "max_tokens": 5,
                     }
                 ),
-                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,  # Usage info from stream
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,  # Usage info must be present
                 total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
                 model=ANY_STRING,
-                provider="openai",
+                provider=expected_provider,
             )
         ],
     )
@@ -158,7 +159,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
                         "max_tokens": 5,
                     }
                 ),
-                usage=ANY_DICT,  # Usage info from stream
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,  # Usage info must be present
                 total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
@@ -232,7 +233,7 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
                         "stream_key": "stream_value",
                     }
                 ),
-                usage=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
                 total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,

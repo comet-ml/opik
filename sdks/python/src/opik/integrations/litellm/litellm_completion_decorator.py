@@ -119,49 +119,50 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             result_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
         )
 
+        model = result_dict.get("model")
+        provider = _get_provider_from_model(model) if model else None
+        
         opik_usage = None
         if result_dict.get("usage") is not None:
-            model_name = result_dict.get("model", "")
-            provider = _get_provider_from_model(model_name)
-
             if provider is not None:
                 opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-                    provider=provider,
+                    provider=LLMProvider.OPENAI,  # litellm always returns openai-like usage
                     usage=result_dict["usage"],
                     logger=LOGGER,
                     error_message="Failed to log token usage from litellm call",
                 )
-            else:
+            
+            # If provider-specific parsing failed or no provider, try generic parser
+            if opik_usage is None:
                 opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
                     usage=result_dict["usage"],
                 )
 
-            model = result_dict.get("model")
-
-            # Calculate cost using LiteLLM's built-in cost calculation
-            total_cost = None
-            try:
-                if isinstance(output, (litellm.types.utils.ModelResponse, completion_chunks_aggregator.CompletionChunksAggregated)):
-                    total_cost = litellm.completion_cost(completion_response=output)
-                elif isinstance(output, dict):
-                    # For dict responses, try to calculate cost from dict
-                    total_cost = litellm.completion_cost(completion_response=output)
-            except Exception as exception:
-                LOGGER.debug(
-                    "Failed to calculate cost from litellm response: %s",
-                    str(exception),
-                    exc_info=True,
-                )
-
-            result = arguments_helpers.EndSpanParameters(
-                output=output_data,
-                usage=opik_usage,
-                metadata=metadata,
-                model=model,
-                total_cost=total_cost,
+        # Calculate cost using LiteLLM's built-in cost calculation
+        total_cost = None
+        try:
+            if isinstance(output, (litellm.types.utils.ModelResponse, completion_chunks_aggregator.CompletionChunksAggregated)):
+                total_cost = litellm.completion_cost(completion_response=output)
+            elif isinstance(output, dict):
+                # For dict responses, try to calculate cost from dict
+                total_cost = litellm.completion_cost(completion_response=output)
+        except Exception as exception:
+            LOGGER.debug(
+                "Failed to calculate cost from litellm response: %s",
+                str(exception),
+                exc_info=True,
             )
 
-            return result
+        result = arguments_helpers.EndSpanParameters(
+            output=output_data,
+            usage=opik_usage,
+            metadata=metadata,
+            model=model,
+            provider=provider.value if provider else None,
+            total_cost=total_cost,
+        )
+
+        return result
 
     @override
     def _streams_handler(  # type: ignore
