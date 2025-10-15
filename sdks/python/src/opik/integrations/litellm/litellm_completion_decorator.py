@@ -59,7 +59,6 @@ def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
 def _convert_response_to_dict(
     output: Union[
         litellm.types.utils.ModelResponse,
-        completion_chunks_aggregator.CompletionChunksAggregated,
         Dict[str, Any],
     ],
 ) -> Dict[str, Any]:
@@ -96,7 +95,6 @@ def _extract_usage_from_response(
 def _calculate_completion_cost(
     output: Union[
         litellm.types.utils.ModelResponse,
-        completion_chunks_aggregator.CompletionChunksAggregated,
         Dict[str, Any],
     ],
 ) -> Optional[float]:
@@ -159,10 +157,9 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             output,
             (
                 litellm.types.utils.ModelResponse,
-                completion_chunks_aggregator.CompletionChunksAggregated,
                 dict,
             ),
-        ), f"Expected ModelResponse, CompletionChunksAggregated, or dict, got {type(output)}"
+        ), f"Expected ModelResponse or dict, got {type(output)}"
 
         response_dict = _convert_response_to_dict(output)
         output_data, metadata = dict_utils.split_dict_by_keys(
@@ -191,7 +188,7 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         generations_aggregator: Optional[
             Callable[
                 [List[litellm.types.utils.ModelResponse]],
-                Optional[completion_chunks_aggregator.CompletionChunksAggregated],
+                Optional[litellm.types.utils.ModelResponse],
             ]
         ],
     ) -> Optional[litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper]:

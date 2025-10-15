@@ -1,20 +1,9 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-import pydantic
 import litellm.types.utils
 
 LOGGER = logging.getLogger(__name__)
-
-
-class CompletionChunksAggregated(pydantic.BaseModel):
-    choices: List[Dict[str, Any]]
-    created: int
-    id: str
-    model: str
-    object: str
-    system_fingerprint: Optional[str] = None
-    usage: Optional[Dict[str, Any]] = None
 
 
 def _initialize_aggregated_response(
@@ -80,17 +69,7 @@ def _extract_usage_from_chunk(
 
 def aggregate(
     items: List[litellm.types.utils.ModelResponse],
-) -> Optional[CompletionChunksAggregated]:
-    """
-    Aggregate LiteLLM streaming chunks into a single object.
-    This function is AI generated and covered by the litellm integration tests for streaming.
-
-    Args:
-        items: List of streaming chunks
-
-    Returns:
-        CompletionChunksAggregated or None if aggregation fails
-    """
+) -> Optional[litellm.types.utils.ModelResponse]:
     try:
         if not items:
             return None
@@ -125,7 +104,7 @@ def aggregate(
                 aggregated_response["usage"] = chunk_usage
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
-        return CompletionChunksAggregated(**aggregated_response)
+        return litellm.types.utils.ModelResponse(**aggregated_response)
 
     except Exception as exception:
         LOGGER.error(
