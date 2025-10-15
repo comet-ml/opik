@@ -3,7 +3,7 @@ description: Learn how to create custom metrics for evaluating multi-turn conver
 toc_max_heading_level: 4
 ---
 
-# Custom Conversation Metrics
+# Custom Conversation (Multi-turn) Metrics
 
 Conversation metrics evaluate multi-turn conversations rather than single input-output pairs. These metrics are particularly useful for evaluating chatbots, conversational agents, and any multi-turn dialogue systems.
 
@@ -29,7 +29,7 @@ conversation = [
 
 ## Creating a Custom Conversation Metric
 
-To create a custom conversation metric, subclass `ConversationThreadMetric` and implement the `score` method:
+To create a custom conversation metric, subclass [`ConversationThreadMetric`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/ConversationThreadMetric.html) and implement the `score` method:
 
 ```python
 from typing import Any
