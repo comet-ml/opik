@@ -144,7 +144,7 @@ def initialize_clients():
     gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if gemini_key:
         import sys
-        print(f"🔍 DEBUG: Looking for Google ADK with key: {gemini_key[:10]}...")
+        print("🔍 DEBUG: Gemini API key detected; looking for Google ADK...")
         try:
             # Detect ADK presence (no Client class; used for agents, not image generation)
             try:
