@@ -1956,50 +1956,14 @@ class AutomationRuleEvaluatorsResourceTest {
     @DisplayName("List Filtering Functionality")
     class ListFilteringFunctionality {
 
-        @Test
-        @DisplayName("Filter automation rules by project name contains")
-        void filterByProjectNameContains() throws JsonProcessingException {
+        @ParameterizedTest(name = "Filter by project name with operator: {0}")
+        @MethodSource("projectNameFilteringTestCases")
+        @DisplayName("Filter automation rules by project name with various operators")
+        void filterByProjectName(String operator, String matchingPrefix, String nonMatchingPrefix,
+                java.util.function.Predicate<String> matchPredicate) throws JsonProcessingException {
             // Given
-            var projectName1 = "test-project-" + RandomStringUtils.randomAlphanumeric(10);
-            var projectName2 = "other-project-" + RandomStringUtils.randomAlphanumeric(10);
-
-            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, WORKSPACE_NAME);
-            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, WORKSPACE_NAME);
-
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId1)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId2)
-                    .build();
-
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-
-            // When - Filter by project name containing "test-project"
-            var filterFields = List.of(Map.of(
-                    "field", "project_name",
-                    "operator", "contains",
-                    "value", "test-project"));
-            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    (UUID) null, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then
-            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
-            var matchingEvaluators = page.content().stream()
-                    .filter(e -> e.getProjectName().contains("test-project"))
-                    .toList();
-            assertThat(matchingEvaluators).hasSizeGreaterThanOrEqualTo(1);
-            assertThat(matchingEvaluators).allMatch(e -> e.getProjectName().contains("test-project"));
-        }
-
-        @Test
-        @DisplayName("Filter automation rules by exact project name")
-        void filterByExactProjectName() throws JsonProcessingException {
-            // Given
-            var projectName1 = "exact-match-" + RandomStringUtils.randomAlphanumeric(10);
-            var projectName2 = "different-name-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectName1 = matchingPrefix + RandomStringUtils.randomAlphanumeric(10);
+            var projectName2 = nonMatchingPrefix + RandomStringUtils.randomAlphanumeric(10);
 
             var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, WORKSPACE_NAME);
             var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, WORKSPACE_NAME);
@@ -2014,62 +1978,43 @@ class AutomationRuleEvaluatorsResourceTest {
             var id1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
             evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
 
-            // When - Filter by exact project name
+            // When - Filter by project name with given operator
+            var filterValue = operator.equals("=") ? projectName1 : matchingPrefix;
             var filterFields = List.of(Map.of(
                     "field", "project_name",
-                    "operator", "=",
-                    "value", projectName1));
+                    "operator", operator,
+                    "value", filterValue));
             String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
             var page = evaluatorsResourceClient.findEvaluatorPage(
                     (UUID) null, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
+            // Then - Find the matching evaluator
             assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
             var matchingEvaluators = page.content().stream()
                     .filter(e -> e.getId().equals(id1))
                     .toList();
             assertThat(matchingEvaluators).hasSize(1);
-            assertThat(matchingEvaluators.get(0).getProjectName()).isEqualTo(projectName1);
+            assertThat(matchingEvaluators.get(0).getProjectName()).satisfies(matchPredicate::test);
             assertThat(matchingEvaluators.get(0).getProjectId()).isEqualTo(projectId1);
         }
 
-        @Test
-        @DisplayName("Filter automation rules by project name with starts_with operator")
-        void filterByProjectNameStartsWith() throws JsonProcessingException {
-            // Given
-            var projectPrefix = "prefix-" + RandomStringUtils.randomAlphanumeric(5);
-            var projectName1 = projectPrefix + "-project1";
-            var projectName2 = "other-" + RandomStringUtils.randomAlphanumeric(10);
-
-            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, WORKSPACE_NAME);
-            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, WORKSPACE_NAME);
-
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId1)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId2)
-                    .build();
-
-            var id1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-
-            // When - Filter by project name starting with prefix
-            var filterFields = List.of(Map.of(
-                    "field", "project_name",
-                    "operator", "starts_with",
-                    "value", projectPrefix));
-            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    (UUID) null, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then
-            var matchingEvaluators = page.content().stream()
-                    .filter(e -> e.getId().equals(id1))
-                    .toList();
-            assertThat(matchingEvaluators).hasSize(1);
-            assertThat(matchingEvaluators.get(0).getProjectName()).isEqualTo(projectName1);
-            assertThat(matchingEvaluators.get(0).getProjectId()).isEqualTo(projectId1);
+        static Stream<org.junit.jupiter.params.provider.Arguments> projectNameFilteringTestCases() {
+            return Stream.of(
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "contains",
+                            "test-project-",
+                            "other-project-",
+                            (java.util.function.Predicate<String>) name -> name.contains("test-project-")),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "=",
+                            "exact-match-",
+                            "different-name-",
+                            (java.util.function.Predicate<String>) name -> name.startsWith("exact-match-")),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "starts_with",
+                            "prefix-",
+                            "other-",
+                            (java.util.function.Predicate<String>) name -> name.startsWith("prefix-")));
         }
     }
 
