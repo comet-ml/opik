@@ -231,31 +231,6 @@ def _export_datasets(
         return 0
 
 
-def _export_experiments(
-    client: opik.Opik,
-    project_dir: Path,
-    max_results: int,
-    name_pattern: Optional[str] = None,
-) -> int:
-    """Export experiments.
-
-    TODO: Experiments are complex entities that include:
-    - Experiment metadata and configuration
-    - Associated traces with feedback scores
-    - Dataset items used in the experiment
-    - Evaluation results and metrics
-
-    Full experiment export/import requires handling all these relationships
-    and is not currently implemented. This is a placeholder for future work.
-    """
-    console.print(
-        "[yellow]Experiment export is not yet implemented. "
-        "Experiments are complex entities that require handling of traces, "
-        "dataset items, and feedback scores. This feature will be added in a future release.[/yellow]"
-    )
-    return 0
-
-
 def _export_prompts(
     client: opik.Opik,
     project_dir: Path,
@@ -359,29 +334,25 @@ def _export_prompts(
 @click.option(
     "--all",
     is_flag=True,
-    help="Include all data types (traces, datasets, experiments, prompts).",
+    help="Include all data types (traces, datasets, prompts).",
 )
 @click.option(
     "--include",
-    type=click.Choice(
-        ["traces", "datasets", "experiments", "prompts"], case_sensitive=False
-    ),
+    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
     multiple=True,
     default=["traces"],
     help="Data types to include in download. Can be specified multiple times. Defaults to traces only.",
 )
 @click.option(
     "--exclude",
-    type=click.Choice(
-        ["traces", "datasets", "experiments", "prompts"], case_sensitive=False
-    ),
+    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
     multiple=True,
     help="Data types to exclude from download. Can be specified multiple times.",
 )
 @click.option(
     "--name",
     type=str,
-    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, experiment names, or prompt names.",
+    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, or prompt names.",
 )
 def export(
     workspace_or_project: str,
@@ -396,7 +367,7 @@ def export(
     """
     Download data from a workspace or workspace/project to local files.
 
-    This command fetches traces, datasets, experiments, and prompts from the specified workspace or project
+    This command fetches traces, datasets, and prompts from the specified workspace or project
     and saves them to local JSON files in the output directory.
 
     Note: Thread metadata is automatically derived from traces with the same thread_id,
@@ -426,7 +397,7 @@ def export(
         # Determine which data types to download
         if all:
             # If --all is specified, include all data types
-            include_set = {"traces", "datasets", "experiments", "prompts"}
+            include_set = {"traces", "datasets", "prompts"}
         else:
             include_set = set(item.lower() for item in include)
 
@@ -452,9 +423,7 @@ def export(
 
             # Note about workspace vs project-specific data
             project_specific = [dt for dt in data_types if dt in ["traces"]]
-            workspace_data = [
-                dt for dt in data_types if dt in ["datasets", "experiments", "prompts"]
-            ]
+            workspace_data = [dt for dt in data_types if dt in ["datasets", "prompts"]]
 
             if project_specific and workspace_data:
                 console.print(
@@ -483,14 +452,6 @@ def export(
                     client, project_dir, max_results, name
                 )
                 total_exported += datasets_exported
-
-            # Download experiments
-            if "experiments" in data_types:
-                console.print("[blue]Downloading experiments...[/blue]")
-                experiments_exported = _export_experiments(
-                    client, project_dir, max_results, name
-                )
-                total_exported += experiments_exported
 
             # Download prompts
             if "prompts" in data_types:
@@ -530,9 +491,7 @@ def export(
                 # Note about workspace vs project-specific data
                 project_specific = [dt for dt in data_types if dt in ["traces"]]
                 workspace_data = [
-                    dt
-                    for dt in data_types
-                    if dt in ["datasets", "experiments", "prompts"]
+                    dt for dt in data_types if dt in ["datasets", "prompts"]
                 ]
 
                 if project_specific and workspace_data:
@@ -557,14 +516,6 @@ def export(
                         client, workspace_dir, max_results, name
                     )
                     total_exported += datasets_exported
-
-                # Download experiments
-                if "experiments" in data_types:
-                    console.print("[blue]Downloading experiments...[/blue]")
-                    experiments_exported = _export_experiments(
-                        client, workspace_dir, max_results, name
-                    )
-                    total_exported += experiments_exported
 
                 # Download prompts
                 if "prompts" in data_types:
