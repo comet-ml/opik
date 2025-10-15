@@ -11,18 +11,12 @@ Java-Python Integration:
 - OpenTelemetry metrics track job processing performance
 """
 
-import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
-from redis import Redis, ConnectionError, TimeoutError as RedisTimeoutError
-from rq import Worker, Queue, get_current_job
-from rq.job import Job
-from rq.serializers import JSONSerializer
-from opentelemetry import trace, metrics
+from rq import Worker
+from opentelemetry import trace
 from opentelemetry.metrics import get_meter
-import json
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -96,99 +90,11 @@ class NoOpDeathPenalty:
         pass
 
 # Queue names
-HELLO_WORLD_QUEUE = "opik:hello_world_queue"
 OPTIMIZER_CLOUD_QUEUE = "opik:optimizer-cloud"
-
-# Connection settings
-CONNECTION_TIMEOUT = 5
-
-
-def get_redis_connection():
-    """
-    Get Redis connection from environment variables.
-    
-    Returns:
-        Redis: Redis connection instance with JSONSerializer for RQ compatibility
-    """
-    redis_host = os.getenv("REDIS_HOST", "localhost")
-    redis_port = int(os.getenv("REDIS_PORT", "6379"))
-    redis_db = int(os.getenv("REDIS_DB", "0"))
-    redis_password = os.getenv("REDIS_PASSWORD")
-    
-    logger.info(f"Connecting to Redis at {redis_host}:{redis_port} (db={redis_db})")
-    
-    return Redis(
-        host=redis_host,
-        port=redis_port,
-        db=redis_db,
-        password=redis_password if redis_password else None,
-        decode_responses=False,  # RQ handles decoding
-        socket_timeout=CONNECTION_TIMEOUT,
-        socket_connect_timeout=CONNECTION_TIMEOUT,
-        socket_keepalive=True,
-        health_check_interval=30
-    )
-
 
 # ================================
 # Job Processing Functions
 # ================================
-
-def process_hello_world(*args, **kwargs):
-    """
-    Process a hello world message from the Java backend.
-    
-    This function is called by RQ when a job is dequeued.
-    
-    Args:
-        *args: Positional arguments (first arg should be dict with message data)
-        **kwargs: Keyword arguments
-    
-    Returns:
-        dict: Processing result
-    """
-    with tracer.start_as_current_span("process_hello_world") as span:
-        logger.info(f"Received args: {args}, kwargs: {kwargs}")
-        try:
-            current_job = get_current_job()
-            if current_job:
-                logger.info(f"PY job id={current_job.id} func=process_hello_world args={args} kwargs={kwargs}")
-        except Exception:
-            pass
-        
-        # Handle different argument formats
-        if args and isinstance(args[0], dict):
-            message_data = args[0]
-            message_text = message_data.get('message', 'No message')
-            wait_seconds = message_data.get('wait_seconds', 0)
-        elif 'message' in kwargs:
-            message_text = kwargs.get('message', 'No message')
-            wait_seconds = kwargs.get('wait_seconds', 0)
-        else:
-            message_text = str(args[0]) if args else 'No message'
-            wait_seconds = 0
-        
-        logger.info(f"Processing hello world message: {message_text} (wait: {wait_seconds}s)")
-        
-        span.set_attribute("message", message_text)
-        span.set_attribute("wait_seconds", wait_seconds)
-        span.set_attribute("queue", HELLO_WORLD_QUEUE)
-        
-        # Simulate processing time
-        if wait_seconds > 0:
-            time.sleep(wait_seconds)
-        
-        result = {
-            "status": "success",
-            "message": f"Received and processed: {message_text}",
-            "processed_by": "Python RQ Worker",
-            "wait_time": wait_seconds,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-        logger.info(f"Message processed successfully: {result}")
-        return result
-
 
 def process_optimizer_job(*args, **kwargs):
     """
@@ -228,6 +134,57 @@ def process_optimizer_job(*args, **kwargs):
         logger.info(f"Optimizer job processed successfully: {result}")
         return result
 
+
+def process_hello_world(*args, **kwargs):
+    """
+    Process a hello world message from the Java backend.
+    
+    This function is called by RQ when a job is dequeued.
+    
+    Args:
+        *args: Positional arguments (first arg should be dict with message data)
+        **kwargs: Keyword arguments
+    
+    Returns:
+        dict: Processing result
+    """
+    with tracer.start_as_current_span("process_hello_world") as span:
+        logger.info(f"Received args: {args}, kwargs: {kwargs}")
+        try:
+            current_job = get_current_job()
+            if current_job:
+                logger.info(f"PY job id={current_job.id} func=process_hello_world args={args} kwargs={kwargs}")
+        except Exception:
+            pass
+
+        # Handle different argument formats
+        if args and isinstance(args[0], dict):
+            message_data = args[0]
+            message_text = message_data.get('message', 'No message')
+            wait_seconds = message_data.get('wait_seconds', 0)
+        elif 'message' in kwargs:
+            message_text = kwargs.get('message', 'No message')
+            wait_seconds = kwargs.get('wait_seconds', 0)
+        else:
+            message_text = str(args[0]) if args else 'No message'
+            wait_seconds = 0
+
+        logger.info(f"Processing hello world message: {message_text} (wait: {wait_seconds}s)")
+
+        # Simulate processing time
+        if wait_seconds > 0:
+            time.sleep(wait_seconds)
+
+        result = {
+            "status": "success",
+            "message": f"Received and processed: {message_text}",
+            "processed_by": "Python RQ Worker",
+            "wait_time": wait_seconds,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        logger.info(f"Message processed successfully: {result}")
+        return result
 
 # ================================
 # Custom RQ Worker with Metrics
@@ -273,8 +230,6 @@ class MetricsWorker(Worker):
         logger.info(f"Starting perform_job for job {job.id}")
         logger.info(f"Job origin: {job.origin if hasattr(job, 'origin') else 'N/A'}")
         logger.info(f"Job func_name: {job.func_name if hasattr(job, 'func_name') else 'N/A'}")
-        #logger.info(f"Job args: {job.args if hasattr(job, 'args') else 'N/A'}")
-        #logger.info(f"Job kwargs: {job.kwargs if hasattr(job, 'kwargs') else 'N/A'}")
         
         func_name = job.func_name if hasattr(job, 'func_name') else 'unknown'
         queue_name = queue.name
@@ -301,8 +256,6 @@ class MetricsWorker(Worker):
                 "Processing job id=%s func=%s", # args=%s kwargs=%s
                 getattr(job, 'id', 'unknown'),
                 func_name,
-                #getattr(job, 'args', None),
-                #getattr(job, 'kwargs', None),
             )
             logger.info(f"About to call super().perform_job()")
             result = super().perform_job(job, queue)

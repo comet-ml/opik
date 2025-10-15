@@ -73,7 +73,7 @@ public class RqJobUtils {
      * @param job The RQ job containing func, args, kwargs
      * @return Compressed byte array
      */
-    private static String buildJobDataJsonString(@NonNull Job job) {
+    public static String buildJobDataJsonString(@NonNull Job job) {
         // Build JSON array: [function, null, args, kwargs]
         ArrayNode dataArray = JsonNodeFactory.instance.arrayNode();
         dataArray.add(job.func());

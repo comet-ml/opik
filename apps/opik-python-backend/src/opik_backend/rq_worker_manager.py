@@ -19,8 +19,6 @@ from rq import Queue, Worker
 from rq.serializers import JSONSerializer
 from rq.job import Job
 
-from opik_backend.rq_worker import MetricsWorker
-
 logger = logging.getLogger(__name__)
 
 class RqWorkerManager:
@@ -56,6 +54,7 @@ class RqWorkerManager:
         self.initial_backoff = float(os.getenv('RQ_INITIAL_BACKOFF', '1'))  # seconds
         self.max_backoff = float(os.getenv('RQ_MAX_BACKOFF', '60'))  # seconds
         self.backoff_multiplier = float(os.getenv('RQ_BACKOFF_MULTIPLIER', '2'))
+        self.connection_timeout = float(os.getenv('REDIS_TIMEOUT_SECONDS', '15'))
         
         # Log configuration
         logger.info("RQ Worker Manager Configuration:")
@@ -63,22 +62,38 @@ class RqWorkerManager:
         logger.info(f"  Queue names: {self.queue_names}")
         logger.info(f"  Backoff: initial={self.initial_backoff}s, max={self.max_backoff}s, multiplier={self.backoff_multiplier}")
     
+    def _configure_worker_logger(self, worker: Worker) -> None:
+        """
+        Configure the RQ worker logger to align with application logging format.
+        """
+        rq_logger = worker.log  # logger name: 'rq.worker'
+        for handler in list(rq_logger.handlers):
+            rq_logger.removeHandler(handler)
+        formatter = logging.Formatter(
+            fmt='[%(asctime)s] [pid=%(process)d/%(processName)s] [thr=%(thread)d/%(threadName)s] [%(levelname)s] [%(name)s] - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S %z'
+        )
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_handler.setFormatter(formatter)
+        rq_logger.addHandler(stream_handler)
+        rq_logger.setLevel(logging.INFO)
+        rq_logger.propagate = False
+    
     def _create_redis_connection(self) -> redis.Redis:
         """
-        Create a Redis connection.
-        
-        Returns:
-            Redis connection instance
+        Create a Redis connection using shared factory.
         """
+
+        # Use the centralized connection factory for consistency
         return redis.Redis(
             host=self.redis_host,
             port=self.redis_port,
             db=self.redis_db,
-            password=self.redis_password,
-            decode_responses=False,  # RQ needs binary mode
-            socket_timeout=5,
-            socket_connect_timeout=5,
-            retry_on_timeout=True,
+            password=self.redis_password if self.redis_password else None,
+            decode_responses=False,  # RQ handles decoding
+            socket_timeout=self.connection_timeout,
+            socket_connect_timeout=self.connection_timeout,
+            socket_keepalive=True,
             health_check_interval=30
         )
     
@@ -161,18 +176,7 @@ class RqWorkerManager:
                 )
 
                 # Align RQ worker logger format with application logs
-                rq_logger = worker.log  # logger name: 'rq.worker'
-                for handler in list(rq_logger.handlers):
-                    rq_logger.removeHandler(handler)
-                formatter = logging.Formatter(
-                    fmt='[%(asctime)s] [pid=%(process)d/%(processName)s] [thr=%(thread)d/%(threadName)s] [%(levelname)s] [%(name)s] - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S %z'
-                )
-                stream_handler = logging.StreamHandler(sys.stderr)
-                stream_handler.setFormatter(formatter)
-                rq_logger.addHandler(stream_handler)
-                rq_logger.setLevel(logging.INFO)
-                rq_logger.propagate = False
+                self._configure_worker_logger(worker)
                 
                 # Monkey-patch _install_signal_handlers to do nothing
                 # This is required because signal handlers can only be installed in the main thread
@@ -190,7 +194,6 @@ class RqWorkerManager:
             except RedisConnectionError as e:
                 logger.error(f"Redis connection lost: {e}. Reconnecting...")
                 # Connection lost, loop will reconnect with backoff
-                
             except Exception as e:
                 logger.error(f"Unexpected error in RQ worker: {e}", exc_info=True)
                 # Wait before reconnecting
@@ -198,13 +201,13 @@ class RqWorkerManager:
                     continue
                 else:
                     break
-            
             finally:
                 # Clean up connection
                 if self.redis_conn:
                     try:
                         self.redis_conn.close()
                     except:
+                        logger.error("Error closing Redis connection", exc_info=True)
                         pass
                     self.redis_conn = None
         

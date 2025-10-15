@@ -123,7 +123,7 @@ class RqPublisher implements QueueProducer {
      * @return Mono<Integer> The number of jobs in the queue
      */
     public Mono<Integer> getQueueSize(@NonNull String queueName) {
-        String rqQueueKey = RQ_QUEUE + queueName;
+        String rqQueueKey = RQ_QUEUE.formatted(queueName);
         RQueueReactive<String> queue = redisClient.getQueue(rqQueueKey, StringCodec.INSTANCE);
         return queue.size();
     }
