@@ -2,10 +2,10 @@
 RQ Worker for processing tasks from Redis queues.
 
 This module provides an RQ-based worker that processes jobs created by Java
-in RQ's native compressed binary format.
+in RQ's native plain JSON format.
 
 Java-Python Integration:
-- Java creates jobs with zlib-compressed JSON data field
+- Java creates jobs with plain JSON (UTF-8) data field
 - Python RQ worker processes jobs natively
 - No bridge component needed
 - OpenTelemetry metrics track job processing performance
@@ -14,7 +14,7 @@ Java-Python Integration:
 import logging
 import time
 from datetime import datetime, timezone
-from rq import Worker
+from rq import Worker, get_current_job
 from opentelemetry import trace
 from opentelemetry.metrics import get_meter
 

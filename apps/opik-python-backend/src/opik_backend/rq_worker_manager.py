@@ -208,7 +208,6 @@ class RqWorkerManager:
                         self.redis_conn.close()
                     except Exception:
                         logger.error("Error closing Redis connection", exc_info=True)
-                        pass
                     self.redis_conn = None
         
         logger.info("RQ worker manager thread stopped")

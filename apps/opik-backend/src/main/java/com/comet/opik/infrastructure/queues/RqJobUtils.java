@@ -71,7 +71,7 @@ public class RqJobUtils {
      * This is serialized to JSON (UTF-8) without compression.
      *
      * @param job The RQ job containing func, args, kwargs
-     * @return Compressed byte array
+     * @return Plain JSON string in UTF-8 format
      */
     public static String buildJobDataJsonString(@NonNull Job job) {
         // Build JSON array: [function, null, args, kwargs]

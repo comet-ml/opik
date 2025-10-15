@@ -10,7 +10,7 @@ import java.util.UUID;
  * Represents a complete RQ message with metadata.
  *
  * This combines:
- * - The job data (func, args, kwargs) that will be compressed
+ * - The job data (func, args, kwargs) that will be serialized to plain JSON
  * - RQ metadata (id, timestamps, status, etc.) stored in the HASH
  */
 @Builder(toBuilder = true)
