@@ -298,8 +298,21 @@ def _export_prompts(
                 # Create prompt data structure
                 prompt_data = {
                     "name": prompt.name,
-                    "current_version": prompt.model_dump(),
-                    "history": [version.model_dump() for version in prompt_history],
+                    "current_version": {
+                        "prompt": prompt.prompt,
+                        "metadata": prompt.metadata,
+                        "type": prompt.type.value if prompt.type else None,
+                        "commit": prompt.commit,
+                    },
+                    "history": [
+                        {
+                            "prompt": version.prompt,
+                            "metadata": version.metadata,
+                            "type": version.type.value if version.type else None,
+                            "commit": version.commit,
+                        }
+                        for version in prompt_history
+                    ],
                     "downloaded_at": datetime.now().isoformat(),
                 }
 
