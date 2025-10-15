@@ -219,7 +219,8 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   // Reset expansion state when data changes to ensure all sections are expanded by default
   useEffect(() => {
     setExpanded(initialExpanded);
-  }, [initialExpanded, setExpanded]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialExpanded]);
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
