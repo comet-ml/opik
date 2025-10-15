@@ -126,9 +126,7 @@ def _import_traces(
                     continue
 
                 if dry_run:
-                    console.print(
-                        f"[blue]Would upload trace: {trace_data['trace']['id']}[/blue]"
-                    )
+                    print(f"Would upload trace: {trace_data['trace']['id']}")
                     imported_count += 1
                     progress.update(
                         task,
@@ -233,9 +231,7 @@ def _import_datasets(
                 continue
 
             if dry_run:
-                console.print(
-                    f"[blue]Would upload dataset: {dataset_data['name']}[/blue]"
-                )
+                print(f"Would upload dataset: {dataset_data['name']}")
                 imported_count += 1
                 continue
 
@@ -308,9 +304,7 @@ def _import_prompts(
                 continue
 
             if dry_run:
-                console.print(
-                    f"[blue]Would upload prompt: {prompt_data['name']}[/blue]"
-                )
+                print(f"Would upload prompt: {prompt_data['name']}")
                 imported_count += 1
                 continue
 
@@ -334,7 +328,8 @@ def _import_prompts(
 
 @click.command(name="import")
 @click.argument(
-    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+    "workspace_folder",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
 )
 @click.argument("workspace_name", type=str)
 @click.option(
