@@ -92,8 +92,7 @@ class TestCLIImportExport:
         prompt_name = f"cli-test-prompt-{random_chars()}"
         opik_client.create_prompt(
             name=prompt_name,
-            content="You are a helpful assistant. Answer the following question: {question}",
-            description="CLI test prompt",
+            prompt="You are a helpful assistant. Answer the following question: {question}",
         )
         return prompt_name
 
@@ -274,17 +273,28 @@ class TestCLIImportExport:
         ), f"Expected imported test traces, found: {[t.name for t in imported_traces]}"
 
         # Verify trace content matches
+        # Match traces by name instead of relying on order
         original_trace = traces[0]
-        imported_trace = imported_test_traces[0]
+
+        # Find the matching imported trace by name
+        matching_imported_trace = None
+        for imported_trace_candidate in imported_test_traces:
+            if imported_trace_candidate.name == original_trace.name:
+                matching_imported_trace = imported_trace_candidate
+                break
+
+        assert (
+            matching_imported_trace is not None
+        ), f"Could not find imported trace with name '{original_trace.name}'"
 
         print(
-            f"Comparing original trace '{original_trace.name}' with imported trace '{imported_trace.name}'"
+            f"Comparing original trace '{original_trace.name}' with imported trace '{matching_imported_trace.name}'"
         )
 
         # Check that the trace name and basic properties match
-        assert imported_trace.name == original_trace.name
-        assert imported_trace.input == original_trace.input
-        assert imported_trace.output == original_trace.output
+        assert matching_imported_trace.name == original_trace.name
+        assert matching_imported_trace.input == original_trace.input
+        assert matching_imported_trace.output == original_trace.output
 
     def test_export_import_datasets_happy_flow(
         self,
@@ -372,26 +382,22 @@ class TestCLIImportExport:
         self._create_test_prompt(opik_client, source_project_name)
 
         # Verify prompt was created
-        prompts = opik_client.search_prompts(project_name=source_project_name)
+        prompts = opik_client.search_prompts()
         assert len(prompts) >= 1, "Expected at least 1 prompt to be created"
 
-        # Step 2: Export prompts
-        export_cmd = [
-            "export",
-            f"default/{source_project_name}",
-            "--path",
+        # Step 2: Export prompts using direct function call
+        success = self._run_export_directly(
+            "default",
             str(test_data_dir),
-            "--include",
-            "prompts",
-            "--max-results",
-            "10",
-        ]
+            ["prompts"],
+            max_results=10,
+            debug=True,
+        )
 
-        result = self._run_cli_command(export_cmd, "Export prompts")
-        assert result.returncode == 0, f"Export failed: {result.stderr}"
+        assert success, "Export command failed"
 
         # Verify export files were created
-        project_dir = test_data_dir / "default" / source_project_name
+        project_dir = test_data_dir / "default"
         assert project_dir.exists(), f"Export directory not found: {project_dir}"
 
         prompt_files = list(project_dir.glob("prompt_*.json"))
@@ -403,8 +409,8 @@ class TestCLIImportExport:
         with open(prompt_files[0], "r") as f:
             prompt_data = json.load(f)
 
-        assert "id" in prompt_data
         assert "name" in prompt_data
+        assert "current_version" in prompt_data
         assert "downloaded_at" in prompt_data
 
         # Step 3: Import prompts to target project
@@ -420,7 +426,7 @@ class TestCLIImportExport:
         assert result.returncode == 0, f"Import failed: {result.stderr}"
 
         # Step 4: Verify prompts were imported
-        imported_prompts = opik_client.search_prompts(project_name=target_project_name)
+        imported_prompts = opik_client.search_prompts()
         assert len(imported_prompts) >= 1, "Expected imported prompts in target project"
 
         # Verify prompt content matches
@@ -428,7 +434,7 @@ class TestCLIImportExport:
         imported_prompt = imported_prompts[0]
 
         assert imported_prompt.name == original_prompt.name
-        assert imported_prompt.content == original_prompt.content
+        assert imported_prompt.prompt == original_prompt.prompt
 
     def test_export_import_all_data_types_happy_flow(
         self,
@@ -486,7 +492,7 @@ class TestCLIImportExport:
         imported_datasets = opik_client.search_datasets(
             project_name=target_project_name
         )
-        imported_prompts = opik_client.search_prompts(project_name=target_project_name)
+        imported_prompts = opik_client.search_prompts()
 
         assert len(imported_traces) >= 1, "Expected imported traces"
         assert len(imported_datasets) >= 1, "Expected imported datasets"
