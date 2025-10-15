@@ -57,7 +57,7 @@ function logSpan({
   let spanTrace = trace;
 
   if (!spanTrace) {
-    spanTrace = trackOpikClient.trace({
+    spanTrace = getTrackOpikClient().trace({
       name,
       projectName,
     });
@@ -302,4 +302,15 @@ export function track(
   };
 }
 
-export const trackOpikClient = new OpikClient();
+let _cachedTrackOpikClient: OpikClient | null = null;
+
+export function getTrackOpikClient(): OpikClient {
+  if (_cachedTrackOpikClient === null) {
+    _cachedTrackOpikClient = new OpikClient();
+  }
+  return _cachedTrackOpikClient;
+}
+
+export function _resetTrackOpikClientCache(): void {
+  _cachedTrackOpikClient = null;
+}
