@@ -176,6 +176,7 @@ def _export_datasets(
     project_dir: Path,
     max_results: int,
     name_pattern: Optional[str] = None,
+    debug: bool = False,
 ) -> int:
     """Export datasets."""
     try:
@@ -208,7 +209,10 @@ def _export_datasets(
         for dataset in datasets:
             try:
                 # Get dataset items using the get_items method
-                console.print(f"[blue]Getting items for dataset: {dataset.name}[/blue]")
+                if debug:
+                    console.print(
+                        f"[blue]Getting items for dataset: {dataset.name}[/blue]"
+                    )
                 dataset_items = dataset.get_items()
 
                 # Convert dataset items to the expected format for import
@@ -462,8 +466,13 @@ def export(
             project_dir = workspace_dir / project_name
             project_dir.mkdir(parents=True, exist_ok=True)
 
-            console.print(f"[blue]Output directory: {workspace}/{project_name}[/blue]")
-            console.print(f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]")
+            if debug:
+                console.print(
+                    f"[blue]Output directory: {workspace}/{project_name}[/blue]"
+                )
+                console.print(
+                    f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]"
+                )
 
             # Note about workspace vs project-specific data
             project_specific = [dt for dt in data_types if dt in ["traces"]]
@@ -483,7 +492,8 @@ def export(
 
             # Download traces
             if "traces" in data_types:
-                console.print("[blue]Downloading traces...[/blue]")
+                if debug:
+                    console.print("[blue]Downloading traces...[/blue]")
                 if debug:
                     console.print(
                         f"[blue]DEBUG: Calling _export_traces with project_name: {project_name}, project_dir: {project_dir}[/blue]"
@@ -499,15 +509,17 @@ def export(
 
             # Download datasets
             if "datasets" in data_types:
-                console.print("[blue]Downloading datasets...[/blue]")
+                if debug:
+                    console.print("[blue]Downloading datasets...[/blue]")
                 datasets_exported = _export_datasets(
-                    client, project_dir, max_results, name
+                    client, project_dir, max_results, name, debug
                 )
                 total_exported += datasets_exported
 
             # Download prompts
             if "prompts" in data_types:
-                console.print("[blue]Downloading prompts...[/blue]")
+                if debug:
+                    console.print("[blue]Downloading prompts...[/blue]")
                 prompts_exported = _export_prompts(
                     client, project_dir, max_results, name
                 )
@@ -563,15 +575,17 @@ def export(
 
                 # Download datasets
                 if "datasets" in data_types:
-                    console.print("[blue]Downloading datasets...[/blue]")
+                    if debug:
+                        console.print("[blue]Downloading datasets...[/blue]")
                     datasets_exported = _export_datasets(
-                        client, workspace_dir, max_results, name
+                        client, workspace_dir, max_results, name, debug
                     )
                     total_exported += datasets_exported
 
                 # Download prompts
                 if "prompts" in data_types:
-                    console.print("[blue]Downloading prompts...[/blue]")
+                    if debug:
+                        console.print("[blue]Downloading prompts...[/blue]")
                     prompts_exported = _export_prompts(
                         client, workspace_dir, max_results, name
                     )

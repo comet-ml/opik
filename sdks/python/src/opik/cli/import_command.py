@@ -455,7 +455,8 @@ def import_data(
                 f"[blue]Uploading to workspace: {workspace} (all projects)[/blue]"
             )
 
-        console.print(f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]")
+        if debug:
+            console.print(f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]")
 
         # Note about workspace vs project-specific data
         project_specific = [dt for dt in data_types if dt in ["traces"]]
@@ -489,19 +490,22 @@ def import_data(
 
             # Upload traces
             if "traces" in data_types:
-                console.print("[blue]Uploading traces...[/blue]")
+                if debug:
+                    console.print("[blue]Uploading traces...[/blue]")
                 traces_imported = _import_traces(client, project_dir, dry_run, name)
                 total_imported += traces_imported
 
             # Upload datasets
             if "datasets" in data_types:
-                console.print("[blue]Uploading datasets...[/blue]")
+                if debug:
+                    console.print("[blue]Uploading datasets...[/blue]")
                 datasets_imported = _import_datasets(client, project_dir, dry_run, name)
                 total_imported += datasets_imported
 
             # Upload prompts
             if "prompts" in data_types:
-                console.print("[blue]Uploading prompts...[/blue]")
+                if debug:
+                    console.print("[blue]Uploading prompts...[/blue]")
                 prompts_imported = _import_prompts(client, project_dir, dry_run, name)
                 total_imported += prompts_imported
 
@@ -535,7 +539,8 @@ def import_data(
 
                 # Upload datasets
                 if "datasets" in data_types:
-                    console.print("[blue]Uploading datasets...[/blue]")
+                    if debug:
+                        console.print("[blue]Uploading datasets...[/blue]")
                     datasets_imported = _import_datasets(
                         client, project_dir, dry_run, name
                     )
@@ -543,7 +548,8 @@ def import_data(
 
                 # Upload prompts
                 if "prompts" in data_types:
-                    console.print("[blue]Uploading prompts...[/blue]")
+                    if debug:
+                        console.print("[blue]Uploading prompts...[/blue]")
                     prompts_imported = _import_prompts(
                         client, project_dir, dry_run, name
                     )
