@@ -254,6 +254,9 @@ class TestLocalEmulatorMessageProcessorProcess:
     def test_process__create_trace_message__retry_message_skipped__calls_dispatch_message_once(
         self,
     ):
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
         message_1 = messages.CreateTraceMessage(
             trace_id="test_trace_1",
             project_name="test_project",
@@ -286,9 +289,9 @@ class TestLocalEmulatorMessageProcessorProcess:
         # mark as the second delivery attempt
         message_2.delivery_attempts = 2
 
-        with patch.object(self.processor, "_dispatch_message") as mock_dispatch:
-            self.processor.process(message_1)
-            self.processor.process(message_2)
+        with patch.object(processor, "_dispatch_message") as mock_dispatch:
+            processor.process(message_1)
+            processor.process(message_2)
 
         mock_dispatch.assert_called_once_with(message_1)
 
