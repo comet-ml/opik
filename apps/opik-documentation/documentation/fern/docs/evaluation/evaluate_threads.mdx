@@ -180,20 +180,7 @@ Where `user_frustration_score` is the name of the user frustration metric and `0
 **Best practice**: If you are using SDK for thread evaluation, automate it by setting up a scheduled cron job with filters to regularly generate feedback scores for specific traces.
 </Tip>
 
-
-## Multi-Value Feedback Scores for Threads
-
-**Team-based thread evaluation** enables multiple evaluators to score conversation threads independently, providing more reliable assessment of multi-turn dialogue quality.
-
-**Key benefits for thread evaluation:**
-
-- **Conversation complexity scoring** - Multiple reviewers can assess different aspects like coherence, user satisfaction, and goal completion across conversation turns
-- **Reduced evaluation bias** - Individual subjectivity in judging conversational quality is mitigated through team consensus
-- **Thread-specific metrics** - Teams can collaboratively evaluate conversation-specific aspects like frustration levels, topic drift, and resolution success
-
-This collaborative approach is especially valuable for conversational threads where dialogue quality, context maintenance, and user experience assessment often require multiple expert perspectives.
-
-#### Using Opik UI to view results
+## Using Opik UI to view results
 
 Once the evaluation is complete, you can access the evaluation results in the Opik UI.
 Not only you will be able to see the score values, but the LLM-judge reasoning behind these values too!
@@ -209,6 +196,18 @@ Not only you will be able to see the score values, but the LLM-judge reasoning b
 You can only evaluate/score threads that are inactive.
 
 </Note>
+
+## Multi-Value Feedback Scores for Threads
+
+**Team-based thread evaluation** enables multiple evaluators to score conversation threads independently, providing more reliable assessment of multi-turn dialogue quality.
+
+**Key benefits for thread evaluation:**
+
+- **Conversation complexity scoring** - Multiple reviewers can assess different aspects like coherence, user satisfaction, and goal completion across conversation turns
+- **Reduced evaluation bias** - Individual subjectivity in judging conversational quality is mitigated through team consensus
+- **Thread-specific metrics** - Teams can collaboratively evaluate conversation-specific aspects like frustration levels, topic drift, and resolution success
+
+This collaborative approach is especially valuable for conversational threads where dialogue quality, context maintenance, and user experience assessment often require multiple expert perspectives.
 
 ## Next steps
 
