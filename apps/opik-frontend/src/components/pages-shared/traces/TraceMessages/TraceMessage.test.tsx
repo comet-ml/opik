@@ -25,8 +25,8 @@ vi.mock(
 
 describe("TraceMessage", () => {
   const createMockTrace = (
-    input: unknown,
-    output: unknown,
+    input: object,
+    output: object,
     overrides?: Partial<Trace>,
   ): Trace => ({
     id: "trace_123",
@@ -40,7 +40,7 @@ describe("TraceMessage", () => {
     last_updated_at: "2024-01-01T00:00:01Z",
     metadata: {},
     project_id: "project_123",
-    comments: { total: 0, comments: [] },
+    comments: [],
     tags: [],
     ...overrides,
   });
