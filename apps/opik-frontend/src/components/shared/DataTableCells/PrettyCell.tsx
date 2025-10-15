@@ -82,9 +82,19 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
-    // Don't strip HTML tags as the message is already plain text from prettifyMessage
-    // The prettifyMessage function extracts plain text, so we don't need to sanitize it
-    const displayMessage = message;
+    // Strip HTML tags from prettified content, but only if it contains actual HTML tags
+    // Check for valid HTML tag patterns (opening tags like <div>, <p>, <br>, etc.)
+    // This regex matches:
+    // - Common HTML tags with optional attributes: <div>, <div class="...">, <br/>, <br />, etc.
+    // - Excludes patterns like Python object representations: <module.Class object at 0xADDRESS>
+    const hasValidHtmlTags =
+      /<(br|p|div|span|a|strong|em|b|i|u|ul|ol|li|h[1-6]|table|tr|td|th|img|code|pre)(\s+[^>]*)?\/?>/i.test(
+        message,
+      );
+    const displayMessage =
+      response.prettified && hasValidHtmlTags
+        ? stripHtmlTags(message)
+        : message;
 
     if (isSmall) {
       return (
@@ -105,7 +115,14 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
         {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
       </div>
     );
-  }, [isSmall, hasExceededLimit, message, rawValue, maxDataLength]);
+  }, [
+    isSmall,
+    hasExceededLimit,
+    message,
+    rawValue,
+    maxDataLength,
+    response.prettified,
+  ]);
 
   return (
     <CellWrapper
