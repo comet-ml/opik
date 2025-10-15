@@ -41,10 +41,22 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
     """
 
     def __init__(self, active: bool, merge_duplicates: bool) -> None:
-        self.processed_messages: List[messages.BaseMessage] = []
-        self._trace_trees: List[models.TraceModel] = []
         self.merge_duplicates = merge_duplicates
         self._active = active
+
+        self.reset()
+
+    def reset(self) -> None:
+        """
+        Resets the internal state of the instance to its initial configuration.
+
+        This method clears and re-initializes all internal attributes related to
+        processed messages, traces, spans, and feedback scores. It ensures that
+        the instance can start fresh, as if it was just created, without retaining
+        any previous data.
+        """
+        self.processed_messages: List[messages.BaseMessage] = []
+        self._trace_trees: List[models.TraceModel] = []
 
         self._traces_to_spans_mapping: Dict[str, List[str]] = collections.defaultdict(
             list
@@ -341,6 +353,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
     ) -> None:
         if not self.is_active():
             return
+
         try:
             self._dispatch_message(message)
         except Exception as exception:

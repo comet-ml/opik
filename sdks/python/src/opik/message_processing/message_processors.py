@@ -1,10 +1,13 @@
 import abc
 import logging
+from typing import List, Optional, TypeVar, Type
 
 from . import messages
 
 
 LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class BaseMessageProcessor(abc.ABC):
@@ -18,7 +21,17 @@ class BaseMessageProcessor(abc.ABC):
 
 
 class ChainedMessageProcessor(BaseMessageProcessor):
-    def __init__(self, processors: list[BaseMessageProcessor]) -> None:
+    """
+    Processes messages through a chain of message processors.
+
+    This class allows for the sequential processing of a message by a list of
+    `BaseMessageProcessor` instances. Each processor in the chain is invoked in the
+    order provided. If an exception occurs during the processing by a specific
+    processor, it is logged, and the process continues with the next processor in
+    the chain.
+    """
+
+    def __init__(self, processors: List[BaseMessageProcessor]) -> None:
         self._processors = processors
 
     def is_active(self) -> bool:
@@ -36,3 +49,21 @@ class ChainedMessageProcessor(BaseMessageProcessor):
                     exc_info=True,
                 )
                 continue
+
+    def get_processor_by_type(self, processor_type: Type[T]) -> Optional[T]:
+        """
+        Retrieves a processor from the available processors that matches the specified type.
+
+        This method iterates through the list of processors and checks if any of them is
+        an instance of the given class type. If a match is found, it returns the processor.
+
+        Args:
+            processor_type: Concrete processor class to search for.
+
+        Returns:
+            The processor matching the specified type if found, else None.
+        """
+        for processor in self._processors:
+            if isinstance(processor, processor_type):
+                return processor
+        return None

@@ -27,6 +27,9 @@ class LocalEmulatorMessageProcessor(
             messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
         ],
     ) -> None:
+        if not self.is_active():
+            return
+
         if hasattr(message, "delivery_attempts") and message.delivery_attempts > 1:
             # skip retries
             LOGGER.debug("Skipping retry of the message: %s", message)
