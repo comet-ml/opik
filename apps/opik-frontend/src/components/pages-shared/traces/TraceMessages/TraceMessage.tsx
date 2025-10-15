@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 
-import { Trace, USER_FEEDBACK_SCORE } from "@/types/traces";
+import { Trace, USER_FEEDBACK_SCORE, SPAN_TYPE } from "@/types/traces";
 import { MessageRenderer } from "@/components/shared/MessageRenderer";
 import LikeFeedback from "@/components/pages-shared/traces/TraceMessages/LikeFeedback";
 import { Separator } from "@/components/ui/separator";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { cn } from "@/lib/utils";
 import isFunction from "lodash/isFunction";
+import { traceHasToolCalls } from "@/lib/toolCallDetection";
+import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 
 type TraceMessageProps = {
   trace: Trace;
@@ -26,6 +28,10 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     )?.value as USER_FEEDBACK_SCORE;
   }, [trace.feedback_scores]);
 
+  const hasToolCalls = useMemo(() => {
+    return traceHasToolCalls(trace);
+  }, [trace]);
+
   return (
     <div
       className={cn("pt-4 first:pt-0", withActions && "border-b")}
@@ -33,11 +39,21 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     >
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
+          {hasToolCalls && (
+            <div className="absolute -left-7 top-2">
+              <BaseTraceDataTypeIcon type={SPAN_TYPE.tool} />
+            </div>
+          )}
           <MessageRenderer message={trace.input} attemptTextExtraction={true} />
         </div>
       </div>
       <div key={`${trace.id}_output`} className="flex justify-start">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground px-4 py-2">
+          {hasToolCalls && (
+            <div className="absolute -left-7 top-2">
+              <BaseTraceDataTypeIcon type={SPAN_TYPE.tool} />
+            </div>
+          )}
           <MessageRenderer
             message={trace.output}
             attemptTextExtraction={true}
