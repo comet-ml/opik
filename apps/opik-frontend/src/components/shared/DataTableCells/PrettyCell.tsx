@@ -12,6 +12,30 @@ const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
 const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
 
+const HTML_TAGS = [
+    "br",
+    "p",
+    "div",
+    "span",
+    "a",
+    "strong",
+    "em",
+    "b",
+    "i",
+    "u",
+    "ul",
+    "ol",
+    "li",
+    "h[1-6]",
+    "table",
+    "tr",
+    "td",
+    "th",
+    "img",
+    "code",
+    "pre",
+  ];
+
 /**
  * Strips HTML/Markdown tags from text to show clean plain text
  */
@@ -87,10 +111,8 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     // This regex matches:
     // - Common HTML tags with optional attributes: <div>, <div class="...">, <br/>, <br />, etc.
     // - Excludes patterns like Python object representations: <module.Class object at 0xADDRESS>
-    const hasValidHtmlTags =
-      /<(br|p|div|span|a|strong|em|b|i|u|ul|ol|li|h[1-6]|table|tr|td|th|img|code|pre)(\s+[^>]*)?\/?>/i.test(
-        message,
-      );
+    const htmlTagPattern = `<(${HTML_TAGS.join("|")})(\\s+[^>]*)?/?>`;
+    const hasValidHtmlTags = new RegExp(htmlTagPattern, "i").test(message);
     const displayMessage =
       response.prettified && hasValidHtmlTags
         ? stripHtmlTags(message)
