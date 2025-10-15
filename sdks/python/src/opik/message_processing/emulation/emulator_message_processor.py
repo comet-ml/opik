@@ -35,14 +35,16 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
     class must be updated accordingly.
 
     Args:
+        active: Flag indicating whether the emulator is active.
         merge_duplicates: Flag indicating whether duplicates (traces or spans) should
             be merged to retain only unique and updated ones.
     """
 
-    def __init__(self, merge_duplicates: bool = True) -> None:
+    def __init__(self, active: bool, merge_duplicates: bool) -> None:
         self.processed_messages: List[messages.BaseMessage] = []
         self._trace_trees: List[models.TraceModel] = []
         self.merge_duplicates = merge_duplicates
+        self._active = active
 
         self._traces_to_spans_mapping: Dict[str, List[str]] = collections.defaultdict(
             list
@@ -60,6 +62,9 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         self._span_to_feedback_scores: Dict[str, List[models.FeedbackScoreModel]] = (
             collections.defaultdict(list)
         )
+
+    def is_active(self) -> bool:
+        return self._active
 
     @property
     def trace_trees(self) -> List[models.TraceModel]:
@@ -331,6 +336,8 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
         ],
     ) -> None:
+        if not self.is_active():
+            return
         try:
             self._dispatch_message(message)
         except Exception as exception:

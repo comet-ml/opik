@@ -12,7 +12,9 @@ from ....testlib import assert_helpers
 
 class TestLocalEmulatorMessageProcessor:
     def test_init(self):
-        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor()
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True
+        )
         assert processor is not None
         assert hasattr(processor, "processed_messages")
         assert hasattr(processor, "merge_duplicates")
@@ -20,12 +22,14 @@ class TestLocalEmulatorMessageProcessor:
 
     def test_init_with_merge_duplicates_false(self):
         processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
-            merge_duplicates=False
+            active=True, merge_duplicates=False
         )
         assert processor is not None
 
     def test_create_trace_model(self):
-        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor()
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True
+        )
         trace_id = "test_trace_id"
         start_time = datetime.datetime.now()
         name = "test_trace"
@@ -75,7 +79,9 @@ class TestLocalEmulatorMessageProcessor:
         assert trace_model.last_updated_at == last_updated_at
 
     def test_create_span_model(self):
-        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor()
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True
+        )
         span_id = "test_span_id"
         start_time = datetime.datetime.now()
         name = "test_span"
@@ -137,7 +143,9 @@ class TestLocalEmulatorMessageProcessor:
         assert span_model.last_updated_at == last_updated_at
 
     def test_create_feedback_score_model(self):
-        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor()
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True
+        )
         score_id = "test_score_id"
         name = "accuracy"
         value = 0.95
@@ -164,12 +172,12 @@ class TestLocalEmulatorMessageProcessor:
 
 class TestLocalEmulatorMessageProcessorProcess:
     def setup_method(self):
-        self.processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
-            merge_duplicates=True
-        )
         self.test_datetime = datetime_helpers.local_timestamp()
 
-    def test_process__create_trace_message__calls_dispatch_message(self):
+    def test_process__active__calls_dispatch_message(self):
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
         message = messages.CreateTraceMessage(
             trace_id="test_trace_id",
             project_name="test_project",
@@ -185,12 +193,39 @@ class TestLocalEmulatorMessageProcessorProcess:
             last_updated_at=self.test_datetime,
         )
 
-        with patch.object(self.processor, "_dispatch_message") as mock_dispatch:
-            self.processor.process(message)
+        with patch.object(processor, "_dispatch_message") as mock_dispatch:
+            processor.process(message)
 
         mock_dispatch.assert_called_once_with(message)
 
+    def test_process__not_active__do_not_call_dispatch_message(self):
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=False, merge_duplicates=True
+        )
+        message = messages.CreateTraceMessage(
+            trace_id="test_trace_id",
+            project_name="test_project",
+            name="test_trace",
+            start_time=self.test_datetime,
+            end_time=self.test_datetime,
+            input={"key": "value"},
+            output={"result": "success"},
+            metadata={"meta": "data"},
+            tags=["tag1", "tag2"],
+            error_info=None,
+            thread_id="thread_123",
+            last_updated_at=self.test_datetime,
+        )
+
+        with patch.object(processor, "_dispatch_message") as mock_dispatch:
+            processor.process(message)
+
+        mock_dispatch.assert_not_called()
+
     def test_process__exception_handling(self, capture_log):
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
         message = messages.CreateTraceMessage(
             trace_id="test_trace_id",
             start_time=datetime.datetime.now(),
@@ -207,9 +242,9 @@ class TestLocalEmulatorMessageProcessorProcess:
         )
 
         with patch.object(
-            self.processor, "_dispatch_message", side_effect=Exception("Test exception")
+            processor, "_dispatch_message", side_effect=Exception("Test exception")
         ):
-            self.processor.process(message)
+            processor.process(message)
 
         assert (
             "Failed to process message by emulator message processor"
@@ -261,7 +296,7 @@ class TestLocalEmulatorMessageProcessorProcess:
 class TestLocalEmulatorMessageProcessorTraceTreesProperty:
     def setup_method(self):
         self.processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
-            merge_duplicates=True
+            active=True, merge_duplicates=True
         )
         self.test_datetime = datetime_helpers.local_timestamp()
         self.later_datetime = self.test_datetime + datetime.timedelta(seconds=1)

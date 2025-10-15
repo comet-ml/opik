@@ -18,8 +18,8 @@ class LocalEmulatorMessageProcessor(
     locally in memory to be used for evaluation.
     """
 
-    def __init__(self, merge_duplicates: bool = True) -> None:
-        super().__init__(merge_duplicates)
+    def __init__(self, active: bool, merge_duplicates: bool = True) -> None:
+        super().__init__(active=active, merge_duplicates=merge_duplicates)
 
     def process(
         self,

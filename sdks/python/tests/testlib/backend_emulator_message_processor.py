@@ -14,8 +14,8 @@ class BackendEmulatorMessageProcessor(
     to be used in tests.
     """
 
-    def __init__(self, merge_duplicates: bool = True) -> None:
-        super().__init__(merge_duplicates)
+    def __init__(self, active: bool = True, merge_duplicates: bool = True) -> None:
+        super().__init__(active=active, merge_duplicates=merge_duplicates)
 
     def create_trace_model(
         self,

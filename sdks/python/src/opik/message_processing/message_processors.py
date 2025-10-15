@@ -26,19 +26,24 @@ MessageProcessingHandler = Callable[[messages.BaseMessage], None]
 
 class BaseMessageProcessor(abc.ABC):
     @abc.abstractmethod
-    def process(
-        self,
-        message: messages.BaseMessage,
-    ) -> None:
+    def process(self, message: messages.BaseMessage) -> None:
         pass
+
+    @abc.abstractmethod
+    def is_active(self) -> bool:
+        return False
 
 
 class OpikMessageProcessor(BaseMessageProcessor):
     def __init__(
-        self, rest_client: rest_api_client.OpikApi, batch_memory_limit_mb: int = 50
+        self,
+        rest_client: rest_api_client.OpikApi,
+        batch_memory_limit_mb: int = 50,
+        active: bool = True,
     ):
         self._rest_client = rest_client
         self._batch_memory_limit_mb = batch_memory_limit_mb
+        self._is_active = active
 
         self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
@@ -53,7 +58,13 @@ class OpikMessageProcessor(BaseMessageProcessor):
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
         }
 
+    def is_active(self) -> bool:
+        return self._is_active
+
     def process(self, message: messages.BaseMessage) -> None:
+        if not self.is_active():
+            return
+
         message_type = type(message)
         handler = self._handlers.get(message_type)
         if handler is None:
