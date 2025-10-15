@@ -206,7 +206,7 @@ class RqWorkerManager:
                 if self.redis_conn:
                     try:
                         self.redis_conn.close()
-                    except:
+                    except Exception:
                         logger.error("Error closing Redis connection", exc_info=True)
                         pass
                     self.redis_conn = None
@@ -278,7 +278,7 @@ def init_rq_worker(app=None):
     global _worker_manager
     
     # Check if RQ worker is enabled
-    rq_enabled = os.getenv('RQ_WORKER_ENABLED', 'false').lower() in ('true')
+    rq_enabled = os.getenv('RQ_WORKER_ENABLED', 'false').lower() == 'true'
     if not rq_enabled:
         logger.info("RQ worker disabled via RQ_WORKER_ENABLED environment variable")
         return

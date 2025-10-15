@@ -9,7 +9,6 @@ These tests verify that:
 """
 
 import pytest
-import pytest
 fakeredis = pytest.importorskip("fakeredis")
 import json
 import uuid

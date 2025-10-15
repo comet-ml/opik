@@ -103,7 +103,6 @@ class RqIntegrationTest {
         Assertions.assertThat(queueSize).isEqualTo(messages);
     }
 
-    //missing test to check redis data format
     @Test
     void testRedisDataFormat() {
         // Send a test message

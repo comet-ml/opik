@@ -253,7 +253,7 @@ class MetricsWorker(Worker):
             # Execute the job (RQ sets started_at and ended_at internally)
             # Explicit log tying the exact job id to the function and arguments for auditability
             logger.info(
-                "Processing job id=%s func=%s", # args=%s kwargs=%s
+                "Processing job id=%s func=%s",
                 getattr(job, 'id', 'unknown'),
                 func_name,
             )
