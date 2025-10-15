@@ -7,7 +7,6 @@ from typing import (
     Optional,
     Tuple,
 )
-
 from typing_extensions import override
 
 import opik.dict_utils as dict_utils
@@ -18,6 +17,8 @@ from opik.types import LLMProvider
 
 import litellm
 import litellm.types.utils
+import litellm.litellm_core_utils.streaming_handler
+
 
 from . import stream_patchers, completion_chunks_aggregator
 
@@ -32,21 +33,69 @@ KWARGS_KEYS_TO_LOG_AS_INPUTS = [
 ]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 
+PROVIDER_MAPPING = {
+    "openai": LLMProvider.OPENAI,
+    "vertex_ai-language-models": LLMProvider.GOOGLE_VERTEXAI,
+    "gemini": LLMProvider.GOOGLE_AI,
+    "anthropic": LLMProvider.ANTHROPIC,
+    "vertex_ai-anthropic_models": LLMProvider.ANTHROPIC_VERTEXAI,
+    "bedrock": LLMProvider.BEDROCK,
+    "bedrock_converse": LLMProvider.BEDROCK,
+    "groq": LLMProvider.GROQ,
+}
+
+
+def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
+    try:
+        provider_info = litellm.get_llm_provider(model_name)
+        provider_name = provider_info[1] if len(provider_info) > 1 else None
+        return PROVIDER_MAPPING.get(provider_name, None)
+    except Exception:
+        return None
+
+
+def _convert_response_to_dict(output: Any) -> Dict[str, Any]:
+    if hasattr(output, "model_dump"):
+        return output.model_dump(mode="json")
+    elif isinstance(output, dict):
+        return output
+    else:
+        return dict(output)
+
+
+def _extract_usage_from_response(response_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
+    usage_data = response_dict.get("usage")
+    if usage_data is None:
+        return None
+    
+    opik_usage = llm_usage.try_build_opik_usage_or_log_error(
+        provider=LLMProvider.OPENAI,
+        usage=usage_data,
+        logger=LOGGER,
+        error_message="Failed to log token usage from litellm call",
+    )
+    
+    if opik_usage is None:
+        opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
+            usage=usage_data,
+        )
+    
+    return opik_usage
+
+
+def _calculate_completion_cost(output: Any) -> Optional[float]:
+    try:
+        return litellm.completion_cost(completion_response=output)
+    except Exception as exception:
+        LOGGER.debug(
+            "Failed to calculate cost from litellm response: %s",
+            str(exception),
+            exc_info=True,
+        )
+        return None
+
 
 class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
-    """
-    An implementation of BaseTrackDecorator designed specifically for tracking
-    calls of LiteLLM's `completion` and `acompletion` functions.
-
-    Besides special processing for input arguments and response content, it
-    overrides _streams_handler() method to work correctly with
-    LiteLLM's AdapterCompletionStreamWrapper objects for both sync and async streaming.
-    
-    Supports:
-    - Non-streaming completion calls
-    - Streaming completion calls (both sync and async)
-    """
-
     @override
     def _start_span_inputs_preprocessor(
         self,
@@ -55,41 +104,33 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in litellm.completion(**kwargs) or litellm.acompletion(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in litellm.completion(**kwargs) "
+            "or litellm.acompletion(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
-
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
-        input, new_metadata = dict_utils.split_dict_by_keys(
+        input_data, new_metadata = dict_utils.split_dict_by_keys(
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
-        metadata.update(
-            {
-                "created_from": "litellm",
-            }
-        )
-
-        tags = ["litellm"]
+        metadata["created_from"] = "litellm"
 
         model_name = kwargs.get("model", "")
-        provider = _get_provider_from_model(model_name)
+        provider = _extract_provider_from_model(model_name)
 
-        result = arguments_helpers.StartSpanParameters(
+        return arguments_helpers.StartSpanParameters(
             name=name,
-            input=input,
+            input=input_data,
             type=track_options.type,
-            tags=tags,
+            tags=["litellm"],
             metadata=metadata,
             project_name=track_options.project_name,
             model=model_name,
             provider=provider,
         )
-
-        return result
 
     @override
     def _end_span_inputs_preprocessor(
@@ -103,57 +144,21 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             (
                 litellm.types.utils.ModelResponse,
                 completion_chunks_aggregator.CompletionChunksAggregated,
-                dict,  # For dict responses
+                dict,
             ),
         ), f"Expected ModelResponse, CompletionChunksAggregated, or dict, got {type(output)}"
 
-        # Handle both ModelResponse objects and dict responses
-        if hasattr(output, "model_dump"):
-            result_dict = output.model_dump(mode="json")
-        elif isinstance(output, dict):
-            result_dict = output
-        else:
-            result_dict = dict(output)
-
+        response_dict = _convert_response_to_dict(output)
         output_data, metadata = dict_utils.split_dict_by_keys(
-            result_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
+            response_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
         )
 
-        model = result_dict.get("model")
-        provider = _get_provider_from_model(model) if model else None
-        
-        opik_usage = None
-        if result_dict.get("usage") is not None:
-            if provider is not None:
-                opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-                    provider=LLMProvider.OPENAI,  # litellm always returns openai-like usage
-                    usage=result_dict["usage"],
-                    logger=LOGGER,
-                    error_message="Failed to log token usage from litellm call",
-                )
-            
-            # If provider-specific parsing failed or no provider, try generic parser
-            if opik_usage is None:
-                opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
-                    usage=result_dict["usage"],
-                )
+        model = response_dict.get("model")
+        provider = _extract_provider_from_model(model) if model else None
+        opik_usage = _extract_usage_from_response(response_dict)
+        total_cost = _calculate_completion_cost(output)
 
-        # Calculate cost using LiteLLM's built-in cost calculation
-        total_cost = None
-        try:
-            if isinstance(output, (litellm.types.utils.ModelResponse, completion_chunks_aggregator.CompletionChunksAggregated)):
-                total_cost = litellm.completion_cost(completion_response=output)
-            elif isinstance(output, dict):
-                # For dict responses, try to calculate cost from dict
-                total_cost = litellm.completion_cost(completion_response=output)
-        except Exception as exception:
-            LOGGER.debug(
-                "Failed to calculate cost from litellm response: %s",
-                str(exception),
-                exc_info=True,
-            )
-
-        result = arguments_helpers.EndSpanParameters(
+        return arguments_helpers.EndSpanParameters(
             output=output_data,
             usage=opik_usage,
             metadata=metadata,
@@ -162,8 +167,6 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             total_cost=total_cost,
         )
 
-        return result
-
     @override
     def _streams_handler(  # type: ignore
         self,
@@ -171,58 +174,22 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Optional[Any]:
-        """
-        Handle LiteLLM streaming responses.
+        assert generations_aggregator is not None, (
+            "LiteLLM decorator will always get aggregator function as input"
+        )
         
-        LiteLLM uses AdapterCompletionStreamWrapper for both sync and async streams.
-        We patch the stream's __iter__ or __aiter__ method to accumulate chunks
-        and aggregate them when the stream completes.
-        """
-        assert (
-            generations_aggregator is not None
-        ), "LiteLLM decorator will always get aggregator function as input"
+        is_litellm_stream = isinstance(
+            output, litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper
+        )
+        if not is_litellm_stream:
+            return None
 
-        # Check if this is a LiteLLM stream wrapper
-        # LiteLLM uses CustomStreamWrapper for streaming responses
-        import litellm.litellm_core_utils.streaming_handler
-        if isinstance(output, litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper):
-            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            
-            # LiteLLM's CustomStreamWrapper supports both sync and async
-            # We patch both methods and let the actual usage determine which is called
-            return stream_patchers.patch_stream(
-                stream=output,
-                span_to_end=span_to_end,
-                trace_to_end=trace_to_end,
-                generations_aggregator=completion_chunks_aggregator.aggregate,
-                finally_callback=self._after_call,
-            )
-
-        NOT_A_STREAM = None
-        return NOT_A_STREAM
-
-
-def _get_provider_from_model(model_name: str) -> Optional[LLMProvider]:
-    """
-    Extract the actual provider from the model name using LiteLLM's built-in method.
-    """
-    try:
-        provider_info = litellm.get_llm_provider(model_name)
-        provider_name = provider_info[1] if len(provider_info) > 1 else None
-
-        # Map LiteLLM provider names to our LLMProvider enum
-        # Based on mapping from Java backend CostService.java to ensure consistency
-        provider_mapping = {
-            "openai": LLMProvider.OPENAI,
-            "vertex_ai-language-models": LLMProvider.GOOGLE_VERTEXAI,
-            "gemini": LLMProvider.GOOGLE_AI,
-            "anthropic": LLMProvider.ANTHROPIC,
-            "vertex_ai-anthropic_models": LLMProvider.ANTHROPIC_VERTEXAI,
-            "bedrock": LLMProvider.BEDROCK,
-            "bedrock_converse": LLMProvider.BEDROCK,
-            "groq": LLMProvider.GROQ,
-        }
-
-        return provider_mapping.get(provider_name, None)
-    except Exception:
-        return None
+        span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+        
+        return stream_patchers.patch_stream(
+            stream=output,
+            span_to_end=span_to_end,
+            trace_to_end=trace_to_end,
+            generations_aggregator=completion_chunks_aggregator.aggregate,
+            finally_callback=self._after_call,
+        )

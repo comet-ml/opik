@@ -37,6 +37,7 @@ def test_litellm_completion_streaming__happyflow(fake_backend, model, expected_p
         messages=messages,
         max_tokens=5,
         stream=True,
+        stream_options={"include_usage": True},
     )
 
     # Consume the stream
@@ -113,6 +114,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
         messages=messages,
         max_tokens=5,
         stream=True,
+        stream_options={"include_usage": True},
     )
 
     # Consume the stream
@@ -196,6 +198,7 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
         messages=messages,
         max_tokens=5,
         stream=True,
+        stream_options={"include_usage": True},
         opik_args=args_dict,
     )
 

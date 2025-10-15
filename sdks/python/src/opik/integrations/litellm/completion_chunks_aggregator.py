@@ -4,8 +4,6 @@ from typing import Any, Dict, List, Optional
 import pydantic
 import litellm.types.utils
 
-import opik.logging_messages as logging_messages
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -19,75 +17,100 @@ class CompletionChunksAggregated(pydantic.BaseModel):
     usage: Optional[Dict[str, Any]] = None
 
 
+def _initialize_aggregated_response(first_chunk: litellm.types.utils.ModelResponse) -> Dict[str, Any]:
+    return {
+        "choices": [{"index": 0, "message": {"role": "", "content": ""}}],
+        "created": getattr(first_chunk, "created", 0),
+        "id": getattr(first_chunk, "id", ""),
+        "model": getattr(first_chunk, "model", ""),
+        "object": "chat.completion",
+        "system_fingerprint": getattr(first_chunk, "system_fingerprint", None),
+        "usage": None,
+    }
+
+
+def _extract_role_from_delta(delta: Any, current_role: str) -> str:
+    if hasattr(delta, "role") and delta.role and not current_role:
+        return delta.role
+    return current_role
+
+
+def _extract_content_from_delta(delta: Any) -> Optional[str]:
+    if hasattr(delta, "content") and delta.content:
+        return delta.content
+    return None
+
+
+def _extract_finish_reason_from_choice(choice: Any) -> Optional[str]:
+    if hasattr(choice, "finish_reason") and choice.finish_reason:
+        return choice.finish_reason
+    return None
+
+
+def _extract_usage_from_chunk(chunk: litellm.types.utils.ModelResponse) -> Optional[Dict[str, Any]]:
+    if not hasattr(chunk, "usage") or chunk.usage is None:
+        return None
+    
+    try:
+        if hasattr(chunk.usage, "model_dump"):
+            usage_dict = chunk.usage.model_dump()
+        elif hasattr(chunk.usage, "dict"):
+            usage_dict = chunk.usage.dict()
+        elif isinstance(chunk.usage, dict):
+            usage_dict = chunk.usage
+        else:
+            return None
+        
+        if usage_dict and isinstance(usage_dict, dict):
+            filtered_usage = {k: v for k, v in usage_dict.items() if v is not None}
+            return filtered_usage if filtered_usage else None
+    except Exception as exception:
+        LOGGER.debug(
+            "Error extracting usage from streaming chunk: %s",
+            str(exception),
+            exc_info=True,
+        )
+        return None
+
+
 def aggregate(
     items: List[litellm.types.utils.ModelResponse],
 ) -> Optional[CompletionChunksAggregated]:
-    """
-    Aggregate streaming chunks from LiteLLM completion into a single response.
-    
-    LiteLLM returns ModelResponse objects for each chunk, similar to OpenAI's
-    ChatCompletionChunk format.
-    
-    Args:
-        items: List of streaming chunks (ModelResponse objects)
-        
-    Returns:
-        Aggregated response or None if aggregation fails
-    """
     try:
         if not items:
             return None
             
-        first_chunk = items[0]
-
-        aggregated_response = {
-            "choices": [{"index": 0, "message": {"role": "", "content": ""}}],
-            "created": getattr(first_chunk, "created", 0),
-            "id": getattr(first_chunk, "id", ""),
-            "model": getattr(first_chunk, "model", ""),
-            "object": "chat.completion",
-            "system_fingerprint": getattr(first_chunk, "system_fingerprint", None),
-            "usage": None,
-        }
-
+        aggregated_response = _initialize_aggregated_response(items[0])
         text_chunks: List[str] = []
 
         for chunk in items:
-            # Access choices - litellm.types.utils.ModelResponse has choices attribute
-            if hasattr(chunk, "choices") and chunk.choices:
-                choice = chunk.choices[0]
+            if not hasattr(chunk, "choices") or not chunk.choices:
+                continue
+            
+            choice = chunk.choices[0]
+            
+            if hasattr(choice, "delta") and choice.delta:
+                delta = choice.delta
                 
-                # LiteLLM uses delta for streaming chunks
-                if hasattr(choice, "delta") and choice.delta:
-                    delta = choice.delta
-                    
-                    # Extract role from delta
-                    if hasattr(delta, "role") and delta.role:
-                        if not aggregated_response["choices"][0]["message"]["role"]:
-                            aggregated_response["choices"][0]["message"]["role"] = delta.role
-                    
-                    # Extract content from delta
-                    if hasattr(delta, "content") and delta.content:
-                        text_chunks.append(delta.content)
+                current_role = aggregated_response["choices"][0]["message"]["role"]
+                aggregated_response["choices"][0]["message"]["role"] = _extract_role_from_delta(
+                    delta, current_role
+                )
                 
-                # Extract finish_reason
-                if hasattr(choice, "finish_reason") and choice.finish_reason:
-                    aggregated_response["choices"][0]["finish_reason"] = choice.finish_reason
+                content = _extract_content_from_delta(delta)
+                if content:
+                    text_chunks.append(content)
+            
+            finish_reason = _extract_finish_reason_from_choice(choice)
+            if finish_reason:
+                aggregated_response["choices"][0]["finish_reason"] = finish_reason
 
-            # Extract usage information (typically in the last chunk)
-            if hasattr(chunk, "usage") and chunk.usage:
-                if hasattr(chunk.usage, "model_dump"):
-                    aggregated_response["usage"] = chunk.usage.model_dump()
-                elif hasattr(chunk.usage, "dict"):
-                    aggregated_response["usage"] = chunk.usage.dict()
-                elif isinstance(chunk.usage, dict):
-                    aggregated_response["usage"] = chunk.usage
+            chunk_usage = _extract_usage_from_chunk(chunk)
+            if chunk_usage:
+                aggregated_response["usage"] = chunk_usage
 
-        # Combine all text chunks
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
-        
-        result = CompletionChunksAggregated(**aggregated_response)
-        return result
+        return CompletionChunksAggregated(**aggregated_response)
         
     except Exception as exception:
         LOGGER.error(
@@ -96,4 +119,3 @@ def aggregate(
             exc_info=True,
         )
         return None
-
