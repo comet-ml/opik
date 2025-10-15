@@ -2,15 +2,14 @@ import abc
 import collections
 import datetime
 import logging
-from typing import List, Tuple, Type, Dict, Union, Optional, Any
+import threading
+from typing import List, Dict, Union, Optional, Any
 
+from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
 from opik.types import ErrorInfoDict, SpanType
-from opik import dict_utils
-
 from . import models
 from .. import message_processors, messages
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +43,8 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         self.merge_duplicates = merge_duplicates
         self._active = active
 
+        self._rlock = threading.RLock()
+
         self.reset()
 
     def reset(self) -> None:
@@ -55,31 +56,33 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         the instance can start fresh, as if it was just created, without retaining
         any previous data.
         """
-        self.processed_messages: List[messages.BaseMessage] = []
-        self._trace_trees: List[models.TraceModel] = []
+        with self._rlock:
+            self._trace_trees: List[models.TraceModel] = []
 
-        self._traces_to_spans_mapping: Dict[str, List[str]] = collections.defaultdict(
-            list
-        )
-        # the same as _trace_trees but without a trace. Useful for distributed tracing.
-        self._span_trees: List[models.SpanModel] = []
-        self._trace_observations: Dict[str, models.TraceModel] = {}
-        self._span_observations: Dict[str, models.SpanModel] = {}
+            self._traces_to_spans_mapping: Dict[str, List[str]] = (
+                collections.defaultdict(list)
+            )
+            # the same as _trace_trees but without a trace. Useful for distributed tracing.
+            self._span_trees: List[models.SpanModel] = []
+            self._trace_observations: Dict[str, models.TraceModel] = {}
+            self._span_observations: Dict[str, models.SpanModel] = {}
 
-        self._span_to_parent_span: Dict[str, Optional[str]] = {}
-        self._span_to_trace: Dict[str, Optional[str]] = {}
-        self._trace_to_feedback_scores: Dict[str, List[models.FeedbackScoreModel]] = (
-            collections.defaultdict(list)
-        )
-        self._span_to_feedback_scores: Dict[str, List[models.FeedbackScoreModel]] = (
-            collections.defaultdict(list)
-        )
+            self._span_to_parent_span: Dict[str, Optional[str]] = {}
+            self._span_to_trace: Dict[str, Optional[str]] = {}
+            self._trace_to_feedback_scores: Dict[
+                str, List[models.FeedbackScoreModel]
+            ] = collections.defaultdict(list)
+            self._span_to_feedback_scores: Dict[
+                str, List[models.FeedbackScoreModel]
+            ] = collections.defaultdict(list)
 
     def is_active(self) -> bool:
-        return self._active
+        with self._rlock:
+            return self._active
 
     def set_active(self, active: bool) -> None:
-        self._active = active
+        with self._rlock:
+            self._active = active
 
     @property
     def trace_trees(self) -> List[models.TraceModel]:
@@ -87,26 +90,27 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         Builds a list of trace trees based on the data from the processed messages.
         Before processing traces, builds span_trees
         """
-        # call to connect all spans
-        self._build_spans_tree()
+        with self._rlock:
+            # call to connect all spans
+            self._build_spans_tree()
 
-        for span_id, trace_id in self._span_to_trace.items():
-            if trace_id is None:
-                continue
+            for span_id, trace_id in self._span_to_trace.items():
+                if trace_id is None:
+                    continue
 
-            trace = self._trace_observations[trace_id]
-            if self._span_to_parent_span[
-                span_id
-            ] is None and not _observation_already_stored(span_id, trace.spans):
-                span = self._span_observations[span_id]
-                trace.spans.append(span)
-                trace.spans.sort(key=lambda x: x.start_time)
+                trace = self._trace_observations[trace_id]
+                if self._span_to_parent_span[
+                    span_id
+                ] is None and not _observation_already_stored(span_id, trace.spans):
+                    span = self._span_observations[span_id]
+                    trace.spans.append(span)
+                    trace.spans.sort(key=lambda x: x.start_time)
 
-        for trace in self._trace_trees:
-            trace.feedback_scores = self._trace_to_feedback_scores[trace.id]
+            for trace in self._trace_trees:
+                trace.feedback_scores = self._trace_to_feedback_scores[trace.id]
 
-        self._trace_trees.sort(key=lambda x: x.start_time)
-        return self._trace_trees
+            self._trace_trees.sort(key=lambda x: x.start_time)
+            return self._trace_trees
 
     def _save_trace(self, trace: models.TraceModel) -> None:
         if self.merge_duplicates:
@@ -155,21 +159,22 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         Builds a list of span trees based on the data from the processed messages.
         Children's spans are sorted by creation time
         """
-        for span_id, parent_span_id in self._span_to_parent_span.items():
-            if parent_span_id is None:
-                continue
+        with self._rlock:
+            for span_id, parent_span_id in self._span_to_parent_span.items():
+                if parent_span_id is None:
+                    continue
 
-            parent_span = self._span_observations[parent_span_id]
-            if not _observation_already_stored(span_id, parent_span.spans):
-                parent_span.spans.append(self._span_observations[span_id])
-                parent_span.spans.sort(key=lambda x: x.start_time)
+                parent_span = self._span_observations[parent_span_id]
+                if not _observation_already_stored(span_id, parent_span.spans):
+                    parent_span.spans.append(self._span_observations[span_id])
+                    parent_span.spans.sort(key=lambda x: x.start_time)
 
-        all_span_ids = self._span_to_trace
-        for span_id in all_span_ids:
-            span = self._span_observations[span_id]
-            span.feedback_scores = self._span_to_feedback_scores[span_id]
+            all_span_ids = self._span_to_trace
+            for span_id in all_span_ids:
+                span = self._span_observations[span_id]
+                span.feedback_scores = self._span_to_feedback_scores[span_id]
 
-        self._span_trees.sort(key=lambda x: x.start_time)
+            self._span_trees.sort(key=lambda x: x.start_time)
 
     def _dispatch_message(self, message: messages.BaseMessage) -> None:
         if isinstance(message, messages.CreateTraceMessage):
@@ -343,37 +348,24 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                     feedback_model
                 )
 
-        self.processed_messages.append(message)
-
     def process(
         self,
         message: Union[
             messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
         ],
     ) -> None:
-        if not self.is_active():
-            return
+        with self._rlock:
+            if not self.is_active():
+                return
 
-        try:
-            self._dispatch_message(message)
-        except Exception as exception:
-            LOGGER.error(
-                "Failed to process message by emulator message processor, reason: %s",
-                exception,
-                exc_info=True,
-            )
-
-    def get_messages_of_type(
-        self, allowed_types: Tuple[Type, ...]
-    ) -> List[messages.BaseMessage]:
-        """
-        Returns all messages instances of requested types
-        """
-        return [
-            message
-            for message in self.processed_messages
-            if isinstance(message, allowed_types)
-        ]
+            try:
+                self._dispatch_message(message)
+            except Exception as exception:
+                LOGGER.error(
+                    "Failed to process message by emulator message processor, reason: %s",
+                    exception,
+                    exc_info=True,
+                )
 
     @abc.abstractmethod
     def create_trace_model(

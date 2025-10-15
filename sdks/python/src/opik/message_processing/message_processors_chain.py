@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from . import (
     message_processors,
@@ -39,7 +40,7 @@ def create_message_processors_chain(
 
 
 def toggle_local_emulator_message_processor(
-    active: bool, chain: message_processors.ChainedMessageProcessor
+    active: bool, chain: message_processors.ChainedMessageProcessor, reset: bool = True
 ) -> None:
     """
     Toggles the state of the Local Emulator Message Processor within a given
@@ -53,6 +54,7 @@ def toggle_local_emulator_message_processor(
             Emulator Message Processor. If True, the processor is activated.
         chain: The message processor
             chain containing the Local Emulator Message Processor to be toggled.
+        reset: Determines whether to reset the Local Emulator Message Processor
     """
     local = chain.get_processor_by_type(
         local_emulator_message_processor.LocalEmulatorMessageProcessor
@@ -61,30 +63,31 @@ def toggle_local_emulator_message_processor(
         LOGGER.warning("Local emulator message processor not found in the chain.")
         return
 
-    if active:
+    if reset:
         # reset the local emulator state to make it ready for the next evaluation
         local.reset()
 
     local.set_active(active=active)
 
 
-def reset_local_emulator_message_processor(
+def get_local_emulator_message_processor(
     chain: message_processors.ChainedMessageProcessor,
-) -> None:
+) -> Optional[local_emulator_message_processor.LocalEmulatorMessageProcessor]:
     """
-    Resets the local emulator message processor within a message processing chain. This function searches for
-    the relevant local emulator message processor in the provided chain and invokes its reset method. If the
-    processor is not found, a warning is logged without performing any changes.
+    Retrieves the local emulator message processor from a given chain of message processors.
+
+    This function searches through the provided chain and looks for a processor of type
+    LocalEmulatorMessageProcessor. If one is found, it is returned; otherwise, None is returned.
 
     Args:
-        chain: The chain of message processors in which the
-            local emulator message processor will be searched and reset.
+        chain: A chain of message processors that may contain a
+            LocalEmulatorMessageProcessor.
+
+    Returns:
+        The LocalEmulatorMessageProcessor if found in the chain,
+        otherwise None.
     """
     local = chain.get_processor_by_type(
         local_emulator_message_processor.LocalEmulatorMessageProcessor
     )
-    if local is None:
-        LOGGER.warning("Local emulator message processor not found in the chain.")
-        return
-
-    local.reset()
+    return local
