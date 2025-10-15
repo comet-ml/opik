@@ -561,12 +561,11 @@ def log_threads_with_decorator():
 
     thread_configs = [thread1_config, thread2_config, thread3_config]
 
-
     @opik.track
     def chat_message(input, output, thread_id):
         opik_context.update_current_trace(thread_id=thread_id)
         return output
-    
+
     for thread in thread_configs:
         for input, output in zip(thread["inputs"], thread["outputs"]):
             chat_message(input, output, thread["thread_id"])
