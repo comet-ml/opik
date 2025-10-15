@@ -319,8 +319,18 @@ metric = GEval(
 )
 ```
 
+## Custom Conversation Metrics
+
+For evaluating multi-turn conversations and dialogue systems, you'll need specialized conversation metrics. These metrics evaluate entire conversation threads rather than single input-output pairs.
+
+Learn how to create custom conversation metrics in the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric).
+
 ## What's next
 
-Creating custom metrics is just the beginning of building a comprehensive evaluation system for your LLM applications. In this guide, you've learned how to create custom metrics using different approaches, from simple metrics to sophisticated LLM-as-a-judge implementations.
+Creating custom metrics is just the beginning of building a comprehensive evaluation system for your LLM applications. In this guide, you've learned how to create custom metrics using different approaches, from simple metrics to sophisticated LLM-as-a-judge implementations, including specialized conversation thread metrics for multi-turn dialogue evaluation.
 
-But this is just the beginning. From here, you might want to evaluate your LLM application with your custom metrics following the **[Evaluate your LLM application](/evaluation/evaluate_your_llm)** guide to run comprehensive evaluations using these custom metrics on your datasets.
+From here, you might want to:
+
+- **Evaluate your LLM application** following the [Evaluate your LLM application](/evaluation/evaluate_your_llm) guide
+- **Evaluate conversation threads** using the [Evaluate Threads guide](/evaluation/evaluate_threads)
+- **Explore built-in metrics** in the [Metrics overview](/evaluation/metrics/overview)

@@ -43,6 +43,10 @@ results = evaluate_threads(
 )
 ```
 
+<Tip>
+Want to create your own custom conversation metrics? Check out the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric) to learn how to build specialized metrics for evaluating multi-turn dialogues.
+</Tip>
+
 ### Understanding the Transform Arguments
 
 Threads consist of multiple traces, and each trace has an input and output. In practice, these typically contain user messages and agent responses. However, trace inputs and outputs are rarely just simple strings—they are usually complex data structures whose exact format depends on your agent framework.
