@@ -7,6 +7,7 @@ with any key value pairs. When getting started, we recommend having an `input` a
 example. These datasets can be created from:
 
 - Python SDK: You can use the Python SDK to create a dataset and add items to it.
+- TypeScript SDK: You can use the TypeScript SDK to create a dataset and add items to it.
 - Traces table: You can add existing logged traces (from a production application for example) to a dataset.
 - The Opik UI: You can manually create a dataset and add items to it.
 
@@ -46,13 +47,24 @@ For datasets requiring rich metadata, complex schemas, or programmatic control, 
 
 You can create a dataset and log items to it using the `get_or_create_dataset` method:
 
-```python
+<CodeBlocks>
+```typescript title="TypeScript SDK" language="typescript"
+import { Opik } from "opik";
+
+// Create a dataset
+const client = new Opik();
+const dataset = await client.getOrCreateDataset("My dataset");
+```
+
+```python title="Python SDK" language="python"
 from opik import Opik
 
 # Create a dataset
 client = Opik()
 dataset = client.get_or_create_dataset(name="My dataset")
 ```
+
+</CodeBlocks>
 
 If a dataset with the given name already exists, the existing dataset will be returned.
 
@@ -62,11 +74,23 @@ If a dataset with the given name already exists, the existing dataset will be re
 
 You can insert items to a dataset using the `insert` method:
 
-```python
-from opik import Opik
+<CodeBlocks>
+```typescript title="TypeScript" language="typescript"
+import { Opik } from "opik";
+const client = new Opik();
+const dataset = await client.getOrCreateDataset("My dataset");
+
+dataset.insert([
+  { user_question: "Hello, world!", expected_output: { assistant_answer: "Hello, world!" } },
+  { user_question: "What is the capital of France?", expected_output: { assistant_answer: "Paris" } },
+]);
+```
+
+```python title="Python" language="python"
+import opik
 
 # Get or create a dataset
-client = Opik()
+client = opik.Opik()
 dataset = client.get_or_create_dataset(name="My dataset")
 
 # Add dataset items to it
@@ -76,10 +100,12 @@ dataset.insert([
 ])
 ```
 
+</CodeBlocks>
+
 <Tip>
   Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you
-  can insert the same item multiple times without duplicating it in the dataset. This combined with the
-  `get_or_create_dataset` method means that you can use the SDK to manage your datasets in a "fire and forget" manner.
+  can insert the same item multiple times without duplicating it in the dataset. This combined with the `get or create
+  dataset` methods means that you can use the SDK to manage your datasets in a "fire and forget" manner.
 </Tip>
 
 Once the items have been inserted, you can view them in the Opik UI:
@@ -92,85 +118,100 @@ Once the items have been inserted, you can view them in the Opik UI:
 
 You can also insert items from a JSONL file:
 
-```python
+<CodeBlocks>
+  ```python title="Python" language="python"
+  import opik
+
+  client = opik.Opik()
+  dataset = client.get_or_create_dataset(name="My dataset")
+
 dataset.read_jsonl_from_file("path/to/file.jsonl")
-```
-
-The format of the JSONL file should be a JSON object per line. For example:
 
 ```
-{"user_question": "Hello, world!"}
-{"user_question": "What is the capital of France?", "expected_output": {"assistant_answer": "Paris"}}
-```
+</CodeBlocks>
 
 #### Inserting items from a Pandas DataFrame
 
 You can also insert items from a Pandas DataFrame:
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
+import opik
+
+client = opik.Opik()
+dataset = client.get_or_create_dataset(name="My dataset")
+
 dataset.insert_from_pandas(dataframe=df)
-```
 
-The `keys_mapping` parameter maps the column names in the DataFrame to the keys in the dataset items, this can be useful if you want to rename columns before inserting them into the dataset:
-
-```python
+# You can also specify an optional keys_mapping parameter
 dataset.insert_from_pandas(dataframe=df, keys_mapping={"Expected output": "expected_output"})
 ```
+
+</CodeBlocks>
 
 ### Deleting items
 
 You can delete items in a dataset by using the `delete` method:
 
-```python
-from opik import Opik
+<CodeBlocks>
+  ```typescript title="TypeScript" language="typescript"
+  import { Opik } from "opik";
 
-# Get or create a dataset
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
+  // Get or create a dataset
+  client = new Opik();
+  dataset = await client.getDataset("My dataset")
 
-dataset.delete(items_ids=["123", "456"])
-```
+  await dataset.delete(["123", "456"])
 
-<Tip>
-You can also remove all the items in a dataset by using the `clear` method:
+  // Or to delete all items
+  await dataset.clear()
+  ```
 
-```python
-from opik import Opik
+  ```python title="Python" language="python"
+  from opik import Opik
 
-# Get or create a dataset
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
+  # Get or create a dataset
+  client = Opik()
+  dataset = client.get_dataset(name="My dataset")
 
-dataset.clear()
-```
+  dataset.delete(items_ids=["123", "456"])
 
-</Tip>
+  # Or to delete all items
+  dataset.clear()
+  ```
+</CodeBlocks>
 
 ## Downloading a dataset from Opik
 
 You can download a dataset from Opik using the `get_dataset` method:
 
-```python
-from opik import Opik
+<CodeBlocks>
+  ```typescript title="TypeScript" language="typescript"
+  import { Opik } from "opik";
 
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
-```
+  const client = new Opik();
+  const dataset = await client.getDataset("My dataset");
 
-Once the dataset has been retrieved, you can access its items using the `to_pandas()` or `to_json` methods:
+  const items = await dataset.getItems();
+  console.log(items);
+  ```
 
-```python
-from opik import Opik
+  ```python title="Python" language="python"
+  from opik import Opik
 
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
+  client = Opik()
+  dataset = client.get_dataset(name="My dataset")
 
-# Convert to a Pandas DataFrame
-dataset.to_pandas()
+  # Get items as list of DatasetItem objects
+  items = dataset.get_items()
 
-# Convert to a JSON array
-dataset.to_json()
-```
+  # Convert to a Pandas DataFrame
+  dataset.to_pandas()
+
+  # Convert to a JSON array
+  dataset.to_json()
+  ```
+</CodeBlocks>
 
 ## Expanding a dataset with AI
 
