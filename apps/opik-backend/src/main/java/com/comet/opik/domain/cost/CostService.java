@@ -30,7 +30,7 @@ public class CostService {
             "bedrock", "bedrock",
             "bedrock_converse", "bedrock",
             "groq", "groq");
-    private static final String PRICES_FILE = "model_prices_and_context_window.json";
+    public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
@@ -76,7 +76,7 @@ public class CostService {
     }
 
     private static Map<String, ModelPrice> parseModelPrices() throws IOException {
-        Map<String, ModelCostData> modelCosts = JsonUtils.readJsonFile(PRICES_FILE, new TypeReference<>() {
+        Map<String, ModelCostData> modelCosts = JsonUtils.readJsonFile(MODEL_PRICES_FILE, new TypeReference<>() {
         });
         if (modelCosts.isEmpty()) {
             throw new UncheckedIOException(new IOException("Failed to load model prices"));

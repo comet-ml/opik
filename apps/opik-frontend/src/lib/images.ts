@@ -151,6 +151,31 @@ export const extractFilename = (url: string): string => {
   return match ? match[0] : url;
 };
 
+export const parseImageValue = (
+  value: unknown,
+): ParsedImageData | undefined => {
+  if (!isString(value)) {
+    return undefined;
+  }
+
+  if (isImageBase64String(value)) {
+    return {
+      url: value,
+      name: "Base64 Image",
+    };
+  }
+
+  const imageUrlMatch = value.match(IMAGE_URL_REGEX);
+  if (imageUrlMatch) {
+    return {
+      url: imageUrlMatch[0],
+      name: extractFilename(imageUrlMatch[0]),
+    };
+  }
+
+  return undefined;
+};
+
 // here we extracting only URL base images that can have no extension that can be skipped with general regex
 const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
   if (isObject(input) && "messages" in input && isArray(input.messages)) {
