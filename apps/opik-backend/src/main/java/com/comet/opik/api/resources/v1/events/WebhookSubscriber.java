@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -57,8 +56,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
         return Mono.defer(() -> validateEvent(event))
                 .then(Mono.defer(() -> webhookHttpClient.sendWebhook(event)))
-                .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId())
-                        .put(RequestContext.USER_NAME, event.getUserName()))
+                .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(unused -> {
                     log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",

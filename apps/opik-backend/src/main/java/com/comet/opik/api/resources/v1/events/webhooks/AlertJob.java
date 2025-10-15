@@ -101,7 +101,8 @@ public class AlertJob extends Job {
                                     bucketData.workspaceId(),
                                     eventType,
                                     bucketData.eventIds(),
-                                    bucketData.payloads()))
+                                    bucketData.payloads(),
+                                    bucketData.userNames()))
                             .then(bucketService.deleteBucket(bucketKey));
                 })
                 .doOnSuccess(__ -> log.info("Successfully processed and deleted bucket: '{}'", bucketKey))
@@ -125,14 +126,15 @@ public class AlertJob extends Job {
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
             @NonNull Set<String> eventIds,
-            @NonNull Set<String> payloads) {
+            @NonNull Set<String> payloads,
+            @NonNull Set<String> userNames) {
 
         log.info(
                 "Processing alert bucket: alertId='{}', workspaceId='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
                 alertId, workspaceId, eventType, eventIds.size(), payloads.size());
 
         return Mono.fromCallable(() -> alertService.getByIdAndWorkspace(alertId, workspaceId))
-                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds, payloads))
+                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds, payloads, userNames))
                 .doOnSuccess(
                         __ -> log.info("Successfully sent webhook for alert '{}' with '{}' events and '{}' payloads",
                                 alertId, eventIds.size(), payloads.size()))
@@ -155,7 +157,8 @@ public class AlertJob extends Job {
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
             @NonNull Set<String> eventIds,
-            @NonNull Set<String> payloads) {
+            @NonNull Set<String> payloads,
+            @NonNull Set<String> userNames) {
 
         if (Boolean.FALSE.equals(alert.enabled())) {
             log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
@@ -177,6 +180,7 @@ public class AlertJob extends Job {
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
                 "metadata", payloads,
+                "userNames", userNames,
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",

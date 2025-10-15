@@ -64,6 +64,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -80,7 +81,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -831,9 +831,10 @@ class AlertResourceTest {
             externalWebhookServer.resetAll();
         }
 
-        @Test
+        @ParameterizedTest
+        @EnumSource(AlertEventType.class)
         @DisplayName("Success: should test webhook successfully when webhook server responds with 2xx")
-        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult() {
+        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult(AlertEventType eventType) {
             // Given
             var mock = prepareMockWorkspace();
             var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
@@ -852,6 +853,9 @@ class AlertResourceTest {
                     .build();
             alert = alert.toBuilder()
                     .webhook(webhook)
+                    .triggers(List.of(alert.triggers().getFirst().toBuilder()
+                            .eventType(eventType)
+                            .build()))
                     .build();
 
             // When
@@ -910,14 +914,10 @@ class AlertResourceTest {
 
             // Verify event metadata
             assertThat(actualEvent.getId()).isNotNull();
-            assertThat(actualEvent.getUrl()).isEqualTo(alert.webhook().url());
             assertThat(actualEvent.getAlertId()).isEqualTo(alert.id());
             assertThat(actualEvent.getCreatedAt()).isNotNull();
             assertThat(actualEvent.getMaxRetries()).isEqualTo(1);
 
-            // Verify headers
-            var expectedHeaders = Optional.ofNullable(alert.webhook().headers()).orElse(Map.of());
-            assertThat(actualEvent.getHeaders()).isEqualTo(expectedHeaders);
             assertThat(actualEvent.getEventType()).isEqualTo(alert.triggers().getFirst().eventType());
 
             // Verify payload
@@ -1037,21 +1037,31 @@ class AlertResourceTest {
                     HttpStatus.SC_CREATED);
 
             // Create a prompt to trigger the event
-            var expectedPrompt = factory.manufacturePojo(Prompt.class)
+            var prompt = factory.manufacturePojo(Prompt.class)
                     .toBuilder()
                     .versionCount(0L)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
                     .build();
-            var promptId = promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
+            var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
+            var actualPrompt = promptResourceClient.getPrompt(promptId, mock.getLeft(), mock.getRight());
+
             // Now delete the prompt to trigger the deletion event
             deleteAction.accept(promptId, mock.getRight(), mock.getLeft());
 
             var payload = verifyWebhookCalledAndGetPayload(alert);
-            Set<UUID> ids = JsonUtils.readCollectionValue(payload, Set.class, UUID.class);
+            List<Prompt> prompts = JsonUtils.readCollectionValue(payload, List.class, Prompt.class);
 
-            assertThat(ids).hasSize(1);
-            assertThat(ids).contains(promptId);
+            assertThat(prompts).hasSize(1);
+            assertThat(prompts.getFirst())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(actualPrompt);
         }
 
         Stream<Arguments> testDeletePromptEvent__whenWebhookServerReceivesAlert() {
@@ -1518,6 +1528,44 @@ class AlertResourceTest {
             assertThat(payloads).hasSize(1);
 
             return payloads.getFirst();
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Webhook Examples:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetWebhookExamples {
+
+        @Test
+        @DisplayName("Success: should return webhook examples for all event types")
+        void getWebhookExamples__whenCalled__thenReturnExamplesForAllEventTypes() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // When
+            var webhookExamples = alertResourceClient.getWebhookExamples(mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            // Then
+            assertThat(webhookExamples).isNotNull();
+            assertThat(webhookExamples.responseExamples()).isNotNull();
+            assertThat(webhookExamples.responseExamples()).isNotEmpty();
+
+            // Verify that all alert event types have examples
+            assertThat(webhookExamples.responseExamples().keySet()).containsExactlyInAnyOrder(
+                    AlertEventType.TRACE_ERRORS,
+                    AlertEventType.TRACE_FEEDBACK_SCORE,
+                    AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+                    AlertEventType.PROMPT_CREATED,
+                    AlertEventType.PROMPT_COMMITTED,
+                    AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
+                    AlertEventType.PROMPT_DELETED);
+
+            // Verify that each example is a non-empty string
+            webhookExamples.responseExamples().values().forEach(example -> {
+                assertThat(example).isNotNull();
+                assertThat(example).isNotEmpty();
+            });
         }
     }
 

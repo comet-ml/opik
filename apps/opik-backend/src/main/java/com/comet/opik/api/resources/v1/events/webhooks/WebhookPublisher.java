@@ -72,7 +72,6 @@ public class WebhookPublisher {
                 .secret(secretToken)
                 .maxRetries(maxRetries)
                 .workspaceId(workspaceId)
-                .userName("system")
                 .createdAt(Instant.now())
                 .build();
 
