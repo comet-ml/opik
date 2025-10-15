@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   ColumnDef,
   ExpandedState,
@@ -56,6 +56,35 @@ const filterNullObjectEntries = (
  */
 const filterNullArrayItems = (items: unknown[]): unknown[] => {
   return items.filter((item) => !isNull(item));
+};
+
+/**
+ * Helper function to create child rows from a value
+ */
+const createChildRows = (
+  value: unknown,
+  parentDepth: number,
+  maxDepth: number,
+): JsonRowData[] => {
+  if (isArray(value)) {
+    return filterNullArrayItems(value).map((item, index) => ({
+      key: `Item ${index + 1}`,
+      value: item,
+      depth: parentDepth + 1,
+      isExpandable: isObject(item) && parentDepth + 1 < maxDepth,
+    }));
+  }
+
+  if (isObject(value)) {
+    return filterNullObjectEntries(Object.entries(value)).map(([key, val]) => ({
+      key,
+      value: val,
+      depth: parentDepth + 1,
+      isExpandable: isObject(val) && !isNull(val) && parentDepth + 1 < maxDepth,
+    }));
+  }
+
+  return [];
 };
 
 const JsonValue: React.FC<{
@@ -157,28 +186,7 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
 
         // If this row is expandable, recursively expand its children
         if (row.isExpandable) {
-          const value = row.value;
-          let childRows: JsonRowData[] = [];
-
-          if (isArray(value)) {
-            childRows = filterNullArrayItems(value).map((item, childIndex) => ({
-              key: `Item ${childIndex + 1}`,
-              value: item,
-              depth: row.depth + 1,
-              isExpandable: isObject(item) && row.depth + 1 < maxDepth,
-            }));
-          } else if (isObject(value)) {
-            childRows = filterNullObjectEntries(Object.entries(value)).map(
-              ([key, val]) => ({
-                key,
-                value: val,
-                depth: row.depth + 1,
-                isExpandable:
-                  isObject(val) && !isNull(val) && row.depth + 1 < maxDepth,
-              }),
-            );
-          }
-
+          const childRows = createChildRows(row.value, row.depth, maxDepth);
           if (childRows.length > 0) {
             expandAllRows(childRows, currentPath);
           }
@@ -191,19 +199,27 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   }, [tableData, maxDepth]);
 
   // Use localStorage for persistence if localStorageKey is provided, otherwise use regular state
-  const [, setLocalStorageExpanded] = useLocalStorageState<ExpandedState>(
-    localStorageKey || "json-table-expanded-state-fallback",
-    {
-      defaultValue: initialExpanded,
-    },
+  const [localStorageExpanded, setLocalStorageExpanded] =
+    useLocalStorageState<ExpandedState>(
+      localStorageKey || "json-table-expanded-state-fallback",
+      {
+        defaultValue: initialExpanded,
+      },
+    );
+  const [regularExpanded, setRegularExpanded] = useState<ExpandedState>(
+    () => initialExpanded,
   );
-  const [, setRegularExpanded] = useState<ExpandedState>(() => initialExpanded);
 
-  // Always use the initialExpanded state to ensure all sections are expanded by default
-  // This overrides any existing localStorage values
+  // Use the state values directly - they already have initialExpanded as default
+  // This allows user interactions while maintaining the default expanded state
   const [expanded, setExpanded] = localStorageKey
-    ? [initialExpanded, setLocalStorageExpanded]
-    : [initialExpanded, setRegularExpanded];
+    ? [localStorageExpanded, setLocalStorageExpanded]
+    : [regularExpanded, setRegularExpanded];
+
+  // Reset expansion state when data changes to ensure all sections are expanded by default
+  useEffect(() => {
+    setExpanded(initialExpanded);
+  }, [initialExpanded, setExpanded]);
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
@@ -261,29 +277,8 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
         return undefined;
       }
 
-      const value = row.value;
-      if (isArray(value)) {
-        return filterNullArrayItems(value).map((item, index) => ({
-          key: `Item ${index + 1}`,
-          value: item,
-          depth: row.depth + 1,
-          isExpandable: isObject(item) && row.depth + 1 < maxDepth,
-        }));
-      }
-
-      if (isObject(value)) {
-        return filterNullObjectEntries(Object.entries(value)).map(
-          ([key, val]) => ({
-            key,
-            value: val,
-            depth: row.depth + 1,
-            isExpandable:
-              isObject(val) && !isNull(val) && row.depth + 1 < maxDepth,
-          }),
-        );
-      }
-
-      return undefined;
+      const childRows = createChildRows(row.value, row.depth, maxDepth);
+      return childRows.length > 0 ? childRows : undefined;
     },
   });
 
