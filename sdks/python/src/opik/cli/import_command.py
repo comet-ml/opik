@@ -283,31 +283,6 @@ def _import_datasets(
     return imported_count
 
 
-def _import_experiments(
-    client: opik.Opik,
-    project_dir: Path,
-    dry_run: bool,
-    name_pattern: Optional[str] = None,
-) -> int:
-    """Import experiments from JSON files.
-
-    TODO: Experiments are complex entities that include:
-    - Experiment metadata and configuration
-    - Associated traces with feedback scores
-    - Dataset items used in the experiment
-    - Evaluation results and metrics
-
-    Full experiment export/import requires handling all these relationships
-    and is not currently implemented. This is a placeholder for future work.
-    """
-    console.print(
-        "[yellow]Experiment import is not yet implemented. "
-        "Experiments are complex entities that require handling of traces, "
-        "dataset items, and feedback scores. This feature will be added in a future release.[/yellow]"
-    )
-    return 0
-
-
 def _import_prompts(
     client: opik.Opik,
     project_dir: Path,
@@ -370,29 +345,25 @@ def _import_prompts(
 @click.option(
     "--all",
     is_flag=True,
-    help="Include all data types (traces, datasets, experiments, prompts).",
+    help="Include all data types (traces, datasets, prompts).",
 )
 @click.option(
     "--include",
-    type=click.Choice(
-        ["traces", "datasets", "experiments", "prompts"], case_sensitive=False
-    ),
+    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
     multiple=True,
     default=["traces"],
     help="Data types to include in upload. Can be specified multiple times. Defaults to traces only.",
 )
 @click.option(
     "--exclude",
-    type=click.Choice(
-        ["traces", "datasets", "experiments", "prompts"], case_sensitive=False
-    ),
+    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
     multiple=True,
     help="Data types to exclude from upload. Can be specified multiple times.",
 )
 @click.option(
     "--name",
     type=str,
-    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, experiment names, or prompt names.",
+    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, or prompt names.",
 )
 def import_data(
     workspace_folder: str,
@@ -436,7 +407,7 @@ def import_data(
         # Determine which data types to upload
         if all:
             # If --all is specified, include all data types
-            include_set = {"traces", "datasets", "experiments", "prompts"}
+            include_set = {"traces", "datasets", "prompts"}
         else:
             include_set = set(item.lower() for item in include)
 
@@ -465,9 +436,7 @@ def import_data(
 
         # Note about workspace vs project-specific data
         project_specific = [dt for dt in data_types if dt in ["traces"]]
-        workspace_data = [
-            dt for dt in data_types if dt in ["datasets", "experiments", "prompts"]
-        ]
+        workspace_data = [dt for dt in data_types if dt in ["datasets", "prompts"]]
 
         if project_specific and workspace_data:
             if import_to_specific_project:
@@ -506,14 +475,6 @@ def import_data(
                 console.print("[blue]Uploading datasets...[/blue]")
                 datasets_imported = _import_datasets(client, project_dir, dry_run, name)
                 total_imported += datasets_imported
-
-            # Upload experiments
-            if "experiments" in data_types:
-                console.print("[blue]Uploading experiments...[/blue]")
-                experiments_imported = _import_experiments(
-                    client, project_dir, dry_run, name
-                )
-                total_imported += experiments_imported
 
             # Upload prompts
             if "prompts" in data_types:
@@ -556,14 +517,6 @@ def import_data(
                         client, project_dir, dry_run, name
                     )
                     total_imported += datasets_imported
-
-                # Upload experiments
-                if "experiments" in data_types:
-                    console.print("[blue]Uploading experiments...[/blue]")
-                    experiments_imported = _import_experiments(
-                        client, project_dir, dry_run, name
-                    )
-                    total_imported += experiments_imported
 
                 # Upload prompts
                 if "prompts" in data_types:
