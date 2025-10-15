@@ -216,6 +216,9 @@ navigation:
               - page: Custom metric
                 path: docs/evaluation/metrics/custom_metric.mdx
                 slug: custom_metric
+              - page: Custom conversation metric
+                path: docs/evaluation/metrics/custom_conversation_metric.mdx
+                slug: custom_conversation_metric
           - section: Tutorials
             skip-slug: true
             collapsed: true

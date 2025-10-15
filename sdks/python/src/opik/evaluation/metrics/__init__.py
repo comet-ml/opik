@@ -1,4 +1,5 @@
 from .aggregated_metric import AggregatedMetric
+from .conversation.conversation_thread_metric import ConversationThreadMetric
 from .conversation.session_completeness.metric import SessionCompletenessQuality
 from .conversation.conversational_coherence.metric import ConversationalCoherenceMetric
 from .conversation.user_frustration.metric import UserFrustrationMetric
@@ -51,5 +52,6 @@ __all__ = [
     "Usefulness",
     "UserFrustrationMetric",
     "TrajectoryAccuracy",
+    "ConversationThreadMetric",
     # "Factuality",
 ]
