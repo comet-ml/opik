@@ -29,7 +29,7 @@ import useAppStore from "@/store/AppStore";
 import { AlertFormType, AlertFormSchema } from "./schema";
 import WebhookSettings from "./WebhookSettings";
 import EventTriggers from "./EventTriggers";
-import TestWebhookButton from "./TestWebhookButton";
+import TestWebhookSection from "./TestWebhookSection";
 import {
   alertTriggersToFormTriggers,
   formTriggersToAlertTriggers,
@@ -52,7 +52,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 
   const isEdit = Boolean(alert);
   const title = isEdit ? "Edit alert" : "Create a new alert";
-  const submitText = isEdit ? "Save" : "Create alert";
+  const submitText = isEdit ? "Update alert" : "Create alert";
   const isPending =
     alertCreateMutation.isPending || alertUpdateMutation.isPending;
 
@@ -194,126 +194,127 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 
   return (
     <div className="py-6">
+      {isPending && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/30">
+          <Loader
+            className="min-h-56"
+            message={
+              <div className="comet-body-s-accented text-center">
+                {isEdit ? "Updating alert..." : "Creating alert..."}
+              </div>
+            }
+          />
+        </div>
+      )}
       <h1 className="comet-title-l">{title}</h1>
 
-      <div className="relative mt-6 max-w-3xl">
-        {isPending && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/10">
-            <Loader
-              className="min-h-56"
-              message={
-                <div className="comet-body-s-accented text-center">
-                  {isEdit ? "Updating alert..." : "Creating alert..."}
-                </div>
-              }
-            />
-          </div>
-        )}
-        <Form {...form}>
-          <form
-            className="flex flex-col gap-6"
-            onSubmit={form.handleSubmit(onSubmit)}
-          >
-            <div className="flex flex-col gap-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, ["name"]);
-                  return (
-                    <FormItem>
-                      <Label>Name</Label>
+      <div className="relative mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="flex-1 lg:max-w-[720px]">
+          <Form {...form}>
+            <form
+              className="flex flex-col gap-6"
+              onSubmit={form.handleSubmit(onSubmit)}
+            >
+              <div className="flex flex-col gap-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field, formState }) => {
+                    const validationErrors = get(formState.errors, ["name"]);
+                    return (
+                      <FormItem>
+                        <Label>Name</Label>
+                        <FormControl>
+                          <Input
+                            className={cn({
+                              "border-destructive": Boolean(
+                                validationErrors?.message,
+                              ),
+                            })}
+                            placeholder="Name"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between space-y-0">
+                      <div className="flex flex-col">
+                        <Label
+                          htmlFor="enabled"
+                          className="comet-body-s-accented"
+                        >
+                          Enable alert
+                        </Label>
+                        <Description>
+                          Enable to send automatic notifications to the
+                          specified URL for selected events.
+                        </Description>
+                      </div>
                       <FormControl>
-                        <Input
-                          className={cn({
-                            "border-destructive": Boolean(
-                              validationErrors?.message,
-                            ),
-                          })}
-                          placeholder="Name"
-                          {...field}
+                        <Switch
+                          id="enabled"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
                         />
                       </FormControl>
-                      <FormMessage />
                     </FormItem>
-                  );
-                }}
-              />
-
-              <FormField
-                control={form.control}
-                name="enabled"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between space-y-0">
-                    <div className="flex flex-col">
-                      <Label
-                        htmlFor="enabled"
-                        className="comet-body-s-accented"
-                      >
-                        Enable alert
-                      </Label>
-                      <Description>
-                        Enable to send automatic notifications to the specified
-                        URL for selected events.
-                      </Description>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        id="enabled"
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <Separator />
-
-            <WebhookSettings form={form} />
-
-            <EventTriggers form={form} projectsIds={projectsIds} />
-
-            <Separator />
-
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <h3 className="comet-body-accented">
-                  Test alert configuration
-                </h3>
-                <Description>
-                  Send a test notification to your configured endpoint to verify
-                  that the webhook is set up correctly and receiving events as
-                  expected.
-                </Description>
-              </div>
-              <div>
-                <TestWebhookButton
-                  getAlert={getAlert}
-                  disabled={form.formState.isSubmitting || isPending}
+                  )}
                 />
               </div>
-            </div>
 
-            <div className="flex gap-2 pt-4">
-              <Button
-                type="submit"
-                disabled={form.formState.isSubmitting || isPending}
-              >
-                {submitText}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleNavigateBack}
-                disabled={form.formState.isSubmitting || isPending}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Form>
+              <Separator />
+
+              <WebhookSettings form={form} />
+
+              <EventTriggers form={form} projectsIds={projectsIds} />
+
+              <Separator className="lg:hidden" />
+
+              <div className="lg:hidden">
+                <TestWebhookSection
+                  form={form}
+                  getAlert={getAlert}
+                  isPending={isPending}
+                />
+              </div>
+
+              <Separator className="lg:hidden" />
+
+              <div className="flex gap-2 pt-4">
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting || isPending}
+                >
+                  {submitText}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleNavigateBack}
+                  disabled={form.formState.isSubmitting || isPending}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </div>
+
+        <div className="hidden w-full lg:sticky lg:top-6 lg:block lg:w-2/5 lg:min-w-[320px] lg:max-w-[480px]">
+          <TestWebhookSection
+            form={form}
+            getAlert={getAlert}
+            isPending={isPending}
+          />
+        </div>
       </div>
 
       <ConfirmDialog
