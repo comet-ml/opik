@@ -519,6 +519,21 @@ responseFormatting:
   # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
   truncationSize: ${OPIK_RESPONSE_TRUNCATION_CHAR_LIMIT:-10001}
 
+# Queue configuration for Python RQ workers
+queues:
+  # Default: true
+  # Description: Whether queue functionality is enabled
+  enabled: ${OPIK_QUEUES_ENABLED:-true}
+  # Default: 1 day
+  # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
+  defaultJobTtl: ${OPIK_QUEUES_DEFAULT_JOB_TTL:-1 day}
+  # Per-queue specific configurations
+  queues:
+    # Optimizer cloud queue configuration
+    opik:optimizer-cloud:
+      # Job TTL for optimizer jobs
+      jobTTl: ${OPIK_OPTIMIZER_QUEUE_JOB_TTL:-1 day}
+
 # Webhook configuration
 webhook:
   # Default: false
