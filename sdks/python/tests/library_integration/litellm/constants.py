@@ -7,13 +7,24 @@ MODEL_FOR_TESTS = "gpt-4o-mini"
 # Only includes models that pass strict usage validation
 TEST_MODELS_PARAMETRIZE = [
     ("gpt-4o-mini", "openai"),  # OpenAI - fully supported with usage tracking
-    ("anthropic/claude-3-5-haiku-20241022", "anthropic"),  # Anthropic - fully supported with usage tracking
-    ("bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock"),  # Anthropic via Bedrock - provider is bedrock
-    ("openai/gpt-4o-2024-08-06", "openai"),  # OpenAI - fully supported with usage tracking
+    (
+        "anthropic/claude-3-5-haiku-20241022",
+        "anthropic",
+    ),  # Anthropic - fully supported with usage tracking
+    (
+        "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "bedrock",
+    ),  # Anthropic via Bedrock - provider is bedrock
+    (
+        "openai/gpt-4o-2024-08-06",
+        "openai",
+    ),  # OpenAI - fully supported with usage tracking
 ]
 
-EXPECTED_LITELLM_USAGE_LOGGED_FORMAT = ANY_DICT.containing({
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-})
+EXPECTED_LITELLM_USAGE_LOGGED_FORMAT = ANY_DICT.containing(
+    {
+        "prompt_tokens": ANY_BUT_NONE,
+        "completion_tokens": ANY_BUT_NONE,
+        "total_tokens": ANY_BUT_NONE,
+    }
+)

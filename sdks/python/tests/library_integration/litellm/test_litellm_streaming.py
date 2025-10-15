@@ -23,7 +23,9 @@ MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 
 
 @pytest.mark.parametrize("model,expected_provider", constants.TEST_MODELS_PARAMETRIZE)
-def test_litellm_completion_streaming__happyflow(fake_backend, model, expected_provider):
+def test_litellm_completion_streaming__happyflow(
+    fake_backend, model, expected_provider
+):
     """Test basic LiteLLM streaming completion tracking."""
     track_litellm()
 
@@ -185,7 +187,10 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
     ]
 
     args_dict = {
-        "span": {"tags": ["streaming-span"], "metadata": {"stream_key": "stream_value"}},
+        "span": {
+            "tags": ["streaming-span"],
+            "metadata": {"stream_key": "stream_value"},
+        },
         "trace": {
             "thread_id": "stream-thread-1",
             "tags": ["streaming-trace"],
@@ -249,4 +254,3 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-

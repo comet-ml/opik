@@ -63,23 +63,25 @@ def _convert_response_to_dict(output: Any) -> Dict[str, Any]:
         return dict(output)
 
 
-def _extract_usage_from_response(response_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
+def _extract_usage_from_response(
+    response_dict: Dict[str, Any],
+) -> Optional[llm_usage.OpikUsage]:
     usage_data = response_dict.get("usage")
     if usage_data is None:
         return None
-    
+
     opik_usage = llm_usage.try_build_opik_usage_or_log_error(
         provider=LLMProvider.OPENAI,
         usage=usage_data,
         logger=LOGGER,
         error_message="Failed to log token usage from litellm call",
     )
-    
+
     if opik_usage is None:
         opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
             usage=usage_data,
         )
-    
+
     return opik_usage
 
 
@@ -174,10 +176,10 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Optional[Any]:
-        assert generations_aggregator is not None, (
-            "LiteLLM decorator will always get aggregator function as input"
-        )
-        
+        assert (
+            generations_aggregator is not None
+        ), "LiteLLM decorator will always get aggregator function as input"
+
         is_litellm_stream = isinstance(
             output, litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper
         )
@@ -185,7 +187,7 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             return None
 
         span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-        
+
         return stream_patchers.patch_stream(
             stream=output,
             span_to_end=span_to_end,

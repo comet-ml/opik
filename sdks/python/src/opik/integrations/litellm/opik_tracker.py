@@ -53,7 +53,7 @@ def _patch_litellm_completion(
         type="llm",
         name="acompletion",
         project_name=project_name,
-        generations_aggregator=completion_chunks_aggregator.aggregate,      
+        generations_aggregator=completion_chunks_aggregator.aggregate,
     )
 
     # Patch the global functions
