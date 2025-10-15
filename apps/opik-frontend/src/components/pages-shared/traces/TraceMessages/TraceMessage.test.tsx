@@ -173,9 +173,7 @@ describe("TraceMessage", () => {
   it("should handle complex tool call structures", () => {
     const trace = createMockTrace(
       {
-        messages: [
-          { role: "user", content: "Book a flight and a hotel" },
-        ],
+        messages: [{ role: "user", content: "Book a flight and a hotel" }],
       },
       {
         messages: [
@@ -213,8 +211,7 @@ describe("TraceMessage", () => {
           },
           {
             role: "assistant",
-            content:
-              "I've booked your flight (AA123) and hotel (Hilton LAX).",
+            content: "I've booked your flight (AA123) and hotel (Hilton LAX).",
           },
         ],
       },
@@ -270,4 +267,3 @@ describe("TraceMessage", () => {
     expect(iconContainers.length).toBeGreaterThan(0);
   });
 });
-

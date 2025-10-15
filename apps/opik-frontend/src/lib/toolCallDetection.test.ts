@@ -184,7 +184,8 @@ describe("toolCallDetection", () => {
                 type: "function",
                 function: {
                   name: "book_flight",
-                  arguments: '{"from": "NYC", "to": "LAX", "date": "2024-01-15"}',
+                  arguments:
+                    '{"from": "NYC", "to": "LAX", "date": "2024-01-15"}',
                 },
               },
             ],
@@ -278,7 +279,13 @@ describe("toolCallDetection", () => {
     it("should detect tool calls in either input or output", () => {
       const traceWithInputToolCalls = {
         input: {
-          tool_calls: [{ id: "1", type: "function", function: { name: "fn1", arguments: "{}" } }],
+          tool_calls: [
+            {
+              id: "1",
+              type: "function",
+              function: { name: "fn1", arguments: "{}" },
+            },
+          ],
         },
         output: { content: "Done" },
       };
@@ -286,7 +293,13 @@ describe("toolCallDetection", () => {
       const traceWithOutputToolCalls = {
         input: { content: "Start" },
         output: {
-          tool_calls: [{ id: "2", type: "function", function: { name: "fn2", arguments: "{}" } }],
+          tool_calls: [
+            {
+              id: "2",
+              type: "function",
+              function: { name: "fn2", arguments: "{}" },
+            },
+          ],
         },
       };
 
@@ -296,7 +309,9 @@ describe("toolCallDetection", () => {
 
     it("should handle traces with missing input or output", () => {
       expect(traceHasToolCalls({})).toBe(false);
-      expect(traceHasToolCalls({ input: undefined, output: undefined })).toBe(false);
+      expect(traceHasToolCalls({ input: undefined, output: undefined })).toBe(
+        false,
+      );
       expect(traceHasToolCalls({ input: null, output: null })).toBe(false);
     });
 
@@ -305,9 +320,7 @@ describe("toolCallDetection", () => {
         id: "trace_123",
         name: "agent_call",
         input: {
-          messages: [
-            { role: "user", content: "Get the weather in Boston" },
-          ],
+          messages: [{ role: "user", content: "Get the weather in Boston" }],
         },
         output: {
           messages: [
@@ -332,7 +345,8 @@ describe("toolCallDetection", () => {
             },
             {
               role: "assistant",
-              content: "The current weather in Boston is 65°F and partly cloudy.",
+              content:
+                "The current weather in Boston is 65°F and partly cloudy.",
             },
           ],
         },
@@ -342,4 +356,3 @@ describe("toolCallDetection", () => {
     });
   });
 });
-

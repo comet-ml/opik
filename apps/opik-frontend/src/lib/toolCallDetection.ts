@@ -7,7 +7,7 @@ import isArray from "lodash/isArray";
  * - OpenAI format: { role: "assistant", tool_calls: [...] }
  * - Direct messages array: { messages: [{tool_calls: [...]}] }
  * - Output array: { output: [{tool_calls: [...]}] }
- * 
+ *
  * @param data - The trace input or output data to check
  * @returns true if tool calls are detected, false otherwise
  */
@@ -19,7 +19,11 @@ export const hasToolCalls = (data: unknown): boolean => {
   const obj = data as Record<string, unknown>;
 
   // Direct tool_calls in the root object (OpenAI assistant message format)
-  if ("tool_calls" in obj && isArray(obj.tool_calls) && obj.tool_calls.length > 0) {
+  if (
+    "tool_calls" in obj &&
+    isArray(obj.tool_calls) &&
+    obj.tool_calls.length > 0
+  ) {
     return true;
   }
 
@@ -28,18 +32,26 @@ export const hasToolCalls = (data: unknown): boolean => {
     return obj.messages.some((message: unknown) => {
       if (isObject(message)) {
         const msg = message as Record<string, unknown>;
-        return "tool_calls" in msg && isArray(msg.tool_calls) && msg.tool_calls.length > 0;
+        return (
+          "tool_calls" in msg &&
+          isArray(msg.tool_calls) &&
+          msg.tool_calls.length > 0
+        );
       }
       return false;
     });
   }
 
-  // Check output array for tool calls  
+  // Check output array for tool calls
   if ("output" in obj && isArray(obj.output)) {
     return obj.output.some((item: unknown) => {
       if (isObject(item)) {
         const outputItem = item as Record<string, unknown>;
-        return "tool_calls" in outputItem && isArray(outputItem.tool_calls) && outputItem.tool_calls.length > 0;
+        return (
+          "tool_calls" in outputItem &&
+          isArray(outputItem.tool_calls) &&
+          outputItem.tool_calls.length > 0
+        );
       }
       return false;
     });
@@ -50,7 +62,11 @@ export const hasToolCalls = (data: unknown): boolean => {
     return obj.input.some((item: unknown) => {
       if (isObject(item)) {
         const inputItem = item as Record<string, unknown>;
-        return "tool_calls" in inputItem && isArray(inputItem.tool_calls) && inputItem.tool_calls.length > 0;
+        return (
+          "tool_calls" in inputItem &&
+          isArray(inputItem.tool_calls) &&
+          inputItem.tool_calls.length > 0
+        );
       }
       return false;
     });
@@ -72,11 +88,13 @@ export const hasToolCalls = (data: unknown): boolean => {
 
 /**
  * Checks if a trace contains tool calls in either input or output
- * 
+ *
  * @param trace - The trace object with input and output fields
  * @returns true if tool calls are detected in input or output
  */
-export const traceHasToolCalls = (trace: { input?: unknown; output?: unknown }): boolean => {
+export const traceHasToolCalls = (trace: {
+  input?: unknown;
+  output?: unknown;
+}): boolean => {
   return hasToolCalls(trace.input) || hasToolCalls(trace.output);
 };
-
