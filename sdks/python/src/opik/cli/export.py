@@ -298,14 +298,14 @@ def _export_prompts(
                     "current_version": {
                         "prompt": prompt.prompt,
                         "metadata": prompt.metadata,
-                        "type": prompt.type.value if prompt.type else None,
+                        "type": prompt.type if prompt.type else None,
                         "commit": prompt.commit,
                     },
                     "history": [
                         {
                             "prompt": version.prompt,
                             "metadata": version.metadata,
-                            "type": version.type.value if version.type else None,
+                            "type": version.type if version.type else None,
                             "commit": version.commit,
                         }
                         for version in prompt_history
