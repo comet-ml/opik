@@ -83,7 +83,7 @@ class OpikTracer(tracing.Tracer):
         """Create a span or trace based on existing context using span_creation_handler."""
         # For pipeline operations, use the pipeline name, otherwise use component name
         final_name = (
-            self._name if operation_name == constants.PIPELINE_RUN_KEY else span_name
+            self._name if "pipeline.run" in operation_name else span_name
         )
         metadata = {"created_from": "haystack", "operation": operation_name}
 

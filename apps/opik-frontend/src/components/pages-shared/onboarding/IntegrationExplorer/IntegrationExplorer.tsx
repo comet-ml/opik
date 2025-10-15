@@ -11,6 +11,7 @@ import IntegrationGrid from "./IntegrationGrid";
 
 export type IntegrationExplorerProps = {
   children: React.ReactNode;
+  source?: string;
 };
 
 const IntegrationExplorer: React.FunctionComponent<IntegrationExplorerProps> & {
@@ -21,8 +22,12 @@ const IntegrationExplorer: React.FunctionComponent<IntegrationExplorerProps> & {
   CopyApiKey: typeof IntegrationCopyApiKey;
   Tabs: typeof IntegrationTabs;
   Grid: typeof IntegrationGrid;
-} = ({ children }) => {
-  return <IntegrationExplorerProvider>{children}</IntegrationExplorerProvider>;
+} = ({ children, source }) => {
+  return (
+    <IntegrationExplorerProvider source={source}>
+      {children}
+    </IntegrationExplorerProvider>
+  );
 };
 
 IntegrationExplorer.Search = IntegrationSearch;
