@@ -13,6 +13,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
 from opik.rest_api.core.api_error import ApiError
+from opik.api_objects.trace import trace_data
+from opik.api_objects.span import span_data
+from opik.api_objects.trace.migration import prepare_traces_and_spans_for_copy
 
 console = Console()
 
@@ -28,8 +31,74 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return False
 
 
+def _json_to_trace_data(
+    trace_info: Dict[str, Any], project_name: str
+) -> trace_data.TraceData:
+    """Convert JSON trace data to TraceData object."""
+    return trace_data.TraceData(
+        id=trace_info.get("id", ""),
+        name=trace_info.get("name"),
+        start_time=(
+            datetime.fromisoformat(trace_info["start_time"].replace("Z", "+00:00"))
+            if trace_info.get("start_time")
+            else None
+        ),
+        end_time=(
+            datetime.fromisoformat(trace_info["end_time"].replace("Z", "+00:00"))
+            if trace_info.get("end_time")
+            else None
+        ),
+        metadata=trace_info.get("metadata"),
+        input=trace_info.get("input"),
+        output=trace_info.get("output"),
+        tags=trace_info.get("tags"),
+        feedback_scores=trace_info.get("feedback_scores"),
+        project_name=project_name,
+        created_by=trace_info.get("created_by"),
+        error_info=trace_info.get("error_info"),
+        thread_id=trace_info.get("thread_id"),
+    )
+
+
+def _json_to_span_data(
+    span_info: Dict[str, Any], project_name: str
+) -> span_data.SpanData:
+    """Convert JSON span data to SpanData object."""
+    return span_data.SpanData(
+        trace_id=span_info.get("trace_id", ""),
+        id=span_info.get("id", ""),
+        parent_span_id=span_info.get("parent_span_id"),
+        name=span_info.get("name"),
+        type=span_info.get("type", "general"),
+        start_time=(
+            datetime.fromisoformat(span_info["start_time"].replace("Z", "+00:00"))
+            if span_info.get("start_time")
+            else None
+        ),
+        end_time=(
+            datetime.fromisoformat(span_info["end_time"].replace("Z", "+00:00"))
+            if span_info.get("end_time")
+            else None
+        ),
+        metadata=span_info.get("metadata"),
+        input=span_info.get("input"),
+        output=span_info.get("output"),
+        tags=span_info.get("tags"),
+        usage=span_info.get("usage"),
+        feedback_scores=span_info.get("feedback_scores"),
+        project_name=project_name,
+        model=span_info.get("model"),
+        provider=span_info.get("provider"),
+        error_info=span_info.get("error_info"),
+        total_cost=span_info.get("total_cost"),
+    )
+
+
 def _import_traces(
-    client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
+    client: opik.Opik,
+    project_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str] = None,
 ) -> int:
     """Import traces from JSON files."""
     trace_files = list(project_dir.glob("trace_*.json"))
@@ -71,99 +140,58 @@ def _import_traces(
                 trace_info = trace_data["trace"]
                 spans_info = trace_data.get("spans", [])
 
-                # Create the trace (let system generate new ID)
-                trace_obj = client.trace(
-                    name=trace_info.get("name"),
-                    start_time=(
-                        datetime.fromisoformat(
-                            trace_info["start_time"].replace("Z", "+00:00")
-                        )
-                        if trace_info.get("start_time")
-                        else None
-                    ),
-                    end_time=(
-                        datetime.fromisoformat(
-                            trace_info["end_time"].replace("Z", "+00:00")
-                        )
-                        if trace_info.get("end_time")
-                        else None
-                    ),
-                    input=trace_info.get("input"),
-                    output=trace_info.get("output"),
-                    metadata=trace_info.get("metadata"),
-                    tags=trace_info.get("tags"),
-                    thread_id=trace_info.get("thread_id"),
-                    error_info=trace_info.get("error_info"),
+                # Convert JSON data to TraceData and SpanData objects
+                # Use a temporary project name for the migration logic
+                temp_project_name = "temp_import"
+                trace_data_obj = _json_to_trace_data(trace_info, temp_project_name)
+
+                # Convert spans to SpanData objects, setting the correct trace_id
+                span_data_objects = []
+                for span_info in spans_info:
+                    span_info["trace_id"] = trace_data_obj.id  # Ensure trace_id is set
+                    span_data_obj = _json_to_span_data(span_info, temp_project_name)
+                    span_data_objects.append(span_data_obj)
+
+                # Use the migration logic to prepare traces and spans with new IDs
+                # This handles orphan spans, validates parent relationships, and logs issues
+                new_trace_data, new_span_data = prepare_traces_and_spans_for_copy(
+                    destination_project_name=client.project_name or "default",
+                    traces_data=[trace_data_obj],
+                    spans_data=span_data_objects,
                 )
 
-                # Create spans for this trace (let system generate new IDs)
-                # First, create a mapping of old span IDs to new span IDs
-                span_id_mapping: Dict[str, str] = {}
+                # Create the trace using the prepared data
+                new_trace = new_trace_data[0]
+                trace_obj = client.trace(
+                    name=new_trace.name,
+                    start_time=new_trace.start_time,
+                    end_time=new_trace.end_time,
+                    input=new_trace.input,
+                    output=new_trace.output,
+                    metadata=new_trace.metadata,
+                    tags=new_trace.tags,
+                    thread_id=new_trace.thread_id,
+                    error_info=new_trace.error_info,
+                )
 
-                # Sort spans by hierarchy (root spans first, then children)
-                # Build a mapping from span ID to span info for O(1) parent lookup
-                span_id_to_info = {span.get("id"): span for span in spans_info}
-                span_depths: Dict[str, int] = {}
-
-                def compute_span_depth(span_info: Dict[str, Any]) -> int:
-                    span_id = span_info.get("id")
-                    if span_id is None:
-                        return 0  # Skip spans without IDs
-                    if span_id in span_depths:
-                        return span_depths[span_id]
-                    parent_id = span_info.get("parent_span_id")
-                    if parent_id is None:
-                        depth = 0
-                    elif parent_id in span_id_to_info:
-                        depth = compute_span_depth(span_id_to_info[parent_id]) + 1
-                    else:
-                        depth = 1  # If parent not found, assume depth 1
-                    span_depths[span_id] = depth
-                    return depth
-
-                sorted_spans = sorted(spans_info, key=compute_span_depth)
-
-                for span_info in sorted_spans:
-                    old_span_id = span_info.get("id")
-                    old_parent_id = span_info.get("parent_span_id")
-
-                    # Map old parent ID to new parent ID
-                    new_parent_id = (
-                        span_id_mapping.get(old_parent_id) if old_parent_id else None
+                # Create spans using the prepared data
+                for span_data_obj in new_span_data:
+                    client.span(
+                        trace_id=trace_obj.id,
+                        parent_span_id=span_data_obj.parent_span_id,
+                        name=span_data_obj.name,
+                        type=span_data_obj.type,
+                        start_time=span_data_obj.start_time,
+                        end_time=span_data_obj.end_time,
+                        input=span_data_obj.input,
+                        output=span_data_obj.output,
+                        metadata=span_data_obj.metadata,
+                        tags=span_data_obj.tags,
+                        usage=span_data_obj.usage,
+                        model=span_data_obj.model,
+                        provider=span_data_obj.provider,
+                        error_info=span_data_obj.error_info,
                     )
-
-                    # Create the span
-                    new_span = client.span(
-                        trace_id=trace_obj.id,  # Use the new trace ID
-                        parent_span_id=new_parent_id,
-                        name=span_info.get("name"),
-                        type=span_info.get("type", "general"),
-                        start_time=(
-                            datetime.fromisoformat(
-                                span_info["start_time"].replace("Z", "+00:00")
-                            )
-                            if span_info.get("start_time")
-                            else None
-                        ),
-                        end_time=(
-                            datetime.fromisoformat(
-                                span_info["end_time"].replace("Z", "+00:00")
-                            )
-                            if span_info.get("end_time")
-                            else None
-                        ),
-                        input=span_info.get("input"),
-                        output=span_info.get("output"),
-                        metadata=span_info.get("metadata"),
-                        tags=span_info.get("tags"),
-                        usage=span_info.get("usage"),
-                        model=span_info.get("model"),
-                        provider=span_info.get("provider"),
-                        error_info=span_info.get("error_info"),
-                    )
-
-                    # Store the mapping of old ID to new ID
-                    span_id_mapping[old_span_id] = new_span.id
 
                 imported_count += 1
                 progress.update(
@@ -181,7 +209,10 @@ def _import_traces(
 
 
 def _import_datasets(
-    client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
+    client: opik.Opik,
+    project_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str] = None,
 ) -> int:
     """Import datasets from JSON files."""
     dataset_files = list(project_dir.glob("dataset_*.json"))
@@ -253,72 +284,35 @@ def _import_datasets(
 
 
 def _import_experiments(
-    client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
+    client: opik.Opik,
+    project_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str] = None,
 ) -> int:
-    """Import experiments from JSON files."""
-    experiment_files = list(project_dir.glob("experiment_*.json"))
+    """Import experiments from JSON files.
 
-    if not experiment_files:
-        console.print(f"[yellow]No experiment files found in {project_dir}[/yellow]")
-        return 0
+    TODO: Experiments are complex entities that include:
+    - Experiment metadata and configuration
+    - Associated traces with feedback scores
+    - Dataset items used in the experiment
+    - Evaluation results and metrics
 
-    imported_count = 0
-    for experiment_file in experiment_files:
-        try:
-            with open(experiment_file, "r", encoding="utf-8") as f:
-                experiment_data = json.load(f)
-
-            # Filter by name pattern if specified
-            experiment_name = experiment_data.get("name", "")
-            if name_pattern and not _matches_name_pattern(
-                experiment_name, name_pattern
-            ):
-                continue
-
-            if dry_run:
-                console.print(
-                    f"[blue]Would upload experiment: {experiment_data['name']}[/blue]"
-                )
-                imported_count += 1
-                continue
-
-            # Check if experiment already exists
-            existing_experiments = client.get_experiments_by_name(
-                experiment_data["name"]
-            )
-            if existing_experiments:
-                console.print(
-                    f"[yellow]Experiment '{experiment_data['name']}' already exists, skipping...[/yellow]"
-                )
-                imported_count += 1
-                continue
-
-            # Create experiment with basic metadata
-            # Note: We only create the experiment metadata, not the trace relationships
-            # The traces will maintain their experiment_id when uploaded separately
-            client.create_experiment(
-                dataset_name=experiment_data["dataset_name"],
-                name=experiment_data["name"],
-                experiment_config=experiment_data["experiment_data"].get("metadata"),
-                type=experiment_data["experiment_data"].get("type", "regular"),
-            )
-
-            console.print(
-                f"[green]Created experiment: {experiment_data['name']}[/green]"
-            )
-            imported_count += 1
-
-        except Exception as e:
-            console.print(
-                f"[red]Error importing experiment from {experiment_file.name}: {e}[/red]"
-            )
-            continue
-
-    return imported_count
+    Full experiment export/import requires handling all these relationships
+    and is not currently implemented. This is a placeholder for future work.
+    """
+    console.print(
+        "[yellow]Experiment import is not yet implemented. "
+        "Experiments are complex entities that require handling of traces, "
+        "dataset items, and feedback scores. This feature will be added in a future release.[/yellow]"
+    )
+    return 0
 
 
 def _import_prompts(
-    client: Any, project_dir: Path, dry_run: bool, name_pattern: Optional[str] = None
+    client: opik.Opik,
+    project_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str] = None,
 ) -> int:
     """Import prompts from JSON files."""
     prompt_files = list(project_dir.glob("prompt_*.json"))

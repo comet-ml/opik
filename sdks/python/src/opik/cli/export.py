@@ -5,7 +5,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import click
 from rich.console import Console
@@ -28,14 +28,19 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
 
 
 def _export_traces(
-    client: Any,
+    client: opik.Opik,
     project_name: str,
     project_dir: Path,
     max_results: int,
     filter: Optional[str],
     name_pattern: Optional[str] = None,
 ) -> int:
-    """Download traces and their spans."""
+    """Download traces and their spans with pagination support for large projects."""
+    exported_count = 0
+    page_size = min(100, max_results)  # Process in smaller batches
+    last_trace_time = None
+    total_processed = 0
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -43,83 +48,119 @@ def _export_traces(
     ) as progress:
         task = progress.add_task("Searching for traces...", total=None)
 
-        traces = client.search_traces(
-            project_name=project_name,
-            filter_string=filter,
-            max_results=max_results,
-            truncate=False,  # Don't truncate data for download
-        )
+        while total_processed < max_results:
+            # Calculate how many traces to fetch in this batch
+            remaining = max_results - total_processed
+            current_page_size = min(page_size, remaining)
 
-        progress.update(task, description=f"Found {len(traces)} traces")
+            # Build filter string with pagination
+            pagination_filter = filter or ""
+            if last_trace_time:
+                # Add timestamp filter to continue from where we left off
+                time_filter = f"start_time < '{last_trace_time.isoformat()}'"
+                if pagination_filter:
+                    pagination_filter = f"({pagination_filter}) AND {time_filter}"
+                else:
+                    pagination_filter = time_filter
 
-    if not traces:
-        console.print("[yellow]No traces found in the project.[/yellow]")
-        return 0
+            try:
+                traces = client.search_traces(
+                    project_name=project_name,
+                    filter_string=pagination_filter if pagination_filter else None,
+                    max_results=current_page_size,
+                    truncate=False,  # Don't truncate data for download
+                )
+            except Exception as e:
+                console.print(f"[red]Error searching traces: {e}[/red]")
+                break
 
-    # Filter traces by name pattern if specified
-    if name_pattern:
-        original_count = len(traces)
-        traces = [
-            trace
-            for trace in traces
-            if _matches_name_pattern(trace.name or "", name_pattern)
-        ]
-        if len(traces) < original_count:
-            console.print(
-                f"[blue]Filtered to {len(traces)} traces matching pattern '{name_pattern}'[/blue]"
+            if not traces:
+                # No more traces to process
+                break
+
+            # Update progress description
+            progress.update(
+                task, description=f"Found {len(traces)} traces in current batch"
             )
 
-    if not traces:
-        console.print("[yellow]No traces found matching the name pattern.[/yellow]")
-        return 0
+            # Filter traces by name pattern if specified
+            if name_pattern:
+                original_count = len(traces)
+                traces = [
+                    trace
+                    for trace in traces
+                    if _matches_name_pattern(trace.name or "", name_pattern)
+                ]
+                if len(traces) < original_count:
+                    console.print(
+                        f"[blue]Filtered to {len(traces)} traces matching pattern '{name_pattern}' in current batch[/blue]"
+                    )
 
-    # Download each trace with its spans
-    exported_count = 0
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Downloading traces...", total=len(traces))
-
-        for trace in traces:
-            try:
-                # Get spans for this trace
-                spans = client.search_spans(
-                    project_name=project_name,
-                    trace_id=trace.id,
-                    max_results=1000,  # Get all spans for the trace
-                    truncate=False,
-                )
-
-                # Create trace data structure
-                trace_data = {
-                    "trace": trace.model_dump(),
-                    "spans": [span.model_dump() for span in spans],
-                    "downloaded_at": datetime.now().isoformat(),
-                    "project_name": project_name,
-                }
-
-                # Save to file
-                trace_file = project_dir / f"trace_{trace.id}.json"
-                with open(trace_file, "w", encoding="utf-8") as f:
-                    json.dump(trace_data, f, indent=2, default=str)
-
-                exported_count += 1
-                progress.update(
-                    task,
-                    description=f"Exported {exported_count}/{len(traces)} traces",
-                )
-
-            except Exception as e:
-                console.print(f"[red]Error exporting trace {trace.id}: {e}[/red]")
+            if not traces:
+                # No traces match the name pattern, but we might have more to process
+                last_trace_time = traces[0].start_time if traces else None
+                total_processed += current_page_size
                 continue
+
+            # Update progress for downloading
+            progress.update(
+                task,
+                description=f"Downloading traces... (batch {total_processed // page_size + 1})",
+            )
+
+            # Download each trace with its spans
+            for trace in traces:
+                try:
+                    # Get spans for this trace
+                    spans = client.search_spans(
+                        project_name=project_name,
+                        trace_id=trace.id,
+                        max_results=1000,  # Get all spans for the trace
+                        truncate=False,
+                    )
+
+                    # Create trace data structure
+                    trace_data = {
+                        "trace": trace.model_dump(),
+                        "spans": [span.model_dump() for span in spans],
+                        "downloaded_at": datetime.now().isoformat(),
+                        "project_name": project_name,
+                    }
+
+                    # Save to file
+                    trace_file = project_dir / f"trace_{trace.id}.json"
+                    with open(trace_file, "w", encoding="utf-8") as f:
+                        json.dump(trace_data, f, indent=2, default=str)
+
+                    exported_count += 1
+                    total_processed += 1
+
+                except Exception as e:
+                    console.print(f"[red]Error exporting trace {trace.id}: {e}[/red]")
+                    continue
+
+            # Update last trace time for pagination
+            if traces:
+                last_trace_time = traces[-1].start_time
+
+            # If we got fewer traces than requested, we've reached the end
+            if len(traces) < current_page_size:
+                break
+
+        # Final progress update
+        if exported_count == 0:
+            console.print("[yellow]No traces found in the project.[/yellow]")
+        else:
+            progress.update(task, description=f"Exported {exported_count} traces total")
 
     return exported_count
 
 
 def _export_datasets(
-    client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
+    client: opik.Opik,
+    project_dir: Path,
+    max_results: int,
+    name_pattern: Optional[str] = None,
 ) -> int:
     """Export datasets."""
     try:
@@ -191,76 +232,35 @@ def _export_datasets(
 
 
 def _export_experiments(
-    client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
+    client: opik.Opik,
+    project_dir: Path,
+    max_results: int,
+    name_pattern: Optional[str] = None,
 ) -> int:
-    """Export experiments."""
-    try:
-        # Get all datasets first to find experiments
-        datasets = client.get_datasets(max_results=100, sync_items=False)
+    """Export experiments.
 
-        if not datasets:
-            console.print(
-                "[yellow]No datasets found to check for experiments.[/yellow]"
-            )
-            return 0
+    TODO: Experiments are complex entities that include:
+    - Experiment metadata and configuration
+    - Associated traces with feedback scores
+    - Dataset items used in the experiment
+    - Evaluation results and metrics
 
-        exported_count = 0
-        for dataset in datasets:
-            try:
-                experiments = client.get_dataset_experiments(
-                    dataset.name, max_results=max_results
-                )
-
-                for experiment in experiments:
-                    # Filter by name pattern if specified
-                    if name_pattern and not _matches_name_pattern(
-                        experiment.name, name_pattern
-                    ):
-                        continue
-
-                    try:
-                        # Get experiment data
-                        experiment_data_obj = experiment.get_experiment_data()
-
-                        # Create experiment data structure
-                        experiment_data = {
-                            "id": experiment.id,
-                            "name": experiment.name,
-                            "dataset_name": experiment.dataset_name,
-                            "experiment_data": experiment_data_obj.model_dump(),
-                            "downloaded_at": datetime.now().isoformat(),
-                        }
-
-                        # Save to file
-                        experiment_file = (
-                            project_dir / f"experiment_{experiment.id}.json"
-                        )
-                        with open(experiment_file, "w", encoding="utf-8") as f:
-                            json.dump(experiment_data, f, indent=2, default=str)
-
-                        exported_count += 1
-
-                    except Exception as e:
-                        console.print(
-                            f"[red]Error downloading experiment {experiment.id}: {e}[/red]"
-                        )
-                        continue
-
-            except Exception as e:
-                console.print(
-                    f"[red]Error getting experiments for dataset {dataset.name}: {e}[/red]"
-                )
-                continue
-
-        return exported_count
-
-    except Exception as e:
-        console.print(f"[red]Error exporting experiments: {e}[/red]")
-        return 0
+    Full experiment export/import requires handling all these relationships
+    and is not currently implemented. This is a placeholder for future work.
+    """
+    console.print(
+        "[yellow]Experiment export is not yet implemented. "
+        "Experiments are complex entities that require handling of traces, "
+        "dataset items, and feedback scores. This feature will be added in a future release.[/yellow]"
+    )
+    return 0
 
 
 def _export_prompts(
-    client: Any, project_dir: Path, max_results: int, name_pattern: Optional[str] = None
+    client: opik.Opik,
+    project_dir: Path,
+    max_results: int,
+    name_pattern: Optional[str] = None,
 ) -> int:
     """Export prompts."""
     try:
