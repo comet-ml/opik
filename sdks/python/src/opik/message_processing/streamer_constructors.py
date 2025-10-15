@@ -2,7 +2,14 @@ from typing import List, Optional
 
 import httpx
 
-from . import queue_consumer, messages, message_processors, message_queue, streamer
+from . import (
+    queue_consumer,
+    messages,
+    message_processors,
+    message_queue,
+    online_message_processor,
+    streamer,
+)
 from ..file_upload import upload_manager, base_upload_manager
 from ..rest_api import client as rest_api_client
 from .batching import batch_manager_constuctors
@@ -16,7 +23,9 @@ def construct_online_streamer(
     n_consumers: int,
     max_queue_size: int,
 ) -> streamer.Streamer:
-    message_processor = message_processors.OpikMessageProcessor(rest_client=rest_client)
+    message_processor = online_message_processor.OpikMessageProcessor(
+        rest_client=rest_client
+    )
 
     file_uploader = upload_manager.FileUploadManager(
         rest_client=rest_client,
