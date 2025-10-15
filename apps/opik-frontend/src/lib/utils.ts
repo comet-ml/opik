@@ -44,10 +44,10 @@ export function cn(...inputs: ClassValue[]) {
  * Check if a string contains actual HTML markup
  * Uses a regex pattern to detect common HTML tags while excluding non-HTML text
  * that happens to contain angle brackets (e.g., Python object representations)
- * 
+ *
  * @param str - The string to check for HTML content
  * @returns true if the string contains valid HTML tags, false otherwise
- * 
+ *
  * @example
  * containsHTML('<div>Hello</div>') // true
  * containsHTML('<p class="text">Text</p>') // true
@@ -80,7 +80,7 @@ export const containsHTML = (str: string): boolean => {
     "code",
     "pre",
   ];
-  
+
   const htmlTagPattern = `<(${HTML_TAGS.join("|")})(\\s+[^>]*)?\\/?>`;
   return new RegExp(htmlTagPattern, "i").test(str);
 };

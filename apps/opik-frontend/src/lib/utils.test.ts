@@ -162,9 +162,9 @@ describe("containsHTML", () => {
 
   it("should detect HTML tags with attributes", () => {
     expect(containsHTML('<div class="container">Hello</div>')).toBe(true);
-    expect(
-      containsHTML('<div class="container" id="main">Hello</div>'),
-    ).toBe(true);
+    expect(containsHTML('<div class="container" id="main">Hello</div>')).toBe(
+      true,
+    );
     expect(containsHTML('<span style="color: red;">Red text</span>')).toBe(
       true,
     );
