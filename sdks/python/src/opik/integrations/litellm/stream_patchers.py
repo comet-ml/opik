@@ -1,6 +1,6 @@
 import logging
 import functools
-from typing import List, Optional, Callable, TypeVar
+from typing import Any, List, Optional, Callable, TypeVar
 
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers, error_info_collector
@@ -28,7 +28,7 @@ def _create_sync_next_wrapper(
     @functools.wraps(original_next)
     def wrapper(
         self: litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper,
-    ) -> StreamItem:
+    ) -> Any:
         if not hasattr(self, "_opik_accumulated_items"):
             if hasattr(self, "opik_tracked_instance"):
                 self._opik_accumulated_items = []
@@ -79,7 +79,7 @@ def _create_async_next_wrapper(
     @functools.wraps(original_anext)
     async def wrapper(
         self: litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper,
-    ) -> StreamItem:
+    ) -> Any:
         if not hasattr(self, "_opik_accumulated_items_async"):
             if hasattr(self, "opik_tracked_instance_async"):
                 self._opik_accumulated_items_async = []

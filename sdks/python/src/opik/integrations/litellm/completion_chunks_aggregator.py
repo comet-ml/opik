@@ -68,6 +68,7 @@ def _extract_usage_from_chunk(
         if usage_dict and isinstance(usage_dict, dict):
             filtered_usage = {k: v for k, v in usage_dict.items() if v is not None}
             return filtered_usage if filtered_usage else None
+        return None
     except Exception as exception:
         LOGGER.debug(
             "Error extracting usage from streaming chunk: %s",
@@ -80,6 +81,16 @@ def _extract_usage_from_chunk(
 def aggregate(
     items: List[litellm.types.utils.ModelResponse],
 ) -> Optional[CompletionChunksAggregated]:
+    """
+    Aggregate LiteLLM streaming chunks into a single object.
+    This function is AI generated and covered by the litellm integration tests for streaming.
+
+    Args:
+        items: List of streaming chunks
+
+    Returns:
+        CompletionChunksAggregated or None if aggregation fails
+    """
     try:
         if not items:
             return None

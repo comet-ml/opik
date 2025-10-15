@@ -6,6 +6,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Union,
 )
 from typing_extensions import override
 
@@ -19,21 +20,20 @@ import litellm
 import litellm.types.utils
 import litellm.litellm_core_utils.streaming_handler
 
-
 from . import stream_patchers, completion_chunks_aggregator
 
 LOGGER = logging.getLogger(__name__)
 
-KWARGS_KEYS_TO_LOG_AS_INPUTS = [
+KWARGS_KEYS_TO_LOG_AS_INPUTS: List[str] = [
     "messages",
     "functions",
     "function_call",
     "tools",
     "tool_choice",
 ]
-RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
+RESPONSE_KEYS_TO_LOG_AS_OUTPUT: List[str] = ["choices"]
 
-PROVIDER_MAPPING = {
+PROVIDER_MAPPING: Dict[str, LLMProvider] = {
     "openai": LLMProvider.OPENAI,
     "vertex_ai-language-models": LLMProvider.GOOGLE_VERTEXAI,
     "gemini": LLMProvider.GOOGLE_AI,
@@ -49,12 +49,20 @@ def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
     try:
         provider_info = litellm.get_llm_provider(model_name)
         provider_name = provider_info[1] if len(provider_info) > 1 else None
+        if provider_name is None:
+            return None
         return PROVIDER_MAPPING.get(provider_name, None)
     except Exception:
         return None
 
 
-def _convert_response_to_dict(output: Any) -> Dict[str, Any]:
+def _convert_response_to_dict(
+    output: Union[
+        litellm.types.utils.ModelResponse,
+        completion_chunks_aggregator.CompletionChunksAggregated,
+        Dict[str, Any],
+    ],
+) -> Dict[str, Any]:
     if hasattr(output, "model_dump"):
         return output.model_dump(mode="json")
     elif isinstance(output, dict):
@@ -85,7 +93,13 @@ def _extract_usage_from_response(
     return opik_usage
 
 
-def _calculate_completion_cost(output: Any) -> Optional[float]:
+def _calculate_completion_cost(
+    output: Union[
+        litellm.types.utils.ModelResponse,
+        completion_chunks_aggregator.CompletionChunksAggregated,
+        Dict[str, Any],
+    ],
+) -> Optional[float]:
     try:
         return litellm.completion_cost(completion_response=output)
     except Exception as exception:
@@ -174,8 +188,13 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
+        generations_aggregator: Optional[
+            Callable[
+                [List[litellm.types.utils.ModelResponse]],
+                Optional[completion_chunks_aggregator.CompletionChunksAggregated],
+            ]
+        ],
+    ) -> Optional[litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper]:
         assert (
             generations_aggregator is not None
         ), "LiteLLM decorator will always get aggregator function as input"
