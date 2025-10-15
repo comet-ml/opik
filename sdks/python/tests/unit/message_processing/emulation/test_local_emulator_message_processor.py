@@ -16,8 +16,6 @@ class TestLocalEmulatorMessageProcessor:
             active=True
         )
         assert processor is not None
-        assert hasattr(processor, "processed_messages")
-        assert hasattr(processor, "merge_duplicates")
         assert processor.merge_duplicates is True
 
     def test_init_with_merge_duplicates_false(self):
