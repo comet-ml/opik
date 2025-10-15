@@ -32,7 +32,7 @@ const NewQuickstartPage: React.FunctionComponent = () => {
           and debugging.
         </div>
 
-        <IntegrationExplorer>
+        <IntegrationExplorer source="get-started">
           <div className="mb-8 flex items-center justify-between gap-6">
             <IntegrationExplorer.Search />
 

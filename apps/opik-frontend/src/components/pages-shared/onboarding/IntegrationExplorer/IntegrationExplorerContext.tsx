@@ -11,10 +11,12 @@ export type IntegrationExplorerContextType = {
   setHelpGuideDialogOpen: (open?: boolean) => void;
   setSearchText: (text: string) => void;
   setActiveTab: (tab: string) => void;
+  source?: string;
 };
 
 export type IntegrationExplorerProviderProps = {
   children: React.ReactNode;
+  source?: string;
 };
 
 const IntegrationExplorerContext =
@@ -32,7 +34,7 @@ export const useIntegrationExplorer = () => {
 
 export const IntegrationExplorerProvider: React.FunctionComponent<
   IntegrationExplorerProviderProps
-> = ({ children }) => {
+> = ({ children, source }) => {
   const [searchText, setSearchText] = useState("");
   const [activeTab, setActiveTab] = useState<string>(
     INTEGRATION_CATEGORIES.ALL,
@@ -63,6 +65,7 @@ export const IntegrationExplorerProvider: React.FunctionComponent<
     setHelpGuideDialogOpen,
     setSearchText,
     setActiveTab,
+    source,
   };
 
   return (

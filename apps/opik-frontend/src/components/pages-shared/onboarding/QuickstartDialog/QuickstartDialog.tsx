@@ -19,7 +19,7 @@ const QuickstartDialog: React.FC = () => {
           and debugging.
         </div>
 
-        <IntegrationExplorer>
+        <IntegrationExplorer source="quickstart-dialog">
           <div className="mb-8 flex items-center justify-between gap-6">
             <IntegrationExplorer.Search />
 
