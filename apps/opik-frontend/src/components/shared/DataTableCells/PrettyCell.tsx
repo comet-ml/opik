@@ -82,10 +82,9 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
-    // Strip HTML tags from prettified content to show clean plain text
-    const displayMessage = response.prettified
-      ? stripHtmlTags(message)
-      : message;
+    // Don't strip HTML tags as the message is already plain text from prettifyMessage
+    // The prettifyMessage function extracts plain text, so we don't need to sanitize it
+    const displayMessage = message;
 
     if (isSmall) {
       return (
@@ -106,14 +105,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
         {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
       </div>
     );
-  }, [
-    isSmall,
-    hasExceededLimit,
-    message,
-    rawValue,
-    maxDataLength,
-    response.prettified,
-  ]);
+  }, [isSmall, hasExceededLimit, message, rawValue, maxDataLength]);
 
   return (
     <CellWrapper
