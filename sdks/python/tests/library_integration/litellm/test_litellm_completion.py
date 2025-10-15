@@ -70,7 +70,8 @@ def test_litellm_completion_create__happyflow(fake_backend):
                         "max_tokens": 10,
                     }
                 ),
-                usage=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
+                total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -133,7 +134,8 @@ async def test_litellm_acompletion_create__happyflow(fake_backend):
                         "max_tokens": 10,
                     }
                 ),
-                usage=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
+                total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -264,7 +266,8 @@ def test_litellm_completion_with_tools__tools_logged(fake_backend):
                         "max_tokens": 10,
                     }
                 ),
-                usage=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
+                total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -335,7 +338,8 @@ def test_litellm_completion_create__opik_args__happyflow(fake_backend):
                         "span_key": "span_value",
                     }
                 ),
-                usage=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
+                total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
@@ -407,7 +411,8 @@ async def test_litellm_acompletion_create__opik_args__happyflow(fake_backend):
                         "span_key": "span_value",
                     }
                 ),
-                usage=ANY_DICT,
+                usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,
+                total_cost=ANY_BUT_NONE,  # Cost calculated by LiteLLM
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],

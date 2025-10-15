@@ -1,6 +1,7 @@
 from typing import Optional
 
 from . import litellm_completion_decorator
+from . import completion_chunks_aggregator
 
 import litellm
 
@@ -16,10 +17,8 @@ def track_litellm(
     executes normally but no span/trace is sent.
 
     Tracks calls to:
-    * `litellm.completion()`
-    * `litellm.acompletion()`
-
-    Note: Streaming is not currently supported
+    * `litellm.completion()` - both streaming and non-streaming
+    * `litellm.acompletion()` - both streaming and non-streaming
 
     Can be used within other Opik-tracked functions.
 
@@ -48,11 +47,13 @@ def _patch_litellm_completion(
         type="llm",
         name="completion",
         project_name=project_name,
+        generations_aggregator=completion_chunks_aggregator.aggregate,
     )
     acompletion_decorator = decorator_factory.track(
         type="llm",
         name="acompletion",
         project_name=project_name,
+        generations_aggregator=completion_chunks_aggregator.aggregate,      
     )
 
     # Patch the global functions
