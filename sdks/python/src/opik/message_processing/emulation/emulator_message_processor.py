@@ -66,6 +66,9 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
     def is_active(self) -> bool:
         return self._active
 
+    def set_active(self, active: bool) -> None:
+        self._active = active
+
     @property
     def trace_trees(self) -> List[models.TraceModel]:
         """
