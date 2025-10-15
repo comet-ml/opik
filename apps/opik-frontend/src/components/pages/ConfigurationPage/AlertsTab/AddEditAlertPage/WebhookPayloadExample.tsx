@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import isString from "lodash/isString";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import useWebhookExamplesQuery from "@/api/alerts/useWebhookExamplesQuery";
 import CodeHighlighter, {
@@ -22,11 +23,11 @@ const WebhookPayloadExample: React.FunctionComponent<
       return "";
     }
 
-    return JSON.stringify(
-      safelyParseJSON(examples.response_examples[eventType]),
-      null,
-      2,
-    );
+    const payload = isString(examples.response_examples[eventType])
+      ? safelyParseJSON(examples.response_examples[eventType] as string)
+      : examples.response_examples[eventType];
+
+    return JSON.stringify(payload, null, 2);
   }, [examples, eventType]);
 
   if (isPending) {

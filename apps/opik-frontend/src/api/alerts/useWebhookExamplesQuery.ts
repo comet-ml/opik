@@ -4,7 +4,7 @@ import { ALERTS_KEY, ALERTS_REST_ENDPOINT } from "@/api/api";
 import api from "@/api/api";
 
 export type WebhookExamplesResponse = {
-  response_examples: Record<ALERT_EVENT_TYPE, string>;
+  response_examples: Record<ALERT_EVENT_TYPE, string | object>;
 };
 
 const getWebhookExamples = async (): Promise<WebhookExamplesResponse> => {
