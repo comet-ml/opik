@@ -12,7 +12,7 @@ import opik.healthcheck as opik_healthcheck
     default=False,
     help="Print the list of installed packages to the console.",
 )
-def healthcheck(show_installed_packages: bool = True) -> None:
+def healthcheck(show_installed_packages: bool) -> None:
     """
     Performs a health check of the application, including validation of configuration,
     verification of library installations, and checking the availability of the backend workspace.

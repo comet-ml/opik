@@ -1,7 +1,6 @@
 """Configure command for Opik CLI."""
 
 import logging
-import sys
 
 import click
 
@@ -63,6 +62,6 @@ def configure(use_local: bool, yes: bool) -> None:
             )
         else:
             LOGGER.error("Unknown deployment type was selected. Exiting.")
-            sys.exit(1)
+            raise click.ClickException("Unknown deployment type was selected. Exiting.")
 
         configurator.configure()

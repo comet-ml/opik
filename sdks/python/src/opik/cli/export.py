@@ -36,6 +36,9 @@ def _export_traces(
     name_pattern: Optional[str] = None,
 ) -> int:
     """Download traces and their spans with pagination support for large projects."""
+    console.print(
+        f"[blue]DEBUG: _export_traces called with project_name: {project_name}, project_dir: {project_dir}[/blue]"
+    )
     exported_count = 0
     page_size = min(100, max_results)  # Process in smaller batches
     last_trace_time = None
@@ -64,11 +67,17 @@ def _export_traces(
                     pagination_filter = time_filter
 
             try:
+                console.print(
+                    f"[blue]DEBUG: Searching traces with project_name: {project_name}, filter: {pagination_filter}, max_results: {current_page_size}[/blue]"
+                )
                 traces = client.search_traces(
                     project_name=project_name,
                     filter_string=pagination_filter if pagination_filter else None,
                     max_results=current_page_size,
                     truncate=False,  # Don't truncate data for download
+                )
+                console.print(
+                    f"[blue]DEBUG: Found {len(traces) if traces else 0} traces[/blue]"
                 )
             except Exception as e:
                 console.print(f"[red]Error searching traces: {e}[/red]")
@@ -82,6 +91,9 @@ def _export_traces(
             progress.update(
                 task, description=f"Found {len(traces)} traces in current batch"
             )
+
+            # Store original traces for pagination before filtering
+            original_traces = traces
 
             # Filter traces by name pattern if specified
             if name_pattern:
@@ -98,7 +110,10 @@ def _export_traces(
 
             if not traces:
                 # No traces match the name pattern, but we might have more to process
-                last_trace_time = traces[0].start_time if traces else None
+                # Use original_traces for pagination, not the filtered empty list
+                last_trace_time = (
+                    original_traces[0].start_time if original_traces else None
+                )
                 total_processed += current_page_size
                 continue
 
@@ -192,22 +207,25 @@ def _export_datasets(
         exported_count = 0
         for dataset in datasets:
             try:
-                # Get dataset items
-                dataset_items = []
-                # Note: Dataset iteration is not directly supported, so we'll get basic info
-                dataset_items.append(
-                    {
-                        "name": dataset.name,
-                        "description": dataset.description,
-                        "note": "Dataset items not downloaded - dataset iteration not supported",
+                # Get dataset items using the get_items method
+                console.print(f"[blue]Getting items for dataset: {dataset.name}[/blue]")
+                dataset_items = dataset.get_items()
+
+                # Convert dataset items to the expected format for import
+                formatted_items = []
+                for item in dataset_items:
+                    formatted_item = {
+                        "input": item.get("input"),
+                        "expected_output": item.get("expected_output"),
+                        "metadata": item.get("metadata"),
                     }
-                )
+                    formatted_items.append(formatted_item)
 
                 # Create dataset data structure
                 dataset_data = {
                     "name": dataset.name,
                     "description": dataset.description,
-                    "items": dataset_items,
+                    "items": formatted_items,
                     "downloaded_at": datetime.now().isoformat(),
                 }
 
@@ -354,6 +372,11 @@ def _export_prompts(
     type=str,
     help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, or prompt names.",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug output to show detailed information about the export process.",
+)
 def export(
     workspace_or_project: str,
     path: str,
@@ -363,6 +386,7 @@ def export(
     include: tuple,
     exclude: tuple,
     name: Optional[str],
+    debug: bool,
 ) -> None:
     """
     Download data from a workspace or workspace/project to local files.
@@ -377,17 +401,37 @@ def export(
                           or workspace/project (e.g., "my-workspace/my-project") to export a specific project.
     """
     try:
+        if debug:
+            console.print("[blue]DEBUG: Starting export with parameters:[/blue]")
+            console.print(
+                f"[blue]  workspace_or_project: {workspace_or_project}[/blue]"
+            )
+            console.print(f"[blue]  path: {path}[/blue]")
+            console.print(f"[blue]  max_results: {max_results}[/blue]")
+            console.print(f"[blue]  include: {include}[/blue]")
+            console.print(f"[blue]  debug: {debug}[/blue]")
+
         # Parse workspace/project from the argument
         if "/" in workspace_or_project:
             workspace, project_name = workspace_or_project.split("/", 1)
             export_specific_project = True
+            if debug:
+                console.print(
+                    f"[blue]DEBUG: Parsed workspace: {workspace}, project: {project_name}[/blue]"
+                )
         else:
             # Only workspace specified - download all projects
             workspace = workspace_or_project
             project_name = None
             export_specific_project = False
+            if debug:
+                console.print(f"[blue]DEBUG: Workspace only: {workspace}[/blue]")
 
         # Initialize Opik client with workspace
+        if debug:
+            console.print(
+                f"[blue]DEBUG: Initializing Opik client with workspace: {workspace}[/blue]"
+            )
         client = opik.Opik(workspace=workspace)
 
         # Create output directory
@@ -440,9 +484,17 @@ def export(
             # Download traces
             if "traces" in data_types:
                 console.print("[blue]Downloading traces...[/blue]")
+                if debug:
+                    console.print(
+                        f"[blue]DEBUG: Calling _export_traces with project_name: {project_name}, project_dir: {project_dir}[/blue]"
+                    )
                 traces_exported = _export_traces(
                     client, project_name, project_dir, max_results, filter, name
                 )
+                if debug:
+                    console.print(
+                        f"[blue]DEBUG: _export_traces returned: {traces_exported}[/blue]"
+                    )
                 total_exported += traces_exported
 
             # Download datasets
