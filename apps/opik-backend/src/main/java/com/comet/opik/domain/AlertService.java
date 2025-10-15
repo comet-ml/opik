@@ -18,7 +18,6 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -46,6 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.resources.v1.events.WebhookSubscriber.deserializeEventPayload;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -91,6 +91,7 @@ class AlertServiceImpl implements AlertService {
     private final static EnumMap<AlertEventType, String> TEST_PAYLOAD = new EnumMap<>(Map.of(
             AlertEventType.TRACE_ERRORS,
             """
+                    [
                         {
                           "id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
                           "name": "handle_query",
@@ -121,6 +122,7 @@ class AlertServiceImpl implements AlertService {
                           },
                           "tags": ["production", "contact-query"]
                         }
+                    ]
                     """,
             AlertEventType.TRACE_FEEDBACK_SCORE,
             """
@@ -160,17 +162,7 @@ class AlertServiceImpl implements AlertService {
                       "created_at": "2025-08-27T10:00:00Z",
                       "created_by": "test-user",
                       "last_updated_at": "2025-08-27T10:00:00Z",
-                      "last_updated_by": "test-user",
-                      "versions": [
-                              {
-                                  "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
-                                  "commit": "986afb80",
-                                  "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
-                                  "type": "mustache",
-                                  "created_at": "2025-08-27T10:00:00Z",
-                                  "created_by": "test-user"
-                              }
-                      ]
+                      "last_updated_by": "test-user"
                     }
                     """,
             AlertEventType.PROMPT_COMMITTED,
@@ -201,16 +193,14 @@ class AlertServiceImpl implements AlertService {
                           "created_by": "test-user",
                           "last_updated_at": "2025-08-27T10:00:00Z",
                           "last_updated_by": "test-user",
-                          "versions": [
-                                  {
-                                      "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
-                                      "commit": "986afb80",
-                                      "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
-                                      "type": "mustache",
-                                      "created_at": "2025-08-27T10:00:00Z",
-                                      "created_by": "test-user"
-                                  }
-                          ]
+                          "latest_version": {
+                              "id": "0198c90a-46c6-78ef-90d9-62ed986afb80",
+                              "commit": "986afb80",
+                              "template": "You are an Opik expert and know how to explain Comet SDK concepts in simple terms. Keep the answers short and don't try to make up answers that you don't know.",
+                              "type": "mustache",
+                              "created_at": "2025-08-27T10:00:00Z",
+                              "created_by": "test-user"
+                          }
                         }
                     ]
                     """,
@@ -223,7 +213,7 @@ class AlertServiceImpl implements AlertService {
                           "project_id": "0198ec68-6e06-7253-a20b-d35c9252b9ba",
                           "project_name": "Demo Project",
                           "name": "PII",
-                          "result": "FAILED",
+                          "result": "failed",
                           "details": {
                             "detected_entities": ["EMAIL", "PHONE_NUMBER"],
                             "message": "PII detected in response: email address and phone number"
@@ -360,9 +350,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        var event = mapAlertToWebhookEvent(alert, workspaceId);
-        String requestBody = JsonUtils
-                .writeValueAsString(event.toBuilder().url(null).headers(null).secret(null).build());
+        var event = deserializeEventPayload(mapAlertToWebhookEvent(alert, workspaceId));
 
         return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
@@ -374,7 +362,7 @@ class AlertServiceImpl implements AlertService {
                     return WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.SUCCESS)
                             .statusCode(response.getStatus())
-                            .requestBody(requestBody)
+                            .requestBody(event.toBuilder().url(null).headers(null).secret(null).build())
                             .errorMessage(null)
                             .build();
                 })
@@ -389,7 +377,7 @@ class AlertServiceImpl implements AlertService {
                     return Mono.just(WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.FAILURE)
                             .statusCode(statusCode)
-                            .requestBody(requestBody)
+                            .requestBody(event.toBuilder().url(null).headers(null).secret(null).build())
                             .errorMessage(throwable.getMessage())
                             .build());
                 })
@@ -406,7 +394,7 @@ class AlertServiceImpl implements AlertService {
         var eventType = CollectionUtils.isEmpty(alert.triggers())
                 ? AlertEventType.TRACE_ERRORS
                 : alert.triggers().getFirst().eventType();
-        Set<String> eventIds = Set.of("0198ec7e-e844-7537-aaaa-fc5db24fb547");
+        List<String> eventIds = List.of("0198ec7e-e844-7537-aaaa-fc5db24fb547");
         var alertId = alert.id() == null ? UUID.fromString("0198ec7e-e844-7537-aaaa-fc5dd35fb547") : alert.id();
 
         Map<String, Object> payload = Map.of(
@@ -414,8 +402,8 @@ class AlertServiceImpl implements AlertService {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
-                "userNames", Set.of("test-user"),
-                "metadata", Set.of(TEST_PAYLOAD.get(eventType)),
+                "userNames", List.of("test-user"),
+                "metadata", List.of(TEST_PAYLOAD.get(eventType)),
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
@@ -545,7 +533,7 @@ class AlertServiceImpl implements AlertService {
     }
 
     private static WebhookExamples prepareWebhookPayloadExamples() {
-        Map<AlertEventType, String> examples = new HashMap<>();
+        Map<AlertEventType, WebhookEvent<?>> examples = new HashMap<>();
 
         Arrays.stream(AlertEventType.values())
                 .forEach(eventType -> {
@@ -556,10 +544,8 @@ class AlertServiceImpl implements AlertService {
                                             .build()))
                             .build();
 
-                    var webhookEvent = mapAlertToWebhookEvent(alert, "demo-workspace-id");
-                    String requestBody = JsonUtils
-                            .writeValueAsString(webhookEvent.toBuilder().url(null).headers(null).secret(null).build());
-                    examples.put(eventType, requestBody);
+                    var webhookEvent = deserializeEventPayload(mapAlertToWebhookEvent(alert, "demo-workspace-id"));
+                    examples.put(eventType, webhookEvent.toBuilder().url(null).headers(null).secret(null).build());
                 });
 
         return WebhookExamples.builder()

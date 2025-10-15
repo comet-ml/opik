@@ -908,8 +908,7 @@ class AlertResourceTest {
                     .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON)));
         }
 
-        private void assertWebhookTestResultRequest(Alert alert, String testResultRequestBody) {
-            WebhookEvent<?> actualEvent = JsonUtils.readValue(testResultRequestBody, WebhookEvent.class);
+        private void assertWebhookTestResultRequest(Alert alert, WebhookEvent<?> actualEvent) {
 
             // Verify the webhook event is not null
             assertThat(actualEvent).isNotNull();
@@ -1569,7 +1568,6 @@ class AlertResourceTest {
             // Verify that each example is a non-empty string
             webhookExamples.responseExamples().values().forEach(example -> {
                 assertThat(example).isNotNull();
-                assertThat(example).isNotEmpty();
             });
         }
     }

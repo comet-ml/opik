@@ -152,7 +152,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         });
     }
 
-    private WebhookEvent<Map<String, Object>> deserializeEventPayload(
+    public static WebhookEvent<Map<String, Object>> deserializeEventPayload(
             @NonNull WebhookEvent<Map<String, Object>> event) {
         Map<String, Object> payload = event.getPayload();
         List<String> metadatas = (List<String>) payload.getOrDefault("metadata", List.of());
@@ -169,7 +169,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                 .build();
     }
 
-    private TypeReference<?> payloadTypePerEventType(AlertEventType eventType) {
+    private static TypeReference<?> payloadTypePerEventType(AlertEventType eventType) {
         return switch (eventType) {
             case PROMPT_DELETED -> LIST_PROMPT_TYPE_REFERENCE;
             case PROMPT_CREATED -> PROMPT_TYPE_REFERENCE;
