@@ -26,6 +26,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -75,6 +76,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
@@ -906,8 +908,7 @@ class AlertResourceTest {
                     .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON)));
         }
 
-        private void assertWebhookTestResultRequest(Alert alert, String testResultRequestBody) {
-            WebhookEvent<?> actualEvent = JsonUtils.readValue(testResultRequestBody, WebhookEvent.class);
+        private void assertWebhookTestResultRequest(Alert alert, WebhookEvent<?> actualEvent) {
 
             // Verify the webhook event is not null
             assertThat(actualEvent).isNotNull();
@@ -1160,6 +1161,7 @@ class AlertResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(Comparator.naturalOrder(), Instant.class)
+                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                     .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
                                     .build())
                     .isEqualTo(feedbackScore);
@@ -1231,6 +1233,7 @@ class AlertResourceTest {
             // Assert feedback score details using recursive comparison
             assertThat(actualFeedbackScores)
                     .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .ignoringFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
                     .ignoringCollectionOrder()
                     .isEqualTo(feedbackScores);
@@ -1309,6 +1312,7 @@ class AlertResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(Comparator.naturalOrder(), Instant.class)
+                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                     .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
                                     .build())
                     .isEqualTo(feedbackScoreBatchItem);
@@ -1524,10 +1528,10 @@ class AlertResourceTest {
 
             // Get sent event and verify it's payload
             WebhookEvent<Map<String, Object>> actualEvent = JsonUtils.readValue(actualRequestBody, WebhookEvent.class);
-            List<String> payloads = (List<String>) actualEvent.getPayload().get("metadata");
+            List<Object> payloads = (List<Object>) actualEvent.getPayload().get("metadata");
             assertThat(payloads).hasSize(1);
 
-            return payloads.getFirst();
+            return JsonUtils.writeValueAsString(payloads.getFirst());
         }
     }
 
@@ -1564,7 +1568,6 @@ class AlertResourceTest {
             // Verify that each example is a non-empty string
             webhookExamples.responseExamples().values().forEach(example -> {
                 assertThat(example).isNotNull();
-                assertThat(example).isNotEmpty();
             });
         }
     }

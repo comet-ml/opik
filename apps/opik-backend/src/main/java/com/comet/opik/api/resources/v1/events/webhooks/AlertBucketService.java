@@ -15,8 +15,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -78,18 +78,18 @@ public class AlertBucketService {
                 bucket.get(PAYLOADS_KEY).defaultIfEmpty("[]"),
                 bucket.get(USER_NAMES_KEY).defaultIfEmpty("[]"))
                 .map(tuple -> {
-                    Set<String> eventIds = JsonUtils.readCollectionValue(tuple.getT1(), Set.class, String.class);
-                    Set<String> payloads = JsonUtils.readCollectionValue(tuple.getT2(), Set.class, String.class);
-                    Set<String> userNames = JsonUtils.readCollectionValue(tuple.getT3(), Set.class, String.class);
+                    List<String> eventIds = JsonUtils.readCollectionValue(tuple.getT1(), List.class, String.class);
+                    List<String> payloads = JsonUtils.readCollectionValue(tuple.getT2(), List.class, String.class);
+                    List<String> userNames = JsonUtils.readCollectionValue(tuple.getT3(), List.class, String.class);
                     return new Object[]{eventIds, payloads, userNames};
                 })
                 .flatMap(sets -> {
                     @SuppressWarnings("unchecked")
-                    Set<String> eventIds = (Set<String>) sets[0];
+                    List<String> eventIds = (List<String>) sets[0];
                     @SuppressWarnings("unchecked")
-                    Set<String> payloads = (Set<String>) sets[1];
+                    List<String> payloads = (List<String>) sets[1];
                     @SuppressWarnings("unchecked")
-                    Set<String> userNames = (Set<String>) sets[2];
+                    List<String> userNames = (List<String>) sets[2];
 
                     eventIds.add(eventId);
                     payloads.add(payload);
@@ -231,27 +231,6 @@ public class AlertBucketService {
     }
 
     /**
-     * Retrieves the bucket data (event IDs) for a given bucket key.
-     *
-     * @param bucketKey the bucket key
-     * @return Mono containing the set of event IDs
-     */
-    public Mono<Set<String>> getBucketEventIds(@NonNull String bucketKey) {
-        RMapReactive<String, String> bucket = redissonClient.getMap(bucketKey);
-
-        return bucket.get(EVENT_IDS_KEY)
-                .defaultIfEmpty("[]")
-                .<Set<String>>map(json -> {
-                    Set<String> eventIds = JsonUtils.readCollectionValue(json, Set.class, String.class);
-                    return new HashSet<>(eventIds);
-                })
-                .doOnSuccess(eventIds -> log.debug("Retrieved {} events from bucket '{}'",
-                        eventIds.size(), bucketKey))
-                .doOnError(error -> log.error("Failed to retrieve event IDs from bucket '{}': {}",
-                        bucketKey, error.getMessage(), error));
-    }
-
-    /**
      * Retrieves complete bucket data including event IDs, payloads, user names, firstSeen timestamp, and window size.
      *
      * @param bucketKey the bucket key
@@ -275,16 +254,16 @@ public class AlertBucketService {
                     String windowSizeStr = tuple.getT5();
                     String workspaceId = tuple.getT6();
 
-                    Set<String> eventIds = JsonUtils.readCollectionValue(eventIdsJson, Set.class, String.class);
-                    Set<String> payloads = JsonUtils.readCollectionValue(payloadsJson, Set.class, String.class);
-                    Set<String> userNames = JsonUtils.readCollectionValue(userNamesJson, Set.class, String.class);
+                    List<String> eventIds = JsonUtils.readCollectionValue(eventIdsJson, List.class, String.class);
+                    List<String> payloads = JsonUtils.readCollectionValue(payloadsJson, List.class, String.class);
+                    List<String> userNames = JsonUtils.readCollectionValue(userNamesJson, List.class, String.class);
                     long firstSeen = Long.parseLong(firstSeenStr);
                     long windowSize = Long.parseLong(windowSizeStr);
 
                     return BucketData.builder()
-                            .eventIds(new HashSet<>(eventIds))
-                            .payloads(new HashSet<>(payloads))
-                            .userNames(new HashSet<>(userNames))
+                            .eventIds(new ArrayList<>(eventIds))
+                            .payloads(new ArrayList<>(payloads))
+                            .userNames(new ArrayList<>(userNames))
                             .firstSeen(firstSeen)
                             .windowSize(windowSize)
                             .workspaceId(workspaceId)
@@ -303,8 +282,8 @@ public class AlertBucketService {
      * Data class to hold complete bucket information.
      */
     @Builder
-    public record BucketData(@NonNull Set<String> eventIds, @NonNull Set<String> payloads,
-            @NonNull Set<String> userNames, long firstSeen, long windowSize,
+    public record BucketData(@NonNull List<String> eventIds, @NonNull List<String> payloads,
+            @NonNull List<String> userNames, long firstSeen, long windowSize,
             @NonNull String workspaceId) {
     }
 

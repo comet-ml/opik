@@ -18,9 +18,9 @@ import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -125,9 +125,9 @@ public class AlertJob extends Job {
             @NonNull UUID alertId,
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds,
-            @NonNull Set<String> payloads,
-            @NonNull Set<String> userNames) {
+            @NonNull List<String> eventIds,
+            @NonNull List<String> payloads,
+            @NonNull List<String> userNames) {
 
         log.info(
                 "Processing alert bucket: alertId='{}', workspaceId='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
@@ -156,9 +156,9 @@ public class AlertJob extends Job {
             @NonNull Alert alert,
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds,
-            @NonNull Set<String> payloads,
-            @NonNull Set<String> userNames) {
+            @NonNull List<String> eventIds,
+            @NonNull List<String> payloads,
+            @NonNull List<String> userNames) {
 
         if (Boolean.FALSE.equals(alert.enabled())) {
             log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
