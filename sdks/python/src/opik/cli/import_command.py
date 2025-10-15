@@ -365,6 +365,11 @@ def _import_prompts(
     type=str,
     help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, or prompt names.",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug output to show detailed information about the import process.",
+)
 def import_data(
     workspace_folder: str,
     workspace_name: str,
@@ -373,6 +378,7 @@ def import_data(
     include: tuple,
     exclude: tuple,
     name: Optional[str],
+    debug: bool,
 ) -> None:
     """
     Upload data from local files to a workspace or workspace/project.
@@ -388,17 +394,34 @@ def import_data(
                    or workspace/project (e.g., "my-workspace/my-project") to import to a specific project.
     """
     try:
+        if debug:
+            console.print("[blue]DEBUG: Starting import with parameters:[/blue]")
+            console.print(f"[blue]  workspace_folder: {workspace_folder}[/blue]")
+            console.print(f"[blue]  workspace_name: {workspace_name}[/blue]")
+            console.print(f"[blue]  include: {include}[/blue]")
+            console.print(f"[blue]  debug: {debug}[/blue]")
+
         # Parse workspace/project from the argument
         if "/" in workspace_name:
             workspace, project_name = workspace_name.split("/", 1)
             import_to_specific_project = True
+            if debug:
+                console.print(
+                    f"[blue]DEBUG: Parsed workspace: {workspace}, project: {project_name}[/blue]"
+                )
         else:
             # Only workspace specified - upload to all projects
             workspace = workspace_name
             project_name = None
             import_to_specific_project = False
+            if debug:
+                console.print(f"[blue]DEBUG: Workspace only: {workspace}[/blue]")
 
         # Initialize Opik client with workspace
+        if debug:
+            console.print(
+                f"[blue]DEBUG: Initializing Opik client with workspace: {workspace}[/blue]"
+            )
         client = opik.Opik(workspace=workspace)
 
         # Use the specified workspace folder directly
