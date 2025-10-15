@@ -927,6 +927,7 @@ class TracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
@@ -939,6 +940,8 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -955,7 +958,11 @@ class TracesClient:
         client.traces.get_trace_thread(thread_id='thread_id', )
         """
         _response = self._raw_client.get_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1026,6 +1033,7 @@ class TracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1038,6 +1046,8 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1053,7 +1063,11 @@ class TracesClient:
         client.traces.open_trace_thread(thread_id='thread_id', )
         """
         _response = self._raw_client.open_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2334,6 +2348,7 @@ class AsyncTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThread:
         """
@@ -2346,6 +2361,8 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2365,7 +2382,11 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2439,6 +2460,7 @@ class AsyncTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2451,6 +2473,8 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2469,7 +2493,11 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.open_trace_thread(
-            thread_id=thread_id, project_name=project_name, project_id=project_id, request_options=request_options
+            thread_id=thread_id,
+            project_name=project_name,
+            project_id=project_id,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 

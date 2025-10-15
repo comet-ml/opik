@@ -1187,6 +1187,7 @@ class RawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TraceThread]:
         """
@@ -1199,6 +1200,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1215,6 +1218,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -1326,6 +1330,7 @@ class RawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1338,6 +1343,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1353,6 +1360,7 @@ class RawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -3000,6 +3008,7 @@ class AsyncRawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TraceThread]:
         """
@@ -3012,6 +3021,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3028,6 +3039,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
@@ -3139,6 +3151,7 @@ class AsyncRawTracesClient:
         thread_id: str,
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
+        truncate: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3151,6 +3164,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        truncate : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3166,6 +3181,7 @@ class AsyncRawTracesClient:
                 "project_name": project_name,
                 "project_id": project_id,
                 "thread_id": thread_id,
+                "truncate": truncate,
             },
             headers={
                 "content-type": "application/json",
