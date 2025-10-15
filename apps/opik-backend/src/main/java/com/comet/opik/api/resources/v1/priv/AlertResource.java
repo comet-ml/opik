@@ -137,11 +137,7 @@ public class AlertResource {
 
         return Response.ok(alertPage.toBuilder()
                 .content(alertPage.content().stream()
-                        .map(alert -> alert.toBuilder().webhook(alert.webhook().toBuilder()
-                                .secretToken(alert.webhook().secretToken() != null
-                                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
-                                        : null)
-                                .build()).build())
+                        .map(this::maskSecretToken)
                         .toList())
                 .build()).build();
     }
@@ -163,11 +159,7 @@ public class AlertResource {
 
         log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
 
-        return Response.ok().entity(alert.toBuilder().webhook(alert.webhook().toBuilder()
-                .secretToken(alert.webhook().secretToken() != null
-                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
-                        : null)
-                .build()).build()).build();
+        return Response.ok().entity(maskSecretToken(alert)).build();
     }
 
     @POST
@@ -228,5 +220,13 @@ public class AlertResource {
         log.info("Got webhook examples on workspace_id '{}'", workspaceId);
 
         return Response.ok().entity(examples).build();
+    }
+
+    private Alert maskSecretToken(Alert alert) {
+        return alert.toBuilder().webhook(alert.webhook().toBuilder()
+                .secretToken(alert.webhook().secretToken() != null
+                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
+                        : null)
+                .build()).build();
     }
 }
