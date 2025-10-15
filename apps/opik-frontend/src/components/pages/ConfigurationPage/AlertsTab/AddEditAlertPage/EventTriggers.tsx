@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { UseFormReturn, useFieldArray, Path } from "react-hook-form";
-import { Plus, X, CircleHelp, ExternalLink, WebhookIcon } from "lucide-react";
+import { Path, useFieldArray, UseFormReturn } from "react-hook-form";
+import { CircleHelp, ExternalLink, Plus, WebhookIcon, X } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
 import { FormErrorSkeleton, FormField, FormItem } from "@/components/ui/form";
@@ -18,6 +18,8 @@ import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSel
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
 import { ALERT_EVENT_TYPE } from "@/types/alerts";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
@@ -29,6 +31,9 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   projectsIds,
 }) => {
   const triggersError = form.formState.errors.triggers;
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -59,7 +64,14 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
     remove(index);
   };
 
-  const allEventTypes = Object.values(ALERT_EVENT_TYPE) as ALERT_EVENT_TYPE[];
+  const allEventTypes = useMemo(() => {
+    const eventTypes = Object.values(ALERT_EVENT_TYPE) as ALERT_EVENT_TYPE[];
+    return eventTypes.filter((t) =>
+      t === ALERT_EVENT_TYPE.trace_guardrails_triggered
+        ? isGuardrailsEnabled
+        : true,
+    );
+  }, [isGuardrailsEnabled]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -194,12 +206,11 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                       <div className="flex items-center">
                         <Button
                           type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-10 shrink-0"
+                          variant="minimal"
+                          size="icon-xs"
                           onClick={() => removeTrigger(index)}
                         >
-                          <X className="size-4" />
+                          <X />
                         </Button>
                       </div>
                     </div>
