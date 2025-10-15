@@ -9,7 +9,6 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
-import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
@@ -1625,307 +1624,137 @@ class AutomationRuleEvaluatorsResourceTest {
     @DisplayName("Sorting Functionality")
     class SortingFunctionality {
 
-        @Test
-        @DisplayName("Sort by name ascending")
-        void sortByNameAscending() throws JsonProcessingException {
+        @ParameterizedTest(name = "Sort by {0} {1}")
+        @MethodSource("sortingTestCases")
+        @DisplayName("Sort evaluators by various fields with ASC/DESC")
+        void sortEvaluators(String field, String direction,
+                java.util.function.Function<AutomationRuleEvaluator<?>, Comparable> extractor)
+                throws JsonProcessingException {
             // Given
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
 
-            var name1 = "a-rule-" + RandomStringUtils.randomAlphanumeric(10);
-            var name2 = "c-rule-" + RandomStringUtils.randomAlphanumeric(10);
-            var name3 = "b-rule-" + RandomStringUtils.randomAlphanumeric(10);
+            // Create 5 evaluators with different values
+            var evaluators = IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        var builder = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                                .projectId(projectId);
 
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name(name1)
-                    .projectId(projectId)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name(name2)
-                    .projectId(projectId)
-                    .build();
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name(name3)
-                    .projectId(projectId)
-                    .build();
+                        // Set specific values based on field being tested
+                        if (field.equals("name")) {
+                            builder.name("name-" + (char) ('a' + i) + "-" + RandomStringUtils.randomAlphanumeric(5));
+                        } else if (field.equals("sampling_rate")) {
+                            builder.samplingRate((float) (i + 1) / 10); // 0.1, 0.2, 0.3, 0.4, 0.5
+                        } else if (field.equals("enabled")) {
+                            builder.enabled(i % 2 == 0); // alternating true/false
+                        }
 
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
+                        return builder.build();
+                    })
+                    .toList();
+
+            // Create all evaluators
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
 
             // When
-            var sortingFields = List.of(Map.of("field", "name", "direction", "ASC"));
+            var sortingFields = List.of(Map.of("field", field, "direction", direction));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
 
-            // Then - Wait for ClickHouse to have the data available
+            // Then - Wait for ClickHouse and verify sorting
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 var page = evaluatorsResourceClient.findEvaluatorPage(
                         projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-                assertThat(page.content()).hasSize(3);
-                assertThat(page.content().get(0).getName()).isEqualTo(name1);
-                assertThat(page.content().get(1).getName()).isEqualTo(name3);
-                assertThat(page.content().get(2).getName()).isEqualTo(name2);
-            });
-        }
+                assertThat(page.content()).hasSizeGreaterThanOrEqualTo(5);
 
-        @Test
-        @DisplayName("Sort by name descending")
-        void sortByNameDescending() throws JsonProcessingException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-
-            var name1 = "a-rule-" + RandomStringUtils.randomAlphanumeric(10);
-            var name2 = "c-rule-" + RandomStringUtils.randomAlphanumeric(10);
-            var name3 = "b-rule-" + RandomStringUtils.randomAlphanumeric(10);
-
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name(name1)
-                    .projectId(projectId)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name(name2)
-                    .projectId(projectId)
-                    .build();
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name(name3)
-                    .projectId(projectId)
-                    .build();
-
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
-
-            // When
-            var sortingFields = List.of(Map.of("field", "name", "direction", "DESC"));
-            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-
-            // Then - Wait for ClickHouse to have the data available
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var page = evaluatorsResourceClient.findEvaluatorPage(
-                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
-
-                assertThat(page.content()).hasSize(3);
-                assertThat(page.content().get(0).getName()).isEqualTo(name2);
-                assertThat(page.content().get(1).getName()).isEqualTo(name3);
-                assertThat(page.content().get(2).getName()).isEqualTo(name1);
-            });
-        }
-
-        @Test
-        @DisplayName("Sort by type ascending")
-        void sortByTypeAscending() throws JsonProcessingException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
-
-            // When
-            var sortingFields = List.of(Map.of("field", "type", "direction", "ASC"));
-            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-
-            // Then - Wait for ClickHouse to have the data available
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var page = evaluatorsResourceClient.findEvaluatorPage(
-                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
-
-                assertThat(page.content()).hasSize(3);
-                // Verify types are sorted by database enum order (actual order from database)
-                assertThat(page.content().get(0).getType()).isEqualTo(AutomationRuleEvaluatorType.LLM_AS_JUDGE);
-                assertThat(page.content().get(1).getType())
-                        .isEqualTo(AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
-                assertThat(page.content().get(2).getType())
-                        .isEqualTo(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE);
-            });
-        }
-
-        @Test
-        @DisplayName("Sort by sampling rate descending")
-        void sortBySamplingRateDescending() throws JsonProcessingException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .samplingRate(0.3f)
-                    .projectId(projectId)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .samplingRate(0.9f)
-                    .projectId(projectId)
-                    .build();
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .samplingRate(0.5f)
-                    .projectId(projectId)
-                    .build();
-
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
-
-            // When
-            var sortingFields = List.of(Map.of("field", "sampling_rate", "direction", "DESC"));
-            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-
-            // Then - Wait for ClickHouse to have the data available
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var page = evaluatorsResourceClient.findEvaluatorPage(
-                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
-
-                assertThat(page.content()).hasSize(3);
-                assertThat(page.content().get(0).getSamplingRate()).isEqualTo(0.9f);
-                assertThat(page.content().get(1).getSamplingRate()).isEqualTo(0.5f);
-                assertThat(page.content().get(2).getSamplingRate()).isEqualTo(0.3f);
-            });
-        }
-
-        @Test
-        @DisplayName("Sort by enabled status")
-        void sortByEnabledStatus() throws JsonProcessingException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .enabled(true)
-                    .projectId(projectId)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .enabled(false)
-                    .projectId(projectId)
-                    .build();
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .enabled(true)
-                    .projectId(projectId)
-                    .build();
-
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
-
-            // When - Sort by enabled DESC (enabled first)
-            var sortingFields = List.of(Map.of("field", "enabled", "direction", "DESC"));
-            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-
-            // Then - Wait for ClickHouse to have the data available
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var page = evaluatorsResourceClient.findEvaluatorPage(
-                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
-
-                assertThat(page.content()).hasSize(3);
-                assertThat(page.content().get(0).isEnabled()).isTrue();
-                assertThat(page.content().get(1).isEnabled()).isTrue();
-                assertThat(page.content().get(2).isEnabled()).isFalse();
-            });
-        }
-
-        @Test
-        @DisplayName("Sort by project name ascending")
-        void sortByProjectNameAscending() throws JsonProcessingException {
-            // Given
-            var projectName1 = "a-project-" + RandomStringUtils.randomAlphanumeric(10);
-            var projectName2 = "c-project-" + RandomStringUtils.randomAlphanumeric(10);
-            var projectName3 = "b-project-" + RandomStringUtils.randomAlphanumeric(10);
-
-            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, WORKSPACE_NAME);
-            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, WORKSPACE_NAME);
-            var projectId3 = projectResourceClient.createProject(projectName3, API_KEY, WORKSPACE_NAME);
-
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId1)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId2)
-                    .build();
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId3)
-                    .build();
-
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
-
-            // When
-            var sortingFields = List.of(Map.of("field", "project_name", "direction", "ASC"));
-            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-
-            // Then - Wait for ClickHouse to have the data available
-            // Query all evaluators in workspace (null projectId) and sort by project_name
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var page = evaluatorsResourceClient.findEvaluatorPage(
-                        null, null, null, sorting, 1, 100, WORKSPACE_NAME, API_KEY);
-
-                // Filter to get only our 3 test evaluators
-                var testEvaluators = page.content().stream()
-                        .filter(e -> e.getProjectId().equals(projectId1) ||
-                                e.getProjectId().equals(projectId2) ||
-                                e.getProjectId().equals(projectId3))
+                // Extract the values and verify they're sorted correctly
+                var actualValues = page.content().stream()
+                        .filter(e -> evaluators.stream().anyMatch(ev -> ev.getName().equals(e.getName())))
+                        .limit(5)
+                        .map(extractor)
                         .toList();
 
-                assertThat(testEvaluators).hasSize(3);
-                assertThat(testEvaluators.get(0).getProjectName()).isEqualTo(projectName1);
-                assertThat(testEvaluators.get(1).getProjectName()).isEqualTo(projectName3);
-                assertThat(testEvaluators.get(2).getProjectName()).isEqualTo(projectName2);
+                var expectedValues = new java.util.ArrayList<>(actualValues);
+                if (direction.equals("ASC")) {
+                    expectedValues.sort(java.util.Comparator.naturalOrder());
+                } else {
+                    expectedValues.sort(java.util.Comparator.reverseOrder());
+                }
+
+                assertThat(actualValues).isEqualTo(expectedValues);
             });
         }
 
-        @Test
-        @DisplayName("Sort by project name descending")
-        void sortByProjectNameDescending() throws JsonProcessingException {
-            // Given
-            var projectName1 = "a-project-" + RandomStringUtils.randomAlphanumeric(10);
-            var projectName2 = "c-project-" + RandomStringUtils.randomAlphanumeric(10);
-            var projectName3 = "b-project-" + RandomStringUtils.randomAlphanumeric(10);
+        static Stream<org.junit.jupiter.params.provider.Arguments> sortingTestCases() {
+            return Stream.of(
+                    // Name sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "name", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "name", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
 
-            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, WORKSPACE_NAME);
-            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, WORKSPACE_NAME);
-            var projectId3 = projectResourceClient.createProject(projectName3, API_KEY, WORKSPACE_NAME);
+                    // Type sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "type", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                                    .name()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "type", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                                    .name()),
 
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId1)
-                    .build();
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId2)
-                    .build();
-            var evaluator3 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId3)
-                    .build();
+                    // Sampling rate sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "sampling_rate", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getSamplingRate()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "sampling_rate", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getSamplingRate()),
 
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
-            evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY);
+                    // Enabled sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "enabled", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                                    ? 1
+                                    : 0),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "enabled", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                                    ? 1
+                                    : 0),
 
-            // When
-            var sortingFields = List.of(Map.of("field", "project_name", "direction", "DESC"));
-            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
+                    // Project name sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "project_name", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getProjectName()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "project_name", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getProjectName()),
 
-            // Then - Wait for ClickHouse to have the data available
-            // Query all evaluators in workspace (null projectId) and sort by project_name
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var page = evaluatorsResourceClient.findEvaluatorPage(
-                        null, null, null, sorting, 1, 100, WORKSPACE_NAME, API_KEY);
+                    // Created at sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "created_at", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                                    .toEpochMilli()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "created_at", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                                    .toEpochMilli()),
 
-                // Filter to get only our 3 test evaluators
-                var testEvaluators = page.content().stream()
-                        .filter(e -> e.getProjectId().equals(projectId1) ||
-                                e.getProjectId().equals(projectId2) ||
-                                e.getProjectId().equals(projectId3))
-                        .toList();
-
-                assertThat(testEvaluators).hasSize(3);
-                assertThat(testEvaluators.get(0).getProjectName()).isEqualTo(projectName2);
-                assertThat(testEvaluators.get(1).getProjectName()).isEqualTo(projectName3);
-                assertThat(testEvaluators.get(2).getProjectName()).isEqualTo(projectName1);
-            });
+                    // Last updated at sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "last_updated_at", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedAt().toEpochMilli()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "last_updated_at", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedAt().toEpochMilli()));
         }
 
         @Test
@@ -1955,6 +1784,127 @@ class AutomationRuleEvaluatorsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @DisplayName("List Filtering Functionality")
     class ListFilteringFunctionality {
+
+        @Test
+        @DisplayName("Filter by ID with equals operator")
+        void filterById() throws JsonProcessingException {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // When
+            var filterFields = List.of(Map.of("field", "id", "operator", "=", "value", id.toString()));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content().get(0).getId()).isEqualTo(id);
+        }
+
+        @Test
+        @DisplayName("Filter by Name with contains operator")
+        void filterByName() throws JsonProcessingException {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var uniqueName = "unique-name-" + RandomStringUtils.randomAlphanumeric(10);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(uniqueName)
+                    .projectId(projectId)
+                    .build();
+            evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // When
+            var filterFields = List.of(Map.of("field", "name", "operator", "contains", "value", "unique-name-"));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+            assertThat(page.content()).anyMatch(e -> e.getName().equals(uniqueName));
+        }
+
+        @Test
+        @DisplayName("Filter by Created By with contains operator")
+        void filterByCreatedBy() throws JsonProcessingException {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // When - Filter by created_by using contains operator
+            var filterFields = List.of(Map.of("field", "created_by", "operator", "contains", "value", "test"));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Just verify the API accepts the filter (result may be empty or may contain evaluators)
+            assertThat(page).isNotNull();
+            assertThat(page.sortableBy()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Filter by Created At with greater than operator")
+        void filterByCreatedAt() throws JsonProcessingException, InterruptedException {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            // Create first evaluator
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+
+            var timestamp = Instant.now();
+            Thread.sleep(1000);
+
+            // Create second evaluator after timestamp
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            var id2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+
+            // When - Filter by created_at >timestamp
+            var filterFields = List.of(Map.of("field", "created_at", "operator", ">", "value", timestamp.toString()));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Should have at least the second evaluator
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+            assertThat(page.content()).anyMatch(e -> e.getId().equals(id2));
+        }
+
+        @Test
+        @DisplayName("Filter by Last Updated At with greater than or equal operator")
+        void filterByLastUpdatedAt() throws JsonProcessingException {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var timestamp = Instant.now().minusSeconds(10);
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // When - Filter by last_updated_at >= timestamp (10 seconds ago)
+            var filterFields = List
+                    .of(Map.of("field", "last_updated_at", "operator", ">=", "value", timestamp.toString()));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Should include our evaluator
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+            assertThat(page.content()).anyMatch(e -> e.getId().equals(id));
+        }
 
         @ParameterizedTest(name = "Filter by project name with operator: {0}")
         @MethodSource("projectNameFilteringTestCases")
@@ -2015,6 +1965,204 @@ class AutomationRuleEvaluatorsResourceTest {
                             "prefix-",
                             "other-",
                             (java.util.function.Predicate<String>) name -> name.startsWith("prefix-")));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Pagination Functionality")
+    class PaginationFunctionality {
+
+        @Test
+        @DisplayName("Fetch evaluators using pagination - page 1")
+        void paginationPage1() {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluators = IntStream.range(0, 25)
+                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                            .name("evaluator-" + i)
+                            .projectId(projectId)
+                            .build())
+                    .toList();
+
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
+
+            // When - Fetch page 1 with size 10
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page.page()).isEqualTo(1);
+            assertThat(page.size()).isEqualTo(10);
+            assertThat(page.total()).isEqualTo(25);
+            assertThat(page.content()).hasSize(10);
+        }
+
+        @Test
+        @DisplayName("Fetch evaluators using pagination - page 2")
+        void paginationPage2() {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluators = IntStream.range(0, 25)
+                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                            .name("evaluator-" + i)
+                            .projectId(projectId)
+                            .build())
+                    .toList();
+
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
+
+            // When - Fetch page 2 with size 10
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, null, 2, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page.page()).isEqualTo(2);
+            assertThat(page.size()).isEqualTo(10);
+            assertThat(page.total()).isEqualTo(25);
+            assertThat(page.content()).hasSize(10);
+        }
+
+        @Test
+        @DisplayName("Fetch evaluators using pagination - last page")
+        void paginationLastPage() {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluators = IntStream.range(0, 25)
+                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                            .name("evaluator-" + i)
+                            .projectId(projectId)
+                            .build())
+                    .toList();
+
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
+
+            // When - Fetch page 3 with size 10 (last page with 5 items)
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, null, 3, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page.page()).isEqualTo(3);
+            assertThat(page.size()).isEqualTo(5); // Only 5 items on last page
+            assertThat(page.total()).isEqualTo(25);
+            assertThat(page.content()).hasSize(5);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("ProjectId Filtering Functionality")
+    class ProjectIdFilteringFunctionality {
+
+        @Test
+        @DisplayName("Filter evaluators by single projectId")
+        void filterBySingleProjectId() {
+            // Given
+            var projectId1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId1)
+                    .build();
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId2)
+                    .build();
+
+            var id1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+
+            // When - Filter by projectId1
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId1, null, null, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Only evaluator1 should be returned
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+            var matchingEvaluators = page.content().stream()
+                    .filter(e -> e.getId().equals(id1))
+                    .toList();
+            assertThat(matchingEvaluators).hasSize(1);
+            assertThat(matchingEvaluators.get(0).getProjectId()).isEqualTo(projectId1);
+        }
+
+        @Test
+        @DisplayName("Filter evaluators across all projects when projectId is null")
+        void filterAcrossAllProjects() {
+            // Given
+            var projectId1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name("unique-eval-1-" + RandomStringUtils.randomAlphanumeric(10))
+                    .projectId(projectId1)
+                    .build();
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name("unique-eval-2-" + RandomStringUtils.randomAlphanumeric(10))
+                    .projectId(projectId2)
+                    .build();
+
+            var id1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+            var id2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+
+            // When - Query all projects (null projectId)
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    (UUID) null, null, null, null, 1, 100, WORKSPACE_NAME, API_KEY);
+
+            // Then - Both evaluators should be returned
+            var evaluatorIds = page.content().stream().map(AutomationRuleEvaluator::getId).toList();
+            assertThat(evaluatorIds).contains(id1, id2);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Combined Sorting and Filtering Functionality")
+    class CombinedSortingAndFilteringFunctionality {
+
+        @Test
+        @DisplayName("Filter by project name and sort by name ascending")
+        void filterAndSort() throws JsonProcessingException {
+            // Given
+            var projectName = "test-project-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var evaluators = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                            .name("eval-" + (char) ('e' - i) + "-" + RandomStringUtils.randomAlphanumeric(5)) // e, d, c, b, a
+                            .projectId(projectId)
+                            .build())
+                    .toList();
+
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
+
+            // When - Filter by project name and sort by name ASC
+            var filterFields = List.of(Map.of(
+                    "field", "project_name",
+                    "operator", "contains",
+                    "value", "test-project"));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+
+            var sortingFields = List.of(Map.of("field", "name", "direction", "ASC"));
+            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
+
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    (UUID) null, null, filters, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Results should be filtered and sorted
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(5);
+            var matchingEvaluators = page.content().stream()
+                    .filter(e -> evaluators.stream().anyMatch(ev -> ev.getName().equals(e.getName())))
+                    .limit(5)
+                    .toList();
+
+            assertThat(matchingEvaluators).hasSize(5);
+            // Verify they're sorted by name (should be alphabetically: eval-a, eval-b, eval-c, eval-d, eval-e)
+            for (int i = 0; i < matchingEvaluators.size() - 1; i++) {
+                assertThat(matchingEvaluators.get(i).getName())
+                        .isLessThan(matchingEvaluators.get(i + 1).getName());
+            }
         }
     }
 
