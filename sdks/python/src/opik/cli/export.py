@@ -507,7 +507,7 @@ def export(
                     )
                 total_exported += traces_exported
 
-            # Download datasets
+            # Download datasets (workspace-level data, but export to project directory for consistency)
             if "datasets" in data_types:
                 if debug:
                     console.print("[blue]Downloading datasets...[/blue]")
@@ -516,7 +516,7 @@ def export(
                 )
                 total_exported += datasets_exported
 
-            # Download prompts
+            # Download prompts (workspace-level data, but export to project directory for consistency)
             if "prompts" in data_types:
                 if debug:
                     console.print("[blue]Downloading prompts...[/blue]")
