@@ -113,7 +113,7 @@ class TestCLIImportExport:
             full_cmd,
             capture_output=True,
             text=True,
-            cwd="/home/dblank/comet/opik/sdks/python",
+            cwd=Path(__file__).parent.parent,
             env=env,
         )
 
