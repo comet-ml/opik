@@ -13,9 +13,11 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
@@ -81,8 +83,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
     private final @NonNull OpikConfiguration opikConfiguration;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
-    private final @NonNull com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory sortingFactory;
-    private final @NonNull com.comet.opik.domain.sorting.SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
