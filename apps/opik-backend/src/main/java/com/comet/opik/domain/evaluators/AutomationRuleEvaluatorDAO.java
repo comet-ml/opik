@@ -52,7 +52,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             LEFT JOIN projects p
               ON rule.project_id = p.id
             WHERE rule.workspace_id = :workspaceId AND rule.action = :action
-            <if(projectId)> AND rule.project_id = :projectId <endif>
+            <if(projectIds)> AND rule.project_id IN (<projectIds>) <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
@@ -65,7 +65,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
-            @Define("projectId") @Bind("projectId") UUID projectId,
+            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") List<UUID> projectIds,
             @Bind("action") AutomationRule.AutomationRuleAction action,
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
@@ -77,11 +77,19 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             @Define("offset") @Bind("offset") Integer offset,
             @Define("limit") @Bind("limit") Integer limit);
 
+    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, List<UUID> projectIds,
+            AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
+            Map<String, Object> filterMapping, Integer offset, Integer limit) {
+        return find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
+                criteria.name(), sortingFields, filters, filterMapping, offset, limit);
+    }
+
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
-        return find(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
-                criteria.name(), sortingFields, filters, filterMapping, offset, limit);
+        // Backward compatibility: convert single projectId to list
+        List<UUID> projectIds = projectId != null ? List.of(projectId) : null;
+        return find(workspaceId, projectIds, criteria, sortingFields, filters, filterMapping, offset, limit);
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
@@ -95,7 +103,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
             WHERE workspace_id = :workspaceId AND rule.action = :action
-            <if(projectId)> AND project_id = :projectId <endif>
+            <if(projectIds)> AND project_id IN (<projectIds>) <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
@@ -105,7 +113,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @AllowUnusedBindings
     long findCount(
             @Bind("workspaceId") String workspaceId,
-            @Define("projectId") @Bind("projectId") UUID projectId,
+            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") List<UUID> projectIds,
             @Bind("action") AutomationRule.AutomationRuleAction action,
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
@@ -113,10 +121,18 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             @Define("name") @Bind("name") String name);
 
     default long findCount(String workspaceId,
+            List<UUID> projectIds,
+            AutomationRuleEvaluatorCriteria criteria) {
+        return findCount(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
+                criteria.name());
+    }
+
+    default long findCount(String workspaceId,
             UUID projectId,
             AutomationRuleEvaluatorCriteria criteria) {
-        return findCount(workspaceId, projectId, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
-                criteria.name());
+        // Backward compatibility: convert single projectId to list
+        List<UUID> projectIds = projectId != null ? List.of(projectId) : null;
+        return findCount(workspaceId, projectIds, criteria);
     }
 
     @SqlUpdate("""

@@ -86,6 +86,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -1654,14 +1655,17 @@ class AutomationRuleEvaluatorsResourceTest {
             // When
             var sortingFields = List.of(Map.of("field", "name", "direction", "ASC"));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).getName()).isEqualTo(name1);
-            assertThat(page.content().get(1).getName()).isEqualTo(name3);
-            assertThat(page.content().get(2).getName()).isEqualTo(name2);
+            // Then - Wait for ClickHouse to have the data available
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = evaluatorsResourceClient.findEvaluatorPage(
+                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+                assertThat(page.content()).hasSize(3);
+                assertThat(page.content().get(0).getName()).isEqualTo(name1);
+                assertThat(page.content().get(1).getName()).isEqualTo(name3);
+                assertThat(page.content().get(2).getName()).isEqualTo(name2);
+            });
         }
 
         @Test
@@ -1694,14 +1698,17 @@ class AutomationRuleEvaluatorsResourceTest {
             // When
             var sortingFields = List.of(Map.of("field", "name", "direction", "DESC"));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).getName()).isEqualTo(name2);
-            assertThat(page.content().get(1).getName()).isEqualTo(name3);
-            assertThat(page.content().get(2).getName()).isEqualTo(name1);
+            // Then - Wait for ClickHouse to have the data available
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = evaluatorsResourceClient.findEvaluatorPage(
+                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+                assertThat(page.content()).hasSize(3);
+                assertThat(page.content().get(0).getName()).isEqualTo(name2);
+                assertThat(page.content().get(1).getName()).isEqualTo(name3);
+                assertThat(page.content().get(2).getName()).isEqualTo(name1);
+            });
         }
 
         @Test
@@ -1727,17 +1734,20 @@ class AutomationRuleEvaluatorsResourceTest {
             // When
             var sortingFields = List.of(Map.of("field", "type", "direction", "ASC"));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
-            assertThat(page.content()).hasSize(3);
-            // Verify types are sorted by database enum order (actual order from database)
-            assertThat(page.content().get(0).getType()).isEqualTo(AutomationRuleEvaluatorType.LLM_AS_JUDGE);
-            assertThat(page.content().get(1).getType())
-                    .isEqualTo(AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
-            assertThat(page.content().get(2).getType())
-                    .isEqualTo(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE);
+            // Then - Wait for ClickHouse to have the data available
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = evaluatorsResourceClient.findEvaluatorPage(
+                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+                assertThat(page.content()).hasSize(3);
+                // Verify types are sorted by database enum order (actual order from database)
+                assertThat(page.content().get(0).getType()).isEqualTo(AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                assertThat(page.content().get(1).getType())
+                        .isEqualTo(AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                assertThat(page.content().get(2).getType())
+                        .isEqualTo(AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE);
+            });
         }
 
         @Test
@@ -1766,14 +1776,17 @@ class AutomationRuleEvaluatorsResourceTest {
             // When
             var sortingFields = List.of(Map.of("field", "sampling_rate", "direction", "DESC"));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).getSamplingRate()).isEqualTo(0.9f);
-            assertThat(page.content().get(1).getSamplingRate()).isEqualTo(0.5f);
-            assertThat(page.content().get(2).getSamplingRate()).isEqualTo(0.3f);
+            // Then - Wait for ClickHouse to have the data available
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = evaluatorsResourceClient.findEvaluatorPage(
+                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+                assertThat(page.content()).hasSize(3);
+                assertThat(page.content().get(0).getSamplingRate()).isEqualTo(0.9f);
+                assertThat(page.content().get(1).getSamplingRate()).isEqualTo(0.5f);
+                assertThat(page.content().get(2).getSamplingRate()).isEqualTo(0.3f);
+            });
         }
 
         @Test
@@ -1802,14 +1815,17 @@ class AutomationRuleEvaluatorsResourceTest {
             // When - Sort by enabled DESC (enabled first)
             var sortingFields = List.of(Map.of("field", "enabled", "direction", "DESC"));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).isEnabled()).isTrue();
-            assertThat(page.content().get(1).isEnabled()).isTrue();
-            assertThat(page.content().get(2).isEnabled()).isFalse();
+            // Then - Wait for ClickHouse to have the data available
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = evaluatorsResourceClient.findEvaluatorPage(
+                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+                assertThat(page.content()).hasSize(3);
+                assertThat(page.content().get(0).isEnabled()).isTrue();
+                assertThat(page.content().get(1).isEnabled()).isTrue();
+                assertThat(page.content().get(2).isEnabled()).isFalse();
+            });
         }
 
         @Test
@@ -1841,21 +1857,25 @@ class AutomationRuleEvaluatorsResourceTest {
             // When
             var sortingFields = List.of(Map.of("field", "project_name", "direction", "ASC"));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    null, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
-            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(3);
-            var evaluators = page.content().stream()
-                    .filter(e -> e.getProjectId().equals(projectId1)
-                            || e.getProjectId().equals(projectId2)
-                            || e.getProjectId().equals(projectId3))
-                    .toList();
+            // Then - Wait for ClickHouse to have the data available
+            // Query all evaluators in workspace (null projectId) and sort by project_name
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = evaluatorsResourceClient.findEvaluatorPage(
+                        null, null, null, sorting, 1, 100, WORKSPACE_NAME, API_KEY);
 
-            assertThat(evaluators).hasSize(3);
-            assertThat(evaluators.get(0).getProjectName()).isEqualTo(projectName1);
-            assertThat(evaluators.get(1).getProjectName()).isEqualTo(projectName3);
-            assertThat(evaluators.get(2).getProjectName()).isEqualTo(projectName2);
+                // Filter to get only our 3 test evaluators
+                var testEvaluators = page.content().stream()
+                        .filter(e -> e.getProjectId().equals(projectId1) ||
+                                e.getProjectId().equals(projectId2) ||
+                                e.getProjectId().equals(projectId3))
+                        .toList();
+
+                assertThat(testEvaluators).hasSize(3);
+                assertThat(testEvaluators.get(0).getProjectName()).isEqualTo(projectName1);
+                assertThat(testEvaluators.get(1).getProjectName()).isEqualTo(projectName3);
+                assertThat(testEvaluators.get(2).getProjectName()).isEqualTo(projectName2);
+            });
         }
 
         @Test
@@ -1887,21 +1907,25 @@ class AutomationRuleEvaluatorsResourceTest {
             // When
             var sortingFields = List.of(Map.of("field", "project_name", "direction", "DESC"));
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    null, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-            // Then
-            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(3);
-            var evaluators = page.content().stream()
-                    .filter(e -> e.getProjectId().equals(projectId1)
-                            || e.getProjectId().equals(projectId2)
-                            || e.getProjectId().equals(projectId3))
-                    .toList();
+            // Then - Wait for ClickHouse to have the data available
+            // Query all evaluators in workspace (null projectId) and sort by project_name
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = evaluatorsResourceClient.findEvaluatorPage(
+                        null, null, null, sorting, 1, 100, WORKSPACE_NAME, API_KEY);
 
-            assertThat(evaluators).hasSize(3);
-            assertThat(evaluators.get(0).getProjectName()).isEqualTo(projectName2);
-            assertThat(evaluators.get(1).getProjectName()).isEqualTo(projectName3);
-            assertThat(evaluators.get(2).getProjectName()).isEqualTo(projectName1);
+                // Filter to get only our 3 test evaluators
+                var testEvaluators = page.content().stream()
+                        .filter(e -> e.getProjectId().equals(projectId1) ||
+                                e.getProjectId().equals(projectId2) ||
+                                e.getProjectId().equals(projectId3))
+                        .toList();
+
+                assertThat(testEvaluators).hasSize(3);
+                assertThat(testEvaluators.get(0).getProjectName()).isEqualTo(projectName2);
+                assertThat(testEvaluators.get(1).getProjectName()).isEqualTo(projectName3);
+                assertThat(testEvaluators.get(2).getProjectName()).isEqualTo(projectName1);
+            });
         }
 
         @Test
@@ -1959,7 +1983,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     "value", "test-project"));
             String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
             var page = evaluatorsResourceClient.findEvaluatorPage(
-                    null, null, filters, null, 1, 100, WORKSPACE_NAME, API_KEY);
+                    (UUID) null, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
 
             // Then
             assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
@@ -1997,7 +2021,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     "value", projectName1));
             String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
             var page = evaluatorsResourceClient.findEvaluatorPage(
-                    null, null, filters, null, 1, 100, WORKSPACE_NAME, API_KEY);
+                    (UUID) null, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
 
             // Then
             assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
@@ -2037,7 +2061,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     "value", projectPrefix));
             String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
             var page = evaluatorsResourceClient.findEvaluatorPage(
-                    null, null, filters, null, 1, 100, WORKSPACE_NAME, API_KEY);
+                    (UUID) null, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
 
             // Then
             var matchingEvaluators = page.content().stream()

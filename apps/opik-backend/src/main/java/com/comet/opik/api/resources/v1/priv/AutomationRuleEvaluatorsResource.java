@@ -10,6 +10,7 @@ import com.comet.opik.api.filter.AutomationRuleEvaluatorFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -82,18 +83,27 @@ public class AutomationRuleEvaluatorsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Looking for automated evaluators for project id '{}' on workspaceId '{}' (page {})", projectId,
-                workspaceId, page);
 
         var queryFilters = filtersFactory.newFilters(filters, AutomationRuleEvaluatorFilter.LIST_TYPE_REFERENCE);
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
-        String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields, sortingFactory.getFieldMapping());
         List<String> sortableBy = sortingFactory.getSortableFields();
 
-        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(projectId, workspaceId, id, name, queryFilters,
-                sortingFieldsSql, sortableBy, page, size);
-        log.info("Found {} automated evaluators for project id '{}' on workspaceId '{}' (page {}, total {})",
-                evaluatorPage.size(), projectId, workspaceId, page, evaluatorPage.total());
+        var searchCriteria = AutomationRuleEvaluatorSearchCriteria.builder()
+                .projectId(projectId)
+                .id(id)
+                .name(name)
+                .filters(queryFilters)
+                .sortingFields(sortingFields)
+                .build();
+
+        log.info("Looking for automated evaluators by '{}' on workspaceId '{}' (page {})", searchCriteria,
+                workspaceId, page);
+
+        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(page, size, searchCriteria, workspaceId,
+                sortableBy);
+
+        log.info("Found {} automated evaluators by '{}' on workspaceId '{}' (page {}, total {})",
+                evaluatorPage.size(), searchCriteria, workspaceId, page, evaluatorPage.total());
 
         return Response.ok()
                 .entity(evaluatorPage)
