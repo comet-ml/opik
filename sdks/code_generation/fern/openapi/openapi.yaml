@@ -11355,6 +11355,8 @@ components:
         thread_id:
           minLength: 1
           type: string
+        truncate:
+          type: boolean
     TraceThreadPage:
       type: object
       properties:
