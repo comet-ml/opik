@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { UseFormReturn, useWatch } from "react-hook-form";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
   const { toast } = useToast();
   const { mutate, isPending: isTestPending } = useWebhookTestMutation();
   const [expandedItem, setExpandedItem] = useState<string>("");
+  const hadTriggersRef = useRef(false);
 
   const triggers = useWatch({
     control: form.control,
@@ -44,9 +45,7 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
   });
 
   const triggerItems = useMemo(() => {
-    if (!triggers || triggers.length === 0) {
-      return [];
-    }
+    if (!triggers?.length) return [];
 
     return triggers.map((trigger) => ({
       eventType: trigger.eventType,
@@ -55,18 +54,30 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
   }, [triggers]);
 
   useEffect(() => {
-    if (triggerItems.length > 0) {
-      const currentItemExists = triggerItems.some(
-        (item) => item.eventType === expandedItem,
-      );
+    const hasTriggers = triggerItems.length > 0;
+    const hadTriggers = hadTriggersRef.current;
 
-      if (!currentItemExists) {
-        setExpandedItem(triggerItems[0].eventType);
-      }
-    } else {
+    if (!hasTriggers) {
       setExpandedItem("");
+      hadTriggersRef.current = false;
+      return;
     }
-  }, [triggerItems, expandedItem]);
+
+    const isFirstTriggerAdded = !hadTriggers && hasTriggers;
+
+    setExpandedItem((currentExpandedItem) => {
+      if (isFirstTriggerAdded) {
+        return triggerItems[0].eventType;
+      }
+
+      const isCurrentItemStillValid = triggerItems.some(
+        (item) => item.eventType === currentExpandedItem,
+      );
+      return isCurrentItemStillValid ? currentExpandedItem : "";
+    });
+
+    hadTriggersRef.current = true;
+  }, [triggerItems]);
 
   const validateAndTest = (payload: Partial<Alert>, successMessage: string) => {
     const url = payload.webhook?.url || "";

@@ -5,6 +5,7 @@ import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import Loader from "@/components/shared/Loader/Loader";
+import { safelyParseJSON } from "@/lib/utils";
 
 type WebhookPayloadExampleProps = {
   eventType: ALERT_EVENT_TYPE;
@@ -21,7 +22,11 @@ const WebhookPayloadExample: React.FunctionComponent<
       return "";
     }
 
-    return JSON.stringify(examples.response_examples[eventType], null, 2);
+    return JSON.stringify(
+      safelyParseJSON(examples.response_examples[eventType]),
+      null,
+      2,
+    );
   }, [examples, eventType]);
 
   if (isPending) {
