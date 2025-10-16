@@ -31,6 +31,7 @@ import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -224,31 +225,16 @@ public class AttachmentStripperService {
             Consumer<JsonNode> inputSetter,
             Consumer<JsonNode> outputSetter,
             Consumer<JsonNode> metadataSetter,
-            java.util.function.Supplier<T> buildFunction) {
+            Supplier<T> buildFunction) {
 
-        Mono<Optional<JsonNode>> inputMono = Mono.justOrEmpty(input)
-                .flatMap(value -> Mono
-                        .fromCallable(() -> stripAttachments(value, entityId, entityType, workspaceId, userName,
-                                projectName, "input"))
-                        .subscribeOn(Schedulers.boundedElastic()))
-                .map(Optional::of)
-                .defaultIfEmpty(Optional.empty());
+        Mono<Optional<JsonNode>> inputMono = processField(
+                input, entityId, entityType, workspaceId, userName, projectName, "input");
 
-        Mono<Optional<JsonNode>> outputMono = Mono.justOrEmpty(output)
-                .flatMap(value -> Mono
-                        .fromCallable(() -> stripAttachments(value, entityId, entityType, workspaceId, userName,
-                                projectName, "output"))
-                        .subscribeOn(Schedulers.boundedElastic()))
-                .map(Optional::of)
-                .defaultIfEmpty(Optional.empty());
+        Mono<Optional<JsonNode>> outputMono = processField(
+                output, entityId, entityType, workspaceId, userName, projectName, "output");
 
-        Mono<Optional<JsonNode>> metadataMono = Mono.justOrEmpty(metadata)
-                .flatMap(meta -> Mono
-                        .fromCallable(() -> stripAttachments(meta, entityId, entityType, workspaceId, userName,
-                                projectName, "metadata"))
-                        .subscribeOn(Schedulers.boundedElastic()))
-                .map(Optional::of)
-                .defaultIfEmpty(Optional.empty());
+        Mono<Optional<JsonNode>> metadataMono = processField(
+                metadata, entityId, entityType, workspaceId, userName, projectName, "metadata");
 
         return Mono.zip(inputMono, outputMono, metadataMono)
                 .map(tuple -> {
@@ -258,6 +244,22 @@ public class AttachmentStripperService {
 
                     return buildFunction.get();
                 });
+    }
+
+    private Mono<Optional<JsonNode>> processField(
+            JsonNode value,
+            UUID entityId,
+            EntityType entityType,
+            String workspaceId,
+            String userName,
+            String projectName,
+            String fieldName) {
+        return Mono.justOrEmpty(value)
+                .flatMap(it -> Mono.fromCallable(
+                        () -> stripAttachments(it, entityId, entityType, workspaceId, userName, projectName, fieldName))
+                        .subscribeOn(Schedulers.boundedElastic()))
+                .map(Optional::of)
+                .defaultIfEmpty(Optional.empty());
     }
 
     /**
