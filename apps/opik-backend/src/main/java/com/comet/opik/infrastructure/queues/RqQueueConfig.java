@@ -18,7 +18,6 @@ import lombok.Data;
 public class RqQueueConfig {
 
     @Valid @NotNull @JsonProperty
-    @Builder.Default
-    private final Duration jobTTl = Duration.days(1);
+    private final Duration jobTTl;
 
 }

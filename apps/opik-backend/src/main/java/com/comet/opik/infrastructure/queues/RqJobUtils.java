@@ -60,9 +60,7 @@ public class RqJobUtils {
         // 3. Convert to Map using Jackson
         Map<String, Object> fields = JsonUtils.convertValue(jobHash, MAP_TYPE);
 
-        // 4. Remove null fields
-        fields.entrySet().removeIf(entry -> entry.getValue() == null);
-
+        // JsonUtils is configured to exclude nulls; no need to manually filter
         return fields;
     }
 
