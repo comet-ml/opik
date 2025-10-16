@@ -269,7 +269,7 @@ def test_evaluate__with_task_span_metrics__only_task_span_metrics__no_regular_me
     assert score["value"] == 1.0
 
 
-def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__comprehensive_evaluation(
+def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__multiple_trials(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     dataset = opik_client.create_dataset(dataset_name)
@@ -326,6 +326,7 @@ def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__comprehen
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         prompt=prompt,
+        trial_count=5,
     )
 
     opik.flush_tracker()
@@ -335,14 +336,14 @@ def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__comprehen
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "mixed-metrics-model", "version": "1.0"},
-        traces_amount=2,
+        traces_amount=2 * 5,  # 2 traces per dataset item per trial
         feedback_scores_amount=4,  # 2 regular + 2 task_span metrics
         prompts=[prompt],
     )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 2
+    assert len(experiment_items_contents) == 2 * 5
 
     expected_score_names = {
         "regular_equals",
