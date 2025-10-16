@@ -6,6 +6,7 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { WebhookTestResultStatus } from "./WebhookTestResultStatus";
+import { WebhookEventObject } from "./WebhookEventObject";
 
 export const WebhookTestResult: core.serialization.ObjectSchema<
     serializers.WebhookTestResult.Raw,
@@ -13,7 +14,7 @@ export const WebhookTestResult: core.serialization.ObjectSchema<
 > = core.serialization.object({
     status: WebhookTestResultStatus.optional(),
     statusCode: core.serialization.property("status_code", core.serialization.number().optional()),
-    requestBody: core.serialization.property("request_body", core.serialization.string().optional()),
+    requestBody: core.serialization.property("request_body", WebhookEventObject.optional()),
     errorMessage: core.serialization.property("error_message", core.serialization.string().optional()),
 });
 
@@ -21,7 +22,7 @@ export declare namespace WebhookTestResult {
     export interface Raw {
         status?: WebhookTestResultStatus.Raw | null;
         status_code?: number | null;
-        request_body?: string | null;
+        request_body?: WebhookEventObject.Raw | null;
         error_message?: string | null;
     }
 }

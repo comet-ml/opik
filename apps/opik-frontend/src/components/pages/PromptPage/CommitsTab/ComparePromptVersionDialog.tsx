@@ -10,8 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
 import { PromptVersion } from "@/types/prompts";
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import { parseContentWithImages } from "@/lib/llm";
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -27,6 +30,21 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   );
   const [diffVersion, setDiffVersion] = useState<PromptVersion | undefined>(
     first(versions),
+  );
+
+  const { text: baseText, images: baseImages } = useMemo(
+    () => parseContentWithImages(baseVersion?.template || ""),
+    [baseVersion?.template],
+  );
+
+  const { text: diffText, images: diffImages } = useMemo(
+    () => parseContentWithImages(diffVersion?.template || ""),
+    [diffVersion?.template],
+  );
+
+  const imagesHaveChanges = useMemo(
+    () => JSON.stringify(baseImages) !== JSON.stringify(diffImages),
+    [baseImages, diffImages],
   );
 
   const hasMoreThenTwoVersions = versions?.length > 2;
@@ -96,7 +114,12 @@ const ComparePromptVersionDialog: React.FunctionComponent<
 
   const generateDiffView = (c1: string, c2: string) => {
     return (
-      <div className="comet-code h-[620px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
+      <div
+        className={cn(
+          "comet-code overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5",
+          imagesHaveChanges ? "h-[520px]" : "h-[620px]",
+        )}
+      >
         <TextDiff content1={c1} content2={c2} />
       </div>
     );
@@ -108,16 +131,34 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>Compare prompts</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-4 pb-2">
-          {generateTitle(baseVersion, setBaseVersion, diffVersion?.commit)}
-          {generateTitle(diffVersion, setDiffVersion, baseVersion?.commit)}
-          {generateDiffView(
-            baseVersion?.template ?? "",
-            baseVersion?.template ?? "",
-          )}
-          {generateDiffView(
-            baseVersion?.template ?? "",
-            diffVersion?.template ?? "",
+        <div className="flex flex-col gap-4 pb-2">
+          <div className="grid grid-cols-2 gap-4">
+            {generateTitle(baseVersion, setBaseVersion, diffVersion?.commit)}
+            {generateTitle(diffVersion, setDiffVersion, baseVersion?.commit)}
+            {generateDiffView(baseText, baseText)}
+            {generateDiffView(baseText, diffText)}
+          </div>
+          {imagesHaveChanges && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-2 rounded-md border p-4">
+                <PromptMessageImageTags
+                  images={baseImages}
+                  setImages={() => {}}
+                  align="start"
+                  editable={false}
+                  preview={true}
+                />
+              </div>
+              <div className="flex items-center gap-2 rounded-md border p-4">
+                <PromptMessageImageTags
+                  images={diffImages}
+                  setImages={() => {}}
+                  align="start"
+                  editable={false}
+                  preview={true}
+                />
+              </div>
+            </div>
           )}
         </div>
       </DialogContent>
