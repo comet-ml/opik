@@ -98,7 +98,7 @@ class RqPublisher implements QueueProducer {
         var rqQueueKey = RQ_QUEUE.formatted(queueName);
         RQueueReactive<String> rqQueue = redisClient.getQueue(rqQueueKey, StringCodec.INSTANCE);
 
-        // Build RQ job HASH fields (all strings now)
+        // Build RQ job HASH fields
         return Mono.fromCallable(() -> RqJobUtils.buildJobHash(message, job))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(jobFields -> {

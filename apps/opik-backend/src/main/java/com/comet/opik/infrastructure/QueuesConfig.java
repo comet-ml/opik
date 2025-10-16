@@ -23,6 +23,9 @@ public class QueuesConfig {
     private Duration defaultJobTtl;
 
     @Valid @NotNull @JsonProperty
+    private boolean useJacksonSerialization = true;
+
+    @Valid @NotNull @JsonProperty
     private Map<String, RqQueueConfig> queues = Map.of();
 
     public Optional<RqQueueConfig> getQueue(String queueName) {
