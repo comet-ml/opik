@@ -67,12 +67,6 @@ def test_parameter_optimizer_selects_best_parameters(
         raising=False,
     )
     monkeypatch.setattr(
-        ParameterOptimizer,
-        "configure_prompt_model",
-        lambda self, prompt: None,
-        raising=False,
-    )
-    monkeypatch.setattr(
         "opik_optimizer.parameter_optimizer.parameter_optimizer.optuna_importance.get_param_importances",
         lambda *args, **kwargs: {"temperature": 1.0},
         raising=False,

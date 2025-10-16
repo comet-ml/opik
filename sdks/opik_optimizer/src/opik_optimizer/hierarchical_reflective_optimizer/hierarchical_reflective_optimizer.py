@@ -51,7 +51,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     complex prompt that you want to systematically refine based on understanding why it fails.
 
     Args:
-        reasoning_model: LiteLLM model name for reasoning and analysis (default: "openai/gpt-4.1")
+        model: LiteLLM model name for the optimization algorithm (reasoning and analysis) (default: "gpt-4o")
         num_threads: Number of parallel threads for evaluation (default: 12)
         verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
         seed: Random seed for reproducibility (default: 42)
@@ -69,7 +69,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        reasoning_model: str = "openai/gpt-4.1",
+        model: str = "gpt-4o",
         num_threads: int = 12,
         verbose: int = 1,
         seed: int = 42,
@@ -80,9 +80,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         **model_kwargs: Any,
     ):
         super().__init__(
-            model=reasoning_model, verbose=verbose, seed=seed, **model_kwargs
+            model=model, verbose=verbose, seed=seed, **model_kwargs
         )
-        self.reasoning_model = reasoning_model
         self.num_threads = num_threads
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
@@ -92,7 +91,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
             call_model_fn=self._call_model_async,
-            reasoning_model=self.reasoning_model,
+            reasoning_model=self.model,
             seed=self.seed,
             max_parallel_batches=self.max_parallel_batches,
             batch_size=self.batch_size,
@@ -249,7 +248,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             Dictionary containing optimizer-specific configuration
         """
         return {
-            "reasoning_model": self.reasoning_model,
+            "model": self.model,
             "num_threads": self.num_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "max_iterations": self.max_iterations,
@@ -403,7 +402,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
 
         improve_prompt_response = self._call_model(
-            model=self.reasoning_model,
+            model=self.model,
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             seed=attempt_seed,
             model_kwargs={},
@@ -508,9 +507,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         # Reset counters at the start of optimization
         self.reset_counters()
-
-        # Configure prompt model if not set
-        self.configure_prompt_model(prompt)
 
         # Setup agent class
         self.agent_class = self.setup_agent_class(prompt, agent_class)
@@ -731,10 +727,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Prepare details for the result
         details = {
-            "model": best_prompt.model or self.model,
+            "model": self.model,
             "temperature": (best_prompt.model_kwargs or {}).get("temperature")
             or self.model_kwargs.get("temperature"),
-            "reasoning_model": self.reasoning_model,
             "num_threads": self.num_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "max_retries": max_retries,

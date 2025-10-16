@@ -134,8 +134,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str,
-        reasoning_model: str | None = None,
+        model: str = "gpt-4o",
         rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
         num_threads: int | None = None,
@@ -147,8 +146,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     ) -> None:
         """
         Args:
-            model: The model to use for evaluation
-            reasoning_model: The model to use for reasoning and prompt generation
+            model: The model to use for the optimization algorithm (reasoning and prompt generation)
             rounds: Number of optimization rounds
             num_prompts_per_round: Number of prompts to generate per round
             n_threads: Number of threads for parallel evaluation
@@ -166,7 +164,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             del model_kwargs["project_name"]
 
         super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
-        self.reasoning_model = reasoning_model if reasoning_model is not None else model
         self.rounds = rounds
         self.num_prompts_per_round = num_prompts_per_round
         if num_threads is not None:
@@ -181,7 +178,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
         logger.debug(
-            f"Initialized MetaPromptOptimizer with model={model}, reasoning_model={self.reasoning_model}"
+            f"Initialized MetaPromptOptimizer with model={model}"
         )
         logger.debug(
             f"Optimization rounds: {rounds}, Prompts/round: {num_prompts_per_round}"
@@ -191,7 +188,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         return {
             "rounds": self.rounds,
             "num_prompts_per_round": self.num_prompts_per_round,
-            "reasoning_model": self.reasoning_model,
             "enable_context": self.enable_context,
         }
 
@@ -200,7 +196,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         project_name: str,
         messages: list[dict[str, str]],
-        is_reasoning: bool = False,
         optimization_id: str | None = None,
     ) -> str:
         """Call the model with the given prompt and return the response."""
@@ -209,22 +204,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         try:
             # Basic LLM parameters (e.g., temperature, max_tokens)
             base_temperature = getattr(self, "temperature", 0.3)
-            base_max_tokens = getattr(self, "max_tokens", 1000)
-
-            # Use potentially different settings for reasoning calls
-            reasoning_temperature = (
-                base_temperature  # Keep same temp unless specified otherwise
-            )
-            # Increase max_tokens for reasoning to ensure JSON fits, unless already high
-            reasoning_max_tokens = (
-                max(base_max_tokens, 3000) if is_reasoning else base_max_tokens
-            )
+            base_max_tokens = getattr(self, "max_tokens", 3000)  # Use higher default for reasoning
 
             llm_config_params = {
-                "temperature": (
-                    reasoning_temperature if is_reasoning else base_temperature
-                ),
-                "max_tokens": reasoning_max_tokens,
+                "temperature": base_temperature,
+                "max_tokens": base_max_tokens,
                 "top_p": getattr(self, "top_p", 1.0),
                 "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
                 "presence_penalty": getattr(self, "presence_penalty", 0.0),
@@ -244,14 +228,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                     metadata_for_opik["opik"]["optimization_id"] = optimization_id
 
             metadata_for_opik["optimizer_name"] = self.__class__.__name__
-            metadata_for_opik["opik_call_type"] = (
-                "reasoning" if is_reasoning else "evaluation_llm_task_direct"
-            )
+            metadata_for_opik["opik_call_type"] = "optimization_algorithm"
 
             if metadata_for_opik:
                 llm_config_params["metadata"] = metadata_for_opik
 
-            model_to_use = self.reasoning_model if is_reasoning else self.model
+            model_to_use = self.model
 
             # Pass llm_config_params (which now includes our metadata) to the Opik monitor.
             # The monitor is expected to return a dictionary suitable for spreading into litellm.completion,
@@ -493,7 +475,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         """
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
         self.agent_class = self.setup_agent_class(prompt, agent_class)
 
         total_items = len(dataset.get_items())
@@ -984,14 +965,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             Return a valid JSON array as specified."""
 
             try:
-                # Use _call_model which handles selecting reasoning_model
+                # Use _call_model for optimization algorithm
                 content = self._call_model(
                     project_name,
                     messages=[
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
-                    is_reasoning=True,
                     optimization_id=optimization_id,
                 )
                 logger.debug(f"Raw response from reasoning model: {content}")
@@ -1153,7 +1133,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": instruction},
                     ],
-                    is_reasoning=True,
                     optimization_id=optimization_id,
                 )
 

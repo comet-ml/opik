@@ -39,7 +39,7 @@ class ChatPrompt:
         messages: list[dict[str, str]] | None = None,
         tools: list[dict[str, Any]] | None = None,
         function_map: dict[str, Callable] | None = None,
-        model: str | None = None,
+        model: str = "gpt-4o-mini",
         invoke: Callable | None = None,
         project_name: str | None = "Default Project",
         **model_kwargs: Any,

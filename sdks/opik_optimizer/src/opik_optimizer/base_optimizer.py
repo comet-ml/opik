@@ -172,19 +172,6 @@ class BaseOptimizer(ABC):
         else:
             return agent_class
 
-    def configure_prompt_model(self, prompt: "chat_prompt.ChatPrompt") -> None:
-        """
-        Configure prompt model and model_kwargs if not set.
-
-        Args:
-            prompt: The chat prompt to configure
-        """
-        # Only configure if prompt is a valid ChatPrompt object
-        if hasattr(prompt, "model") and hasattr(prompt, "model_kwargs"):
-            if prompt.model is None:
-                prompt.model = self.model
-            if prompt.model_kwargs is None:
-                prompt.model_kwargs = self.model_kwargs
 
     # ------------------------------------------------------------------
     # Experiment metadata helpers
@@ -555,11 +542,6 @@ class BaseOptimizer(ABC):
         agent_class: type[OptimizableAgent] | None = None,
     ) -> float:
         random.seed(seed)
-
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
 
         self.agent_class: type[OptimizableAgent]
 

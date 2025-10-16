@@ -29,9 +29,8 @@ class GepaOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str,
+        model: str = "gpt-4o",
         project_name: str | None = None,
-        reflection_model: str | None = None,
         verbose: int = 1,
         seed: int = 42,
         **model_kwargs: Any,
@@ -50,11 +49,6 @@ class GepaOptimizer(BaseOptimizer):
                 f"project_name must be a string or None, got {type(project_name).__name__}"
             )
 
-        if reflection_model is not None and not isinstance(reflection_model, str):
-            raise ValueError(
-                f"reflection_model must be a string or None, got {type(reflection_model).__name__}"
-            )
-
         if not isinstance(verbose, int):
             raise ValueError(
                 f"verbose must be an integer, got {type(verbose).__name__}"
@@ -67,7 +61,6 @@ class GepaOptimizer(BaseOptimizer):
 
         super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
         self.project_name = project_name
-        self.reflection_model = reflection_model or model
         self.num_threads = self.model_kwargs.pop("num_threads", 6)
         self._gepa_live_metric_calls = 0
         self._adapter = None  # Will be set during optimization
@@ -75,7 +68,7 @@ class GepaOptimizer(BaseOptimizer):
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
             "project_name": self.project_name,
-            "reflection_model": self.reflection_model,
+            "model": self.model,
         }
 
     def cleanup(self) -> None:
@@ -266,7 +259,6 @@ class GepaOptimizer(BaseOptimizer):
                 optimizer_config={
                     "optimizer": self.__class__.__name__,
                     "model": self.model,
-                    "reflection_model": self.reflection_model,
                     "max_metric_calls": max_metric_calls,
                     "reflection_minibatch_size": reflection_minibatch_size,
                     "candidate_selection_strategy": candidate_selection_strategy,
@@ -336,7 +328,7 @@ class GepaOptimizer(BaseOptimizer):
                 "valset": data_insts,
                 "adapter": adapter,
                 "task_lm": None,
-                "reflection_lm": self.reflection_model,
+                "reflection_lm": self.model,
                 "candidate_selection_strategy": candidate_selection_strategy,
                 "skip_perfect_score": skip_perfect_score,
                 "reflection_minibatch_size": reflection_minibatch_size,

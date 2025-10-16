@@ -524,7 +524,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         """
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
         self.agent_class = self.setup_agent_class(prompt, agent_class)
 
         # Extract n_trials from kwargs for backward compatibility

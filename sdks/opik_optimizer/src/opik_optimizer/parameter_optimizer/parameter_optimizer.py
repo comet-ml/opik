@@ -97,7 +97,6 @@ class ParameterOptimizer(BaseOptimizer):
             raise TypeError(f"Unsupported keyword arguments: {extra_keys}")
 
         self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
 
         base_model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
         base_prompt = prompt.copy()

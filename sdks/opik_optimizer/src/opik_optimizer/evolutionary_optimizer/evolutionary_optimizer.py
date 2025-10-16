@@ -118,7 +118,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> None:
         """
         Args:
-            model: The model to use for evaluation
+            model: The model to use for the optimization algorithm (mutations, crossover, etc.)
             population_size: Number of prompts in the population
             num_generations: Number of generations to run
             mutation_rate: Mutation rate for genetic operations
@@ -538,7 +538,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         """
         # Use base class validation and setup methods
         self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
         self.agent_class = self.setup_agent_class(prompt, agent_class)
 
         # Extract MCP config from kwargs (for optional MCP workflows)
