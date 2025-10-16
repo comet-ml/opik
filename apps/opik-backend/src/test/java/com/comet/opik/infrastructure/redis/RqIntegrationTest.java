@@ -88,7 +88,7 @@ class RqIntegrationTest {
             int waitSeconds = i * 2; // 2, 4, 6, 8, 10 seconds
 
             Job job = Job.builder()
-                    .func("opik_backend.rq_worker.process_hello_world")
+                    .func("opik_backend.rq_worker.process_optimizer_job")
                     .args(List.of(Map.of(
                             "message", testMessage,
                             "wait_seconds", waitSeconds)))

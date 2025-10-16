@@ -91,30 +91,26 @@ class NoOpDeathPenalty:
 
 
 
-
-def process_hello_world(*args, **kwargs):
+def process_optimizer_job(*args, **kwargs):
     """
-    Process a hello world message from the Java backend.
-    
-    This function is called by RQ when a job is dequeued.
-    
-    Args:
-        *args: Positional arguments (first arg should be dict with message data)
-        **kwargs: Keyword arguments
-    
+    Process an optimizer job from the Java backend.
+
+    Accepts either a dict with 'message' and optional 'wait_seconds',
+    or positional args/kwargs carrying the same fields.
+
     Returns:
         dict: Processing result
     """
-    with tracer.start_as_current_span("process_hello_world") as span:
+    with tracer.start_as_current_span("process_optimizer_job") as span:
         logger.info(f"Received args: {args}, kwargs: {kwargs}")
         try:
             current_job = get_current_job()
             if current_job:
-                logger.info(f"PY job id={current_job.id} func=process_hello_world args={args} kwargs={kwargs}")
+                logger.info(f"PY job id={current_job.id} func=process_optimizer_job args={args} kwargs={kwargs}")
         except Exception:
             pass
 
-        # Handle different argument formats
+        # Normalize inputs (dict first arg or kwargs, else string)
         if args and isinstance(args[0], dict):
             message_data = args[0]
             message_text = message_data.get('message', 'No message')
@@ -126,21 +122,22 @@ def process_hello_world(*args, **kwargs):
             message_text = str(args[0]) if args else 'No message'
             wait_seconds = 0
 
-        logger.info(f"Processing hello world message: {message_text} (wait: {wait_seconds}s)")
+        span.set_attribute("message", message_text)
 
-        # Simulate processing time
+        logger.info(f"Processing optimizer job message: {message_text} (wait: {wait_seconds}s)")
+
         if wait_seconds > 0:
             time.sleep(wait_seconds)
 
         result = {
             "status": "success",
-            "message": f"Received and processed: {message_text}",
-            "processed_by": "Python RQ Worker",
+            "message": f"Optimizer job processed: {message_text}",
+            "processed_by": "Python RQ Worker - Optimizer",
             "wait_time": wait_seconds,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
-        logger.info(f"Message processed successfully: {result}")
+        logger.info(f"Optimizer job processed successfully: {result}")
         return result
 
 # ================================

@@ -78,7 +78,7 @@ class TestJavaPythonRqContract:
         # Given: Job created with Java format
         job_id, queue_name = create_java_style_job(
             redis_conn,
-            function='opik_backend.rq_worker.process_hello_world',
+            function='opik_backend.rq_worker.process_optimizer_job',
             args=['Test message']
         )
         
@@ -100,7 +100,7 @@ class TestJavaPythonRqContract:
             
             # And: Data has correct RQ format
             assert len(parsed) == 4
-            assert parsed[0] == 'opik_backend.rq_worker.process_hello_world'
+            assert parsed[0] == 'opik_backend.rq_worker.process_optimizer_job'
             assert parsed[1] is None
             assert parsed[2] == ['Test message']
             assert parsed[3] == {}
@@ -125,7 +125,7 @@ class TestJavaPythonRqContract:
         
         # When: Create job data
         job_data = [
-            'opik_backend.rq_worker.process_hello_world',
+            'opik_backend.rq_worker.process_optimizer_job',
             None,
             ['message'],
             {}
@@ -173,7 +173,7 @@ class TestJavaPythonRqContract:
 
         # Enqueue our worker function by import path with kwargs
         job = q.enqueue(
-            'opik_backend.rq_worker.process_hello_world',
+            'opik_backend.rq_worker.process_optimizer_job',
             { 'message': 'FromContractTest', 'wait_seconds': 0 }
         )
 
