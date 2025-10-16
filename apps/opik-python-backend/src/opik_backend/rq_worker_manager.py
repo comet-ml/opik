@@ -51,10 +51,6 @@ class RqWorkerManager:
         queue_names_str = os.getenv('RQ_QUEUE_NAMES', 'opik:optimizer-cloud')
         self.queue_names = [name.strip() for name in queue_names_str.split(',') if name.strip()]
         
-        # Exponential backoff configuration
-        self.initial_backoff = float(os.getenv('RQ_INITIAL_BACKOFF', '1'))  # seconds
-        self.max_backoff = float(os.getenv('RQ_MAX_BACKOFF', '60'))  # seconds
-        self.backoff_multiplier = float(os.getenv('RQ_BACKOFF_MULTIPLIER', '2'))
         self.connection_timeout = float(os.getenv('REDIS_TIMEOUT_SECONDS', '5'))
         self.health_check_interval = int(os.getenv('REDIS_HEALTH_CHECK_INTERVAL_SECONDS', '60'))
         
@@ -62,7 +58,7 @@ class RqWorkerManager:
         logger.info("RQ Worker Manager Configuration:")
         logger.info(f"  Redis: {self.redis_host}:{self.redis_port}/{self.redis_db}")
         logger.info(f"  Queue names: {self.queue_names}")
-        logger.info(f"  Backoff: initial={self.initial_backoff}s, max={self.max_backoff}s, multiplier={self.backoff_multiplier}")
+        
     
     def _configure_worker_logger(self, worker: Worker) -> None:
         """
@@ -99,19 +95,7 @@ class RqWorkerManager:
             health_check_interval=self.health_check_interval
         )
     
-    def _connect_with_backoff(self) -> Optional[redis.Redis]:
-        """
-        Single-attempt Redis connection with a health-check ping.
-        Delegates reconnection behavior to Redis client configuration.
-        """
-        try:
-            conn = self._create_redis_connection()
-            conn.ping()
-            logger.info("✅ Redis connection established")
-            return conn
-        except (RedisConnectionError, Exception) as e:
-            logger.warning(f"❌ Redis connection failed: {e}")
-            return None
+    
 
     def _run_worker(self):
         """
