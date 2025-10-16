@@ -88,4 +88,6 @@ INSTRUCTIONS FOR IMPROVING THE PROMPT:
 
 5. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
 
+Do not remove any variables or placeholders from any prompt message. You can move them around if needed but never remove them.
+
 Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompt."""
