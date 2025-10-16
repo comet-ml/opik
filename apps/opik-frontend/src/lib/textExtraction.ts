@@ -14,21 +14,41 @@ import { ExtractTextResult } from "./types";
  */
 export const extractTextFromObject = (
   obj: object,
+  context?: "input" | "output",
 ): ExtractTextResult | string | undefined => {
-  // Direct string fields
-  const directTextFields = [
-    "content",
-    "text",
-    "message",
-    "response",
-    "answer",
-    "output",
-    "input",
-    "query",
-    "prompt",
-    "question",
-    "user_input",
-  ];
+  // Context-specific fields based on the old prettifyGenericLogic behavior
+  const contextSpecificFields =
+    context === "input"
+      ? [
+          "question",
+          "messages",
+          "user_input",
+          "query",
+          "input_prompt",
+          "prompt",
+          "sys.query",
+          "input",
+          "output",
+        ]
+      : context === "output"
+        ? ["answer", "output", "response", "input"]
+        : [
+            "question",
+            "messages",
+            "user_input",
+            "query",
+            "input_prompt",
+            "prompt",
+            "sys.query",
+            "input",
+            "output",
+          ]; // default to input behavior for backward compatibility
+
+  // Common string fields that work for both input and output
+  const commonTextFields = ["content", "text", "message"];
+
+  // Combine fields with context-specific ones first
+  const directTextFields = [...contextSpecificFields, ...commonTextFields];
 
   for (const field of directTextFields) {
     const value = (obj as Record<string, unknown>)[field];
