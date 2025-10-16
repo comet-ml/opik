@@ -56,7 +56,7 @@ class EvaluationEngine:
 
         if len(self._task_span_scoring_metrics) > 0:
             LOGGER.info(
-                "Found %d LLM task span scoring metrics. Enabling task evaluation span handling.",
+                "Detected %d LLM task span scoring metrics — enabling handling of the LLM task evaluation span.",
                 len(self._task_span_scoring_metrics),
             )
 
@@ -201,7 +201,9 @@ class EvaluationEngine:
 
             self._evaluate_llm_tasks_spans(test_results)
 
-            LOGGER.info("Task evaluation span handling disabled.")
+            LOGGER.info(
+                "Task evaluation span handling is disabled — the evaluation has been completed."
+            )
             message_processors_chain.toggle_local_emulator_message_processor(
                 active=False, chain=self._client._message_processor
             )
@@ -260,15 +262,12 @@ class EvaluationEngine:
             )
 
         # find evaluation span
-        evaluation_span = None
-        for span in task_trace.spans:
-            if span.name == EVALUATION_TASK_NAME:
-                evaluation_span = span
-
-        if evaluation_span is None:
+        if len(task_trace.spans) == 0:
             raise ValueError(
                 f"No evaluation span found for test result: {evaluation_task_result}"
             )
+        evaluation_span = task_trace.spans[0]
+
         with helpers.evaluate_llm_task_result_spans_context(
             trace_data=trace.TraceData(
                 id=trace_id,

@@ -21,8 +21,8 @@ class SpanModel:
     id: str
     start_time: datetime.datetime
     name: Optional[str] = None
-    input: Any = None
-    output: Any = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
     type: str = "general"
@@ -44,8 +44,8 @@ class TraceModel:
     start_time: datetime.datetime
     name: Optional[str]
     project_name: str
-    input: Any = None
-    output: Any = None
+    input: Optional[Dict[str, Any]] = None
+    output: Optional[Dict[str, Any]] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
     end_time: Optional[datetime.datetime] = None
