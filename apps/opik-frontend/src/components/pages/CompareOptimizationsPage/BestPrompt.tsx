@@ -2,9 +2,9 @@ import React, { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
-import isObject from "lodash/isObject";
 import get from "lodash/get";
 import { prettifyMessage } from "@/lib/prettifyMessage";
+import { isConversationData } from "@/lib/conversationUtils";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
@@ -64,15 +64,7 @@ const BestPrompt: React.FC<BestPromptProps> = ({
     if (!prompt || prompt === "-") return null;
 
     // Check if this is conversation data
-    const isConversationData =
-      isObject(prompt) &&
-      Array.isArray(prompt) &&
-      (prompt as unknown[]).length > 0 &&
-      (prompt as unknown[]).every(
-        (msg: unknown) => isObject(msg) && "role" in msg,
-      );
-
-    if (isConversationData) {
+    if (isConversationData(prompt)) {
       const prettified = prettifyMessage(prompt);
       return prettified.prettified ? prettified.message : null;
     }
