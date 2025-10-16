@@ -14,8 +14,7 @@ import time
 from typing import Optional
 
 import redis
-from redis.exceptions import ConnectionError as RedisConnectionError
-from opik_backend.utils.redis_utils import get_redis_client
+from opik_backend.utils import redis_utils
 from rq import Queue, Worker
 from rq.serializers import JSONSerializer
 from rq.job import Job
@@ -77,14 +76,6 @@ class RqWorkerManager:
         rq_logger.addHandler(stream_handler)
         rq_logger.setLevel(logging.INFO)
         rq_logger.propagate = False
-    
-    def _create_redis_connection(self) -> redis.Redis:
-        """
-        Create a Redis connection using shared factory.
-        """
-
-        # Use shared singleton client
-        return get_redis_client()
 
     def _run_worker(self):
         """
@@ -93,10 +84,10 @@ class RqWorkerManager:
         """
         logger.info("Starting RQ worker manager thread")
 
-        # Single connection attempt with ping as health check
-        self.redis_conn = self._create_redis_connection()
+        # Single connection attempt with ping as health check (shared client)
+        redis_client = redis_utils.get_redis_client()
         try:
-            self.redis_conn.ping()
+            redis_client.ping()
             logger.info("✅ Redis connection established")
         except Exception as e:
             logger.warning(f"❌ Redis ping failed at startup: {e}")
@@ -109,7 +100,7 @@ class RqWorkerManager:
 
             # Create queues with JSONSerializer (default RQ contract)
             queues = [
-                Queue(name, connection=self.redis_conn, serializer=JSONSerializer())
+                Queue(name, connection=redis_client, serializer=JSONSerializer())
                 for name in self.queue_names
             ]
 
@@ -119,7 +110,7 @@ class RqWorkerManager:
             # Create and run worker with unique name and custom Job class
             worker = MetricsWorker(
                 queues,
-                connection=self.redis_conn,
+                connection=redis_client,
                 serializer=JSONSerializer(),
             )
             # Keep reference for graceful shutdown
@@ -143,13 +134,7 @@ class RqWorkerManager:
         except Exception as e:
             logger.error(f"Unexpected error in RQ worker: {e}", exc_info=True)
         finally:
-            # Clean up connection
-            if self.redis_conn:
-                try:
-                    self.redis_conn.close()
-                except Exception:
-                    logger.error("Error closing Redis connection", exc_info=True)
-                self.redis_conn = None
+            # Do not close shared Redis client here; leave lifecycle to app
             self.worker = None
 
         logger.info("RQ worker manager thread stopped")
