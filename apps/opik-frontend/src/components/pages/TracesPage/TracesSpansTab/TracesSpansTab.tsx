@@ -527,7 +527,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   // Auto-select all feedback score columns when they become available
   useEffect(() => {
-    const missingScoreColumns = dynamicColumnsIds.filter(
+    const userFeedbackColumnId = `${COLUMN_FEEDBACK_SCORES_ID}.User feedback`;
+    const allScoreColumns = [userFeedbackColumnId, ...dynamicColumnsIds];
+
+    const missingScoreColumns = allScoreColumns.filter(
       (id) => !selectedColumns.includes(id),
     );
 
@@ -537,8 +540,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [dynamicColumnsIds, selectedColumns, setSelectedColumns]);
 
   const scoresColumnsData = useMemo(() => {
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: ColumnData<BaseTraceData> = {
+      id: `${COLUMN_FEEDBACK_SCORES_ID}.User feedback`,
+      label: "User feedback",
+      type: COLUMN_TYPE.number,
+      header: FeedbackScoreHeader as never,
+      cell: FeedbackScoreCell as never,
+      accessorFn: (row) =>
+        row.feedback_scores?.find((f) => f.name === "User feedback"),
+      statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.User feedback`,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.label !== "User feedback",
+    );
+
     return [
-      ...dynamicScoresColumns.map(
+      userFeedbackColumn,
+      ...otherDynamicColumns.map(
         ({ label, id, columnType }) =>
           ({
             id,
