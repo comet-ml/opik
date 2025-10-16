@@ -37,6 +37,7 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 public class WebhookHttpClient {
 
     private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
+    public static final String BEARER_PREFIX = "Bearer ";
 
     private final @NonNull Client httpClient;
     private final @NonNull WebhookConfig webhookConfig;
@@ -106,7 +107,7 @@ public class WebhookHttpClient {
                 requestBuilder.header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
 
                 if (StringUtils.isNotBlank(event.getSecret())) {
-                    requestBuilder.header(HttpHeaders.AUTHORIZATION, decrypt(event.getSecret()));
+                    requestBuilder.header(HttpHeaders.AUTHORIZATION, BEARER_PREFIX + decrypt(event.getSecret()));
                 }
 
                 // Serialize payload using JsonUtils.MAPPER to handle Instant fields properly
