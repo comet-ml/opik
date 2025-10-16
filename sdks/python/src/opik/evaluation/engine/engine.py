@@ -264,8 +264,9 @@ class EvaluationEngine:
         # find evaluation span
         if len(task_trace.spans) == 0:
             raise ValueError(
-                f"No evaluation span found for test result: {evaluation_task_result}"
+                f"Task trace contains no spans. Task span metrics require at least one span to be present in the execution trace. Test result: {evaluation_task_result}"
             )
+        # the first span is the evaluation span
         evaluation_span = task_trace.spans[0]
 
         with helpers.evaluate_llm_task_result_spans_context(

@@ -54,7 +54,10 @@ def toggle_local_emulator_message_processor(
             Emulator Message Processor. If True, the processor is activated.
         chain: The message processor
             chain containing the Local Emulator Message Processor to be toggled.
-        reset: Determines whether to reset the Local Emulator Message Processor
+        reset: Determines whether to reset the Local Emulator Message Processor.
+            This can be used to clear the state of the Local Emulator before
+            evaluation. Also, it can be used to clean up the state of the Local Emulator
+            after evaluation to release system resources (memory).
     """
     local = chain.get_processor_by_type(
         local_emulator_message_processor.LocalEmulatorMessageProcessor
@@ -64,7 +67,6 @@ def toggle_local_emulator_message_processor(
         return
 
     if reset:
-        # reset the local emulator state to make it ready for the next evaluation
         local.reset()
 
     local.set_active(active=active)
