@@ -1,5 +1,6 @@
 from .ai2_arc import ai2_arc
 from .cnn_dailymail import cnn_dailymail
+from .driving_hazard import driving_hazard_50, driving_hazard_100, driving_hazard_test
 from .election_questions import election_questions
 from .gsm8k import gsm8k
 from .halu_eval import halu_eval_300
@@ -23,4 +24,7 @@ __all__ = [
     "election_questions",
     "medhallu",
     "rag_hallucinations",
+    "driving_hazard_50",
+    "driving_hazard_100",
+    "driving_hazard_test",
 ]
