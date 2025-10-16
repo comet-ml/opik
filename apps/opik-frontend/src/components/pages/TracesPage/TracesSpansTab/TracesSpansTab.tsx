@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -66,6 +66,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -208,6 +209,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "input",
   "output",
   "duration",
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -524,6 +526,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setSelectedColumns,
   });
 
+  // Auto-select all feedback score columns when they become available
+  useEffect(() => {
+    const missingScoreColumns = dynamicColumnsIds.filter(
+      (id) => !selectedColumns.includes(id),
+    );
+
+    if (missingScoreColumns.length > 0) {
+      setSelectedColumns((prev) => [...prev, ...missingScoreColumns]);
+    }
+  }, [dynamicColumnsIds, selectedColumns, setSelectedColumns]);
+
   const scoresColumnsData = useMemo(() => {
     return [
       ...dynamicScoresColumns.map(
@@ -653,6 +666,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: "created_by",
         label: "Created by",
         type: COLUMN_TYPE.string,
+      },
+      {
+        id: COLUMN_FEEDBACK_SCORES_ID,
+        label: "Feedback scores",
+        type: COLUMN_TYPE.numberDictionary,
+        accessorFn: (row) => row.feedback_scores || [],
+        cell: FeedbackScoreListCell as never,
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,
