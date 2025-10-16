@@ -32,6 +32,10 @@ interface JsonKeyValueTableProps {
   className?: string;
   maxDepth?: number;
   localStorageKey?: string;
+  controlledExpanded?: ExpandedState;
+  onExpandedChange?: (
+    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+  ) => void;
 }
 
 interface JsonRowData {
@@ -157,7 +161,12 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   className,
   maxDepth = 5,
   localStorageKey,
+  controlledExpanded,
+  onExpandedChange,
 }) => {
+  const isControlled =
+    controlledExpanded !== undefined && onExpandedChange !== undefined;
+
   const tableData = useMemo(() => {
     if (!isObject(data)) {
       return [];
@@ -210,17 +219,21 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
     () => initialExpanded,
   );
 
-  // Use the state values directly - they already have initialExpanded as default
-  // This allows user interactions while maintaining the default expanded state
-  const [expanded, setExpanded] = localStorageKey
-    ? [localStorageExpanded, setLocalStorageExpanded]
-    : [regularExpanded, setRegularExpanded];
+  // Choose expanded state and setter based on mode (controlled vs uncontrolled)
+  const [expanded, setExpanded] = isControlled
+    ? [controlledExpanded, onExpandedChange]
+    : localStorageKey
+      ? [localStorageExpanded, setLocalStorageExpanded]
+      : [regularExpanded, setRegularExpanded];
 
   // Reset expansion state when data changes to ensure all sections are expanded by default
+  // But ONLY in uncontrolled mode - in controlled mode, parent manages the state
   useEffect(() => {
-    setExpanded(initialExpanded);
+    if (!isControlled) {
+      setExpanded(initialExpanded);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialExpanded]);
+  }, [initialExpanded, isControlled]);
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
