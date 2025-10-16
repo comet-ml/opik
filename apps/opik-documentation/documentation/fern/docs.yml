@@ -265,7 +265,7 @@ navigation:
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
-          - page: Alerts and Webhooks
+          - page: Alerts
             path: docs/production/alerts.mdx
             slug: alerts
       - section: Configuration
