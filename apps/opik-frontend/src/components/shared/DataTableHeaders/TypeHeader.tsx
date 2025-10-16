@@ -77,7 +77,7 @@ const TypeHeader = <TData,>(context: HeaderContext<TData, unknown>) => {
         />
       )}
       {Boolean(Icon) && (
-        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+        <Icon className="size-3.5 shrink-0 text-light-slate" />
       )}
       <span className="truncate">{header}</span>
       {explainer && <ExplainerIcon {...explainer} />}

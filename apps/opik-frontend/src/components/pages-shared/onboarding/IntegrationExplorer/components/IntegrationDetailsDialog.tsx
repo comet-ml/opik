@@ -83,7 +83,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
               href={selectedIntegration.docsLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
             >
               Read full guide
               <ExternalLink className="size-3" />

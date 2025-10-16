@@ -83,7 +83,7 @@ const AnswerButton: React.FC<AnswerButtonProps> = ({ option }) => {
       variant="outline"
       size="default"
       onClick={() => handleAnswer(option)}
-      className="h-auto justify-center whitespace-normal bg-white px-4 py-2.5 text-left"
+      className="h-auto justify-center whitespace-normal bg-white dark:bg-soft-background hover:dark:bg-primary-foreground px-4 py-2.5 text-left"
     >
       {option}
     </Button>

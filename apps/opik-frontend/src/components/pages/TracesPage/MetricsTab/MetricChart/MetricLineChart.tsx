@@ -18,7 +18,7 @@ import {
   ChartLegend,
   ChartTooltip,
 } from "@/components/ui/chart";
-import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import { DEFAULT_CHART_GRID_PROPS, DEFAULT_CHART_TICK } from "@/constants/chart";
 import { Spinner } from "@/components/ui/spinner";
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import ChartTooltipContent, {
@@ -118,7 +118,7 @@ const MetricLineChart = ({
           bottom: 5,
         }}
       >
-        <CartesianGrid vertical={false} />
+        <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
         <XAxis
           dataKey="time"
           axisLine={false}

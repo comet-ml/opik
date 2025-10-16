@@ -37,7 +37,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
         </div>
       </div>
       <div key={`${trace.id}_output`} className="flex justify-start">
-        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground px-4 py-2">
+        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground dark:bg-secondary px-4 py-2">
           <MessageRenderer
             message={trace.output}
             attemptTextExtraction={true}

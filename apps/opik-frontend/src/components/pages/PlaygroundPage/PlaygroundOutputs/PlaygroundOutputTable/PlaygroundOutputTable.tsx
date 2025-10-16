@@ -144,7 +144,7 @@ const PlaygroundOutputTable = ({
 
   return (
     <div
-      className="pt-10"
+      className="pt-10 playground-table"
       style={{ "--cell-top-height": "28px" } as React.CSSProperties}
     >
       <DataTable

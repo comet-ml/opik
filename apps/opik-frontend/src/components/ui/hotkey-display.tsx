@@ -4,12 +4,12 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const hotkeyDisplayVariants = cva(
-  "inline-flex items-center justify-center rounded-md",
+  "inline-flex items-center justify-center rounded-md group",
   {
     variants: {
       variant: {
-        default: "border border-input",
-        outline: "border border-input bg-background",
+        default: "border border-input dark:bg-input dark:border-border dark:text-foreground-secondary dark:group-disabled:text-muted-gray",
+        outline: "border border-input bg-background dark:bg-input dark:border-border dark:text-foreground-secondary dark:group-disabled:text-muted-gray",
       },
       size: {
         default: "h-8 min-w-8 px-2",
