@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.queues;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -19,8 +20,8 @@ import java.time.Instant;
 public record QueueMessage(
         // RQ metadata (stored directly in Redis HASH)
         String id,
-        String createdAt,
-        String enqueuedAt,
+        Instant createdAt,
+        Instant enqueuedAt,
         JobStatus status,
         String origin,
         long timeoutInSec,
@@ -28,7 +29,9 @@ public record QueueMessage(
         // Additional metadata
         String createdBy,
         String updatedBy,
-        String updatedAt) {
+        Instant updatedAt) {
+
+    public static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
     /**
      * Builder customization to inject defaults
@@ -36,9 +39,9 @@ public record QueueMessage(
     public static class QueueMessageBuilder {
         QueueMessageBuilder() {
             Instant now = Instant.now();
-            this.id = Generators.timeBasedEpoch().generate().toString();
-            this.createdAt = now.toString();
-            this.enqueuedAt = now.toString();
+            this.id = GENERATOR.generate().toString();
+            this.createdAt = now;
+            this.enqueuedAt = now;
             this.updatedAt = this.createdAt;
             this.status = JobStatus.QUEUED;
         }

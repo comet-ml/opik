@@ -45,11 +45,10 @@ public class RqJobUtils {
                 ? message.description()
                 : job.func();
 
-        var now = Instant.now();
         var jobHash = RqJobHash.builder()
                 .id(message.id())
-                .createdAt(now.toString())
-                .enqueuedAt(now.toString())
+                .createdAt((message.createdAt() != null ? message.createdAt() : Instant.now()).toString())
+                .enqueuedAt((message.enqueuedAt() != null ? message.enqueuedAt() : Instant.now()).toString())
                 .status(message.status())
                 .origin(message.origin())
                 .timeoutInSec(message.timeoutInSec())
