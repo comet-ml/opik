@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timezone
 from rq import Worker, get_current_job
 from opentelemetry import trace
+from opik_backend.jobs.optimizer import process_optimizer_job as _process_optimizer_job
 from opentelemetry.metrics import get_meter
 
 logger = logging.getLogger(__name__)
@@ -92,53 +93,8 @@ class NoOpDeathPenalty:
 
 
 def process_optimizer_job(*args, **kwargs):
-    """
-    Process an optimizer job from the Java backend.
-
-    Accepts either a dict with 'message' and optional 'wait_seconds',
-    or positional args/kwargs carrying the same fields.
-
-    Returns:
-        dict: Processing result
-    """
-    with tracer.start_as_current_span("process_optimizer_job") as span:
-        logger.info(f"Received args: {args}, kwargs: {kwargs}")
-        try:
-            current_job = get_current_job()
-            if current_job:
-                logger.info(f"PY job id={current_job.id} func=process_optimizer_job args={args} kwargs={kwargs}")
-        except Exception:
-            pass
-
-        # Normalize inputs (dict first arg or kwargs, else string)
-        if args and isinstance(args[0], dict):
-            message_data = args[0]
-            message_text = message_data.get('message', 'No message')
-            wait_seconds = message_data.get('wait_seconds', 0)
-        elif 'message' in kwargs:
-            message_text = kwargs.get('message', 'No message')
-            wait_seconds = kwargs.get('wait_seconds', 0)
-        else:
-            message_text = str(args[0]) if args else 'No message'
-            wait_seconds = 0
-
-        span.set_attribute("message", message_text)
-
-        logger.info(f"Processing optimizer job message: {message_text} (wait: {wait_seconds}s)")
-
-        if wait_seconds > 0:
-            time.sleep(wait_seconds)
-
-        result = {
-            "status": "success",
-            "message": f"Optimizer job processed: {message_text}",
-            "processed_by": "Python RQ Worker - Optimizer",
-            "wait_time": wait_seconds,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-        logger.info(f"Optimizer job processed successfully: {result}")
-        return result
+    # Re-export to preserve import path stability
+    return _process_optimizer_job(*args, **kwargs)
 
 # ================================
 # Custom RQ Worker with Metrics
