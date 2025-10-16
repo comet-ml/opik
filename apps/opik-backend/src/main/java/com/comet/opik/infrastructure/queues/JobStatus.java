@@ -39,6 +39,11 @@ public enum JobStatus {
     @JsonValue
     private final String value;
 
+    @Override
+    public String toString() {
+        return value;
+    }
+
     @JsonCreator
     public static JobStatus fromString(String value) {
         return Arrays.stream(values())

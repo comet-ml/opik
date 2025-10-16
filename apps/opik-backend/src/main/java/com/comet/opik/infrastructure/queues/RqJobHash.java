@@ -18,7 +18,7 @@ record RqJobHash(
         String enqueuedAt,
         JobStatus status,
         String origin,
-        long timeoutInSec,
+        long timeout,
         String description,
         String data) {
 }

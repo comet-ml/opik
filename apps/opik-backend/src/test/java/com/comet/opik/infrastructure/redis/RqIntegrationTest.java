@@ -145,6 +145,7 @@ class RqIntegrationTest {
         Assertions.assertThat((String) jobHash.get("data")).isNotNull();
         Assertions.assertThat(Instant.parse(jobHash.get("created_at").toString())).isBetween(startedAt, now);
         Assertions.assertThat(Instant.parse(jobHash.get("enqueued_at").toString())).isBetween(startedAt, now);
+        Assertions.assertThat((String) jobHash.get("description")).isEqualTo(Queue.OPTIMIZER_CLOUD.getFunctionName());
         Assertions.assertThat((String) jobHash.get("timeout")).isEqualTo("3600"); // default
     }
 }
