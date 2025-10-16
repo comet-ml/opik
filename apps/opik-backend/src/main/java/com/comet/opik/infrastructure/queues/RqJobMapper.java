@@ -12,14 +12,8 @@ interface RqJobMapper {
 
     RqJobMapper INSTANCE = Mappers.getMapper(RqJobMapper.class);
 
-    @Mapping(target = "id", source = "message.id")
     @Mapping(target = "createdAt", source = "message.createdAt", qualifiedByName = "instantToString")
     @Mapping(target = "enqueuedAt", source = "message.enqueuedAt", qualifiedByName = "instantToString")
-    @Mapping(target = "status", source = "message.status")
-    @Mapping(target = "origin", source = "message.origin")
-    @Mapping(target = "timeoutInSec", source = "message.timeoutInSec")
-    @Mapping(target = "description", source = "description")
-    @Mapping(target = "data", source = "data")
     RqJobHash toHash(QueueMessage message, String description, String data);
 
     @Named("instantToString")

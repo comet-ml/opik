@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.queues;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
 /**
@@ -9,14 +10,15 @@ import lombok.Builder;
  * This is the final format stored in Redis with all metadata fields
  * and the plain JSON data field.
  */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Builder
 record RqJobHash(
-        @JsonProperty("id") String id,
-        @JsonProperty("created_at") String createdAt,
-        @JsonProperty("enqueued_at") String enqueuedAt,
-        @JsonProperty("status") JobStatus status,
-        @JsonProperty("origin") String origin,
-        @JsonProperty("timeout") long timeoutInSec,
-        @JsonProperty("description") String description,
-        @JsonProperty("data") String data) {
+        String id,
+        String createdAt,
+        String enqueuedAt,
+        JobStatus status,
+        String origin,
+        long timeoutInSec,
+        String description,
+        String data) {
 }

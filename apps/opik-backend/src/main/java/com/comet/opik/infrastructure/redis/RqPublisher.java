@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.redis;
 
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.queues.Job;
 import com.comet.opik.infrastructure.queues.Queue;
@@ -20,7 +21,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Publisher service for enqueueing jobs to Python RQ (Redis Queue) workers.
@@ -40,6 +40,7 @@ class RqPublisher implements QueueProducer {
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull IdGenerator idGenerator;
 
     /**
      * Enqueue a message to be processed by Python RQ worker.
@@ -76,7 +77,8 @@ class RqPublisher implements QueueProducer {
      */
     public Mono<String> enqueueJob(@NonNull String queueName, @NonNull Job job) {
 
-        String jobId = UUID.randomUUID().toString();
+        String jobId = idGenerator.toString();
+
         // Use RQ's standard job key format
         String jobKey = RQ_JOB.formatted(jobId);
 
