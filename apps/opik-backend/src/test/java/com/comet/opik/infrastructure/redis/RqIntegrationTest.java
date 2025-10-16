@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.QueuesConfig;
 import com.comet.opik.infrastructure.queues.Job;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.mockito.Mockito;
 import org.redisson.Redisson;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
@@ -23,6 +25,7 @@ import org.redisson.config.Config;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.IntStream;
 
 /**
@@ -59,8 +62,11 @@ class RqIntegrationTest {
 
         opikConfig.setQueues(queuesConfig);
 
+        IdGenerator idGenerator = Mockito.mock(IdGenerator.class);
+        Mockito.when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+
         // Create publisher (needs both reactive and sync clients)
-        publisher = new RqPublisher(redisClient, opikConfig);
+        publisher = new RqPublisher(redisClient, opikConfig, idGenerator);
     }
 
     @AfterAll

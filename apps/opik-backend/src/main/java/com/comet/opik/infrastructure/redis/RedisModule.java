@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.redis;
 
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.DistributedLockConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RedisConfig;
@@ -43,8 +44,8 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Provides
     @Singleton
-    public QueueProducer rqPublisher(RedissonReactiveClient redisClient) {
-        return new RqPublisher(redisClient, configuration());
+    public QueueProducer rqPublisher(RedissonReactiveClient redisClient, IdGenerator idGenerator) {
+        return new RqPublisher(redisClient, configuration(), idGenerator);
     }
 
 }
