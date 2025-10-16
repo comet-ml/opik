@@ -39,6 +39,7 @@ class RqWorkerManager:
         self.worker_thread: Optional[threading.Thread] = None
         self.should_stop = threading.Event()
         self.redis_conn: Optional[redis.Redis] = None
+        self.worker: Optional[Worker] = None
         
         # Configuration from environment
         self.redis_host = os.getenv('REDIS_HOST', 'localhost')
@@ -54,7 +55,7 @@ class RqWorkerManager:
         self.initial_backoff = float(os.getenv('RQ_INITIAL_BACKOFF', '1'))  # seconds
         self.max_backoff = float(os.getenv('RQ_MAX_BACKOFF', '60'))  # seconds
         self.backoff_multiplier = float(os.getenv('RQ_BACKOFF_MULTIPLIER', '2'))
-        self.connection_timeout = float(os.getenv('REDIS_TIMEOUT_SECONDS', '15'))
+        self.connection_timeout = float(os.getenv('REDIS_TIMEOUT_SECONDS', '5'))
         
         # Log configuration
         logger.info("RQ Worker Manager Configuration:")
@@ -174,6 +175,8 @@ class RqWorkerManager:
                     connection=self.redis_conn,
                     serializer=JSONSerializer(),
                 )
+                # Keep reference for graceful shutdown
+                self.worker = worker
 
                 # Align RQ worker logger format with application logs
                 self._configure_worker_logger(worker)
@@ -209,6 +212,7 @@ class RqWorkerManager:
                     except Exception:
                         logger.error("Error closing Redis connection", exc_info=True)
                     self.redis_conn = None
+                self.worker = None
         
         logger.info("RQ worker manager thread stopped")
     
@@ -246,6 +250,12 @@ class RqWorkerManager:
         
         logger.info("Stopping RQ worker manager")
         self.should_stop.set()
+        # Request worker to stop if available
+        try:
+            if self.worker and hasattr(self.worker, 'request_stop'):
+                self.worker.request_stop()
+        except Exception:
+            logger.warning("Failed to request worker stop", exc_info=True)
         
         # Wait for thread to finish (with timeout)
         self.worker_thread.join(timeout=10)

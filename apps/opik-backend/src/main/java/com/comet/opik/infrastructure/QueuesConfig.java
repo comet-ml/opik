@@ -19,8 +19,8 @@ public class QueuesConfig {
     private boolean enabled;
 
     @Valid @NotNull @JsonProperty
-    @MinDuration(value = 5, unit = TimeUnit.SECONDS)
-    private Duration defaultJobTtl = Duration.days(1);
+    @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration defaultJobTtl;
 
     @Valid @NotNull @JsonProperty
     private Map<String, RqQueueConfig> queues = Map.of();

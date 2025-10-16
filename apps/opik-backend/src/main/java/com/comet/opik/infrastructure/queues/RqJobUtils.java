@@ -24,6 +24,9 @@ import java.util.Map;
 @UtilityClass
 public class RqJobUtils {
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+
     /**
      * Build a complete RQ job HASH from an RqMessage.
      *
@@ -55,8 +58,7 @@ public class RqJobUtils {
                 .build();
 
         // 3. Convert to Map using Jackson
-        Map<String, Object> fields = JsonUtils.convertValue(jobHash, new TypeReference<>() {
-        });
+        Map<String, Object> fields = JsonUtils.convertValue(jobHash, MAP_TYPE);
 
         // 4. Remove null fields
         fields.entrySet().removeIf(entry -> entry.getValue() == null);

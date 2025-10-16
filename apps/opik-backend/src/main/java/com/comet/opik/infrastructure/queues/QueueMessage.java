@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.queues;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -13,16 +14,21 @@ import java.util.UUID;
  * - The job data (func, args, kwargs) that will be serialized to plain JSON
  * - RQ metadata (id, timestamps, status, etc.) stored in the HASH
  */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Builder(toBuilder = true)
 public record QueueMessage(
         // RQ metadata (stored directly in Redis HASH)
-        @JsonProperty("id") String id,
-        @JsonProperty("created_at") String createdAt,
-        @JsonProperty("enqueued_at") String enqueuedAt,
-        @JsonProperty("status") JobStatus status,
-        @JsonProperty("origin") String origin,
-        @JsonProperty("timeout") long timeoutInSec,
-        @JsonProperty("description") String description) {
+        String id,
+        String createdAt,
+        String enqueuedAt,
+        JobStatus status,
+        String origin,
+        long timeoutInSec,
+        String description,
+        // Additional metadata
+        String createdBy,
+        String updatedBy,
+        String updatedAt) {
 
     /**
      * Builder customization to inject defaults
@@ -33,6 +39,7 @@ public record QueueMessage(
             this.id = UUID.randomUUID().toString();
             this.createdAt = now.toString();
             this.enqueuedAt = now.toString();
+            this.updatedAt = this.createdAt;
             this.status = JobStatus.QUEUED;
         }
     }

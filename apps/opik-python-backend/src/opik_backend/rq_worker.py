@@ -89,50 +89,7 @@ class NoOpDeathPenalty:
     def cancel_death_penalty(self):
         pass
 
-# Queue names
-OPTIMIZER_CLOUD_QUEUE = "opik:optimizer-cloud"
 
-# ================================
-# Job Processing Functions
-# ================================
-
-def process_optimizer_job(*args, **kwargs):
-    """
-    Process an optimizer job from the Java backend.
-    
-    This function is called by RQ when a job is dequeued.
-    
-    Args:
-        message: The message/job data to process
-    
-    Returns:
-        dict: Processing result
-    """
-    with tracer.start_as_current_span("process_optimizer_job") as span:
-        # Normalize inputs: accept positional string or kwargs 'message'
-        if args and isinstance(args[0], str):
-            message = args[0]
-        elif 'message' in kwargs:
-            message = kwargs.get('message')
-        else:
-            message = None
-        logger.info(f"Processing optimizer job: {message}")
-        
-        span.set_attribute("message", message if message is not None else "")
-        span.set_attribute("queue", OPTIMIZER_CLOUD_QUEUE)
-        
-        # Simulate processing time
-        time.sleep(0.5)
-        
-        result = {
-            "status": "success",
-            "message": f"Optimizer job processed: {message}",
-            "processed_by": "Python RQ Worker - Optimizer",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-        logger.info(f"Optimizer job processed successfully: {result}")
-        return result
 
 
 def process_hello_world(*args, **kwargs):
