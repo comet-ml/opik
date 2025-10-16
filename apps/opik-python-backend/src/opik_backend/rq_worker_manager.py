@@ -92,7 +92,7 @@ class RqWorkerManager:
             port=self.redis_port,
             db=self.redis_db,
             password=self.redis_password if self.redis_password else None,
-            decode_responses=False,  # RQ handles decoding
+            decode_responses=True,
             socket_timeout=self.connection_timeout,
             socket_connect_timeout=self.connection_timeout,
             socket_keepalive=True,
