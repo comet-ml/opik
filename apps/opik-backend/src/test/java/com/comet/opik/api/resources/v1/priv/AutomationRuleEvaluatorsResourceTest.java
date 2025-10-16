@@ -87,7 +87,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -1664,28 +1663,28 @@ class AutomationRuleEvaluatorsResourceTest {
             String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
 
             // Then - Wait for ClickHouse and verify sorting
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                var page = evaluatorsResourceClient.findEvaluatorPage(
-                        projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+            //Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
 
-                assertThat(page.content()).hasSizeGreaterThanOrEqualTo(5);
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(5);
 
-                // Extract the values and verify they're sorted correctly
-                var actualValues = page.content().stream()
-                        .filter(e -> evaluators.stream().anyMatch(ev -> ev.getName().equals(e.getName())))
-                        .limit(5)
-                        .map(extractor)
-                        .toList();
+            // Extract the values and verify they're sorted correctly
+            var actualValues = page.content().stream()
+                    .filter(e -> evaluators.stream().anyMatch(ev -> ev.getName().equals(e.getName())))
+                    .limit(5)
+                    .map(extractor)
+                    .toList();
 
-                var expectedValues = new ArrayList<>(actualValues);
-                if (direction.equals("ASC")) {
-                    expectedValues.sort(Comparator.naturalOrder());
-                } else {
-                    expectedValues.sort(Comparator.reverseOrder());
-                }
+            var expectedValues = new ArrayList<>(actualValues);
+            if (direction.equals("ASC")) {
+                expectedValues.sort(Comparator.naturalOrder());
+            } else {
+                expectedValues.sort(Comparator.reverseOrder());
+            }
 
-                assertThat(actualValues).isEqualTo(expectedValues);
-            });
+            assertThat(actualValues).isEqualTo(expectedValues);
+            //});
         }
 
         static Stream<Arguments> sortingTestCases() {
