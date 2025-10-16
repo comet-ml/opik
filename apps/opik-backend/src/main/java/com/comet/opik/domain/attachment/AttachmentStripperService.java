@@ -6,7 +6,6 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.events.AttachmentUploadRequested;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -29,7 +28,10 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.Base64;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,7 +52,6 @@ import java.util.regex.Pattern;
 @Slf4j
 public class AttachmentStripperService {
 
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull S3Config s3Config;
     private final @NonNull EventBus eventBus;
@@ -72,11 +73,9 @@ public class AttachmentStripperService {
     private final int minBase64Size;
 
     @Inject
-    public AttachmentStripperService(@NonNull IdGenerator idGenerator,
-            @NonNull ObjectMapper objectMapper,
+    public AttachmentStripperService(@NonNull ObjectMapper objectMapper,
             @NonNull OpikConfiguration opikConfig,
             @NonNull EventBus eventBus) {
-        this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.s3Config = opikConfig.getS3Config();
         this.eventBus = eventBus;
@@ -113,132 +112,154 @@ public class AttachmentStripperService {
 
     /**
      * Strips attachments from a Trace entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
     public Mono<Trace> stripAttachments(Trace trace, String workspaceId, String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            Trace.TraceBuilder builder = trace.toBuilder();
-
-            if (trace.input() != null) {
-                JsonNode processedInput = stripAttachments(trace.input(), trace.id(), EntityType.TRACE,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
-
-            if (trace.output() != null) {
-                JsonNode processedOutput = stripAttachments(trace.output(), trace.id(), EntityType.TRACE,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
-
-            if (trace.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(trace.metadata(), trace.id(), EntityType.TRACE,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
-
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+        var builder = trace.toBuilder();
+        return stripAttachmentsCommon(
+                trace.id(),
+                EntityType.TRACE,
+                workspaceId,
+                userName,
+                projectName,
+                trace.input(),
+                trace.output(),
+                trace.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
     }
 
     /**
      * Strips attachments from a TraceUpdate entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
     public Mono<TraceUpdate> stripAttachments(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
             String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            TraceUpdate.TraceUpdateBuilder builder = traceUpdate.toBuilder();
-
-            if (traceUpdate.input() != null) {
-                JsonNode processedInput = stripAttachments(traceUpdate.input(), traceId, EntityType.TRACE,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
-
-            if (traceUpdate.output() != null) {
-                JsonNode processedOutput = stripAttachments(traceUpdate.output(), traceId, EntityType.TRACE,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
-
-            if (traceUpdate.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(traceUpdate.metadata(), traceId, EntityType.TRACE,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
-
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+        var builder = traceUpdate.toBuilder();
+        return stripAttachmentsCommon(
+                traceId,
+                EntityType.TRACE,
+                workspaceId,
+                userName,
+                projectName,
+                traceUpdate.input(),
+                traceUpdate.output(),
+                traceUpdate.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
     }
 
     /**
      * Strips attachments from a Span entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
     public Mono<Span> stripAttachments(Span span, String workspaceId, String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            Span.SpanBuilder builder = span.toBuilder();
-
-            if (span.input() != null) {
-                JsonNode processedInput = stripAttachments(span.input(), span.id(), EntityType.SPAN,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
-
-            if (span.output() != null) {
-                JsonNode processedOutput = stripAttachments(span.output(), span.id(), EntityType.SPAN,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
-
-            if (span.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(span.metadata(), span.id(), EntityType.SPAN,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
-
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+        var builder = span.toBuilder();
+        return stripAttachmentsCommon(
+                span.id(),
+                EntityType.SPAN,
+                workspaceId,
+                userName,
+                projectName,
+                span.input(),
+                span.output(),
+                span.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
     }
 
     /**
      * Strips attachments from a SpanUpdate entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
     public Mono<SpanUpdate> stripAttachments(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
             String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            SpanUpdate.SpanUpdateBuilder builder = spanUpdate.toBuilder();
+        var builder = spanUpdate.toBuilder();
+        return stripAttachmentsCommon(
+                spanId,
+                EntityType.SPAN,
+                workspaceId,
+                userName,
+                projectName,
+                spanUpdate.input(),
+                spanUpdate.output(),
+                spanUpdate.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
+    }
 
-            if (spanUpdate.input() != null) {
-                JsonNode processedInput = stripAttachments(spanUpdate.input(), spanId, EntityType.SPAN,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
+    /**
+     * Common logic for stripping attachments from trace/span entities.
+     *
+     * This method handles the reactive processing of input, output, and metadata fields,
+     * stripping attachments asynchronously and applying the results back via the provided setters.
+     *
+     * @param <T> the entity type being processed
+     * @param entityId the entity ID (trace or span)
+     * @param entityType the type of entity (TRACE or SPAN)
+     * @param workspaceId the workspace ID
+     * @param userName the user name
+     * @param projectName the project name
+     * @param input the input JSON node
+     * @param output the output JSON node
+     * @param metadata the metadata JSON node
+     * @param inputSetter consumer to set input on the entity builder
+     * @param outputSetter consumer to set output on the entity builder
+     * @param metadataSetter consumer to set metadata on the entity builder
+     * @param buildFunction supplier to build the final entity
+     * @return Mono containing the processed entity
+     */
+    private <T> Mono<T> stripAttachmentsCommon(
+            UUID entityId,
+            EntityType entityType,
+            String workspaceId,
+            String userName,
+            String projectName,
+            JsonNode input,
+            JsonNode output,
+            JsonNode metadata,
+            Consumer<JsonNode> inputSetter,
+            Consumer<JsonNode> outputSetter,
+            Consumer<JsonNode> metadataSetter,
+            Supplier<T> buildFunction) {
 
-            if (spanUpdate.output() != null) {
-                JsonNode processedOutput = stripAttachments(spanUpdate.output(), spanId, EntityType.SPAN,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
+        Mono<Optional<JsonNode>> inputMono = processField(
+                input, entityId, entityType, workspaceId, userName, projectName, "input");
 
-            if (spanUpdate.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(spanUpdate.metadata(), spanId, EntityType.SPAN,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
+        Mono<Optional<JsonNode>> outputMono = processField(
+                output, entityId, entityType, workspaceId, userName, projectName, "output");
 
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+        Mono<Optional<JsonNode>> metadataMono = processField(
+                metadata, entityId, entityType, workspaceId, userName, projectName, "metadata");
+
+        return Mono.zip(inputMono, outputMono, metadataMono)
+                .map(tuple -> {
+                    tuple.getT1().ifPresent(inputSetter);
+                    tuple.getT2().ifPresent(outputSetter);
+                    tuple.getT3().ifPresent(metadataSetter);
+
+                    return buildFunction.get();
+                });
+    }
+
+    private Mono<Optional<JsonNode>> processField(
+            JsonNode value,
+            UUID entityId,
+            EntityType entityType,
+            String workspaceId,
+            String userName,
+            String projectName,
+            String fieldName) {
+        return Mono.justOrEmpty(value)
+                .flatMap(it -> Mono.fromCallable(
+                        () -> stripAttachments(it, entityId, entityType, workspaceId, userName, projectName, fieldName))
+                        .subscribeOn(Schedulers.boundedElastic()))
+                .map(Optional::of)
+                .defaultIfEmpty(Optional.empty());
     }
 
     /**
