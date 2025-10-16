@@ -66,7 +66,6 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
-import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -666,14 +665,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: "created_by",
         label: "Created by",
         type: COLUMN_TYPE.string,
-      },
-      {
-        id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback scores",
-        type: COLUMN_TYPE.numberDictionary,
-        accessorFn: (row) => row.feedback_scores || [],
-        cell: FeedbackScoreListCell as never,
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,
