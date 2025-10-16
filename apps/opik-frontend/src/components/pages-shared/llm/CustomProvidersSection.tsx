@@ -51,6 +51,9 @@ type CustomProvidersSectionProps = {
 const CustomProvidersSection: React.FC<CustomProvidersSectionProps> = ({
   providerKeys,
 }) => {
+  const resetDialogKeyRef = useRef(0);
+  const [openDialog, setOpenDialog] = useState<boolean>(false);
+
   const customProviders = useMemo(() => {
     return providerKeys.filter((pk) => pk.provider === PROVIDER_TYPE.CUSTOM);
   }, [providerKeys]);
@@ -67,6 +70,11 @@ const CustomProvidersSection: React.FC<CustomProvidersSectionProps> = ({
     ];
   }, []);
 
+  const handleAddCustomProvider = () => {
+    resetDialogKeyRef.current += 1;
+    setOpenDialog(true);
+  };
+
   return (
     <div className="mt-8">
       <div className="mb-4 flex items-center justify-between">
@@ -77,6 +85,10 @@ const CustomProvidersSection: React.FC<CustomProvidersSectionProps> = ({
             LM Studio, etc.)
           </p>
         </div>
+        <Button onClick={handleAddCustomProvider} size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          Add Custom Provider
+        </Button>
       </div>
 
       <DataTable
@@ -84,11 +96,23 @@ const CustomProvidersSection: React.FC<CustomProvidersSectionProps> = ({
         data={customProviders}
         noData={
           <DataTableNoData title="No custom providers configured">
-            <p className="comet-body-s text-muted-foreground">
-              Click "Add configuration" above to add a custom provider
+            <p className="comet-body-s text-muted-foreground mb-2">
+              Add your first custom provider to use Ollama, vLLM, or other
+              OpenAI-compatible services.
             </p>
+            <Button variant="link" onClick={handleAddCustomProvider}>
+              Add Custom Provider
+            </Button>
           </DataTableNoData>
         }
+      />
+
+      <ManageAIProviderDialog
+        key={resetDialogKeyRef.current}
+        open={openDialog}
+        setOpen={setOpenDialog}
+        configuredProvidersList={providerKeys}
+        defaultProvider={PROVIDER_TYPE.CUSTOM}
       />
     </div>
   );
