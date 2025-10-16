@@ -9,6 +9,8 @@ import { ExpandedState } from "@tanstack/react-table";
 
 /**
  * State for a single section (input/output/metadata) in the annotation viewer
+ * Note: expanded state uses index-based paths but JsonKeyValueTable will map these
+ * to key-based paths internally for robustness across different tree structures
  */
 interface SectionState {
   expanded: ExpandedState;
