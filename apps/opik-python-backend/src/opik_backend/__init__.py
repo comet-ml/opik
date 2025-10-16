@@ -74,21 +74,35 @@ def create_app(test_config=None, should_init_executor=True):
             from opik_backend.utils.redis_utils import get_redis_client
             get_redis_client().ping()
             app.logger.info("Redis client initialized at startup")
+
+            # Initialize RQ worker (only starts when running under Gunicorn)
+            init_rq_worker(app)
         except Exception as e:
             app.logger.warning(f"Redis client initialization failed at startup: {e}")
 
-    # Initialize RQ worker (only starts when running under Gunicorn)
-    init_rq_worker(app)
-
     # Ensure Redis client is closed at teardown
     from opik_backend.utils.redis_utils import get_redis_client
+    import atexit
+
     @app.teardown_appcontext
     def close_redis_client(exception):
+        # Do NOT close when worker is enabled (worker uses shared client)
+        if not is_rq_worker_enabled():
+            try:
+                client = get_redis_client()
+                client.close()
+            except Exception:
+                pass
+
+    # Also close on process exit
+    def _close_redis_on_exit():
         try:
             client = get_redis_client()
             client.close()
         except Exception:
             pass
+
+    atexit.register(_close_redis_on_exit)
 
     return app
 

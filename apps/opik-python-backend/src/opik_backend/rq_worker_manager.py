@@ -83,17 +83,11 @@ class RqWorkerManager:
         """
         logger.info("Starting RQ worker manager thread")
 
-        # Single connection attempt with ping as health check (shared client)
-        redis_client = redis_utils.get_redis_client()
         try:
+            # Use shared Redis client; startup connectivity is handled at app init
+            redis_client = redis_utils.get_redis_client()
             redis_client.ping()
-            logger.info("✅ Redis connection established")
-        except Exception as e:
-            logger.warning(f"❌ Redis ping failed at startup: {e}")
-            logger.info("RQ worker manager stopping (no connection)")
-            return
 
-        try:
             # Import custom worker class
             from opik_backend.rq_worker import MetricsWorker
 
