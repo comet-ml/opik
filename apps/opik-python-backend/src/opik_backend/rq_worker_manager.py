@@ -235,6 +235,11 @@ class RqWorkerManager:
         
         # Wait for thread to finish (with timeout)
         self.worker_thread.join(timeout=10)
+
+        # Fallback: second-phase wait with shorter timeout
+        if self.worker_thread.is_alive():
+            logger.warning("RQ worker thread still running after initial timeout; waiting briefly")
+            self.worker_thread.join(timeout=3)
         
         if self.worker_thread.is_alive():
             logger.warning("RQ worker thread did not stop gracefully")
