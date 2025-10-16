@@ -4,6 +4,13 @@ import { OpikBaseModel, type OpikMessage } from "./OpikBaseModel";
 import { ModelConfigurationError, ModelGenerationError } from "./errors";
 import { logger } from "@/utils/logger";
 import { detectProvider, type SupportedModelId } from "./providerDetection";
+import { track } from "@/decorators/track";
+import { SpanType } from "@/rest_api/api";
+import { enrichSpanFromResponse } from "./usageExtractor";
+
+export type VercelAIChatModelOptions = {
+  trackGenerations?: boolean;
+} & Record<string, unknown>;
 
 /**
  * LLM model implementation using Vercel AI SDK with multi-provider support.
@@ -38,11 +45,25 @@ export class VercelAIChatModel extends OpikBaseModel {
   private readonly model: LanguageModel;
 
   /**
+   * Private tracked wrapper for generateText SDK method.
+   */
+  private _generateText: (
+    params: Parameters<typeof generateText>[0]
+  ) => Promise<Awaited<ReturnType<typeof generateText>>>;
+
+  /**
+   * Private tracked wrapper for generateObject SDK method.
+   */
+  private _generateObject: (
+    params: Parameters<typeof generateObject>[0]
+  ) => Promise<Awaited<ReturnType<typeof generateObject>>>;
+
+  /**
    * Creates a new VercelAIChatModel instance with a LanguageModel.
    *
    * @param model - A LanguageModel instance
    */
-  constructor(model: LanguageModel);
+  constructor(model: LanguageModel, options?: VercelAIChatModelOptions);
 
   /**
    * Creates a new VercelAIChatModel instance with a typed model ID.
@@ -50,14 +71,19 @@ export class VercelAIChatModel extends OpikBaseModel {
    * @param modelId - The model ID (e.g., 'gpt-4o', 'claude-3-5-sonnet-latest', 'gemini-2.0-flash')
    * @param options - Provider-specific configuration options
    */
-  constructor(modelId: SupportedModelId, options?: Record<string, unknown>);
+  constructor(modelId: SupportedModelId, options?: VercelAIChatModelOptions);
   constructor(
     model: LanguageModel | SupportedModelId,
-    options?: Record<string, unknown>
+    options: VercelAIChatModelOptions = {
+      trackGenerations: true,
+    }
   ) {
     // Determine model name for OpikBaseModel
     const modelName = typeof model === "string" ? model : model.modelId;
     super(modelName);
+
+    // Extract trackGenerations from options, default to true
+    const { trackGenerations, ...restOptions } = options;
 
     try {
       // Check if it's a LanguageModel instance
@@ -66,8 +92,48 @@ export class VercelAIChatModel extends OpikBaseModel {
         logger.debug(`Initialized VercelAIChatModel with custom LanguageModel`);
       } else {
         // It's a model ID string, detect provider
-        this.model = detectProvider(model, options);
+        this.model = detectProvider(model, restOptions);
         logger.debug(`Initialized VercelAIChatModel with model ID: ${model}`);
+      }
+
+      logger.info(
+        "Initialized VercelAIChatModel",
+        JSON.stringify(
+          {
+            model: this.model,
+            modelName: this.modelName,
+            trackGenerations,
+            restOptions,
+          },
+          null,
+          2
+        )
+      );
+
+      // Wrap Vercel AI SDK methods with track decorator if tracking is enabled
+      if (trackGenerations) {
+        this._generateText = track(
+          {
+            name: "model.generateText",
+            type: SpanType.Llm,
+            enrichSpan: (result) =>
+              enrichSpanFromResponse(result, this.modelName),
+          },
+          generateText
+        );
+
+        this._generateObject = track(
+          {
+            name: "model.generateObject",
+            type: SpanType.Llm,
+            enrichSpan: (result) =>
+              enrichSpanFromResponse(result, this.modelName),
+          },
+          generateObject
+        );
+      } else {
+        this._generateText = generateText;
+        this._generateObject = generateObject;
       }
     } catch (error) {
       throw new ModelConfigurationError(
@@ -106,13 +172,14 @@ export class VercelAIChatModel extends OpikBaseModel {
     options?: Record<string, unknown>
   ): Promise<string> {
     try {
+      let LLMResult: string;
       if (responseFormat) {
         // Use generateObject for structured output
         logger.debug(
           `Generating structured output with model ${this.modelName}, input length: ${input.length}`
         );
 
-        const result = await generateObject({
+        const result = await this._generateObject({
           model: this.model,
           prompt: input,
           schema: responseFormat,
@@ -123,15 +190,13 @@ export class VercelAIChatModel extends OpikBaseModel {
           `Generated structured output with model ${this.modelName}`
         );
 
-        // Return JSON string to match Python SDK behavior
-        return JSON.stringify(result.object);
+        LLMResult = JSON.stringify(result.object);
       } else {
-        // Use generateText for regular text generation
         logger.debug(
           `Generating text with model ${this.modelName}, input length: ${input.length}`
         );
 
-        const result = await generateText({
+        const result = await this._generateText({
           model: this.model,
           prompt: input,
           ...options,
@@ -141,8 +206,10 @@ export class VercelAIChatModel extends OpikBaseModel {
           `Generated text with model ${this.modelName}, output length: ${result.text.length}`
         );
 
-        return result.text;
+        LLMResult = result.text;
       }
+
+      return LLMResult;
     } catch (error) {
       const errorMessage = responseFormat
         ? `Failed to generate structured output with model ${this.modelName}`
@@ -160,7 +227,8 @@ export class VercelAIChatModel extends OpikBaseModel {
    * Generate a provider-specific response object.
    *
    * Returns the full response object from Vercel AI SDK, which includes
-   * text, usage information, and other metadata.
+   * text, usage information, and other metadata. When trackGenerations is enabled,
+   * automatically tracks the generation with usage and metadata.
    *
    * @param messages - Array of conversation messages in Opik format
    * @param options - Optional generation parameters
@@ -187,7 +255,7 @@ export class VercelAIChatModel extends OpikBaseModel {
         `Generating provider response with model ${this.modelName}, messages count: ${messages.length}`
       );
 
-      const result = await generateText({
+      const result = await this._generateText({
         model: this.model,
         messages,
         ...options,

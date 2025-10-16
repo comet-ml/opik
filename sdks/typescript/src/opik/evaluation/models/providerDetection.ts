@@ -193,7 +193,7 @@ export function detectProvider(
   options?: Record<string, unknown>
 ): LanguageModel {
   if (isOpenAIModelId(modelId, options)) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = (options?.apiKey as string) || process.env.OPENAI_API_KEY;
     validateApiKey("OpenAI", apiKey, "OPENAI_API_KEY");
 
     return createOpenAI({
@@ -203,7 +203,7 @@ export function detectProvider(
   }
 
   if (isAnthropicModelId(modelId, options)) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = (options?.apiKey as string) || process.env.ANTHROPIC_API_KEY;
     validateApiKey("Anthropic", apiKey, "ANTHROPIC_API_KEY");
 
     return createAnthropic({
@@ -213,7 +213,7 @@ export function detectProvider(
   }
 
   if (isGeminiModelId(modelId, options)) {
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const apiKey = (options?.apiKey as string) || process.env.GOOGLE_API_KEY;
     validateApiKey("Google Gemini", apiKey, "GOOGLE_API_KEY");
 
     return createGoogleGenerativeAI({

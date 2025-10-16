@@ -9,6 +9,7 @@ import { EvaluationResult, EvaluationTask } from "./types";
 import { evaluate, EvaluateOptions } from "./evaluate";
 import { formatPromptTemplate } from "@/prompt/formatting";
 import { PromptType } from "@/prompt/types";
+import { formatMessagesAsString } from "./utils/formatMessages";
 
 /**
  * Options for evaluating prompt templates against a dataset.
@@ -141,8 +142,12 @@ function _buildPromptEvaluationTask(
     // Extract text from provider response
     const outputText = extractResponseText(response);
 
+    // Convert messages array to human-readable string for metrics
+    // This ensures compatibility with metrics that expect string input
+    const inputText = formatMessagesAsString(formattedMessages);
+
     return {
-      input: formattedMessages,
+      input: inputText,
       output: outputText,
     };
   };

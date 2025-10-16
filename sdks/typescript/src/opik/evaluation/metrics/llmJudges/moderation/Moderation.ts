@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { BaseMetric } from "../../BaseMetric";
+import {
+  BaseLLMJudgeMetric,
+  LLMJudgeModelSettings,
+} from "../BaseLLMJudgeMetric";
 import { EvaluationScoreResult } from "@/evaluation/types";
-import { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
-import { resolveModel } from "@/evaluation/models/modelsFactory";
 import type { SupportedModelId } from "@/evaluation/models/providerDetection";
 import type { LanguageModel } from "ai";
+import type { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
 import { FewShotExampleModeration } from "../types";
 import { generateQuery } from "./template";
 import { parseModelOutput } from "./parser";
@@ -52,17 +54,30 @@ const responseSchema = z.object({
  * console.log(result.value);  // 0.0 (safe content)
  * console.log(result.reason); // Explanation
  *
- * // Using custom model
- * const customMetric = new Moderation({ model: 'gpt-4-turbo' });
+ * // Using custom model with temperature and seed
+ * const customMetric = new Moderation({
+ *   model: 'gpt-4-turbo',
+ *   temperature: 0.3,
+ *   seed: 42
+ * });
  *
  * // Using custom model instance
  * import { openai } from '@ai-sdk/openai';
  * const customModel = openai('gpt-4o');
  * const instanceMetric = new Moderation({ model: customModel });
+ *
+ * // With advanced settings
+ * const advancedMetric = new Moderation({
+ *   temperature: 0.5,
+ *   maxTokens: 1000,
+ *   modelSettings: {
+ *     topP: 0.9,
+ *     presencePenalty: 0.1
+ *   }
+ * });
  * ```
  */
-export class Moderation extends BaseMetric {
-  private readonly model: OpikBaseModel;
+export class Moderation extends BaseLLMJudgeMetric {
   private readonly fewShotExamples: FewShotExampleModeration[];
 
   /**
@@ -73,56 +88,33 @@ export class Moderation extends BaseMetric {
    * @param options.name - The name of the metric. Defaults to "moderation_metric".
    * @param options.fewShotExamples - Optional few-shot examples to guide the model
    * @param options.trackMetric - Whether to track the metric. Defaults to true.
-   * @param options.seed - Optional seed value for reproducible model generation
-   * @param options.temperature - Optional temperature value for model generation
+   * @param options.temperature - Temperature setting (0.0-2.0). Controls randomness. Lower values make output more focused and deterministic. See https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text#temperature
+   * @param options.seed - Random seed for reproducible outputs. Useful for testing and debugging.
+   * @param options.maxTokens - Maximum number of tokens to generate in the response.
+   * @param options.modelSettings - Advanced model settings (topP, topK, presencePenalty, frequencyPenalty, stopSequences)
    */
   constructor(options?: {
     model?: SupportedModelId | LanguageModel | OpikBaseModel;
     name?: string;
     fewShotExamples?: FewShotExampleModeration[];
     trackMetric?: boolean;
-    seed?: number;
     temperature?: number;
+    seed?: number;
+    maxTokens?: number;
+    modelSettings?: LLMJudgeModelSettings;
   }) {
     const name = options?.name ?? "moderation_metric";
-    const trackMetric = options?.trackMetric ?? true;
 
-    super(name, trackMetric);
+    super(name, {
+      model: options?.model,
+      trackMetric: options?.trackMetric,
+      temperature: options?.temperature,
+      seed: options?.seed,
+      maxTokens: options?.maxTokens,
+      modelSettings: options?.modelSettings,
+    });
 
     this.fewShotExamples = options?.fewShotExamples ?? [];
-    this.model = this.initModel(
-      options?.model,
-      options?.temperature,
-      options?.seed
-    );
-  }
-
-  /**
-   * Initializes the model instance.
-   *
-   * @param model - Model identifier or instance
-   * @param temperature - Optional temperature setting
-   * @param seed - Optional seed for reproducibility
-   * @returns Initialized OpikBaseModel instance
-   */
-  private initModel(
-    model: SupportedModelId | LanguageModel | OpikBaseModel | undefined,
-    temperature?: number,
-    seed?: number
-  ): OpikBaseModel {
-    if (model instanceof OpikBaseModel) {
-      return model;
-    }
-
-    // resolveModel handles undefined, string model IDs, and LanguageModel instances
-    const resolvedModel = resolveModel(model);
-
-    // Note: The current OpikBaseModel interface doesn't support setting
-    // temperature/seed after construction. This would need to be added
-    // to the model interface or passed during generateString calls.
-    // For now, we just return the resolved model.
-
-    return resolvedModel;
   }
 
   public readonly validationSchema = validationSchema;
@@ -149,9 +141,12 @@ export class Moderation extends BaseMetric {
 
     const llmQuery = generateQuery(output, this.fewShotExamples);
 
+    const modelOptions = this.buildModelOptions();
+
     const modelOutput = await this.model.generateString(
       llmQuery,
-      responseSchema
+      responseSchema,
+      modelOptions
     );
 
     return parseModelOutput(modelOutput, this.name);

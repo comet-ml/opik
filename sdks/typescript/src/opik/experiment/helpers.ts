@@ -95,7 +95,7 @@ export function buildMetadataAndPromptVersions(
 
     for (const prompt of prompts) {
       // Extract version ID for backend linking
-      promptVersions.push({ id: prompt.id });
+      promptVersions.push({ id: prompt.versionId });
 
       // Embed prompt template in config
       promptsConfig[prompt.name] = prompt.prompt;

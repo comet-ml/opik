@@ -1,6 +1,9 @@
 import type { LanguageModel } from "ai";
 import { OpikBaseModel } from "./OpikBaseModel";
-import { VercelAIChatModel } from "./VercelAIChatModel";
+import {
+  VercelAIChatModel,
+  VercelAIChatModelOptions,
+} from "./VercelAIChatModel";
 import { type SupportedModelId } from "./providerDetection";
 
 /**
@@ -39,7 +42,7 @@ const DEFAULT_MODEL: SupportedModelId = "gpt-4o";
  */
 export function createModel(
   modelId: SupportedModelId,
-  options?: Record<string, unknown>
+  options?: VercelAIChatModelOptions
 ): OpikBaseModel {
   return new VercelAIChatModel(modelId, options);
 }
@@ -51,6 +54,7 @@ export function createModel(
  * yourself using the Vercel AI SDK provider packages.
  *
  * @param languageModel - A pre-configured LanguageModel instance from Vercel AI SDK
+ * @param options - Optional configuration options (trackGenerations defaults to true)
  * @returns An OpikBaseModel instance
  *
  * @example
@@ -72,9 +76,10 @@ export function createModel(
  * ```
  */
 export function createModelFromInstance(
-  languageModel: LanguageModel
+  languageModel: LanguageModel,
+  options?: VercelAIChatModelOptions
 ): OpikBaseModel {
-  return new VercelAIChatModel(languageModel);
+  return new VercelAIChatModel(languageModel, options);
 }
 
 // ============================================================================
@@ -158,17 +163,19 @@ Received: ${receivedType} ${receivedValue}`
  * const model4 = resolveModel(openai('gpt-4o'));
  * ```
  */
+
 export function resolveModel(
-  model?: SupportedModelId | LanguageModel | OpikBaseModel
+  model?: SupportedModelId | LanguageModel | OpikBaseModel,
+  options?: VercelAIChatModelOptions
 ): OpikBaseModel {
   // Handle undefined/null → use default
   if (model == null) {
-    return createModel(DEFAULT_MODEL);
+    return createModel(DEFAULT_MODEL, options);
   }
 
   // Handle string → create from model ID
   if (isSupportedModelId(model)) {
-    return createModel(model);
+    return createModel(model, options);
   }
 
   // Handle OpikBaseModel → return as-is
@@ -178,7 +185,7 @@ export function resolveModel(
 
   // Handle LanguageModel → wrap in adapter
   if (isLanguageModel(model)) {
-    return createModelFromInstance(model);
+    return createModelFromInstance(model, options);
   }
 
   // Invalid type → throw descriptive error

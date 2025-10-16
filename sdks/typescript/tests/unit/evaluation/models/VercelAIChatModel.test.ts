@@ -28,7 +28,9 @@ describe("VercelAIChatModel", () => {
     });
 
     it("should create instance with LanguageModel", () => {
-      const mockLanguageModel = {} as LanguageModel;
+      const mockLanguageModel = {
+        modelId: "custom-model",
+      } as LanguageModel;
       const model = new VercelAIChatModel(mockLanguageModel);
       expect(model).toBeInstanceOf(VercelAIChatModel);
       expect(model.modelName).toBe("custom-model");
