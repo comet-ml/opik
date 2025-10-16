@@ -1754,7 +1754,47 @@ class AutomationRuleEvaluatorsResourceTest {
                     org.junit.jupiter.params.provider.Arguments.of(
                             "last_updated_at", "DESC",
                             (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
-                                    .getLastUpdatedAt().toEpochMilli()));
+                                    .getLastUpdatedAt().toEpochMilli()),
+
+                    // ID sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "id", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                                    .toString()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "id", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                                    .toString()),
+
+                    // Project ID sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "project_id", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                                    .toString()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "project_id", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                                    .toString()),
+
+                    // Created by sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "created_by", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getCreatedBy()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "created_by", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getCreatedBy()),
+
+                    // Last updated by sorting
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "last_updated_by", "ASC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedBy()),
+                    org.junit.jupiter.params.provider.Arguments.of(
+                            "last_updated_by", "DESC",
+                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedBy()));
         }
 
         @Test
@@ -1785,125 +1825,112 @@ class AutomationRuleEvaluatorsResourceTest {
     @DisplayName("List Filtering Functionality")
     class ListFilteringFunctionality {
 
-        @Test
-        @DisplayName("Filter by ID with equals operator")
-        void filterById() throws JsonProcessingException {
+        @ParameterizedTest(name = "Filter by {0} with operator {1}")
+        @MethodSource("filteringTestCases")
+        @DisplayName("Filter automation rules by various fields")
+        void filterByField(String fieldName, String operator, String description)
+                throws JsonProcessingException, InterruptedException {
             // Given
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            final String filterValue;
+            final UUID expectedId;
+
+            if (fieldName.equals("id")) {
+                // Test ID filtering
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = id.toString();
+                expectedId = id;
+
+            } else if (fieldName.equals("name")) {
+                // Test Name filtering
+                var uniqueName = "unique-name-" + RandomStringUtils.randomAlphanumeric(10);
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .name(uniqueName)
+                        .projectId(projectId)
+                        .build();
+                expectedId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = "unique-name-";
+
+            } else if (fieldName.equals("created_by")) {
+                // Test Created By filtering
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = "test";
+                expectedId = null;
+
+            } else if (fieldName.equals("created_at")) {
+                // Test Created At filtering
+                var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+
+                var timestamp = Instant.now();
+                Thread.sleep(1000);
+
+                var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                expectedId = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+                filterValue = timestamp.toString();
+
+            } else { // last_updated_at
+                // Test Last Updated At filtering
+                var timestamp = Instant.now().minusSeconds(10);
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                expectedId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = timestamp.toString();
+            }
 
             // When
-            var filterFields = List.of(Map.of("field", "id", "operator", "=", "value", id.toString()));
+            var filterFields = List.of(Map.of("field", fieldName, "operator", operator, "value", filterValue));
             String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
             var page = evaluatorsResourceClient.findEvaluatorPage(
                     projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
 
             // Then
-            assertThat(page.content()).hasSize(1);
-            assertThat(page.content().get(0).getId()).isEqualTo(id);
-        }
-
-        @Test
-        @DisplayName("Filter by Name with contains operator")
-        void filterByName() throws JsonProcessingException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-            var uniqueName = "unique-name-" + RandomStringUtils.randomAlphanumeric(10);
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name(uniqueName)
-                    .projectId(projectId)
-                    .build();
-            evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
-
-            // When
-            var filterFields = List.of(Map.of("field", "name", "operator", "contains", "value", "unique-name-"));
-            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then
-            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
-            assertThat(page.content()).anyMatch(e -> e.getName().equals(uniqueName));
-        }
-
-        @Test
-        @DisplayName("Filter by Created By with contains operator")
-        void filterByCreatedBy() throws JsonProcessingException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
-
-            // When - Filter by created_by using contains operator
-            var filterFields = List.of(Map.of("field", "created_by", "operator", "contains", "value", "test"));
-            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then - Just verify the API accepts the filter (result may be empty or may contain evaluators)
             assertThat(page).isNotNull();
-            assertThat(page.sortableBy()).isNotNull();
+            assertThat(page.content()).isNotNull();
+
+            if (fieldName.equals("id") && operator.equals("=")) {
+                assertThat(page.content()).hasSize(1);
+                assertThat(page.content().get(0).getId()).isEqualTo(expectedId);
+            } else if (expectedId != null && !fieldName.equals("created_by")) {
+                assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+                assertThat(page.content()).anyMatch(e -> e.getId().equals(expectedId));
+            } else {
+                // For created_by, just verify API accepts the filter
+                assertThat(page.sortableBy()).isNotNull();
+            }
         }
 
-        @Test
-        @DisplayName("Filter by Created At with greater than operator")
-        void filterByCreatedAt() throws JsonProcessingException, InterruptedException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+        static Stream<org.junit.jupiter.params.provider.Arguments> filteringTestCases() {
+            return Stream.of(
+                    // ID filtering
+                    org.junit.jupiter.params.provider.Arguments.of("id", "=", "Filter by exact ID"),
 
-            // Create first evaluator
-            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-            evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+                    // Name filtering
+                    org.junit.jupiter.params.provider.Arguments.of("name", "contains", "Filter by name contains"),
 
-            var timestamp = Instant.now();
-            Thread.sleep(1000);
+                    // Created by filtering
+                    org.junit.jupiter.params.provider.Arguments.of("created_by", "contains",
+                            "Filter by created_by contains"),
 
-            // Create second evaluator after timestamp
-            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-            var id2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+                    // Created at filtering
+                    org.junit.jupiter.params.provider.Arguments.of("created_at", ">",
+                            "Filter by created_at greater than"),
 
-            // When - Filter by created_at >timestamp
-            var filterFields = List.of(Map.of("field", "created_at", "operator", ">", "value", timestamp.toString()));
-            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then - Should have at least the second evaluator
-            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
-            assertThat(page.content()).anyMatch(e -> e.getId().equals(id2));
-        }
-
-        @Test
-        @DisplayName("Filter by Last Updated At with greater than or equal operator")
-        void filterByLastUpdatedAt() throws JsonProcessingException {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-            var timestamp = Instant.now().minusSeconds(10);
-
-            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
-                    .build();
-            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
-
-            // When - Filter by last_updated_at >= timestamp (10 seconds ago)
-            var filterFields = List
-                    .of(Map.of("field", "last_updated_at", "operator", ">=", "value", timestamp.toString()));
-            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then - Should include our evaluator
-            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
-            assertThat(page.content()).anyMatch(e -> e.getId().equals(id));
+                    // Last updated at filtering
+                    org.junit.jupiter.params.provider.Arguments.of("last_updated_at", ">=",
+                            "Filter by last_updated_at greater than or equal"));
         }
 
         @ParameterizedTest(name = "Filter by project name with operator: {0}")
@@ -1973,13 +2000,15 @@ class AutomationRuleEvaluatorsResourceTest {
     @DisplayName("Pagination Functionality")
     class PaginationFunctionality {
 
-        @Test
-        @DisplayName("Fetch evaluators using pagination - page 1")
-        void paginationPage1() {
+        @ParameterizedTest(name = "Fetch page {0} with page size {1}, expecting {2} items")
+        @MethodSource("paginationTestCases")
+        @DisplayName("Fetch evaluators using pagination")
+        void paginationTest(int pageNumber, int pageSize, int expectedItemsOnPage, String description) {
             // Given
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
 
-            var evaluators = IntStream.range(0, 25)
+            var totalItems = 25;
+            var evaluators = IntStream.range(0, totalItems)
                     .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                             .name("evaluator-" + i)
                             .projectId(projectId)
@@ -1988,67 +2017,23 @@ class AutomationRuleEvaluatorsResourceTest {
 
             evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
 
-            // When - Fetch page 1 with size 10
+            // When - Fetch the specified page
             var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, null, 1, 10, WORKSPACE_NAME, API_KEY);
+                    projectId, null, null, null, pageNumber, pageSize, WORKSPACE_NAME, API_KEY);
 
             // Then
-            assertThat(page.page()).isEqualTo(1);
-            assertThat(page.size()).isEqualTo(10);
-            assertThat(page.total()).isEqualTo(25);
-            assertThat(page.content()).hasSize(10);
+            assertThat(page.page()).isEqualTo(pageNumber);
+            assertThat(page.size()).isEqualTo(expectedItemsOnPage);
+            assertThat(page.total()).isEqualTo(totalItems);
+            assertThat(page.content()).hasSize(expectedItemsOnPage);
         }
 
-        @Test
-        @DisplayName("Fetch evaluators using pagination - page 2")
-        void paginationPage2() {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-
-            var evaluators = IntStream.range(0, 25)
-                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                            .name("evaluator-" + i)
-                            .projectId(projectId)
-                            .build())
-                    .toList();
-
-            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
-
-            // When - Fetch page 2 with size 10
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, null, 2, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then
-            assertThat(page.page()).isEqualTo(2);
-            assertThat(page.size()).isEqualTo(10);
-            assertThat(page.total()).isEqualTo(25);
-            assertThat(page.content()).hasSize(10);
-        }
-
-        @Test
-        @DisplayName("Fetch evaluators using pagination - last page")
-        void paginationLastPage() {
-            // Given
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
-
-            var evaluators = IntStream.range(0, 25)
-                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                            .name("evaluator-" + i)
-                            .projectId(projectId)
-                            .build())
-                    .toList();
-
-            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
-
-            // When - Fetch page 3 with size 10 (last page with 5 items)
-            var page = evaluatorsResourceClient.findEvaluatorPage(
-                    projectId, null, null, null, 3, 10, WORKSPACE_NAME, API_KEY);
-
-            // Then
-            assertThat(page.page()).isEqualTo(3);
-            assertThat(page.size()).isEqualTo(5); // Only 5 items on last page
-            assertThat(page.total()).isEqualTo(25);
-            assertThat(page.content()).hasSize(5);
+        static Stream<org.junit.jupiter.params.provider.Arguments> paginationTestCases() {
+            return Stream.of(
+                    // pageNumber, pageSize, expectedItemsOnPage, description
+                    org.junit.jupiter.params.provider.Arguments.of(1, 10, 10, "First page with 10 items"),
+                    org.junit.jupiter.params.provider.Arguments.of(2, 10, 10, "Second page with 10 items"),
+                    org.junit.jupiter.params.provider.Arguments.of(3, 10, 5, "Last page with 5 items"));
         }
     }
 
