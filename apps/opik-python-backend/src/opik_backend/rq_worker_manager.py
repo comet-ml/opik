@@ -115,82 +115,70 @@ class RqWorkerManager:
 
     def _run_worker(self):
         """
-        Run the RQ worker with automatic reconnection.
-        
-        This method runs in a background thread and handles:
-        - Initial connection with exponential backoff
-        - Worker execution
-        - Automatic reconnection on connection loss
+        Run the RQ worker (single-start). Reconnection is delegated to the
+        Redis client / RQ internals. Startup performs a single ping health check.
         """
         logger.info("Starting RQ worker manager thread")
-        
-        while not self.should_stop.is_set():
-            # Connect to Redis with exponential backoff
-            self.redis_conn = self._connect_with_backoff()
-            
-            if self.redis_conn is None:
-                # Stop was requested
-                logger.info("RQ worker manager stopping (no connection)")
-                break
-            
-            try:
-                # Import custom worker class
-                from opik_backend.rq_worker import MetricsWorker
 
-                # Create queues with JSONSerializer (default RQ contract)
-                queues = [
-                    Queue(name, connection=self.redis_conn, serializer=JSONSerializer())
-                    for name in self.queue_names
-                ]
-                
-                logger.info(f"Listening on queues: {self.queue_names}")
-                logger.info("Using JSONSerializer and default Job (plain JSON data)")
-                
-                # Create and run worker with unique name and custom Job class
-                worker = MetricsWorker(
-                    queues,
-                    connection=self.redis_conn,
-                    serializer=JSONSerializer(),
-                )
-                # Keep reference for graceful shutdown
-                self.worker = worker
+        # Single connection attempt with ping as health check
+        self.redis_conn = self._create_redis_connection()
+        try:
+            self.redis_conn.ping()
+            logger.info("✅ Redis connection established")
+        except Exception as e:
+            logger.warning(f"❌ Redis ping failed at startup: {e}")
+            logger.info("RQ worker manager stopping (no connection)")
+            return
 
-                # Align RQ worker logger format with application logs
-                self._configure_worker_logger(worker)
-                
-                # Monkey-patch _install_signal_handlers to do nothing
-                # This is required because signal handlers can only be installed in the main thread
-                # and our worker runs in a background thread
-                worker._install_signal_handlers = lambda: None
-                
-                logger.info(f"RQ worker starting (hostname: {socket.gethostname()}, PID: {os.getpid()})")
-                
-                # Run worker (blocks until connection error or stop)
-                worker.work(
-                    logging_level=logging.INFO,
-                    with_scheduler=False  # Disable scheduler to avoid issues
-                )
-                
-            except RedisConnectionError as e:
-                logger.error(f"Redis connection lost: {e}. Reconnecting...")
-                # Connection lost, loop will reconnect with backoff
-            except Exception as e:
-                logger.error(f"Unexpected error in RQ worker: {e}", exc_info=True)
-                # Wait before reconnecting
-                if not self.should_stop.wait(timeout=self.initial_backoff):
-                    continue
-                else:
-                    break
-            finally:
-                # Clean up connection
-                if self.redis_conn:
-                    try:
-                        self.redis_conn.close()
-                    except Exception:
-                        logger.error("Error closing Redis connection", exc_info=True)
-                    self.redis_conn = None
-                self.worker = None
-        
+        try:
+            # Import custom worker class
+            from opik_backend.rq_worker import MetricsWorker
+
+            # Create queues with JSONSerializer (default RQ contract)
+            queues = [
+                Queue(name, connection=self.redis_conn, serializer=JSONSerializer())
+                for name in self.queue_names
+            ]
+
+            logger.info(f"Listening on queues: {self.queue_names}")
+            logger.info("Using JSONSerializer and default Job (plain JSON data)")
+
+            # Create and run worker with unique name and custom Job class
+            worker = MetricsWorker(
+                queues,
+                connection=self.redis_conn,
+                serializer=JSONSerializer(),
+            )
+            # Keep reference for graceful shutdown
+            self.worker = worker
+
+            # Align RQ worker logger format with application logs
+            self._configure_worker_logger(worker)
+
+            # Monkey-patch _install_signal_handlers to do nothing
+            worker._install_signal_handlers = lambda: None
+
+            logger.info(f"RQ worker starting (hostname: {socket.gethostname()}, PID: {os.getpid()})")
+
+            # Run worker (blocks until stop requested or error). Reconnects are
+            # left to underlying libraries; if it exits, manager won't auto-restart.
+            worker.work(
+                logging_level=logging.INFO,
+                with_scheduler=False
+            )
+
+        except Exception as e:
+            logger.error(f"Unexpected error in RQ worker: {e}", exc_info=True)
+        finally:
+            # Clean up connection
+            if self.redis_conn:
+                try:
+                    self.redis_conn.close()
+                except Exception:
+                    logger.error("Error closing Redis connection", exc_info=True)
+                self.redis_conn = None
+            self.worker = None
+
         logger.info("RQ worker manager thread stopped")
     
     def start(self):
