@@ -50,6 +50,7 @@ type ManageAIProviderDialogProps = {
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
   configuredProvidersList?: ProviderKey[];
+  defaultProvider?: PROVIDER_TYPE;
 };
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
@@ -59,6 +60,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onAddProvider,
   onDeleteProvider,
   configuredProvidersList,
+  defaultProvider,
 }) => {
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const { mutate: createMutate } = useProviderKeysCreateMutation();
@@ -70,7 +72,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   >({
     resolver: zodResolver(AIProviderFormSchema),
     defaultValues: {
-      provider: providerKey?.provider || "",
+      provider: providerKey?.provider || defaultProvider || "",
       apiKey: "",
       location: providerKey?.configuration?.location ?? "",
       url: providerKey?.base_url ?? "",
