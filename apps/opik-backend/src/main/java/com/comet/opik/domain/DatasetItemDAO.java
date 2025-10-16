@@ -754,8 +754,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         arrayFlatten(
                             groupArray(
                                 arrayMap(
-                                    key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
-                                    if(length(output_keys) > 0, output_keys, JSONExtractKeys(output))
+                                    key_type -> map(key_type.key, [key_type.type]),
+                                    if(length(output_keys) > 0, output_keys,
+                                        arrayMap(
+                                            key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))),
+                                            JSONExtractKeys(output)
+                                        )
+                                    )
                                 )
                             )
                         )
