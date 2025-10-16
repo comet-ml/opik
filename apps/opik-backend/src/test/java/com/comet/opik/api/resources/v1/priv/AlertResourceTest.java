@@ -96,6 +96,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
+import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
@@ -1524,7 +1525,7 @@ class AlertResourceTest {
             String actualRequestBody = actualRequest.getBodyAsString();
 
             assertThat(actualRequest.header(HttpHeaders.AUTHORIZATION).firstValue())
-                    .isEqualTo(alert.webhook().secretToken());
+                    .isEqualTo(BEARER_PREFIX + alert.webhook().secretToken());
 
             // Get sent event and verify it's payload
             WebhookEvent<Map<String, Object>> actualEvent = JsonUtils.readValue(actualRequestBody, WebhookEvent.class);
