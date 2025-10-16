@@ -28,7 +28,7 @@ from ...message_processing.emulation import models
 LOGGER = logging.getLogger(__name__)
 
 EVALUATION_TASK_NAME = "evaluation_task"
-EVALUATION_SPAN_PARAMETER_NAME = "evaluation_span"
+EVALUATION_SPAN_PARAMETER_NAME = "task_span"
 
 
 class EvaluationEngine:
@@ -286,19 +286,19 @@ class EvaluationEngine:
             client=self._client,
         ):
             score_results = self._score_llm_task_result_span(
-                trace_id=trace_id, evaluation_span=evaluation_span
+                trace_id=trace_id, task_span=evaluation_span
             )
             # append scores to the input test result
             evaluation_task_result.score_results += score_results
             return evaluation_task_result
 
-    @opik.track(name="llm_span_metrics_calculation")
+    @opik.track(name="task_span_metrics_calculation")  # type: ignore[attr-defined,has-type]
     def _score_llm_task_result_span(
         self,
         trace_id: str,
-        evaluation_span: models.SpanModel,
+        task_span: models.SpanModel,
     ) -> List[score_result.ScoreResult]:
-        score_kwargs = {EVALUATION_SPAN_PARAMETER_NAME: evaluation_span}
+        score_kwargs = {EVALUATION_SPAN_PARAMETER_NAME: task_span}
         score_results = _scores_by_metrics(
             scoring_metrics=self._task_span_scoring_metrics,
             score_kwargs=score_kwargs,
