@@ -626,6 +626,175 @@ evaluation = evaluate(
 )
 ```
 
+### Using task span evaluation metrics
+
+Opik supports advanced evaluation metrics that can analyze the detailed execution information of your tasks. These metrics receive a `task_span` parameter containing structured data about the task execution, including input, output, metadata, and nested operations.
+
+Task span metrics are particularly useful for evaluating:
+- The internal structure and behavior of your LLM applications
+- Performance characteristics like execution patterns
+- Quality of intermediate steps in complex workflows
+- Cost and usage optimization opportunities
+- Agent trajectory
+
+#### Creating task span metrics
+
+To create a task span evaluation metric, define a metric class that accepts a `task_span` parameter in its `score` method. The `task_span` parameter is a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object that contains detailed information about the task execution:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import Optional
+from opik.evaluation.metrics import BaseMetric, score_result
+from opik.message_processing.emulation.models import SpanModel
+
+class TaskSpanQualityMetric(BaseMetric):
+    def __init__(
+        self,
+        name: str = "task_span_quality",
+        track: bool = True,
+        project_name: Optional[str] = None,
+    ):
+        super().__init__(name=name, track=track, project_name=project_name)
+
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Access detailed span information
+        span_name = task_span.name
+        input_data = task_span.input
+        output_data = task_span.output
+        metadata = task_span.metadata
+
+        # Example: Check if the task executed successfully
+        has_error = task_span.error_info is not None
+
+        # Example: Analyze input complexity
+        input_complexity = len(str(input_data)) if input_data else 0
+
+        # Custom scoring logic
+        if has_error:
+            score_value = 0.0
+            reason = "Task execution failed"
+        elif input_complexity > 1000:
+            score_value = 0.8
+            reason = "High complexity input handled well"
+        else:
+            score_value = 1.0
+            reason = "Task executed successfully"
+
+        return score_result.ScoreResult(
+            value=score_value,
+            name=self.name,
+            reason=reason
+        )
+
+# Another example: Check specific task characteristics
+class ExecutionTimeMetric(BaseMetric):
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Calculate execution duration
+        if task_span.start_time and task_span.end_time:
+            duration = (task_span.end_time - task_span.start_time).total_seconds()
+
+            # Score based on execution speed
+            if duration < 1.0:
+                score = 1.0
+                reason = f"Fast execution: {duration:.2f}s"
+            elif duration < 5.0:
+                score = 0.8
+                reason = f"Acceptable execution time: {duration:.2f}s"
+            else:
+                score = 0.5
+                reason = f"Slow execution: {duration:.2f}s"
+        else:
+            score = 0.0
+            reason = "Cannot determine execution time"
+
+        return score_result.ScoreResult(
+            value=score,
+            name=self.name,
+            reason=reason
+        )
+```
+</CodeBlocks>
+
+#### Using task span metrics in evaluation
+
+Task span metrics work alongside regular evaluation metrics and are automatically detected by the evaluation engine:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import evaluate
+from opik.evaluation.metrics import Equals
+
+# Create both regular and task span metrics
+equals_metric = Equals()
+quality_metric = TaskSpanQualityMetric()
+timing_metric = ExecutionTimeMetric()
+
+# Run evaluation with mixed metric types
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[
+        equals_metric,        # Regular metric
+        quality_metric,       # Task span metric
+        timing_metric,        # Task span metric
+    ],
+    experiment_name="Comprehensive Evaluation"
+)
+```
+</CodeBlocks>
+
+<Tip>
+When you use task span metrics, Opik automatically enables span collection and analysis. You don't need to configure anything special - the system will detect metrics with `task_span` parameters and handle them appropriately.
+</Tip>
+
+#### Accessing span hierarchy
+
+Task spans can contain nested spans representing sub-operations. You can analyze the complete execution hierarchy:
+
+<CodeBlocks>
+```python title="Python" language="python"
+class HierarchyAnalysisMetric(BaseMetric):
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Analyze nested operations
+        nested_span_count = len(task_span.spans)
+
+        # Count different types of operations
+        llm_spans = [s for s in task_span.spans if s.type == "llm"]
+        tool_spans = [s for s in task_span.spans if s.type == "tool"]
+
+        # Analyze the complexity of the operation
+        total_operations = nested_span_count
+        llm_operations = len(llm_spans)
+
+        if total_operations == 0:
+            score = 0.5
+            reason = "Simple operation with no nested steps"
+        elif llm_operations > 3:
+            score = 0.7
+            reason = f"Complex operation with {llm_operations} LLM calls"
+        else:
+            score = 1.0
+            reason = f"Well-structured operation with {total_operations} steps"
+
+        return score_result.ScoreResult(
+            value=score,
+            name=self.name,
+            reason=reason
+        )
+```
+</CodeBlocks>
+
+#### Best practices for task span metrics
+
+1. **Focus on execution patterns**: Use task span metrics to evaluate how your application executes, not just the final output
+2. **Combine with regular metrics**: Mix task span metrics with traditional output-based metrics for comprehensive evaluation
+3. **Analyze performance**: Leverage timing, cost, and usage information for optimization insights
+4. **Handle missing data gracefully**: Always check for None values in optional span attributes
+
+<Warning>
+Task span metrics have access to detailed execution information including inputs, outputs, and metadata. Be mindful of sensitive data and ensure your metrics handle this information appropriately.
+</Warning>
+
 ### Accessing logged experiments
 
 You can access all the experiments logged to the platform from the SDK with the
