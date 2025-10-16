@@ -56,6 +56,7 @@ class RqWorkerManager:
         self.max_backoff = float(os.getenv('RQ_MAX_BACKOFF', '60'))  # seconds
         self.backoff_multiplier = float(os.getenv('RQ_BACKOFF_MULTIPLIER', '2'))
         self.connection_timeout = float(os.getenv('REDIS_TIMEOUT_SECONDS', '5'))
+        self.health_check_interval = int(os.getenv('REDIS_HEALTH_CHECK_INTERVAL_SECONDS', '60'))
         
         # Log configuration
         logger.info("RQ Worker Manager Configuration:")
@@ -95,7 +96,7 @@ class RqWorkerManager:
             socket_timeout=self.connection_timeout,
             socket_connect_timeout=self.connection_timeout,
             socket_keepalive=True,
-            health_check_interval=30
+            health_check_interval=self.health_check_interval
         )
     
     def _connect_with_backoff(self) -> Optional[redis.Redis]:
