@@ -527,9 +527,6 @@ queues:
     # Default: 14 days
   # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
   defaultJobTtl: ${OPIK_QUEUES_DEFAULT_JOB_TTL:-14 days}
-    # Default: true
-    # Description: Prefer Jackson JSON building of job data and fields
-    useJacksonSerialization: ${OPIK_QUEUES_USE_JACKSON_SERIALIZATION:-true}
   # Per-queue specific configurations
   queues:
     # Optimizer cloud queue configuration

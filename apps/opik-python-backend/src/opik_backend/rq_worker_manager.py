@@ -40,22 +40,12 @@ class RqWorkerManager:
         self.redis_conn: Optional[redis.Redis] = None
         self.worker: Optional[Worker] = None
         
-        # Configuration from environment
-        self.redis_host = os.getenv('REDIS_HOST', 'localhost')
-        self.redis_port = int(os.getenv('REDIS_PORT', '6379'))
-        self.redis_db = int(os.getenv('REDIS_DB', '0'))
-        self.redis_password = os.getenv('REDIS_PASSWORD')
-        
         # Queue names to listen to (comma-separated)
         queue_names_str = os.getenv('RQ_QUEUE_NAMES', 'opik:optimizer-cloud')
         self.queue_names = [name.strip() for name in queue_names_str.split(',') if name.strip()]
         
-        self.connection_timeout = float(os.getenv('REDIS_TIMEOUT_SECONDS', '5'))
-        self.health_check_interval = int(os.getenv('REDIS_HEALTH_CHECK_INTERVAL_SECONDS', '60'))
-        
         # Log configuration
         logger.info("RQ Worker Manager Configuration:")
-        logger.info(f"  Redis: {self.redis_host}:{self.redis_port}/{self.redis_db}")
         logger.info(f"  Queue names: {self.queue_names}")
         
     
@@ -84,7 +74,7 @@ class RqWorkerManager:
         logger.info("Starting RQ worker manager thread")
 
         try:
-            # Use shared Redis client; startup connectivity is handled at app init
+            # Use shared Redis client in binary mode for RQ
             redis_client = redis_utils.get_redis_client()
             redis_client.ping()
 

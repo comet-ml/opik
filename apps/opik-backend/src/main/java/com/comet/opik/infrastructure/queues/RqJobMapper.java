@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.queues;
 
+import lombok.NonNull;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -16,7 +17,7 @@ interface RqJobMapper {
     @Mapping(target = "enqueuedAt", source = "message.enqueuedAt", qualifiedByName = "instantToString")
     @Mapping(target = "description", source = "description")
     @Mapping(target = "timeout", source = "message.timeoutInSec")
-    RqJobHash toHash(QueueMessage message, String description, String data);
+    RqJobHash toHash(@NonNull QueueMessage message, @NonNull String description, @NonNull String data);
 
     @Named("instantToString")
     static String instantToString(Instant instant) {

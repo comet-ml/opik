@@ -77,7 +77,7 @@ class RqPublisher implements QueueProducer {
      */
     public Mono<String> enqueueJob(@NonNull String queueName, @NonNull Job job) {
 
-        String jobId = idGenerator.toString();
+        String jobId = idGenerator.generateId().toString();
 
         // Use RQ's standard job key format
         String jobKey = RQ_JOB.formatted(jobId);

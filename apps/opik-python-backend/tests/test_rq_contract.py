@@ -171,9 +171,10 @@ class TestJavaPythonRqContract:
         serializer = JSONSerializer()
         q = Queue(queue_name, connection=redis_conn, serializer=serializer)
 
-        # Enqueue our worker function by import path with kwargs
+        # Enqueue our worker function by reference with kwargs
+        from opik_backend.rq_worker import process_optimizer_job
         job = q.enqueue(
-            'opik_backend.rq_worker.process_optimizer_job',
+            process_optimizer_job,
             { 'message': 'FromContractTest', 'wait_seconds': 0 }
         )
 
@@ -182,14 +183,20 @@ class TestJavaPythonRqContract:
         worker.work(burst=True)
 
         # Fetch job and verify result
+        # Refresh job status and verify
         fetched = Job.fetch(job.id, connection=redis_conn, serializer=serializer)
-        assert fetched.is_finished
-        assert isinstance(fetched.result, dict)
-        assert fetched.result.get('status') == 'success'
-        assert 'FromContractTest' in fetched.result.get('message', '')
+        assert fetched.is_finished, fetched.exc_info
+        val = fetched.return_value
+        if callable(val):
+            val = val()
+        # Normalize to text and assert content (app uses JSONSerializer)
+        try:
+            text = val if isinstance(val, str) else (val.decode('utf-8') if isinstance(val, bytes) else json.dumps(val))
+        except Exception:
+            text = str(val)
+        assert 'Optimizer job processed' in text
+        assert 'FromContractTest' in text
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
 
 

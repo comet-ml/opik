@@ -1,8 +1,10 @@
 import os
 import redis
+import logging
+
+logger = logging.getLogger(__name__)
 
 _redis_client = None
-
 
 def _create_redis_client_from_env(*, decode_responses: bool = True) -> redis.Redis:
     host = os.getenv("REDIS_HOST", "localhost")
@@ -11,6 +13,8 @@ def _create_redis_client_from_env(*, decode_responses: bool = True) -> redis.Red
     password = os.getenv("REDIS_PASSWORD")
     timeout = float(os.getenv("REDIS_TIMEOUT_SECONDS", "5"))
     health_interval = int(os.getenv("REDIS_HEALTH_CHECK_INTERVAL_SECONDS", "60"))
+
+    logger.info(f"  Redis: {host}:{port}/{db}")
 
     return redis.Redis(
         host=host,
@@ -24,11 +28,10 @@ def _create_redis_client_from_env(*, decode_responses: bool = True) -> redis.Red
         health_check_interval=health_interval,
     )
 
-
 def get_redis_client() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
-        _redis_client = _create_redis_client_from_env(decode_responses=True)
+        _redis_client = _create_redis_client_from_env(decode_responses=False)
     return _redis_client
 
 
