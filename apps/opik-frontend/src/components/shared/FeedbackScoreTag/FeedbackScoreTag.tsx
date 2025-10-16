@@ -86,12 +86,12 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
         {label}
       </div>
 
-      {/* Value */}
+      {/* Value - display category name if available, otherwise display numeric value */}
       <span
         data-testid="feedback-score-tag-value"
         className="comet-body-s-accented"
       >
-        {value}
+        {category || value}
       </span>
     </div>
   );
