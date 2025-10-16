@@ -9,7 +9,6 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.mapstruct.factory.Mappers;
 
 import java.util.Map;
 
@@ -45,14 +44,10 @@ public class RqJobUtils {
                 ? message.description()
                 : job.func();
 
-        var jobHash = Mappers.getMapper(RqJobMapper.class)
-                .toHash(message, safeDescription, jsonDataString);
-
-        // 3. Convert to Map using Jackson
-        Map<String, Object> fields = JsonUtils.convertValue(jobHash, MAP_TYPE);
+        var jobHash = RqJobMapper.INSTANCE.toHash(message, safeDescription, jsonDataString);
 
         // JsonUtils is configured to exclude nulls; no need to manually filter
-        return fields;
+        return JsonUtils.convertValue(jobHash, MAP_TYPE);
     }
 
     /**

@@ -3,11 +3,14 @@ package com.comet.opik.infrastructure.queues;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
+import org.mapstruct.factory.Mappers;
 
 import java.time.Instant;
 
 @Mapper(componentModel = "jakarta")
 interface RqJobMapper {
+
+    RqJobMapper INSTANCE = Mappers.getMapper(RqJobMapper.class);
 
     @Mapping(target = "id", source = "message.id")
     @Mapping(target = "createdAt", source = "message.createdAt", qualifiedByName = "instantToString")
