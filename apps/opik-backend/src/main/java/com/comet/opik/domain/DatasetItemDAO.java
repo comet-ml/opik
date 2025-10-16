@@ -755,7 +755,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             groupArray(
                                 arrayMap(
                                     key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
-                                    JSONExtractKeys(output)
+                                    if(length(output_keys) > 0, output_keys, JSONExtractKeys(output))
                                 )
                             )
                         )
@@ -767,7 +767,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             INNER JOIN (
                 SELECT
                     id,
-                    output
+                    output,
+                    output_keys
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT trace_id FROM experiment_items_final)
