@@ -9,8 +9,8 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.mapstruct.factory.Mappers;
 
-import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -45,16 +45,8 @@ public class RqJobUtils {
                 ? message.description()
                 : job.func();
 
-        var jobHash = RqJobHash.builder()
-                .id(message.id())
-                .createdAt((message.createdAt() != null ? message.createdAt() : Instant.now()).toString())
-                .enqueuedAt((message.enqueuedAt() != null ? message.enqueuedAt() : Instant.now()).toString())
-                .status(message.status())
-                .origin(message.origin())
-                .timeoutInSec(message.timeoutInSec())
-                .description(safeDescription)
-                .data(jsonDataString)
-                .build();
+        var jobHash = Mappers.getMapper(RqJobMapper.class)
+                .toHash(message, safeDescription, jsonDataString);
 
         // 3. Convert to Map using Jackson
         Map<String, Object> fields = JsonUtils.convertValue(jobHash, MAP_TYPE);
