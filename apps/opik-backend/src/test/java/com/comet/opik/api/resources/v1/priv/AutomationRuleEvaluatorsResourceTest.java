@@ -79,13 +79,17 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -1628,7 +1632,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("sortingTestCases")
         @DisplayName("Sort evaluators by various fields with ASC/DESC")
         void sortEvaluators(String field, String direction,
-                java.util.function.Function<AutomationRuleEvaluator<?>, Comparable> extractor)
+                Function<AutomationRuleEvaluator<?>, Comparable> extractor)
                 throws JsonProcessingException {
             // Given
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
@@ -1673,127 +1677,127 @@ class AutomationRuleEvaluatorsResourceTest {
                         .map(extractor)
                         .toList();
 
-                var expectedValues = new java.util.ArrayList<>(actualValues);
+                var expectedValues = new ArrayList<>(actualValues);
                 if (direction.equals("ASC")) {
-                    expectedValues.sort(java.util.Comparator.naturalOrder());
+                    expectedValues.sort(Comparator.naturalOrder());
                 } else {
-                    expectedValues.sort(java.util.Comparator.reverseOrder());
+                    expectedValues.sort(Comparator.reverseOrder());
                 }
 
                 assertThat(actualValues).isEqualTo(expectedValues);
             });
         }
 
-        static Stream<org.junit.jupiter.params.provider.Arguments> sortingTestCases() {
+        static Stream<Arguments> sortingTestCases() {
             return Stream.of(
                     // Name sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "name", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
+                    Arguments.of(
                             "name", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
 
                     // Type sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "type", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
                                     .name()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "type", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
                                     .name()),
 
                     // Sampling rate sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "sampling_rate", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getSamplingRate()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "sampling_rate", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getSamplingRate()),
 
                     // Enabled sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "enabled", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
                                     ? 1
                                     : 0),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "enabled", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
                                     ? 1
                                     : 0),
 
                     // Project name sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "project_name", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getProjectName()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "project_name", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getProjectName()),
 
                     // Created at sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "created_at", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
                                     .toEpochMilli()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "created_at", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
                                     .toEpochMilli()),
 
                     // Last updated at sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "last_updated_at", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getLastUpdatedAt().toEpochMilli()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "last_updated_at", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getLastUpdatedAt().toEpochMilli()),
 
                     // ID sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "id", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
                                     .toString()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "id", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
                                     .toString()),
 
                     // Project ID sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "project_id", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
                                     .toString()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "project_id", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
                                     .toString()),
 
                     // Created by sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "created_by", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getCreatedBy()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "created_by", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getCreatedBy()),
 
                     // Last updated by sorting
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "last_updated_by", "ASC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getLastUpdatedBy()),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "last_updated_by", "DESC",
-                            (java.util.function.Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
                                     .getLastUpdatedBy()));
         }
 
@@ -1912,24 +1916,24 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
-        static Stream<org.junit.jupiter.params.provider.Arguments> filteringTestCases() {
+        static Stream<Arguments> filteringTestCases() {
             return Stream.of(
                     // ID filtering
-                    org.junit.jupiter.params.provider.Arguments.of("id", "=", "Filter by exact ID"),
+                    Arguments.of("id", "=", "Filter by exact ID"),
 
                     // Name filtering
-                    org.junit.jupiter.params.provider.Arguments.of("name", "contains", "Filter by name contains"),
+                    Arguments.of("name", "contains", "Filter by name contains"),
 
                     // Created by filtering
-                    org.junit.jupiter.params.provider.Arguments.of("created_by", "contains",
+                    Arguments.of("created_by", "contains",
                             "Filter by created_by contains"),
 
                     // Created at filtering
-                    org.junit.jupiter.params.provider.Arguments.of("created_at", ">",
+                    Arguments.of("created_at", ">",
                             "Filter by created_at greater than"),
 
                     // Last updated at filtering
-                    org.junit.jupiter.params.provider.Arguments.of("last_updated_at", ">=",
+                    Arguments.of("last_updated_at", ">=",
                             "Filter by last_updated_at greater than or equal"));
         }
 
@@ -1937,7 +1941,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("projectNameFilteringTestCases")
         @DisplayName("Filter automation rules by project name with various operators")
         void filterByProjectName(String operator, String matchingPrefix, String nonMatchingPrefix,
-                java.util.function.Predicate<String> matchPredicate) throws JsonProcessingException {
+                Predicate<String> matchPredicate) throws JsonProcessingException {
             // Given
             var projectName1 = matchingPrefix + RandomStringUtils.randomAlphanumeric(10);
             var projectName2 = nonMatchingPrefix + RandomStringUtils.randomAlphanumeric(10);
@@ -1975,23 +1979,23 @@ class AutomationRuleEvaluatorsResourceTest {
             assertThat(matchingEvaluators.get(0).getProjectId()).isEqualTo(projectId1);
         }
 
-        static Stream<org.junit.jupiter.params.provider.Arguments> projectNameFilteringTestCases() {
+        static Stream<Arguments> projectNameFilteringTestCases() {
             return Stream.of(
-                    org.junit.jupiter.params.provider.Arguments.of(
+                    Arguments.of(
                             "contains",
                             "test-project-",
                             "other-project-",
-                            (java.util.function.Predicate<String>) name -> name.contains("test-project-")),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                            (Predicate<String>) name -> name.contains("test-project-")),
+                    Arguments.of(
                             "=",
                             "exact-match-",
                             "different-name-",
-                            (java.util.function.Predicate<String>) name -> name.startsWith("exact-match-")),
-                    org.junit.jupiter.params.provider.Arguments.of(
+                            (Predicate<String>) name -> name.startsWith("exact-match-")),
+                    Arguments.of(
                             "starts_with",
                             "prefix-",
                             "other-",
-                            (java.util.function.Predicate<String>) name -> name.startsWith("prefix-")));
+                            (Predicate<String>) name -> name.startsWith("prefix-")));
         }
     }
 
@@ -2028,12 +2032,12 @@ class AutomationRuleEvaluatorsResourceTest {
             assertThat(page.content()).hasSize(expectedItemsOnPage);
         }
 
-        static Stream<org.junit.jupiter.params.provider.Arguments> paginationTestCases() {
+        static Stream<Arguments> paginationTestCases() {
             return Stream.of(
                     // pageNumber, pageSize, expectedItemsOnPage, description
-                    org.junit.jupiter.params.provider.Arguments.of(1, 10, 10, "First page with 10 items"),
-                    org.junit.jupiter.params.provider.Arguments.of(2, 10, 10, "Second page with 10 items"),
-                    org.junit.jupiter.params.provider.Arguments.of(3, 10, 5, "Last page with 5 items"));
+                    Arguments.of(1, 10, 10, "First page with 10 items"),
+                    Arguments.of(2, 10, 10, "Second page with 10 items"),
+                    Arguments.of(3, 10, 5, "Last page with 5 items"));
         }
     }
 

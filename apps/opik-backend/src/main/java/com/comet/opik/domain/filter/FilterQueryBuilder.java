@@ -88,10 +88,14 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
     private static final String WEBHOOK_URL_DB = "webhook_url";
-    private static final String WEBHOOK_SECRET_TOKEN_DB = "webhook_secret_token";
     private static final String ENABLED_DB = "enabled";
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
+
+    // Table alias prefixes for AutomationRuleEvaluator queries
+    private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
+    private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
+    private static final String AUTOMATION_PROJECT_TABLE_ALIAS = "p.%s";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -325,17 +329,24 @@ public class FilterQueryBuilder {
 
     private static final Map<AutomationRuleEvaluatorField, String> AUTOMATION_RULE_EVALUATOR_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<AutomationRuleEvaluatorField, String>builder()
-                    .put(AutomationRuleEvaluatorField.ID, "rule." + ID_DB)
-                    .put(AutomationRuleEvaluatorField.NAME, "rule." + NAME_DB)
-                    .put(AutomationRuleEvaluatorField.TYPE, "evaluator." + TYPE_DB)
-                    .put(AutomationRuleEvaluatorField.ENABLED, "rule." + ENABLED_DB)
-                    .put(AutomationRuleEvaluatorField.SAMPLING_RATE, "rule." + SAMPLING_RATE_DB)
-                    .put(AutomationRuleEvaluatorField.PROJECT_ID, "rule." + PROJECT_ID_DB)
-                    .put(AutomationRuleEvaluatorField.PROJECT_NAME, "p." + NAME_DB)
-                    .put(AutomationRuleEvaluatorField.CREATED_AT, "evaluator." + CREATED_AT_DB)
-                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_AT, "evaluator." + LAST_UPDATED_AT_DB)
-                    .put(AutomationRuleEvaluatorField.CREATED_BY, "evaluator." + CREATED_BY_DB)
-                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_BY, "evaluator." + LAST_UPDATED_BY_DB)
+                    .put(AutomationRuleEvaluatorField.ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, ID_DB))
+                    .put(AutomationRuleEvaluatorField.NAME, String.format(AUTOMATION_RULE_TABLE_ALIAS, NAME_DB))
+                    .put(AutomationRuleEvaluatorField.TYPE, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, TYPE_DB))
+                    .put(AutomationRuleEvaluatorField.ENABLED, String.format(AUTOMATION_RULE_TABLE_ALIAS, ENABLED_DB))
+                    .put(AutomationRuleEvaluatorField.SAMPLING_RATE,
+                            String.format(AUTOMATION_RULE_TABLE_ALIAS, SAMPLING_RATE_DB))
+                    .put(AutomationRuleEvaluatorField.PROJECT_ID,
+                            String.format(AUTOMATION_RULE_TABLE_ALIAS, PROJECT_ID_DB))
+                    .put(AutomationRuleEvaluatorField.PROJECT_NAME,
+                            String.format(AUTOMATION_PROJECT_TABLE_ALIAS, NAME_DB))
+                    .put(AutomationRuleEvaluatorField.CREATED_AT,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_AT_DB))
+                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_AT,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, LAST_UPDATED_AT_DB))
+                    .put(AutomationRuleEvaluatorField.CREATED_BY,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_BY_DB))
+                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_BY,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, LAST_UPDATED_BY_DB))
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(

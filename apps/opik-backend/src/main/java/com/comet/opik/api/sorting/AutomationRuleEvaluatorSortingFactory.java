@@ -21,18 +21,23 @@ import static com.comet.opik.api.sorting.SortableFields.TYPE;
 @Singleton
 public class AutomationRuleEvaluatorSortingFactory extends SortingFactory {
 
+    // Table alias prefixes for AutomationRuleEvaluator queries
+    private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
+    private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
+    private static final String AUTOMATION_PROJECT_TABLE_ALIAS = "p.%s";
+
     private static final Map<String, String> FIELD_TO_DB_COLUMN_MAP = ImmutableMap.<String, String>builder()
-            .put(ID, "rule.id")
-            .put(NAME, "rule.name")
-            .put(TYPE, "evaluator.type")
-            .put(ENABLED, "rule.enabled")
-            .put(SAMPLING_RATE, "rule.sampling_rate")
-            .put(PROJECT_ID, "rule.project_id")
-            .put(PROJECT_NAME, "p.name")
-            .put(CREATED_AT, "evaluator.created_at")
-            .put(LAST_UPDATED_AT, "evaluator.last_updated_at")
-            .put(CREATED_BY, "evaluator.created_by")
-            .put(LAST_UPDATED_BY, "evaluator.last_updated_by")
+            .put(ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, "id"))
+            .put(NAME, String.format(AUTOMATION_RULE_TABLE_ALIAS, "name"))
+            .put(TYPE, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "type"))
+            .put(ENABLED, String.format(AUTOMATION_RULE_TABLE_ALIAS, "enabled"))
+            .put(SAMPLING_RATE, String.format(AUTOMATION_RULE_TABLE_ALIAS, "sampling_rate"))
+            .put(PROJECT_ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, "project_id"))
+            .put(PROJECT_NAME, String.format(AUTOMATION_PROJECT_TABLE_ALIAS, "name"))
+            .put(CREATED_AT, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "created_at"))
+            .put(LAST_UPDATED_AT, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "last_updated_at"))
+            .put(CREATED_BY, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "created_by"))
+            .put(LAST_UPDATED_BY, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "last_updated_by"))
             .build();
 
     @Override
