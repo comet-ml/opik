@@ -237,7 +237,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       datasetId,
       experimentsIds,
       filters,
-      truncate: true,
+      truncate: false,
       page: page as number,
       size: size as number,
     },

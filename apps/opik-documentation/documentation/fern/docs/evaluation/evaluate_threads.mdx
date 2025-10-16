@@ -19,6 +19,9 @@ The Python SDK provides a simple and efficient way to evaluate and optimize conv
 evaluation, a list of metrics to apply to each thread, and it returns a `ThreadsEvaluationResult` object
 containing the evaluation results and feedback scores.
 
+Most importantly, this function **automatically uploads the feedback scores to your traces in Opik!**
+So, once evaluation is completed, you can also [see the results in the UI](#using-opik-ui-to-view-results).
+
 To run the threads evaluation, you can use the following code:
 
 ```python
@@ -42,6 +45,10 @@ results = evaluate_threads(
     trace_output_transform=lambda x: x["output"],
 )
 ```
+
+<Tip>
+Want to create your own custom conversation metrics? Check out the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric) to learn how to build specialized metrics for evaluating multi-turn dialogues.
+</Tip>
 
 ### Understanding the Transform Arguments
 
@@ -169,21 +176,14 @@ filter_string='feedback_scores.user_frustration_score >= 0.5'
 
 Where `user_frustration_score` is the name of the user frustration metric and `0.5` is the threshold value to filter by.
 
-## Multi-Value Feedback Scores for Threads
+<Tip>
+**Best practice**: If you are using SDK for thread evaluation, automate it by setting up a scheduled cron job with filters to regularly generate feedback scores for specific traces.
+</Tip>
 
-**Team-based thread evaluation** enables multiple evaluators to score conversation threads independently, providing more reliable assessment of multi-turn dialogue quality.
-
-**Key benefits for thread evaluation:**
-
-- **Conversation complexity scoring** - Multiple reviewers can assess different aspects like coherence, user satisfaction, and goal completion across conversation turns
-- **Reduced evaluation bias** - Individual subjectivity in judging conversational quality is mitigated through team consensus
-- **Thread-specific metrics** - Teams can collaboratively evaluate conversation-specific aspects like frustration levels, topic drift, and resolution success
-
-This collaborative approach is especially valuable for conversational threads where dialogue quality, context maintenance, and user experience assessment often require multiple expert perspectives.
-
-#### Using Opik UI to view results
+## Using Opik UI to view results
 
 Once the evaluation is complete, you can access the evaluation results in the Opik UI.
+Not only you will be able to see the score values, but the LLM-judge reasoning behind these values too!
 
 <Frame>
   <img src="/img/evaluation/threads_user_frustration_score.png" />
@@ -196,6 +196,18 @@ Once the evaluation is complete, you can access the evaluation results in the Op
 You can only evaluate/score threads that are inactive.
 
 </Note>
+
+## Multi-Value Feedback Scores for Threads
+
+**Team-based thread evaluation** enables multiple evaluators to score conversation threads independently, providing more reliable assessment of multi-turn dialogue quality.
+
+**Key benefits for thread evaluation:**
+
+- **Conversation complexity scoring** - Multiple reviewers can assess different aspects like coherence, user satisfaction, and goal completion across conversation turns
+- **Reduced evaluation bias** - Individual subjectivity in judging conversational quality is mitigated through team consensus
+- **Thread-specific metrics** - Teams can collaboratively evaluate conversation-specific aspects like frustration levels, topic drift, and resolution success
+
+This collaborative approach is especially valuable for conversational threads where dialogue quality, context maintenance, and user experience assessment often require multiple expert perspectives.
 
 ## Next steps
 
