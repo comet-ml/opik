@@ -49,7 +49,7 @@ const PlaygroundOutputCell: React.FunctionComponent<
     return (
       <MarkdownPreview
         className={cn({
-          "text-muted-gray": stale,
+          "text-muted-gray dark:text-foreground": stale,
         })}
       >
         {value}

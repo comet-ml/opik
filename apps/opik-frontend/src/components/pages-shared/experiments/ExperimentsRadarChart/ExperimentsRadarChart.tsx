@@ -2,7 +2,10 @@ import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import {
   ChartContainer,
   ChartLegend,
@@ -95,7 +98,7 @@ const ExperimentsRadarChart: React.FC<ExperimentsRadarChartProps> = ({
           className="size-full h-[var(--chart-height)]"
         >
           <RadarChart data={data} cy="45%" margin={{ top: 0, bottom: 0 }}>
-            <PolarGrid />
+            <PolarGrid {...DEFAULT_CHART_GRID_PROPS} />
             <PolarAngleAxis dataKey="name" tick={renderPolarAngleAxis} dy={3} />
             <ChartTooltip
               isAnimationActive={false}

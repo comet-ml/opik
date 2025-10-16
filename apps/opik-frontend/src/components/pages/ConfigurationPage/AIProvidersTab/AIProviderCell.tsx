@@ -17,7 +17,7 @@ const AIProviderCell = (context: CellContext<unknown, PROVIDER_TYPE>) => {
       tableMetadata={context.table.options.meta}
       className="flex gap-1"
     >
-      {Icon && <Icon />}
+      {Icon && <Icon className="text-foreground" />}
       <span>{providerKeyLabel}</span>
     </CellWrapper>
   );

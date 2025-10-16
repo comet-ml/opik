@@ -12,7 +12,10 @@ import {
   ChartTooltip,
   ChartLegend,
 } from "@/components/ui/chart";
-import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import {
   extractSecondaryScoreNames,
@@ -235,7 +238,7 @@ const OptimizationProgressChartContent: React.FC<
           data={chartData.data}
           margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <CartesianGrid vertical={false} />
+          <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
           <XAxis
             axisLine={false}
             tickLine={false}

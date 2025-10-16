@@ -5,3 +5,7 @@ export const DEFAULT_CHART_TICK = {
   fontSize: "10px",
   lineheight: "12px",
 };
+
+export const DEFAULT_CHART_GRID_PROPS = {
+  stroke: "var(--chart-grid-stroke)",
+};

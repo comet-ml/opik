@@ -27,7 +27,7 @@ const PlaygroundOutput = ({ promptId, index }: PlaygroundOutputProps) => {
     return (
       <MarkdownPreview
         className={cn({
-          "text-muted-gray": stale,
+          "text-muted-gray dark:text-foreground": stale,
         })}
       >
         {value}

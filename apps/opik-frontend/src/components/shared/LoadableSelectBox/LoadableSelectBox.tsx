@@ -213,7 +213,7 @@ export const LoadableSelectBox = ({
 
   const buttonElement = (
     <Button
-      className={cn("justify-between", buttonClassName, {
+      className={cn("group justify-between", buttonClassName, {
         "disabled:cursor-not-allowed disabled:border-input disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray hover:disabled:shadow-none":
           disabled,
       })}
@@ -225,7 +225,7 @@ export const LoadableSelectBox = ({
     >
       {renderTitle()}
 
-      <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
+      <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate group-disabled:text-muted-gray" />
     </Button>
   );
 

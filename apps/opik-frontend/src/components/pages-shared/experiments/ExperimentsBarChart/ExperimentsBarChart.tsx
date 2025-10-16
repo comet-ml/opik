@@ -2,7 +2,10 @@ import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import {
   ChartContainer,
   ChartLegend,
@@ -120,7 +123,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
                 bottom: 0,
               }}
             >
-              <CartesianGrid vertical={false} />
+              <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
 
               <XAxis
                 dataKey="name"
