@@ -23,6 +23,7 @@ jobs:
         run: |
           echo "BRANCH_NAME=github-actions/NA-automatically-update-model-prices-file-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
           curl -o apps/opik-backend/src/main/resources/model_prices_and_context_window.json https://raw.githubusercontent.com/BerriAI/litellm/refs/heads/main/model_prices_and_context_window.json
+          cp apps/opik-backend/src/main/resources/model_prices_and_context_window.json apps/opik-frontend/src/data/model_prices_and_context_window.json
 
       - name: Create branch
         uses: JosiahSiegel/remote-branch-action@v1.2.0
@@ -35,6 +36,7 @@ jobs:
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "Github Actions (${{ github.actor }})"
           git add apps/opik-backend/src/main/resources/model_prices_and_context_window.json
+          git add apps/opik-frontend/src/data/model_prices_and_context_window.json
           git commit --allow-empty -m "[NA] [BE] Update model prices file"
 
       - name: Create Pull Request
@@ -49,6 +51,7 @@ jobs:
             
             **Files updated:**
             - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` - Latest model pricing data from LiteLLM
+            - `apps/opik-frontend/src/data/model_prices_and_context_window.json` - Frontend copy kept in sync with backend
             
             ## Change checklist
             - [X] User facing change

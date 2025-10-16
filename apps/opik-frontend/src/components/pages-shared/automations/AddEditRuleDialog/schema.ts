@@ -6,7 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -16,6 +16,14 @@ import {
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import { COLUMN_TYPE } from "@/types/shared";
+import { hasImagesInContent } from "@/lib/llm";
+import { supportsImageInput } from "@/lib/modelCapabilities";
+import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
+
+const isOpenAIModel = (modelName: string): boolean => {
+  const openAIModels = PROVIDER_MODELS[PROVIDER_TYPE.OPEN_AI] || [];
+  return openAIModels.some((model) => model.value === modelName);
+};
 
 const RuleNameSchema = z
   .string({
@@ -93,6 +101,28 @@ export const FiltersSchema = z
           });
         }
       }
+
+      // Validate key for dictionary types
+      if (
+        (filter.type === COLUMN_TYPE.dictionary ||
+          filter.type === COLUMN_TYPE.numberDictionary) &&
+        (!filter.key || filter.key.trim().length === 0)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Key is required for dictionary fields",
+          path: [index, "key"],
+        });
+      }
+
+      // Add custom error if present
+      if (filter.error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: filter.error,
+          path: [index, "value"],
+        });
+      }
     });
   });
 
@@ -157,6 +187,28 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
         message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
       }),
   ),
+}).superRefine((data, ctx) => {
+  const hasImages = data.messages.some((message) =>
+    hasImagesInContent(message.content),
+  );
+
+  if (hasImages) {
+    if (!isOpenAIModel(data.model)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Only OpenAI models are currently supported for Online evaluation with images. Please select an OpenAI model or remove images from messages.",
+        path: ["model"],
+      });
+    } else if (!supportsImageInput(data.model)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
+        path: ["model"],
+      });
+    }
+  }
 });
 
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({

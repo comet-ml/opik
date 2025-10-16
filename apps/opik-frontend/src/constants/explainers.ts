@@ -74,6 +74,7 @@ export enum EXPLAINER_ID {
   metric_context_recall = "metric_context_recall",
   trace_opik_ai = "trace_opik_ai",
   feedback_scores_hotkeys = "feedback_scores_hotkeys",
+  llm_judge_variable_mapping = "llm_judge_variable_mapping",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -519,5 +520,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       'Press "F" to jump to first component in feedback scores\nand use "Tab"/"Shift+Tab" to move between components\n\nController Types:\n\n1. Numerical Inputs (number fields):\n   • use arrow keys to adjust values\n   • or type numbers directly\n\n2. Dropdown selectors:\n   • press "Enter" to open select\n   • use arrow keys to navigate\n   • press "Enter" to select\n\n3. Toggle buttons:\n   • use arrow keys to navigate between options\n   • press "Enter" to select\n\n4. Reason Text Areas (comment fields):\n   • press "Enter" to open/close section\n   • type your reasoning',
     type: "help",
+  },
+  [EXPLAINER_ID.llm_judge_variable_mapping]: {
+    id: EXPLAINER_ID.llm_judge_variable_mapping,
+    description:
+      "Choose the trace field that should fill each variable. Map variables to any trace field, including image fields like input.image_url or output.image_base64.",
   },
 };

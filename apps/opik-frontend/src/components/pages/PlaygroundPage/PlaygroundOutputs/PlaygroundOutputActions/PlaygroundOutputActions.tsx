@@ -17,6 +17,8 @@ import { cn } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Separator } from "@/components/ui/separator";
+import { hasImagesInContent } from "@/lib/llm";
+import { supportsImageInput } from "@/lib/modelCapabilities";
 
 const EMPTY_DATASETS: Dataset[] = [];
 
@@ -73,6 +75,19 @@ const PlaygroundOutputActions = ({
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
+  const hasImageCompatibilityIssues = useMemo(() => {
+    return Object.values(promptMap).some((prompt) => {
+      if (!prompt.model) return false;
+
+      const modelSupportsImages = supportsImageInput(prompt.model);
+      const hasImages = prompt.messages.some((message) =>
+        hasImagesInContent(message.content),
+      );
+
+      return hasImages && !modelSupportsImages;
+    });
+  }, [promptMap]);
+
   const handleChangeDatasetId = useCallback(
     (id: string | null) => {
       if (datasetId !== id) {
@@ -127,15 +142,15 @@ const PlaygroundOutputActions = ({
       loadingDatasetItems ||
       isLoadingDatasets ||
       isDatasetRemoved ||
-      isDatasetEmpty;
+      isDatasetEmpty ||
+      hasImageCompatibilityIssues;
 
-    const shouldTooltipAppear = !!(
+    const shouldTooltipAppear =
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       isDatasetEmpty ||
-      isDatasetRemoved
-    );
-
+      isDatasetRemoved ||
+      hasImageCompatibilityIssues;
     const style: React.CSSProperties = isDisabledButton
       ? { pointerEvents: "auto" }
       : {};
@@ -143,6 +158,10 @@ const PlaygroundOutputActions = ({
     const getTooltipMessage = () => {
       if (!isDisabledButton) {
         return promptCount === 1 ? "Run your prompt" : "Run your prompts";
+      }
+
+      if (hasImageCompatibilityIssues) {
+        return "Some prompts contain images but the selected model doesn't support image input. Please change the model or remove images from the messages";
       }
 
       if (isDatasetRemoved) {
