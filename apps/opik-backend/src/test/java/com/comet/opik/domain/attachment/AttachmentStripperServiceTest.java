@@ -1,7 +1,6 @@
 package com.comet.opik.domain.attachment;
 
 import com.comet.opik.api.attachment.EntityType;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,7 +15,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.UUID;
 
-import static com.comet.opik.utils.AttachmentPayloadUtilsTest.*;
+import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createLargeGifBase64;
+import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createLargePdfBase64;
+import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createLargePngBase64;
+import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createShortBase64;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -27,9 +29,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AttachmentStripperServiceTest {
-
-    @Mock
-    private IdGenerator idGenerator;
 
     @Mock
     private S3Config s3Config;
@@ -61,8 +60,7 @@ class AttachmentStripperServiceTest {
         when(opikConfiguration.getS3Config()).thenReturn(s3Config);
 
         // Use OpenTelemetry no-op implementation and EventBus mock for async uploads
-        attachmentStripperService = new AttachmentStripperService(
-                idGenerator, objectMapper, opikConfiguration, eventBus);
+        attachmentStripperService = new AttachmentStripperService(objectMapper, opikConfiguration, eventBus);
     }
 
     @Test
