@@ -17,7 +17,7 @@ const TAG_GAP = 6;
 const COUNTER_WIDTH = 30;
 
 type CustomMeta<TData> = {
-  getHoverCardName: (row: TData) => string;
+  getHoverCardName?: (row: TData) => string;
   isAverageScores?: boolean;
 };
 
@@ -71,7 +71,9 @@ const FeedbackScoreListCell = <TData,>(
   const { getHoverCardName, isAverageScores } = (context.column.columnDef.meta
     ?.custom ?? {}) as CustomMeta<TData>;
 
-  const hoverCardName = getHoverCardName(context.row.original);
+  const hoverCardName = getHoverCardName
+    ? getHoverCardName(context.row.original)
+    : "";
   const isEmpty = !feedbackScoreList?.length;
   const [visibleCount, setVisibleCount] = useState(0);
   const widthList = useRef<number[]>([]);
