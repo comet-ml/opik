@@ -10,7 +10,6 @@ import sys
 import os
 import socket
 import threading
-import time
 from typing import Optional
 
 import redis
@@ -213,12 +212,6 @@ def init_rq_worker(app=None):
         app: Flask application instance (unused; accepted for compatibility)
     """
     global _worker_manager
-    
-    # Check if RQ worker is enabled
-    rq_enabled = os.getenv('RQ_WORKER_ENABLED', 'false').lower() == 'true'
-    if not rq_enabled:
-        logger.info("RQ worker disabled via RQ_WORKER_ENABLED environment variable")
-        return
     
     if _worker_manager is not None:
         logger.warning(f"RQ worker manager already initialized in this process (PID: {os.getpid()})")

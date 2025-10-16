@@ -67,8 +67,28 @@ def create_app(test_config=None, should_init_executor=True):
     app.register_blueprint(evaluator)
     app.register_blueprint(post_user_signup)
 
+    # Initialize Redis connection at application startup if RQ worker enabled (non-fatal)
+    from opik_backend.utils.env_utils import is_rq_worker_enabled
+    if is_rq_worker_enabled():
+        try:
+            from opik_backend.utils.redis_utils import get_redis_client
+            get_redis_client().ping()
+            app.logger.info("Redis client initialized at startup")
+        except Exception as e:
+            app.logger.warning(f"Redis client initialization failed at startup: {e}")
+
     # Initialize RQ worker (only starts when running under Gunicorn)
     init_rq_worker(app)
+
+    # Ensure Redis client is closed at teardown
+    from opik_backend.utils.redis_utils import get_redis_client
+    @app.teardown_appcontext
+    def close_redis_client(exception):
+        try:
+            client = get_redis_client()
+            client.close()
+        except Exception:
+            pass
 
     return app
 
