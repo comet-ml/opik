@@ -1,5 +1,5 @@
 ---
-title: Alerts and Webhooks
+title: Alerts
 description: Configure automated webhook notifications to stay informed about events in your Opik workspace, from trace errors to feedback scores and prompt changes.
 ---
 
@@ -9,19 +9,212 @@ Alerts allow you to configure automated webhook notifications for important even
   <img src="/img/production/alerts_configuration.png" alt="Alerts configuration in Opik" />
 </Frame>
 
-## How alerts work
+## Creating an alert
 
-The Opik Alerts system monitors your workspace for specific events and sends consolidated webhook notifications to your configured endpoints. Here's the flow:
+### Prerequisites
 
-1. **Event occurs**: An event happens in your workspace (e.g., a trace error, new feedback score)
-2. **Alert evaluation**: The system checks if any enabled alerts match this event type
-3. **Event aggregation**: Multiple events are aggregated over a short time window (debouncing)
-4. **Webhook delivery**: A consolidated HTTP POST request is sent to your webhook URL
-5. **Retry handling**: Failed requests are automatically retried with exponential backoff
+- Access to the Opik Configuration page
+- A webhook endpoint that can receive HTTP POST requests
+- (Optional) An HTTPS endpoint with valid SSL certificate for production use
 
-### Event debouncing
+### Step-by-step guide
 
-To prevent overwhelming your webhook endpoint, Opik aggregates multiple events of the same type within a short time window (typically 30-60 seconds) and sends them as a single consolidated webhook. This is particularly useful for high-frequency events like feedback scores.
+<Frame>
+  <img src="/img/production/create_alert_form.png" alt="Create alert form" />
+</Frame>
+
+1. **Navigate to Alerts**
+   - Go to Configuration → Alerts tab
+   - Click "Create new alert" button
+
+2. **Configure basic settings**
+   - **Name**: Give your alert a descriptive name (e.g., "Production Errors Slack")
+   - **Enable alert**: Toggle on to activate the alert immediately
+
+3. **Configure webhook settings**
+   - **Endpoint URL**: Enter your webhook URL (must start with `http://` or `https://`)
+   - Example: `https://hooks.slack.com/services/`
+
+4. **Advanced webhook settings** (optional)
+   - **Secret token**: Add a secret token to verify webhook authenticity
+   - **Custom headers**: Add HTTP headers for authentication or routing
+     - Example: `X-Custom-Auth: Bearer your-token-here`
+
+5. **Add triggers**
+   - Click "Add trigger" to select event types
+   - Choose one or more event types from the list
+   - Configure project scope for observability events (optional)
+
+6. **Test your configuration**
+   - Click "Test connection" to send a sample webhook
+   - Verify your endpoint receives the test payload
+   - Check the response status in the Opik UI
+
+7. **Create the alert**
+   - Click "Create alert" to save your configuration
+   - The alert will start monitoring events immediately
+
+## Integration examples
+
+### Slack integration
+
+Send alerts to a Slack channel using Slack's Incoming Webhooks:
+
+1. Create a Slack app and enable Incoming Webhooks
+2. Create a webhook URL (e.g., `https://hooks.slack.com/services/T00000000/B00000000/XXXX`)
+3. In Opik, create an alert with your Slack webhook URL
+4. Format the payload (Slack will display JSON by default)
+
+For better formatting, create a middleware service that transforms Opik's payload into Slack's Block Kit format:
+
+```python
+import requests
+
+def transform_to_slack(opik_payload):
+    event_type = opik_payload.get('eventType')
+    alert_name = opik_payload['payload']['alertName']
+    event_count = opik_payload['payload']['eventCount']
+    
+    return {
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"🚨 {alert_name}"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*{event_count}* new `{event_type}` events"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"View in Opik: https://www.comet.com/opik"
+                }
+            }
+        ]
+    }
+
+@app.route('/opik-to-slack', methods=['POST'])
+def opik_to_slack():
+    opik_data = request.json
+    slack_payload = transform_to_slack(opik_data)
+    
+    # Forward to Slack
+    requests.post(
+        SLACK_WEBHOOK_URL,
+        json=slack_payload
+    )
+    
+    return {'status': 'success'}, 200
+```
+
+### PagerDuty integration
+
+Send critical alerts to PagerDuty for on-call incident management:
+
+```python
+import requests
+
+PAGERDUTY_ROUTING_KEY = "your-routing-key"
+PAGERDUTY_URL = "https://events.pagerduty.com/v2/enqueue"
+
+@app.route('/opik-to-pagerduty', methods=['POST'])
+def opik_to_pagerduty():
+    data = request.json
+    event_type = data.get('eventType')
+    
+    # Only send critical errors to PagerDuty
+    if event_type != 'trace:errors':
+        return {'status': 'ignored'}, 200
+    
+    payload = data['payload']
+    errors = payload.get('metadata', [])
+    
+    # Create PagerDuty event
+    pagerduty_payload = {
+        "routing_key": PAGERDUTY_ROUTING_KEY,
+        "event_action": "trigger",
+        "payload": {
+            "summary": f"{payload['alertName']}: {len(errors)} errors",
+            "severity": "error",
+            "source": "opik",
+            "custom_details": {
+                "event_count": payload['eventCount'],
+                "errors": errors[:5]  # First 5 errors
+            }
+        }
+    }
+    
+    response = requests.post(PAGERDUTY_URL, json=pagerduty_payload)
+    return {'status': 'success'}, 200
+```
+
+### Using no-code automation platforms
+
+No-code automation tools like [n8n](https://n8n.io), [Make.com](https://www.make.com), and [IFTTT](https://ifttt.com) provide an easy way to connect Opik alerts to other services—without writing or deploying code. These platforms can receive webhooks from Opik, apply filters or conditions, and trigger actions such as sending Slack messages, logging data in Google Sheets, or creating incidents in PagerDuty.
+
+<Frame>
+  <img src="/img/production/no_code_automation_flow.png" alt="No-code automation flow example" />
+</Frame>
+
+**To use them:**
+
+1. **Create a new workflow or scenario** and add a **Webhook trigger** node/module
+2. **Copy the webhook URL** generated by the platform and paste it into your Opik alert configuration
+3. **Secure the connection** by validating the Authorization header or including a secret token parameter
+4. **Add filters or routing logic** to handle different eventType values from Opik (for example, trace:errors or trace:feedback_score)
+5. **Chain the desired actions**, such as notifications, database updates, or analytics tracking
+
+These tools also provide built-in monitoring, retries, and visual flow editors, making them suitable for both technical and non-technical users who want to automate Opik alert handling securely and efficiently.
+
+### Custom dashboard integration
+
+Build a custom monitoring dashboard that receives alerts:
+
+```python
+from fastapi import FastAPI, Request
+from datetime import datetime
+
+app = FastAPI()
+
+# In-memory storage (use a database in production)
+alert_history = []
+
+@app.post("/webhook")
+async def receive_webhook(request: Request):
+    data = await request.json()
+    
+    # Store alert
+    alert_history.append({
+        'timestamp': datetime.utcnow(),
+        'event_type': data.get('eventType'),
+        'alert_name': data['payload']['alertName'],
+        'event_count': data['payload']['eventCount'],
+        'data': data
+    })
+    
+    # Keep only last 1000 alerts
+    if len(alert_history) > 1000:
+        alert_history.pop(0)
+    
+    return {"status": "success"}
+
+@app.get("/dashboard")
+async def get_dashboard():
+    # Return aggregated statistics
+    return {
+        'total_alerts': len(alert_history),
+        'by_type': group_by_type(alert_history),
+        'recent_alerts': alert_history[-10:]
+    }
+```
 
 ## Supported event types
 
@@ -80,50 +273,9 @@ Opik supports seven types of alert events:
 - **Payload**: Array of deleted prompt objects
 - **Use case**: Audit prompt deletions, maintain prompt governance
 
-## Creating an alert
+### Want us to support more event types?
 
-### Prerequisites
-
-- Access to the Opik Configuration page
-- A webhook endpoint that can receive HTTP POST requests
-- (Optional) An HTTPS endpoint with valid SSL certificate for production use
-
-### Step-by-step guide
-
-1. **Navigate to Alerts**
-   - Go to Configuration → Alerts tab
-   - Click "Create new alert" button
-
-2. **Configure basic settings**
-   - **Name**: Give your alert a descriptive name (e.g., "Production Errors Slack")
-   - **Enable alert**: Toggle on to activate the alert immediately
-
-3. **Configure webhook settings**
-   - **Endpoint URL**: Enter your webhook URL (must start with `http://` or `https://`)
-   - Example: `https://hooks.slack.com/services/`
-
-4. **Advanced webhook settings** (optional)
-   - **Secret token**: Add a secret token to verify webhook authenticity
-   - **Custom headers**: Add HTTP headers for authentication or routing
-     - Example: `X-Custom-Auth: Bearer your-token-here`
-
-5. **Add triggers**
-   - Click "Add trigger" to select event types
-   - Choose one or more event types from the list
-   - Configure project scope for observability events (optional)
-
-6. **Test your configuration**
-   - Click "Test connection" to send a sample webhook
-   - Verify your endpoint receives the test payload
-   - Check the response status in the Opik UI
-
-7. **Create the alert**
-   - Click "Create alert" to save your configuration
-   - The alert will start monitoring events immediately
-
-<Frame>
-  <img src="/img/production/create_alert_form.png" alt="Create alert form" />
-</Frame>
+If you need additional event types for your use case, please [create an issue on GitHub](https://github.com/comet-ml/opik/issues/new?title=Alert%20Event%20Request%3A%20%3Cevent-name%3E&labels=enhancement) and let us know what you'd like to monitor.
 
 ## Webhook payload structure
 
@@ -403,192 +555,6 @@ else:
     handle_staging_webhook(data)
 ```
 
-## Integration examples
-
-### Slack integration
-
-Send alerts to a Slack channel using Slack's Incoming Webhooks:
-
-1. Create a Slack app and enable Incoming Webhooks
-2. Create a webhook URL (e.g., `https://hooks.slack.com/services/T00000000/B00000000/XXXX`)
-3. In Opik, create an alert with your Slack webhook URL
-4. Format the payload (Slack will display JSON by default)
-
-For better formatting, create a middleware service that transforms Opik's payload into Slack's Block Kit format:
-
-```python
-import requests
-
-def transform_to_slack(opik_payload):
-    event_type = opik_payload.get('eventType')
-    alert_name = opik_payload['payload']['alertName']
-    event_count = opik_payload['payload']['eventCount']
-    
-    return {
-        "blocks": [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": f"🚨 {alert_name}"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*{event_count}* new `{event_type}` events"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"View in Opik: https://www.comet.com/opik"
-                }
-            }
-        ]
-    }
-
-@app.route('/opik-to-slack', methods=['POST'])
-def opik_to_slack():
-    opik_data = request.json
-    slack_payload = transform_to_slack(opik_data)
-    
-    # Forward to Slack
-    requests.post(
-        SLACK_WEBHOOK_URL,
-        json=slack_payload
-    )
-    
-    return {'status': 'success'}, 200
-```
-
-### PagerDuty integration
-
-Send critical alerts to PagerDuty for on-call incident management:
-
-```python
-import requests
-
-PAGERDUTY_ROUTING_KEY = "your-routing-key"
-PAGERDUTY_URL = "https://events.pagerduty.com/v2/enqueue"
-
-@app.route('/opik-to-pagerduty', methods=['POST'])
-def opik_to_pagerduty():
-    data = request.json
-    event_type = data.get('eventType')
-    
-    # Only send critical errors to PagerDuty
-    if event_type != 'trace:errors':
-        return {'status': 'ignored'}, 200
-    
-    payload = data['payload']
-    errors = payload.get('metadata', [])
-    
-    # Create PagerDuty event
-    pagerduty_payload = {
-        "routing_key": PAGERDUTY_ROUTING_KEY,
-        "event_action": "trigger",
-        "payload": {
-            "summary": f"{payload['alertName']}: {len(errors)} errors",
-            "severity": "error",
-            "source": "opik",
-            "custom_details": {
-                "event_count": payload['eventCount'],
-                "errors": errors[:5]  # First 5 errors
-            }
-        }
-    }
-    
-    response = requests.post(PAGERDUTY_URL, json=pagerduty_payload)
-    return {'status': 'success'}, 200
-```
-
-### Custom dashboard integration
-
-Build a custom monitoring dashboard that receives alerts:
-
-```python
-from fastapi import FastAPI, Request
-from datetime import datetime
-
-app = FastAPI()
-
-# In-memory storage (use a database in production)
-alert_history = []
-
-@app.post("/webhook")
-async def receive_webhook(request: Request):
-    data = await request.json()
-    
-    # Store alert
-    alert_history.append({
-        'timestamp': datetime.utcnow(),
-        'event_type': data.get('eventType'),
-        'alert_name': data['payload']['alertName'],
-        'event_count': data['payload']['eventCount'],
-        'data': data
-    })
-    
-    # Keep only last 1000 alerts
-    if len(alert_history) > 1000:
-        alert_history.pop(0)
-    
-    return {"status": "success"}
-
-@app.get("/dashboard")
-async def get_dashboard():
-    # Return aggregated statistics
-    return {
-        'total_alerts': len(alert_history),
-        'by_type': group_by_type(alert_history),
-        'recent_alerts': alert_history[-10:]
-    }
-```
-
-## Managing alerts
-
-### Viewing alerts
-
-Navigate to Configuration → Alerts to see all configured alerts. The table displays:
-
-- **Name**: Alert name
-- **Endpoint**: Webhook URL (truncated)
-- **Events**: Number of trigger types configured
-- **Created by**: User who created the alert
-- **Status**: Enabled or disabled
-
-<Frame>
-  <img src="/img/production/alerts_list.png" alt="Alerts list view" />
-</Frame>
-
-### Editing alerts
-
-1. Click on an alert row or the edit icon
-2. Modify any configuration settings
-3. Click "Save" to update the alert
-
-**Note**: Updating an alert replaces all its triggers and configurations. Make sure to preserve any settings you want to keep.
-
-### Disabling alerts
-
-Temporarily disable an alert without deleting it:
-
-1. Edit the alert
-2. Toggle off the "Enable alert" switch
-3. Save the alert
-
-Disabled alerts will not send webhooks but remain in your configuration for future use.
-
-### Deleting alerts
-
-1. Select one or more alerts using checkboxes
-2. Click the delete button
-3. Confirm the deletion
-
-Deleted alerts cannot be recovered. Consider disabling instead if you might need them later.
-
 ## Troubleshooting
 
 ### Webhooks not being delivered
@@ -706,6 +672,20 @@ If you see SSL certificate errors in logs:
 ## Architecture and internals
 
 Understanding Opik's alert architecture can help with troubleshooting and optimization.
+
+### How alerts work
+
+The Opik Alerts system monitors your workspace for specific events and sends consolidated webhook notifications to your configured endpoints. Here's the flow:
+
+1. **Event occurs**: An event happens in your workspace (e.g., a trace error, new feedback score)
+2. **Alert evaluation**: The system checks if any enabled alerts match this event type
+3. **Event aggregation**: Multiple events are aggregated over a short time window (debouncing)
+4. **Webhook delivery**: A consolidated HTTP POST request is sent to your webhook URL
+5. **Retry handling**: Failed requests are automatically retried with exponential backoff
+
+#### Event debouncing
+
+To prevent overwhelming your webhook endpoint, Opik aggregates multiple events of the same type within a short time window (typically 30-60 seconds) and sends them as a single consolidated webhook. This is particularly useful for high-frequency events like feedback scores.
 
 ### Event flow
 
