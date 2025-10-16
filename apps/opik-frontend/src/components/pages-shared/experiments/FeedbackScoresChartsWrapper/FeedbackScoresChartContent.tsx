@@ -11,7 +11,10 @@ import {
   ChartTooltip,
   ChartLegend,
 } from "@/components/ui/chart";
-import { DEFAULT_CHART_GRID_PROPS, DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import { CartesianGrid, YAxis, Line } from "recharts";
 import ChartVerticalLegendContent from "@/components/shared/ChartVerticalLegendContent/ChartHorizontalLegendContent";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";

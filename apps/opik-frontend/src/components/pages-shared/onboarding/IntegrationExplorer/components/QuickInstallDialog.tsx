@@ -183,7 +183,7 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
                 href={QUICKSTART_DOCS_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+                className="inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
               >
                 Read the full guide
                 <ExternalLink className="size-3" />

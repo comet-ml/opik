@@ -39,7 +39,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
               href="https://www.comet.com/docs/opik/quickstart"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+              className="inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
             >
               check our docs
               <ExternalLink className="size-3" />
@@ -96,7 +96,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   href={buildDocsUrl("/opik-university")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="comet-body-s flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+                  className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
                 >
                   Opik University
                   <ExternalLink className="size-4" />
@@ -105,7 +105,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   href={buildDocsUrl("/quickstart")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="comet-body-s flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+                  className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
                 >
                   Getting started with Opik
                   <ExternalLink className="size-4" />
@@ -114,7 +114,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   href={buildDocsUrl("/cookbook/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="comet-body-s flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+                  className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
                 >
                   Opik&apos;s open-source collection of cookbooks
                   <ExternalLink className="size-4" />
@@ -123,7 +123,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   href={buildDocsUrl("/tracing/integrations/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="comet-body-s flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+                  className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
                 >
                   Integrate Opik with your LLM application
                   <ExternalLink className="size-4" />
@@ -132,7 +132,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   href={buildDocsUrl("/tracing/log_agents")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="comet-body-s flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+                  className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
                 >
                   Track agent execution
                   <ExternalLink className="size-4" />
@@ -141,7 +141,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   href={buildDocsUrl("/faq")}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="comet-body-s flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+                  className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
                 >
                   Read our FAQ
                   <ExternalLink className="size-4" />

@@ -51,7 +51,7 @@ const HelpResources: React.FC<HelpResourcesProps> = ({ title }) => {
             href="https://placeholder-getting-started.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="comet-body-s inline-flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+            className="comet-body-s inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
           >
             Getting started with {title}
             <ExternalLink className="size-4" />
@@ -60,7 +60,7 @@ const HelpResources: React.FC<HelpResourcesProps> = ({ title }) => {
             href="https://placeholder-integration-guide.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="comet-body-s inline-flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+            className="comet-body-s inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
           >
             {title} integration guide
             <ExternalLink className="size-4" />
@@ -69,7 +69,7 @@ const HelpResources: React.FC<HelpResourcesProps> = ({ title }) => {
             href="https://placeholder-best-practices.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="comet-body-s inline-flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+            className="comet-body-s inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
           >
             Best practices with {title}
             <ExternalLink className="size-4" />
@@ -78,7 +78,7 @@ const HelpResources: React.FC<HelpResourcesProps> = ({ title }) => {
             href="https://placeholder-troubleshooting.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="comet-body-s inline-flex items-center gap-1 text-primary dark:text-primary-hover hover:underline"
+            className="comet-body-s inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
           >
             Troubleshooting {title}
             <ExternalLink className="size-4" />

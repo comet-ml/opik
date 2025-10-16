@@ -158,4 +158,7 @@ module.exports = {
       );
     },
   ],
+  safelist: [
+    "playground-table",
+  ],
 };

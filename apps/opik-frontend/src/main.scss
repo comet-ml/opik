@@ -72,7 +72,7 @@
 
     /* Chart colors */
     --chart-tick-stroke: #373d4d;
-    --chart-grid-stroke: #F1F5F8;
+    --chart-grid-stroke: #f1f5f8;
 
     /* DataTable colors */
 
@@ -192,24 +192,24 @@
     --primary: 223 91% 60%;
     --primary-hover: 217 91% 70%;
     --primary-active: 220, 91%, 67%;
-    --secondary: 0, 0%, 18%; 
-    --primary-100:  222, 25%, 14%;
+    --secondary: 0, 0%, 18%;
+    --primary-100: 222, 25%, 14%;
     --white: #ffffff;
 
     --foreground-secondary: 214, 32%, 91%;
     --muted-gray: 0, 0%, 30%;
     --muted-disabled: 0, 0%, 14%;
 
-    --muted-slate: 0, 0%, 64%; 
+    --muted-slate: 0, 0%, 64%;
     --light-slate: 0, 0%, 64%;
     --slate-300: 213 27% 84%;
     --border: 0, 0%, 16%;
     --breadcrumb-last: 214, 32%, 91%;
     --secondary-foreground: 0, 0%, 10%;
-    --primary-foreground: 0, 0%, 11%; 
+    --primary-foreground: 0, 0%, 11%;
 
     --background: 0, 0%, 7%;
-    --foreground: 214, 32%, 91%; 
+    --foreground: 214, 32%, 91%;
 
     --soft-background: 0, 0%, 7%;
     --accent-background: 0, 0%, 9%;
@@ -240,7 +240,7 @@
 
     /* Special button colors - Dark Mode */
     --special-button: #20ac74;
-    --special-button-hover: #219C6A;
+    --special-button-hover: #219c6a;
     --special-button-active: #1e9a65;
 
     /* Action cards - Dark Mode */
@@ -248,17 +248,17 @@
       0 2px 4px -2px rgb(255 255 255 / 0.05);
 
     /* Action types - Dark Mode (darker backgrounds, lighter text) */
-    --action-trace-background: #29322F;
-    --action-trace-text: #14BB83;
-    --action-experiment-background: #2B2229;
-    --action-experiment-text: #CF44AD;
-    --action-guardrail-background: #322D29;
-    --action-guardrail-text: #FF9847;
-    --action-playground-background: #2E2932;
-    --action-playground-text: #A06DD9;
+    --action-trace-background: #29322f;
+    --action-trace-text: #14bb83;
+    --action-experiment-background: #2b2229;
+    --action-experiment-text: #cf44ad;
+    --action-guardrail-background: #322d29;
+    --action-guardrail-text: #ff9847;
+    --action-playground-background: #2e2932;
+    --action-playground-text: #a06dd9;
 
     /* Feature colors - Dark Mode */
-    --feature-experiment-management: #3B70F6;
+    --feature-experiment-management: #3b70f6;
     --feature-llm: #20ac74;
 
     /* Muted colors - Dark Mode */
@@ -268,14 +268,14 @@
     --toggle-outline-active: #2c3c56;
 
     /* Thread colors - Dark Mode */
-    --thread-icon-background: #2E2932;
-    --thread-icon-text: #A06DD9;
+    --thread-icon-background: #2e2932;
+    --thread-icon-text: #a06dd9;
     --thread-active: #2a3f2f;
     --thread-inactive: #2a3447;
     --message-input-background: #2a2f47;
 
     /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
-    --codemirror-background: #1C1C1C;
+    --codemirror-background: #1c1c1c;
     --codemirror-gutter: #7d8590;
     --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
     --codemirror-syntax-blue: #79c0ff;
@@ -294,7 +294,7 @@
     --upload-icon-bg: 71 85 105;
 
     /* Code block colors - Dark Mode */
-    --code-block: #1C1C1C;
+    --code-block: #1c1c1c;
 
     /* Welcome banner gradient colors - Dark Mode */
     --banner-gradient-start: #0f172a;
@@ -306,24 +306,24 @@
     --scrollbar-background: #121212;
     /* Tag variant background and text colors - Dark Mode */
     --tag-gray-bg: #242424;
-    --tag-purple-bg: #2E2932;
-    --tag-purple-text: #A06DD9;
-    --tag-burgundy-bg: #2B2229;
-    --tag-burgundy-text: #CF44AD;
-    --tag-pink-bg: #2E2427;
-    --tag-pink-text: #F45D8A;
+    --tag-purple-bg: #2e2932;
+    --tag-purple-text: #a06dd9;
+    --tag-burgundy-bg: #2b2229;
+    --tag-burgundy-text: #cf44ad;
+    --tag-pink-bg: #2e2427;
+    --tag-pink-text: #f45d8a;
     --tag-red-bg: #322929;
-    --tag-red-text: #F36D6D;
-    --tag-orange-bg: #322D29;
-    --tag-orange-text: #FF9847;
+    --tag-red-text: #f36d6d;
+    --tag-orange-bg: #322d29;
+    --tag-orange-text: #ff9847;
     --tag-yellow-bg: #323029;
-    --tag-yellow-text: #EBAD00;
-    --tag-green-bg: #29322F;
-    --tag-green-text: #14BB83;
+    --tag-yellow-text: #ebad00;
+    --tag-green-bg: #29322f;
+    --tag-green-text: #14bb83;
     --tag-turquoise-bg: #293232;
-    --tag-turquoise-text: #0FBFD2;
-    --tag-blue-bg: #292E32;
-    --tag-blue-text: #6EABE7;
+    --tag-turquoise-text: #0fbfd2;
+    --tag-blue-bg: #292e32;
+    --tag-blue-text: #6eabe7;
 
     /* Info box colors - Dark Mode */
     --info-box-bg: 224 76% 33%;

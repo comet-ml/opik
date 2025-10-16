@@ -13,7 +13,10 @@ import {
   ChartTooltip,
   ChartLegend,
 } from "@/components/ui/chart";
-import { DEFAULT_CHART_GRID_PROPS, DEFAULT_CHART_TICK } from "@/constants/chart";
+import {
+  DEFAULT_CHART_GRID_PROPS,
+  DEFAULT_CHART_TICK,
+} from "@/constants/chart";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 
 export type DataRecord = {
