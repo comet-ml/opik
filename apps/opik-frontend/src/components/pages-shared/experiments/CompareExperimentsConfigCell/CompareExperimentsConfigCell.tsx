@@ -1,11 +1,14 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
+import isObject from "lodash/isObject";
 import { CellContext } from "@tanstack/react-table";
 import Linkify from "linkify-react";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
 import { toString } from "@/lib/utils";
+import { prettifyMessage } from "@/lib/prettifyMessage";
+import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 
 export type CompareFiledValue = string | number | undefined | null;
 
@@ -34,6 +37,31 @@ const CompareExperimentsConfigCell: React.FC<
   const renderContent = () => {
     if (isUndefined(data)) {
       return <span className="px-1.5 py-2.5 text-light-slate">No value</span>;
+    }
+
+    // Check if this is conversation data that should be prettified
+    const isConversationData =
+      isObject(data) &&
+      Array.isArray(data) &&
+      (data as unknown[]).length > 0 &&
+      (data as unknown[]).every(
+        (msg: unknown) => isObject(msg) && "role" in msg,
+      );
+
+    if (isConversationData && !showDiffView) {
+      // Use pretty formatting for conversation data
+      const prettified = prettifyMessage(data);
+      if (prettified.prettified) {
+        return (
+          <div className="size-full max-w-full overflow-hidden whitespace-pre-wrap break-words rounded-md border bg-code-block px-2 py-[11px]">
+            <MarkdownPreview className="prose prose-sm max-w-none">
+              {typeof prettified.message === "string"
+                ? prettified.message
+                : JSON.stringify(prettified.message)}
+            </MarkdownPreview>
+          </div>
+        );
+      }
     }
 
     return (

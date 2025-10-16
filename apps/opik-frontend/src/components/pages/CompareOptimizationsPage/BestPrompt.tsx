@@ -4,6 +4,8 @@ import { ArrowRight } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
 import get from "lodash/get";
+import { prettifyMessage } from "@/lib/prettifyMessage";
+import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
@@ -55,9 +57,28 @@ const BestPrompt: React.FC<BestPromptProps> = ({
 
   const prompt = useMemo(() => {
     const val = get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
-
-    return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
+    return val;
   }, [experiment]);
+
+  const prettifiedPrompt = useMemo(() => {
+    if (!prompt || prompt === "-") return null;
+
+    // Check if this is conversation data
+    const isConversationData =
+      isObject(prompt) &&
+      Array.isArray(prompt) &&
+      (prompt as unknown[]).length > 0 &&
+      (prompt as unknown[]).every(
+        (msg: unknown) => isObject(msg) && "role" in msg,
+      );
+
+    if (isConversationData) {
+      const prettified = prettifyMessage(prompt);
+      return prettified.prettified ? prettified.message : null;
+    }
+
+    return null;
+  }, [prompt]);
 
   return (
     <Card className="h-[224px] w-[280px]">
@@ -78,9 +99,23 @@ const BestPrompt: React.FC<BestPromptProps> = ({
           </div>
           <PercentageTrend percentage={percentage} />
         </div>
-        <TooltipWrapper content={prompt}>
+        <TooltipWrapper
+          content={
+            typeof prettifiedPrompt === "string"
+              ? prettifiedPrompt
+              : toString(prompt)
+          }
+        >
           <div className="comet-body-s mt-5 line-clamp-2 h-11 text-light-slate">
-            {prompt}
+            {prettifiedPrompt ? (
+              <MarkdownPreview className="prose prose-sm line-clamp-2 max-w-none">
+                {typeof prettifiedPrompt === "string"
+                  ? prettifiedPrompt
+                  : JSON.stringify(prettifiedPrompt)}
+              </MarkdownPreview>
+            ) : (
+              toString(prompt)
+            )}
           </div>
         </TooltipWrapper>
         <div className="flex justify-end pt-1">
