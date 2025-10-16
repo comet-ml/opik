@@ -15,6 +15,7 @@ from typing import Optional
 
 import redis
 from redis.exceptions import ConnectionError as RedisConnectionError
+from opik_backend.utils.redis_utils import get_redis_client
 from rq import Queue, Worker
 from rq.serializers import JSONSerializer
 from rq.job import Job
@@ -82,20 +83,8 @@ class RqWorkerManager:
         Create a Redis connection using shared factory.
         """
 
-        # Use the centralized connection factory for consistency
-        return redis.Redis(
-            host=self.redis_host,
-            port=self.redis_port,
-            db=self.redis_db,
-            password=self.redis_password if self.redis_password else None,
-            decode_responses=True,
-            socket_timeout=self.connection_timeout,
-            socket_connect_timeout=self.connection_timeout,
-            socket_keepalive=True,
-            health_check_interval=self.health_check_interval
-        )
-    
-    
+        # Use shared singleton client
+        return get_redis_client()
 
     def _run_worker(self):
         """
