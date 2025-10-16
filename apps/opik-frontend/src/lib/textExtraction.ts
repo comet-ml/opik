@@ -12,6 +12,21 @@ import { ExtractTextResult } from "./types";
  * Note: For conversation arrays (messages, choices), this function extracts the LAST message/choice by design.
  * This is the expected behavior for playground outputs where we want to show the final response.
  */
+// Field priorities based on the old prettifyGenericLogic behavior
+const INPUT_FIELD_PRIORITIES = [
+  "question",
+  "messages",
+  "user_input",
+  "query",
+  "input_prompt",
+  "prompt",
+  "sys.query",
+  "input",
+  "output",
+];
+
+const OUTPUT_FIELD_PRIORITIES = ["answer", "output", "response", "input"];
+
 export const extractTextFromObject = (
   obj: object,
   context?: "input" | "output",
@@ -19,30 +34,10 @@ export const extractTextFromObject = (
   // Context-specific fields based on the old prettifyGenericLogic behavior
   const contextSpecificFields =
     context === "input"
-      ? [
-          "question",
-          "messages",
-          "user_input",
-          "query",
-          "input_prompt",
-          "prompt",
-          "sys.query",
-          "input",
-          "output",
-        ]
+      ? INPUT_FIELD_PRIORITIES
       : context === "output"
-        ? ["answer", "output", "response", "input"]
-        : [
-            "question",
-            "messages",
-            "user_input",
-            "query",
-            "input_prompt",
-            "prompt",
-            "sys.query",
-            "input",
-            "output",
-          ]; // default to input behavior for backward compatibility
+        ? OUTPUT_FIELD_PRIORITIES
+        : INPUT_FIELD_PRIORITIES; // default to input behavior for backward compatibility
 
   // Common string fields that work for both input and output
   const commonTextFields = ["content", "text", "message"];
