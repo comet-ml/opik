@@ -100,41 +100,17 @@ class RqWorkerManager:
     
     def _connect_with_backoff(self) -> Optional[redis.Redis]:
         """
-        Attempt to connect to Redis with exponential backoff.
-        
-        Returns:
-            Redis connection if successful, None otherwise
+        Single-attempt Redis connection with a health-check ping.
+        Delegates reconnection behavior to Redis client configuration.
         """
-        backoff = self.initial_backoff
-        attempt = 1
-
-        while not self.should_stop.is_set():
-            try:
-                logger.info(f"Redis connection attempt {attempt} (backoff: {backoff}s)")
-                conn = self._create_redis_connection()
-
-                # Test the connection
-                conn.ping()
-
-                logger.info(f"✅ Redis connection established successfully on attempt {attempt}")
-                return conn
-
-            except (RedisConnectionError, Exception) as e:
-                logger.warning(
-                    f"❌ Redis connection failed on attempt {attempt}: {e}. "
-                    f"Retrying in {backoff}s..."
-                )
-
-                # Wait with backoff
-                if self.should_stop.wait(timeout=backoff):
-                    # Stop was requested during wait
-                    return None
-
-                # Increase backoff exponentially
-                backoff = min(backoff * self.backoff_multiplier, self.max_backoff)
-                attempt += 1
-
-        return None
+        try:
+            conn = self._create_redis_connection()
+            conn.ping()
+            logger.info("✅ Redis connection established")
+            return conn
+        except (RedisConnectionError, Exception) as e:
+            logger.warning(f"❌ Redis connection failed: {e}")
+            return None
 
     def _run_worker(self):
         """

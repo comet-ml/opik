@@ -2,10 +2,10 @@ package com.comet.opik.infrastructure.queues;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.uuid.Generators;
 import lombok.Builder;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /**
  * Represents a complete RQ message with metadata.
@@ -36,7 +36,7 @@ public record QueueMessage(
     public static class QueueMessageBuilder {
         QueueMessageBuilder() {
             Instant now = Instant.now();
-            this.id = UUID.randomUUID().toString();
+            this.id = Generators.timeBasedEpoch().generate().toString();
             this.createdAt = now.toString();
             this.enqueuedAt = now.toString();
             this.updatedAt = this.createdAt;
