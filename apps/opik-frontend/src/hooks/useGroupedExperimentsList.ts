@@ -287,6 +287,10 @@ export default function useGroupedExperimentsList(
   const experimentsCache = useExperimentsCache();
   const groups = useMemo(() => params.groups ?? [], [params.groups]);
   const hasGroups = Boolean(groups?.length);
+  const isGroupingByDataset = useMemo(
+    () => groups?.some((g) => g.field === COLUMN_DATASET_ID) ?? false,
+    [groups],
+  );
 
   const {
     data: groupsData,
@@ -338,7 +342,7 @@ export default function useGroupedExperimentsList(
     },
     {
       placeholderData: keepPreviousData,
-      enabled: hasGroups,
+      enabled: hasGroups && isGroupingByDataset,
       refetchInterval,
     },
   );
@@ -510,20 +514,27 @@ export default function useGroupedExperimentsList(
 
   const groupedRefetch = useCallback(
     (options?: RefetchOptions) => {
-      return Promise.all([
+      const refetchPromises: Promise<unknown>[] = [
         refetchGroups(options),
         refetchGroupsAggregations(options),
-        refetchDatasets(options),
         ...Object.values(experimentsResponses).map((response) =>
           response.refetch(options),
         ),
-      ]);
+      ];
+
+      // Only refetch datasets when grouping by dataset
+      if (isGroupingByDataset) {
+        refetchPromises.push(refetchDatasets(options));
+      }
+
+      return Promise.all(refetchPromises);
     },
     [
       experimentsResponses,
       refetchGroups,
       refetchGroupsAggregations,
       refetchDatasets,
+      isGroupingByDataset,
     ],
   );
 
