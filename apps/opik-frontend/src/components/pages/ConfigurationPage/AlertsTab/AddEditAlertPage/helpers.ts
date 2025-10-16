@@ -40,7 +40,7 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   [ALERT_EVENT_TYPE.prompt_created]: {
     title: "New prompt added",
     description:
-      "Triggered when a new prompt is created or saved in the workspace's prompt library",
+      "Triggered when a new prompt is created or saved in the workspace's prompt library.",
     hasScope: false,
   },
   [ALERT_EVENT_TYPE.prompt_committed]: {

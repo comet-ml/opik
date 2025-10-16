@@ -7,6 +7,7 @@ from ..core.request_options import RequestOptions
 from ..types.alert_page_public import AlertPagePublic
 from ..types.alert_public import AlertPublic
 from ..types.alert_trigger_write import AlertTriggerWrite
+from ..types.webhook_examples import WebhookExamples
 from ..types.webhook_test_result import WebhookTestResult
 from ..types.webhook_write import WebhookWrite
 from .raw_client import AsyncRawAlertsClient, RawAlertsClient
@@ -211,6 +212,29 @@ class AlertsClient:
         _response = self._raw_client.update_alert(
             id_, name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
         )
+        return _response.data
+
+    def get_webhook_examples(self, *, request_options: typing.Optional[RequestOptions] = None) -> WebhookExamples:
+        """
+        Get webhook payload examples for all alert event types
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WebhookExamples
+            Webhook examples
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.alerts.get_webhook_examples()
+        """
+        _response = self._raw_client.get_webhook_examples(request_options=request_options)
         return _response.data
 
     def test_webhook(
@@ -470,6 +494,32 @@ class AsyncAlertsClient:
         _response = await self._raw_client.update_alert(
             id_, name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
         )
+        return _response.data
+
+    async def get_webhook_examples(self, *, request_options: typing.Optional[RequestOptions] = None) -> WebhookExamples:
+        """
+        Get webhook payload examples for all alert event types
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WebhookExamples
+            Webhook examples
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.alerts.get_webhook_examples()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_webhook_examples(request_options=request_options)
         return _response.data
 
     async def test_webhook(

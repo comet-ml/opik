@@ -37,6 +37,11 @@ export interface MessageRendererProps {
   customTextExtractor?: (message: unknown) => string | undefined;
 
   /**
+   * Context for text extraction - helps prioritize the correct field when extracting text
+   */
+  extractionContext?: "input" | "output";
+
+  /**
    * Fallback content to show when message is null/undefined
    * @default "-"
    */
@@ -57,6 +62,7 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
   className,
   attemptTextExtraction = true,
   customTextExtractor,
+  extractionContext,
   fallbackContent = "-",
 }) => {
   const renderedContent = useMemo(() => {
@@ -90,7 +96,7 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
       if (attemptTextExtraction) {
         const extractedText = customTextExtractor
           ? customTextExtractor(message)
-          : extractTextFromObject(message);
+          : extractTextFromObject(message, extractionContext);
 
         if (extractedText) {
           // Handle structured result from extractTextFromObject
@@ -142,7 +148,13 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
     }
     // Fallback for any other unknown types
     return <MarkdownPreview>{String(message)}</MarkdownPreview>;
-  }, [message, attemptTextExtraction, customTextExtractor, fallbackContent]);
+  }, [
+    message,
+    attemptTextExtraction,
+    customTextExtractor,
+    extractionContext,
+    fallbackContent,
+  ]);
 
   return (
     <div className={cn("message-renderer", className)}>{renderedContent}</div>
