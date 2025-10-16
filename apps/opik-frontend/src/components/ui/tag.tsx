@@ -8,7 +8,7 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
     variant: {
       default: "border border-border bg-background text-muted-slate",
       primary: "bg-primary-100 text-primary-hover",
-      gray: "bg-[var(--tag-gray-bg)] text-muted-slate",
+      gray: "bg-[var(--tag-gray-bg)] text-muted-slate dark:text-foreground",
       purple: "bg-[var(--tag-purple-bg)] text-[var(--tag-purple-text)]",
       burgundy: "bg-[var(--tag-burgundy-bg)] text-[var(--tag-burgundy-text)]",
       pink: "bg-[var(--tag-pink-bg)] text-[var(--tag-pink-text)]",
