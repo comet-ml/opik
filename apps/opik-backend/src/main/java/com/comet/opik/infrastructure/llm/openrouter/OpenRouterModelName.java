@@ -39,6 +39,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     ANTHROPIC_CLAUDE_3_OPUS("anthropic/claude-3-opus"),
     ANTHROPIC_CLAUDE_3_5_HAIKU("anthropic/claude-3.5-haiku"),
     ANTHROPIC_CLAUDE_3_5_HAIKU_20241022("anthropic/claude-3.5-haiku-20241022"),
+    ANTHROPIC_CLAUDE_HAIKU_4_5("anthropic/claude-haiku-4.5"),
     ANTHROPIC_CLAUDE_3_5_SONNET("anthropic/claude-3.5-sonnet"),
     ANTHROPIC_CLAUDE_3_5_SONNET_20240620("anthropic/claude-3.5-sonnet-20240620"),
     ANTHROPIC_CLAUDE_3_7_SONNET("anthropic/claude-3.7-sonnet"),

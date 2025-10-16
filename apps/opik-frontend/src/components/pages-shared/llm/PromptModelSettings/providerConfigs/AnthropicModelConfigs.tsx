@@ -24,7 +24,8 @@ const AnthropicModelConfigs = ({
   const isExclusiveParamModel = useMemo(() => {
     return (
       model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
-      model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5
+      model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
+      model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5
     );
   }, [model]);
 
