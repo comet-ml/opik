@@ -1,0 +1,364 @@
+---
+description: Learn how to create task span metrics for evaluating the detailed execution information of your LLM tasks
+toc_max_heading_level: 4
+---
+
+# Task Span Metrics
+
+Task span metrics are a powerful type of evaluation metric in Opik that can analyze the detailed execution information of your LLM tasks. Unlike traditional metrics that only evaluate input-output pairs, task span metrics have access to the complete execution context, including intermediate steps, metadata, timing information, and hierarchical structure.
+
+## What are Task Span Metrics?
+
+Task span metrics receive a `task_span` parameter containing a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object that represents the complete execution context of your task. This includes:
+
+- **Execution Details**: Input, output, start/end times, and execution metadata
+- **Nested Operations**: Hierarchical structure of sub-operations and function calls
+- **Performance Data**: Timing, cost, usage statistics, and resource consumption
+- **Error Information**: Detailed error context and diagnostic information
+- **Provider Metadata**: Model information, API provider details, and configuration
+
+## When to Use Task Span Metrics
+
+Task span metrics are particularly valuable for:
+
+- **Performance Analysis**: Evaluating execution speed, resource usage, and efficiency
+- **Quality Assessment**: Analyzing the quality of intermediate steps and decision-making
+- **Cost Optimization**: Tracking and optimizing API costs and resource consumption
+- **Agent Evaluation**: Assessing agent trajectories and decision-making patterns
+- **Debugging**: Understanding execution flows and identifying performance bottlenecks
+- **Compliance**: Ensuring tasks execute within expected parameters and constraints
+
+## Creating Task Span Metrics
+
+To create a task span metric, define a class that inherits from `BaseMetric` and implements a `score` method that accepts a `task_span` parameter:
+
+```python
+from typing import Optional
+from opik.evaluation.metrics import BaseMetric, score_result
+from opik.message_processing.emulation.models import SpanModel
+
+class TaskExecutionQualityMetric(BaseMetric):
+    def __init__(
+        self,
+        name: str = "task_execution_quality",
+        track: bool = True,
+        project_name: Optional[str] = None,
+    ):
+        super().__init__(name=name, track=track, project_name=project_name)
+
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Access span execution details
+        execution_successful = task_span.error_info is None
+        has_output = task_span.output is not None
+        execution_time = None
+
+        if task_span.start_time and task_span.end_time:
+            execution_time = (task_span.end_time - task_span.start_time).total_seconds()
+
+        # Custom scoring logic based on execution characteristics
+        if not execution_successful:
+            score_value = 0.0
+            reason = "Task execution failed"
+        elif not has_output:
+            score_value = 0.3
+            reason = "Task completed but produced no output"
+        elif execution_time and execution_time > 30.0:
+            score_value = 0.6
+            reason = f"Task took too long to execute: {execution_time:.2f}s"
+        else:
+            score_value = 1.0
+            reason = "Task executed successfully with good performance"
+
+        return score_result.ScoreResult(
+            value=score_value,
+            name=self.name,
+            reason=reason
+        )
+```
+
+## Accessing Span Properties
+
+The `SpanModel` object provides rich information about task execution:
+
+### Basic Properties
+
+```python
+class BasicSpanAnalysisMetric(BaseMetric):
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Basic span information
+        span_id = task_span.id
+        span_name = task_span.name
+        span_type = task_span.type  # "general", "llm", "tool", etc.
+
+        # Input/Output analysis
+        input_data = task_span.input
+        output_data = task_span.output
+
+        # Metadata and tags
+        metadata = task_span.metadata
+        tags = task_span.tags
+
+        # Your scoring logic here
+        return score_result.ScoreResult(value=1.0, name=self.name)
+```
+
+### Performance Metrics
+
+```python
+class PerformanceMetric(BaseMetric):
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Timing analysis
+        start_time = task_span.start_time
+        end_time = task_span.end_time
+        duration = (end_time - start_time).total_seconds() if both else None
+
+        # Usage information
+        usage_info = task_span.usage  # Token counts, API calls, etc.
+
+        # Model and provider information
+        model_used = task_span.model
+        provider = task_span.provider
+
+        # Performance-based scoring
+        if duration and duration < 2.0:
+            return score_result.ScoreResult(
+                value=1.0,
+                name=self.name,
+                reason=f"Excellent performance: {duration:.2f}s"
+            )
+        else:
+            return score_result.ScoreResult(
+                value=0.5,
+                name=self.name,
+                reason="Performance could be improved"
+            )
+```
+
+## Analyzing Nested Operations
+
+Task spans can contain nested spans representing sub-operations:
+
+```python
+class HierarchyComplexityMetric(BaseMetric):
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Analyze nested spans
+        nested_spans = task_span.spans
+        total_operations = len(nested_spans)
+
+        # Count different types of operations
+        llm_operations = [s for s in nested_spans if s.type == "llm"]
+        tool_operations = [s for s in nested_spans if s.type == "tool"]
+
+        # Analyze complexity
+        if total_operations == 0:
+            complexity_score = 0.5
+            reason = "Simple operation with no sub-steps"
+        elif len(llm_operations) > 5:
+            complexity_score = 0.7
+            reason = f"High complexity: {len(llm_operations)} LLM calls"
+        else:
+            complexity_score = 1.0
+            reason = f"Well-structured with {total_operations} operations"
+
+        return score_result.ScoreResult(
+            value=complexity_score,
+            name=self.name,
+            reason=reason
+        )
+```
+
+## Error Analysis
+
+Task span metrics can analyze execution failures and errors:
+
+```python
+class ErrorAnalysisMetric(BaseMetric):
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        error_info = task_span.error_info
+
+        if error_info is None:
+            return score_result.ScoreResult(
+                value=1.0,
+                name=self.name,
+                reason="No errors detected"
+            )
+
+        # Analyze error severity and type
+        error_message = error_info.get("message", "")
+        error_type = error_info.get("exception_type", "")
+
+        if "timeout" in error_message.lower():
+            return score_result.ScoreResult(
+                value=0.3,
+                name=self.name,
+                reason="Task failed due to timeout"
+            )
+        elif "rate_limit" in error_message.lower():
+            return score_result.ScoreResult(
+                value=0.1,
+                name=self.name,
+                reason="Task failed due to rate limiting"
+            )
+        else:
+            return score_result.ScoreResult(
+                value=0.0,
+                name=self.name,
+                reason=f"Task failed with error: {error_type}"
+            )
+```
+
+## Using Task Span Metrics in Evaluation
+
+Task span metrics work seamlessly with regular evaluation metrics and are automatically detected by the evaluation system:
+
+```python
+from opik import evaluate
+from opik.evaluation.metrics import Equals
+
+# Mix regular and task span metrics
+equals_metric = Equals()
+quality_metric = TaskExecutionQualityMetric()
+performance_metric = PerformanceMetric()
+
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[
+        equals_metric,      # Regular metric (input/output)
+        quality_metric,     # Task span metric (execution analysis)
+        performance_metric, # Task span metric (performance analysis)
+    ],
+    experiment_name="Comprehensive Task Analysis"
+)
+```
+
+## Best Practices
+
+### 1. Handle Missing Data Gracefully
+
+Always check for `None` values in optional span attributes:
+
+```python
+def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    # Safe access to optional fields
+    duration = None
+    if task_span.start_time and task_span.end_time:
+        duration = (task_span.end_time - task_span.start_time).total_seconds()
+
+    cost = task_span.total_cost if task_span.total_cost else 0.0
+    metadata = task_span.metadata or {}
+```
+
+### 2. Focus on Execution Patterns
+
+Use task span metrics to evaluate **how** your application executes, not just the final output:
+
+```python
+# Good: Analyzing execution patterns
+def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    # Check for efficient execution patterns
+    nested_llm_calls = len([s for s in task_span.spans if s.type == "llm"])
+    has_caching = "cache_hit" in (task_span.metadata or {})
+
+    if has_caching:
+        return score_result.ScoreResult(value=1.0, name=self.name, reason="Used caching efficiently")
+    elif nested_llm_calls > 3:
+        return score_result.ScoreResult(value=0.5, name=self.name, reason="Too many LLM calls")
+```
+
+### 3. Combine with Regular Metrics
+
+Task span metrics provide the most value when combined with traditional output-based metrics:
+
+```python
+# Comprehensive evaluation approach
+scoring_metrics = [
+    # Output quality metrics
+    Equals(),
+    Hallucination(),
+
+    # Execution analysis metrics
+    TaskExecutionQualityMetric(),
+    PerformanceMetric(),
+
+    # Cost optimization metrics
+    CostEfficiencyMetric(),
+]
+```
+
+### 4. Security Considerations
+
+Be mindful of sensitive data in span information:
+
+```python
+def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    # Avoid logging sensitive input data
+    input_size = len(str(task_span.input)) if task_span.input else 0
+
+    # Use aggregated information instead of raw data
+    return score_result.ScoreResult(
+        value=1.0 if input_size < 1000 else 0.5,
+        name=self.name,
+        reason=f"Input size: {input_size} characters"
+    )
+```
+
+## Complete Example: Agent Trajectory Analysis metric
+
+Here's a comprehensive example that analyzes agent decision-making:
+
+```python
+class AgentTrajectoryMetric(BaseMetric):
+    def __init__(self, max_steps: int = 10, name: str = "agent_trajectory_quality"):
+        super().__init__(name=name)
+        self.max_steps = max_steps
+
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Analyze agent trajectory through nested spans
+        steps = task_span.spans
+        total_steps = len(steps)
+
+        # Check for efficient path
+        if total_steps == 0:
+            return score_result.ScoreResult(
+                value=0.0, name=self.name,
+                reason="No decision steps found"
+            )
+
+        # Analyze step quality
+        tool_uses = [s for s in steps if s.type == "tool"]
+        llm_reasoning = [s for s in steps if s.type == "llm"]
+
+        # Check for balanced approach
+        if len(tool_uses) == 0:
+            score = 0.3
+            reason = "Agent didn't use any tools"
+        elif total_steps > self.max_steps:
+            score = 0.4
+            reason = f"Too many steps: {total_steps} > {self.max_steps}"
+        elif len(llm_reasoning) == 0:
+            score = 0.5
+            reason = "No reasoning steps detected"
+        else:
+            # Calculate efficiency score
+            efficiency = min(1.0, self.max_steps / total_steps)
+            balance = min(len(tool_uses), len(llm_reasoning)) / max(len(tool_uses), len(llm_reasoning))
+            score = (efficiency + balance) / 2
+            reason = f"Well-balanced trajectory: {total_steps} steps, {len(tool_uses)} tools, {len(llm_reasoning)} reasoning"
+
+        return score_result.ScoreResult(
+            value=score,
+            name=self.name,
+            reason=reason
+        )
+```
+
+## Integration with LLM Evaluation
+
+For a complete guide on using task span metrics in LLM evaluation workflows, see the [Using task span evaluation metrics](/evaluation/evaluate_your_llm#using-task-span-evaluation-metrics) section in the LLM evaluation guide.
+
+## Related Documentation
+
+- [Custom Metrics](/evaluation/metrics/custom_metric) - Creating traditional input/output evaluation metrics
+- [SpanModel API Reference](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) - Complete SpanModel documentation
+- [Evaluation Overview](/evaluation/metrics/overview) - Understanding Opik's evaluation system
