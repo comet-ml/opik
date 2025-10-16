@@ -2,6 +2,7 @@ from typing import Optional
 
 from . import litellm_completion_decorator
 from . import completion_chunks_aggregator
+from . import litellm_opik_logger_compatibility
 
 import litellm
 
@@ -10,6 +11,10 @@ def track_litellm(
     project_name: Optional[str] = None,
 ) -> None:
     """Adds Opik tracking wrappers to LiteLLM completion functions.
+
+    This function automatically disables LiteLLM's OpikLogger callbacks to prevent
+    duplicate logging. The decorator-based integration provides better tracking
+    with proper span/trace hierarchy.
 
     The functions are always patched; however every wrapped call checks
     `opik.decorator.tracing_runtime_config.is_tracing_active()` before emitting
@@ -33,6 +38,9 @@ def track_litellm(
         return
 
     litellm.opik_tracked = True
+
+    # Disable OpikLogger callback to prevent duplicate logging
+    litellm_opik_logger_compatibility.disable_opik_logger_when_decorator_active()
 
     _patch_litellm_completion(project_name)
 
