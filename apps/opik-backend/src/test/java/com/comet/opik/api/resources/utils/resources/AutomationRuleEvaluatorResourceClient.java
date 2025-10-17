@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
@@ -86,6 +88,47 @@ public class AutomationRuleEvaluatorResourceClient {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
         return actualResponse;
+    }
+
+    public AutomationRuleEvaluator.AutomationRuleEvaluatorPage findEvaluatorPage(
+            UUID projectId,
+            String name,
+            String filters,
+            String sorting,
+            Integer page,
+            Integer size,
+            String workspaceName,
+            String apiKey) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI));
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+        if (name != null) {
+            target = target.queryParam("name", name);
+        }
+        if (filters != null) {
+            target = target.queryParam("filters", URLEncoder.encode(filters, StandardCharsets.UTF_8));
+        }
+        if (sorting != null) {
+            target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));
+        }
+        if (page != null) {
+            target = target.queryParam("page", page);
+        }
+        if (size != null) {
+            target = target.queryParam("size", size);
+        }
+
+        var actualResponse = target
+                .request()
+                .header(WORKSPACE_HEADER, workspaceName)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .get();
+
+        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+        return actualResponse.readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
     }
 
     public Response updateEvaluator(
