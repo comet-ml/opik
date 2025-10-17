@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -95,6 +95,7 @@ import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetails
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import { Filter } from "@/types/filters";
+import { USER_FEEDBACK_NAME } from "@/constants/shared";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -219,6 +220,7 @@ const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
 const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 const PAGINATION_SIZE_KEY = "traces-pagination-size";
 const ROW_HEIGHT_KEY = "traces-row-height";
+const USER_FEEDBACK_COLUMN_ID = `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`;
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
@@ -524,9 +526,40 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setSelectedColumns,
   });
 
+  // Auto-select all feedback score columns when they become available
+  useEffect(() => {
+    const allScoreColumns = [USER_FEEDBACK_COLUMN_ID, ...dynamicColumnsIds];
+
+    const missingScoreColumns = allScoreColumns.filter(
+      (id) => !selectedColumns.includes(id),
+    );
+
+    if (missingScoreColumns.length > 0) {
+      setSelectedColumns((prev) => [...prev, ...missingScoreColumns]);
+    }
+  }, [dynamicColumnsIds, selectedColumns, setSelectedColumns]);
+
   const scoresColumnsData = useMemo(() => {
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: ColumnData<BaseTraceData> = {
+      id: USER_FEEDBACK_COLUMN_ID,
+      label: USER_FEEDBACK_NAME,
+      type: COLUMN_TYPE.number,
+      header: FeedbackScoreHeader as never,
+      cell: FeedbackScoreCell as never,
+      accessorFn: (row) =>
+        row.feedback_scores?.find((f) => f.name === USER_FEEDBACK_NAME),
+      statisticKey: USER_FEEDBACK_COLUMN_ID,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.label !== USER_FEEDBACK_NAME,
+    );
+
     return [
-      ...dynamicScoresColumns.map(
+      userFeedbackColumn,
+      ...otherDynamicColumns.map(
         ({ label, id, columnType }) =>
           ({
             id,
