@@ -373,22 +373,36 @@ except Exception as e:
                     return
                 try:
                     for line in pipe:
-                        output_list.append(line)
-                        if line.strip() and self._log_collector:
-                            try:
-                                # Try to parse as JSON
-                                log_data = json.loads(line.strip())
-                                self._log_collector.emit(log_data)
-                            except json.JSONDecodeError:
-                                # Fallback: treat as plain text
-                                log_data = {
-                                    'timestamp': int(time.time() * 1000),
-                                    'level': 'INFO',
-                                    'logger_name': f'subprocess.{stream_name}',
-                                    'message': line.strip(),
-                                    'attributes': {}
-                                }
-                                self._log_collector.emit(log_data)
+                        # Only collect and emit non-empty lines
+                        if line.strip():
+                            output_list.append(line)
+                            if self._log_collector:
+                                try:
+                                    # Try to parse as JSON
+                                    log_data = json.loads(line.strip())
+                                    # If it has log structure, emit as-is, otherwise treat as message
+                                    if 'level' in log_data and 'logger_name' in log_data:
+                                        self._log_collector.emit(log_data)
+                                    else:
+                                        # Plain JSON result - treat as log message
+                                        log_data = {
+                                            'timestamp': int(time.time() * 1000),
+                                            'level': 'INFO',
+                                            'logger_name': f'subprocess.{stream_name}',
+                                            'message': line.strip(),
+                                            'attributes': {}
+                                        }
+                                        self._log_collector.emit(log_data)
+                                except json.JSONDecodeError:
+                                    # Fallback: treat as plain text
+                                    log_data = {
+                                        'timestamp': int(time.time() * 1000),
+                                        'level': 'INFO',
+                                        'logger_name': f'subprocess.{stream_name}',
+                                        'message': line.strip(),
+                                        'attributes': {}
+                                    }
+                                    self._log_collector.emit(log_data)
                 except Exception as e:
                     self.logger.warning(f"Error reading {stream_name}: {e}")
                 finally:
