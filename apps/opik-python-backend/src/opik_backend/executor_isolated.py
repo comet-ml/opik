@@ -83,8 +83,8 @@ class IsolatedSubprocessExecutor:
         self.logger = logging.getLogger(__name__)
         self._active_processes: List[subprocess.Popen] = []  # Track active processes for cleanup
         self._process_lock = Lock()
-        self._teardown_callbacks: List[Callable[[], None]] = [] 
-        self._log_collector = None # Callbacks to run on teardown
+        self._teardown_callbacks: List[Callable[[], None]] = []  # Callbacks to run on teardown
+        self._log_collector = None
 
     def execute(
         self,
@@ -432,7 +432,6 @@ except Exception as e:
                 self._log_collector.close()
                 self._log_collector = None
         except Exception as e:
-            self._log_collector = None
             self.logger.warning(f"Error closing log collector: {e}")
 
     def register_teardown_callback(self, callback):
