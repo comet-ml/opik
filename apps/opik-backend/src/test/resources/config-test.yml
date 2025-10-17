@@ -113,6 +113,11 @@ redis:
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
 
+# Queues configuration for tests
+queues:
+  enabled: true
+  defaultJobTtl: 14 days
+
 openTelemetry:
   # Default: 3h
   # Description: how long it takes to expire non-used keys

@@ -141,4 +141,8 @@ public class JsonUtils {
             return MAPPER.readValue(inputStream, valueTypeRef);
         }
     }
+
+    public <T> T convertValue(@NonNull Object fromValue, @NonNull TypeReference<T> toValueTypeRef) {
+        return MAPPER.convertValue(fromValue, toValueTypeRef);
+    }
 }
