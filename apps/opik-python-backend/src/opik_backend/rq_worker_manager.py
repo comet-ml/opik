@@ -16,7 +16,6 @@ import redis
 from opik_backend.utils import redis_utils
 from rq import Queue, Worker
 from rq.serializers import JSONSerializer
-from rq.job import Job
 
 logger = logging.getLogger(__name__)
 
