@@ -28,38 +28,44 @@ Welcome to the Opik Python SDK design documentation! This directory contains com
 ### Domain-Specific Documentation
 
 #### 2. [Integrations](INTEGRATIONS.md)
-**Complete guide to LLM framework integrations.**
+**Engineering guide to integration architecture.**
 
 **What's Covered**:
-- Integration patterns (decorator-based vs callback-based)
-- 12+ supported integrations (OpenAI, Anthropic, LangChain, etc.)
-- How each integration works
-- Usage examples for each integration
-- Building new integrations (step-by-step guide)
-- Advanced topics (streaming, distributed tracing, cost calculation)
+- Three integration patterns (decorator, callback, hybrid) with selection criteria
+- Integration catalog grouped by pattern
+- Decorator-based deep dive (OpenAI, Anthropic, Bedrock)
+- Callback-based deep dive (LangChain, LlamaIndex, DSPy)
+- Hybrid integrations (ADK, CrewAI)
+- Token usage and cost tracking architecture
+- Streaming support (3 patching techniques with implementations)
+- Step-by-step guide for building decorator integrations
+- Notable implementation details (Bedrock's extensible aggregator, ADK's OpenTelemetry patching)
 
 **Read this if you want to**:
-- Use the SDK with a specific LLM framework
-- Understand how integrations work
-- Build a new integration
-- Learn about provider-specific features
+- Understand how integrations are architected
+- Build a new integration from scratch
+- Learn streaming response handling
+- Understand token usage extraction patterns
+- See real implementation examples
 
 #### 3. [Evaluation](EVALUATION.md)
-**Comprehensive evaluation framework guide.**
+**Engineering guide to evaluation framework architecture.**
 
 **What's Covered**:
-- Core concepts (datasets, experiments, metrics)
-- Evaluation API (`evaluate()`, `evaluate_experiment()`)
-- 20+ built-in metrics (heuristic and LLM-based)
-- Custom metric implementation
-- Advanced usage (parallel execution, sampling, conversation evaluation)
-- Best practices
+- Evaluation engine architecture and components
+- All 4 evaluation methods (`evaluate()`, `evaluate_prompt()`, `evaluate_experiment()`, `evaluate_threads()`)
+- Data flow diagrams with module annotations
+- Parallel execution model (ThreadPoolExecutor)
+- Metrics architecture (3 types: heuristic, LLM judges, conversation)
+- Task lifecycle and context management
+- Error handling strategy
+- Comparison with tracing architecture
 
 **Read this if you want to**:
-- Evaluate your LLM application
-- Use or create custom metrics
-- Run experiments and track results
-- Compare model versions
+- Understand evaluation engine internals
+- Build custom metrics
+- Understand parallel execution
+- See where each step is implemented (module references)
 
 #### 4. [Testing](TESTING.md)
 **Complete testing guide and strategy.**
@@ -369,13 +375,13 @@ If documentation doesn't answer your question:
 
 ## 📊 Documentation Statistics
 
-| Document | Size | Lines | Read Time | Priority |
-|----------|------|-------|-----------|----------|
-| API and Data Flow | 103 KB | ~2,100 | 45-60 min | 🔴 Highest |
-| Integrations | 27 KB | ~1,100 | 20-30 min | 🟡 Medium |
-| Evaluation | 20 KB | ~900 | 15-25 min | 🟡 Medium |
-| Testing | 28 KB | ~1,060 | 20-30 min | 🟢 High |
-| **Total** | **178 KB** | **~5,160** | **~2 hours** | |
+| Document | Lines | Read Time | Priority |
+|----------|-------|-----------|----------|
+| API and Data Flow | ~1,550 | 45-60 min | 🔴 Highest |
+| Integrations | ~2,300 | 40-55 min | 🟡 Medium |
+| Evaluation | ~1,260 | 25-35 min | 🟡 Medium |
+| Testing | ~1,060 | 20-30 min | 🟢 High |
+| **Total** | **~6,170** | **~2.5 hours** | |
 
 ## 🔄 Maintaining This Documentation
 

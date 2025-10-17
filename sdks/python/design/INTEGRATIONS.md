@@ -1,1103 +1,542 @@
-# Opik Python SDK: Integrations
+# Opik Python SDK: Integrations Architecture
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Integration Patterns](#integration-patterns)
-- [Supported Integrations](#supported-integrations)
-- [Building New Integrations](#building-new-integrations)
-- [Advanced Topics](#advanced-topics)
+- [Method Patching Integrations](#method-patching-integrations)
+- [Callback Integrations](#callback-integrations)
+- [Hybrid Integrations](#hybrid-integrations)
+- [Streaming Strategies](#streaming-strategies)
+- [Token Usage and Cost Tracking](#token-usage-and-cost-tracking)
 
 ## Overview
 
-The Opik Python SDK provides seamless integration with popular LLM frameworks and providers. Integrations automatically capture traces, spans, usage data, and costs without requiring manual instrumentation.
+The SDK provides automatic tracking for 12+ LLM frameworks through three architectural patterns. Integrations are designed to be lightweight, extensible, and framework-native.
 
-### Integration Goals
+### Integration Catalog
 
-1. **Zero-overhead**: Minimal performance impact
-2. **Automatic tracking**: Capture calls without manual instrumentation
-3. **Provider-specific**: Support unique features of each library
-4. **Consistent API**: Similar usage patterns across integrations
-5. **Optional**: Can be disabled or configured
+| Integration | Pattern | Location | Key Features |
+|-------------|---------|----------|--------------|
+| **OpenAI** | Method Patching | `integrations/openai/` | Multiple APIs, streaming, function calling |
+| **Anthropic** | Method Patching | `integrations/anthropic/` | Messages API, delta accumulation |
+| **Bedrock** | Method Patching | `integrations/bedrock/` | Multi-format aggregators, extensible |
+| **Google GenAI** | Method Patching | `integrations/genai/` | Multi-modal support |
+| **AISuite** | Method Patching | `integrations/aisuite/` | Unified interface |
+| **LangChain** | Callback | `integrations/langchain/` | BaseTracer, provider extractors, external context support |
+| **LlamaIndex** | Callback | `integrations/llama_index/` | Event parsing, dedicated client |
+| **DSPy** | Callback | `integrations/dspy/` | Isolated context, graph visualization |
+| **Haystack** | Callback | `integrations/haystack/` | Component-based |
+| **ADK** | Hybrid | `integrations/adk/` | OpenTelemetry interception + callbacks |
+| **CrewAI** | Hybrid | `integrations/crewai/` | Method wrapping + LiteLLM delegation |
 
 ## Integration Patterns
 
-The SDK supports two main integration patterns, chosen based on the target library's architecture.
+### Pattern Selection
 
-### Pattern 1: Decorator-Based Integration
+```
+Library Architecture Analysis:
 
-**Use when**: The library exposes client objects with methods to wrap.
+Does library provide callbacks/hooks?
+    │
+    ├─► Yes ─► Callbacks reliable and in-context?
+    │           │
+    │           ├─► Yes ─► Pure Callback
+    │           │           (LangChain, LlamaIndex, DSPy, Haystack)
+    │           │
+    │           └─► No ─► Hybrid (Callback + Patching)
+    │                       (ADK, CrewAI)
+    │
+    └─► No ─► Method Patching
+                (OpenAI, Anthropic, Bedrock, GenAI, AISuite)
+```
 
-**How it works**: Wrap client methods to intercept calls and add tracking.
+### Callback Reliability Issues
 
-**Examples**: OpenAI, Anthropic, Bedrock
+**Why callbacks alone may be insufficient**:
 
+1. **Completion guarantee**: Some frameworks skip END callbacks on exceptions
+2. **Context isolation**: Callbacks may execute in different thread/context than original call
+3. **Timing**: Callbacks may fire with delays, complicating context management
+
+**Solution**: Add patching/integration for OpenTelemetry interception (ADK) or external dependency tracking (CrewAI).
+
+## Method Patching Integrations
+
+### Architecture
+
+Method patching wraps client methods to intercept calls:
+
+```
+track_library(client) → Wraps methods → client.method() intercepted
+                                             ↓
+                                    BaseTrackDecorator
+                                             ↓
+                            _start_span_inputs_preprocessor
+                            (extract input, create span)
+                                             ↓
+                                  Call original method
+                                             ↓
+                                    _streams_handler
+                            (check if output is stream)
+                                             ↓
+                                    ┌────────┴────────┐
+                                    │                 │
+                                Stream?            Not stream
+                                    │                 │
+                            Patch stream              │
+                            Defer finalization        │
+                            Return patched            │
+                                    │                 │
+                                    └────────┬────────┘
+                                             ↓
+                            _end_span_inputs_preprocessor
+                            (extract output, usage, finalize span)
+                            (called immediately for non-streaming,
+                             or in finally block for streaming)
+```
+
+**All method patching integrations are idempotent**: Use `opik_tracked` marker to prevent double-wrapping.
+
+### OpenAI Integration
+
+**Files**:
+- `opik_tracker.py` - Main entry point, wraps client methods
+- `openai_chat_completions_decorator.py` - Chat completions decorator
+- `openai_responses_decorator.py` - Responses API decorator
+- `stream_patchers.py` - Stream iteration patching
+- `chat_completion_chunks_aggregator.py` - Chunk aggregation
+- `response_events_aggregator.py` - Response events aggregation
+
+**Wrapped Methods**:
+- `chat.completions.create()` - Standard chat API
+- `beta.chat.completions.parse()` - Structured outputs
+- `responses.create()` - Responses API
+
+**Streaming Support**: Handles `openai.Stream`, `openai.AsyncStream`, and `ChatCompletionStreamManager`.
+
+### Anthropic Integration
+
+**Files**:
+- `opik_tracker.py` - Main entry point
+- `messages_create_decorator.py` - Messages decorator
+- `stream_patchers.py` - Stream/context manager patching
+
+**Wrapped Methods**:
+- `messages.create()` - Both standard and streaming
+- `messages.stream()` - Context manager pattern
+
+**Key Implementation Detail**: **Delta Accumulation**
+
+Anthropic streams delta events (not complete chunks) that must be accumulated. Event accumulator builds complete message by merging deltas progressively.
+
+**Location**: `stream_patchers.py` - See accumulation logic
+
+### Bedrock Integration
+
+**Files**:
+- `opik_tracker.py` - Main entry point
+- `converse/converse_decorator.py` - Converse API
+- `invoke_model/invoke_model_decorator.py` - Legacy InvokeModel API
+- `invoke_model/chunks_aggregator/` - Extensible aggregator system
+
+**Wrapped Methods**:
+1. `client.converse()` - Unified Converse API
+2. `client.invoke_model()` - Legacy API (multiple formats)
+3. `client.invoke_agent()` - Agent invocations
+
+**Key Implementation Detail**: **Extensible Multi-Format Aggregator**
+
+**Problem**: Bedrock supports multiple model formats (Claude, Nova, Llama, Mistral) with different streaming structures.
+
+**Solution**: Registry pattern with pluggable aggregators.
+
+**Architecture** (`invoke_model/chunks_aggregator/`):
+- `base.py` - `ChunkAggregator` protocol
+- `format_detector.py` - Detection registry + aggregator registry
+- `claude.py`, `nova.py`, `llama.py`, `mistral.py` - Format-specific aggregators
+- `api.py` - Public interface: `detect_format()` + `aggregate_chunks_to_dataclass()`
+
+**Extensibility**: Add new format by creating module + registering in `format_detector.py`. Zero changes to existing code.
+
+**Benefits**: Open/Closed Principle, isolated testing, clear separation of concerns.
+
+**Documentation**: See `EXTENDING.md` and `README.md` in `chunks_aggregator/` directory.
+
+### Google GenAI Integration
+
+**Files**:
+- `opik_tracker.py` - Main entry point
+- `generate_content_decorator.py` - Content generation decorator
+- `stream_wrappers.py` - Stream handling
+- `generations_aggregators.py` - Chunk aggregation
+
+**Features**: Multi-modal support (text, images), streaming responses.
+
+### AISuite Integration
+
+**Files**:
+- `opik_tracker.py` - Main entry point
+- `aisuite_decorator.py` - Decorator implementation
+
+**Pattern**: Similar to OpenAI (unified interface across providers).
+
+## Callback Integrations
+
+### Architecture
+
+Callback integrations implement framework's callback interface:
+
+```
+Framework execution → Fires events → Callback methods
+                                             ↓
+                                    on_start() - Create span/trace
+                                    on_end() - Update and send
+                                    on_error() - Capture error, finalize
+```
+
+### LangChain Integration
+
+**Files**:
+- `opik_tracer.py` - Implements `BaseTracer`
+- `provider_usage_extractors/` - Provider-specific usage extraction
+- `helpers.py` - Utility functions
+- `base_llm_patcher.py` - Adds `base_url` to LLM dict (for provider ID)
+
+**Pattern**: Pure callback (extends `langchain_core.tracers.BaseTracer`)
+
+**Key Feature**: **Supports parent-child relations with external Opik spans/traces**
+
+When used within `@track` decorated functions or existing Opik trace context:
+- Detects existing trace in `context_storage`
+- Creates LangChain spans as children of current Opik span
+- Maintains proper hierarchy between Opik and LangChain operations
+
+Example:
 ```python
-from opik.integrations.openai import track_openai
-import openai
-
-# Create client
-client = openai.OpenAI()
-
-# Wrap with tracking
-tracked_client = track_openai(
-    openai_client=client,
-    project_name="my_project"
-)
-
-# Use normally - automatically tracked
-response = tracked_client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Hello"}]
-)
+@opik.track                          # Opik trace + span
+def my_function():
+    chain.invoke(..., callbacks=[OpikTracer()])  # LangChain spans as children
 ```
 
-**Architecture**:
+**State Management**:
+- `_span_data_map: Dict[UUID, SpanData]` - Maps LangChain run_id to Opik span
+- `_created_traces_data_map: Dict[UUID, TraceData]` - Maps run_id to trace
+- `_externally_created_traces_ids: Set[str]` - Tracks external traces
 
-```
-User calls tracked_client.method()
-        │
-        ▼
-OpikDecorator intercepts
-        │
-        ├─► Start span
-        │   - Capture input
-        │   - Set span type="llm"
-        │   - Record start_time
-        │
-        ▼
-Call original method
-        │
-        ▼
-Get response
-        │
-        ├─► End span
-        │   - Capture output
-        │   - Extract usage
-        │   - Calculate cost
-        │   - Set metadata
-        │
-        ▼
-Return response to user
-```
+**Callback Methods** (implements full `BaseTracer` interface):
 
-### Pattern 2: Callback-Based Integration
+**Chain callbacks**:
+- `_on_chain_start(run)` → Check for existing trace, create span as child if exists
+- `_on_chain_end(run)` → Finalize span, send to backend
+- `_on_chain_error(run)` → Capture error info, finalize span
 
-**Use when**: The library supports callback/hook mechanisms.
+**LLM callbacks**:
+- `on_chat_model_start(...)` → Special handling for chat models
+- `_on_chat_model_start(run)` → Internal processing
+- `_on_llm_start(run)` → Create LLM span (type="llm"), extract provider
+- `_on_llm_end(run)` → Extract usage via provider extractors, send span
+- `_on_llm_error(run)` → Capture error, finalize span
 
-**How it works**: Implement library-specific callback interface that receives execution events.
+**Tool callbacks**:
+- `_on_tool_start(run)` → Create tool span (type="tool")
+- `_on_tool_end(run)` → Finalize tool span
+- `_on_tool_error(run)` → Capture error, finalize span
 
-**Examples**: LangChain, LlamaIndex, Haystack
+Error callbacks ensure spans finalized even when LangChain operations fail.
 
+**Key Implementation Detail**: **Provider-Specific Usage Extractors**
+
+**Location**: `provider_usage_extractors/`
+
+**Challenge**: Each LangChain provider stores usage in different locations/formats within the `Run` object.
+
+**Solution**: Registry pattern with provider-specific extractors.
+
+Extractors:
+- `OpenAIUsageExtractor` - Extracts from `run.outputs.llm_output.token_usage`
+- `AnthropicUsageExtractor` - Handles Anthropic format
+- `BedrockUsageExtractor` - Handles Bedrock format
+- `GoogleUsageExtractor` - Handles Google format
+- See `usage_extractor.py` for full registry
+
+Each extractor knows where to find usage in that provider's Run structure.
+
+**LangGraph Support**: Stores Mermaid graph visualization in trace metadata when `graph` parameter provided.
+
+### LlamaIndex Integration
+
+**Files**:
+- `callback.py` - Implements `BaseCallbackHandler`
+- `event_parsing_utils.py` - Parses LlamaIndex event payloads
+
+**Event Handling**:
+- `on_event_start(event_type, payload, event_id, parent_id)` → Parse payload, create span
+- `on_event_end(event_type, payload, event_id)` → Parse output/usage, send span
+
+**Event Parser** (`event_parsing_utils.py`): Extracts data from payloads based on `event_type` (EMBEDDING, QUERY, LLM, etc.).
+
+### DSPy Integration
+
+**Files**:
+- `callback.py` - Implements `dspy.utils.callback.BaseCallback`
+- `graph.py` - Mermaid graph builder for DSPy programs
+
+**Callbacks**:
+- `on_module_start/end()` - DSPy module execution
+- `on_lm_start/end()` - LM calls (extracts provider/model from "provider/model" format)
+- `on_tool_start/end()` - Tool executions
+
+**Key Implementation Detail**: **Isolated Context Storage**
+
+Uses dedicated `OpikContextStorage` instance (not global). Prevents interference when used alongside `@track` decorator.
+
+**Why?** DSPy callbacks can coexist with `@track` decorated functions. Separate storage prevents context conflicts.
+
+**Graph Visualization**: Builds Mermaid diagram of DSPy program structure (`graph.py`).
+
+### Haystack Integration
+
+**Files**:
+- `opik_connector.py` - Component added to pipeline
+- `opik_tracer.py` - Tracer for pipeline execution
+- `converters.py` - Convert Haystack objects to Opik format
+
+**Pattern**: Component-based (added to pipeline, observes without modifying data flow).
+
+## Hybrid Integrations
+
+### ADK Integration
+
+**Files**:
+- `opik_tracer.py` - Agent callbacks
+- `patchers/adk_otel_tracer/opik_adk_otel_tracer.py` - OpenTelemetry tracer
+- `recursive_callback_injector.py` - Recursive callback injection
+- `graph/mermaid_graph_builder.py` - Agent graph visualization
+- `patchers/patchers.py` - Global patches
+
+**Why Hybrid**: ADK uses OpenTelemetry for internal tracing + provides agent callbacks.
+
+**Dual Approach**:
+
+1. **OpenTelemetry Patching** (`patchers/adk_otel_tracer/opik_adk_otel_tracer.py`):
+   - Intercepts `start_span()` calls from ADK
+   - Creates Opik spans instead
+   - Returns `INVALID_SPAN` (no-op for OpenTelemetry)
+   - Skips internal ADK spans via `_ADK_INTERNAL_SPAN_NAME_SKIP_LIST`
+
+2. **Agent Callbacks** (`opik_tracer.py`):
+   - `before/after_agent_callback`
+   - `before/after_model_callback`
+   - `before/after_tool_callback`
+   - Recursively injected into agent tree (`recursive_callback_injector.py`)
+
+**Key Implementation Details**:
+
+1. **OpenTelemetry Interception**: Instead of dual tracing (OTel + Opik), intercepts OTel tracer to create only Opik spans. Single tracing backend, no OpenTelemetry overhead. Callbacks is used only to update spans and traces, but it's OTel tracer that is responsible
+for creating them and working with context (it's done to benefit from reliability of OTel context manager)
+
+2. **Graph Visualization** (`graph/mermaid_graph_builder.py`): Generates Mermaid diagram of agent structure including:
+   - Agent types (Sequential, Loop, Parallel, LLM)
+   - Tools and their connections
+   - Subagent relationships
+   - Stored in trace metadata `_opik_graph_definition`
+
+### CrewAI Integration
+
+**Files**:
+- `opik_tracker.py` - Main tracking setup
+- `crewai_decorator.py` - Decorator for CrewAI methods
+- `flow_patchers.py` - Flow class patching
+
+**Why Hybrid**: CrewAI methods wrapped + LiteLLM used for LLM tracking.
+
+**Approach**:
+1. **Method Wrapping**: Wrap `Crew.kickoff`, `Agent.execute_task`, `Task.execute_sync`
+2. **LiteLLM Delegation**: Enable `litellm.track_litellm()` (CrewAI uses LiteLLM internally)
+3. **Flow Patching**: Patch `Flow.__init__` to auto-wrap dynamically registered methods
+
+**Key Implementation Detail**: **LiteLLM Delegation**
+
+Reuses existing LiteLLM integration instead of duplicating LLM tracking logic.
+
+**Flow Patching** (`flow_patchers.py`): Patches constructor to wrap methods registered via `@start`, `@listen` decorators.
+
+## Streaming Strategies
+
+### Streaming Challenges
+
+1. **Deferred finalization**: Can't finalize span until stream consumed
+2. **User-controlled consumption**: User determines when/if stream is fully consumed
+3. **Chunk accumulation**: Need complete response for logging
+4. **Error handling**: Exceptions during iteration
+5. **Context cleanup**: Must finalize even if stream abandoned
+
+### Strategy 1: Monkey-Patch Class Iterator
+
+**Used by**: OpenAI (`openai.Stream`), Anthropic (`anthropic.Stream`)
+
+**Files**: `stream_patchers.py` in each integration
+
+**Approach**:
+1. Save original `__iter__` from class
+2. Create wrapper that accumulates chunks
+3. Replace class method: `Stream.__iter__ = wrapper`
+4. Mark instance: `stream.opik_tracked_instance = True`
+5. Attach span/trace data to instance
+6. Wrapper checks marker before processing
+
+**Key Pattern - Context Pop Before Streaming**:
+
+Before returning stream, pop span/trace from context:
 ```python
-from opik.integrations.langchain import OpikTracer
-from langchain.chains import LLMChain
-
-# Create tracer
-tracer = OpikTracer(project_name="my_project")
-
-# Use with LangChain operations
-chain = LLMChain(llm=..., prompt=...)
-result = chain.invoke(
-    input={"query": "test"},
-    config={"callbacks": [tracer]}
-)
+def _streams_handler(self, output, ...):
+    if is_stream(output):
+        # Pop BEFORE returning (stream consumed later)
+        span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+        return patch_stream(output, span_to_end, trace_to_end, ...)
 ```
 
-**Architecture**:
+**Why**: Stream consumption happens after decorator returns. Popping prevents nested calls from seeing stale context.
 
-```
-User invokes chain
-        │
-        ▼
-LangChain execution starts
-        │
-        ├─► on_chain_start(chain_info)
-        │   │
-        │   └─► OpikTracer: Create trace/span
-        │
-        ├─► on_llm_start(llm_info)
-        │   │
-        │   └─► OpikTracer: Create nested span
-        │
-        ├─► on_llm_end(llm_result)
-        │   │
-        │   └─► OpikTracer: Update span, add usage
-        │
-        └─► on_chain_end(chain_result)
-            │
-            └─► OpikTracer: Finalize trace/span
-```
+**Key Pattern - Finalization Guarantee**:
 
-## Supported Integrations
-
-### OpenAI
-
-**Integration type**: Decorator-based
-
-**Location**: `opik/integrations/openai/`
-
-**Features**:
-- Chat completions
-- Streaming responses
-- Function calling
-- Responses API (Structured Outputs)
-- Usage tracking (tokens, costs)
-- Automatic model detection
-
-**Basic Usage**:
-
+All stream wrappers use `finally`:
 ```python
-from opik.integrations.openai import track_openai
-import openai
-
-client = openai.OpenAI()
-tracked_client = track_openai(client, project_name="openai-app")
-
-# Regular completion
-response = tracked_client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Hello"}]
-)
-
-# Streaming
-stream = tracked_client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Hello"}],
-    stream=True
-)
-
-for chunk in stream:
-    print(chunk.choices[0].delta.content, end="")
-
-# Function calling
-response = tracked_client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "What's the weather?"}],
-    tools=[{
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "parameters": {...}
-        }
-    }]
-)
-
-# Structured outputs (Responses API)
-response = tracked_client.responses.create(
-    model="gpt-4",
-    input=[{"role": "user", "content": "Analyze this"}],
-    response_format={"type": "json_schema", "json_schema": {...}}
-)
+def wrapper(self):
+    try:
+        accumulated = []
+        for item in original(self):
+            accumulated.append(item)
+            yield item
+    finally:
+        # ALWAYS runs - even if stream not fully consumed
+        finalize_span(aggregator(accumulated), ...)
 ```
 
-**Captured Data**:
-- Input messages
-- Output/reasoning
-- Model name
-- Usage (prompt_tokens, completion_tokens, total_tokens)
-- Cost (calculated from usage and model pricing)
-- Function calls and tool use
-- Metadata (temperature, max_tokens, etc.)
+**Why**: User might break early or exception occurs. Span must finalize.
 
-**Async Support**:
+### Strategy 2: Context Manager Patching
 
+**Used by**: Anthropic (`MessageStreamManager`)
+
+**Approach**:
+- Patch `__enter__` and `__exit__` of stream manager
+- Accumulate during iteration (between enter/exit)
+- Finalize in `__exit__`
+
+**Files**: `stream_patchers.py`
+
+Suitable for stream managers that use `with` statement pattern.
+
+### Strategy 3: Generator Wrapper
+
+**Used by**: Some Bedrock/GenAI cases
+
+**Location**: `opik/decorator/generator_wrappers.py`
+
+**Approach**: Wrap generator without modifying library classes. Returns custom proxy that finalizes in `__del__` or explicit close.
+
+## Token Usage and Cost Tracking
+
+### OpikUsage - Standardized Format
+
+**Location**: `opik/llm_usage/opik_usage.py`
+
+All providers map to standardized format:
 ```python
-async_client = openai.AsyncOpenAI()
-tracked_async = track_openai(async_client)
-
-response = await tracked_async.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Hello"}]
-)
+class OpikUsage(pydantic.BaseModel):
+    completion_tokens: Optional[int]
+    prompt_tokens: Optional[int]
+    total_tokens: Optional[int]
+    provider_usage: Optional[BaseOriginalProviderUsage]  # Original preserved
 ```
 
-### Anthropic
+### Usage Factory - Registry Pattern
 
-**Integration type**: Decorator-based
+**Location**: `opik/llm_usage/opik_usage_factory.py`
 
-**Location**: `opik/integrations/anthropic/`
-
-**Features**:
-- Messages API
-- Streaming responses
-- Tool use
-- Usage tracking
-- Cost calculation
-
-**Basic Usage**:
-
+Registry with builder functions per provider:
 ```python
-from opik.integrations.anthropic import track_anthropic
-import anthropic
-
-client = anthropic.Anthropic()
-tracked_client = track_anthropic(client, project_name="anthropic-app")
-
-# Regular completion
-response = tracked_client.messages.create(
-    model="claude-3-sonnet-20240229",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello"}]
-)
-
-# Streaming
-stream = tracked_client.messages.create(
-    model="claude-3-sonnet-20240229",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello"}],
-    stream=True
-)
-
-for event in stream:
-    print(event.delta.text, end="")
-
-# Tool use
-response = tracked_client.messages.create(
-    model="claude-3-sonnet-20240229",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "What's the weather?"}],
-    tools=[{
-        "name": "get_weather",
-        "description": "Get weather for location",
-        "input_schema": {...}
-    }]
-)
+_PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[Provider, List[Callable]] = {
+    LLMProvider.OPENAI: [
+        OpikUsage.from_openai_completions_dict,
+        OpikUsage.from_openai_responses_dict,  # Multiple formats supported
+    ],
+    LLMProvider.ANTHROPIC: [OpikUsage.from_anthropic_dict],
+    LLMProvider.BEDROCK: [OpikUsage.from_bedrock_dict],
+    # ...
+}
 ```
 
-**Captured Data**:
-- Input messages (with system prompts)
-- Output text and stop reason
-- Model name
-- Usage (input_tokens, output_tokens)
-- Cost
-- Tool use information
-
-### AWS Bedrock
-
-**Integration type**: Decorator-based
-
-**Location**: `opik/integrations/bedrock/`
-
-**Features**:
-- Converse API support
-- InvokeModel support
-- Multiple model formats (Claude, Llama, Titan, etc.)
-- Usage tracking
-- Region-specific pricing
-
-**Basic Usage**:
-
-```python
-from opik.integrations.bedrock import track_bedrock
-import boto3
-
-client = boto3.client('bedrock-runtime', region_name='us-east-1')
-tracked_client = track_bedrock(client, project_name="bedrock-app")
-
-# Converse API (recommended)
-response = tracked_client.converse(
-    modelId="anthropic.claude-3-sonnet-20240229-v1:0",
-    messages=[{"role": "user", "content": [{"text": "Hello"}]}]
-)
-
-# InvokeModel (legacy)
-response = tracked_client.invoke_model(
-    modelId="anthropic.claude-v2",
-    body=json.dumps({
-        "prompt": "\n\nHuman: Hello\n\nAssistant:",
-        "max_tokens_to_sample": 1000
-    })
-)
-```
-
-**Captured Data**:
-- Input messages/prompts
-- Output text
-- Model ID
-- Usage (varies by model)
-- Cost (region-specific)
-- Request metadata
-
-### LangChain
-
-**Integration type**: Callback-based
-
-**Location**: `opik/integrations/langchain/`
-
-**Features**:
-- Chains
-- Agents
-- Tools
-- Nested operations
-- LLM calls
-- Retriever calls
-
-**Basic Usage**:
-
-```python
-from opik.integrations.langchain import OpikTracer
-from langchain.chains import LLMChain
-from langchain_openai import ChatOpenAI
-
-# Create tracer
-tracer = OpikTracer(project_name="langchain-app")
-
-# Use with chain
-llm = ChatOpenAI(model="gpt-4")
-chain = LLMChain(llm=llm, prompt=prompt_template)
-
-result = chain.invoke(
-    {"query": "What is AI?"},
-    config={"callbacks": [tracer]}
-)
-
-# Use with agent
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-
-agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools)
-
-result = agent_executor.invoke(
-    {"input": "Search for information about AI"},
-    config={"callbacks": [tracer]}
-)
-```
-
-**Captured Data**:
-- Chain inputs/outputs
-- LLM calls (prompts, responses, usage)
-- Tool calls
-- Agent steps
-- Retriever queries
-- Execution hierarchy
-
-### LangGraph
-
-**Integration**: Works with LangChain tracer
-
-**Basic Usage**:
-
-```python
-from opik.integrations.langchain import OpikTracer
-from langgraph.graph import StateGraph
-
-tracer = OpikTracer(project_name="langgraph-app")
-
-# Define graph
-workflow = StateGraph(state_schema)
-workflow.add_node("step1", step1_function)
-workflow.add_node("step2", step2_function)
-workflow.add_edge("step1", "step2")
-
-app = workflow.compile()
-
-# Run with tracing
-result = app.invoke(
-    {"input": "test"},
-    config={"callbacks": [tracer]}
-)
-```
-
-### LlamaIndex
-
-**Integration type**: Callback-based
-
-**Location**: `opik/integrations/llama_index/`
-
-**Features**:
-- Query engines
-- Chat engines
-- Retrievers
-- LLM calls
-- Embeddings
-
-**Basic Usage**:
-
-```python
-from opik.integrations.llama_index import OpikCallbackHandler
-from llama_index.core import VectorStoreIndex, Settings
-
-# Configure globally
-opik_handler = OpikCallbackHandler(project_name="llamaindex-app")
-Settings.callback_manager.add_handler(opik_handler)
-
-# Use normally
-index = VectorStoreIndex.from_documents(documents)
-query_engine = index.as_query_engine()
-
-response = query_engine.query("What is AI?")
-```
-
-**Captured Data**:
-- Queries and responses
-- Retrieved documents
-- LLM calls
-- Embeddings operations
-- Reranking steps
-
-### DSPy
-
-**Integration type**: Decorator-based
-
-**Location**: `opik/integrations/dspy/`
-
-**Features**:
-- Program execution
-- Module calls
-- LM interactions
-- Optimizer steps
-
-**Basic Usage**:
-
-```python
-from opik.integrations.dspy import track_dspy
-import dspy
-
-# Configure DSPy
-lm = dspy.OpenAI(model="gpt-4")
-dspy.configure(lm=lm)
-
-# Track DSPy
-track_dspy(project_name="dspy-app")
-
-# Use DSPy programs normally
-class CoT(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.generate = dspy.ChainOfThought("question -> answer")
-    
-    def forward(self, question):
-        return self.generate(question=question)
-
-cot = CoT()
-response = cot(question="What is AI?")  # Automatically tracked
-```
-
-### CrewAI
-
-**Integration type**: Callback-based
-
-**Location**: `opik/integrations/crewai/`
-
-**Features**:
-- Crew execution
-- Agent tasks
-- Tool usage
-- Multi-agent interactions
-
-**Basic Usage**:
-
-```python
-from opik.integrations.crewai import OpikCrew
-from crewai import Agent, Task, Crew
-
-# Define agents and tasks
-researcher = Agent(
-    role="Researcher",
-    goal="Research topics",
-    tools=[search_tool]
-)
-
-task = Task(
-    description="Research AI trends",
-    agent=researcher
-)
-
-# Create crew with Opik tracking
-crew = Crew(
-    agents=[researcher],
-    tasks=[task]
-)
-
-# Track execution
-opik_crew = OpikCrew(crew, project_name="crewai-app")
-result = opik_crew.kickoff()
-```
-
-### Haystack
-
-**Integration type**: Callback-based
-
-**Location**: `opik/integrations/haystack/`
-
-**Features**:
-- Pipeline execution
-- Component tracking
-- RAG workflows
-
-**Basic Usage**:
-
-```python
-from opik.integrations.haystack import OpikConnector
-from haystack import Pipeline
-from haystack.components.generators import OpenAIGenerator
-
-# Create pipeline
-pipeline = Pipeline()
-pipeline.add_component("generator", OpenAIGenerator(model="gpt-4"))
-
-# Add Opik tracking
-opik_connector = OpikConnector(project_name="haystack-app")
-pipeline.add_component("tracer", opik_connector)
-
-# Run pipeline
-result = pipeline.run({"prompt": "What is AI?"})
-```
-
-### LiteLLM
-
-**Integration type**: Decorator + Logger-based
-
-**Location**: `opik/integrations/litellm/`
-
-**Features**:
-- Unified interface for 100+ LLM providers
-- Automatic provider detection
-- Usage tracking
-- Cost calculation
-
-**Basic Usage**:
-
-```python
-from opik.integrations.litellm import track_litellm
-import litellm
-
-# Enable tracking
-track_litellm(project_name="litellm-app")
-
-# Use any supported model
-response = litellm.completion(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Hello"}]
-)
-
-# Works with any provider
-response = litellm.completion(
-    model="claude-3-sonnet-20240229",
-    messages=[{"role": "user", "content": "Hello"}]
-)
-
-response = litellm.completion(
-    model="command-r-plus",  # Cohere
-    messages=[{"role": "user", "content": "Hello"}]
-)
-```
-
-### Google GenAI
-
-**Integration type**: Decorator-based
-
-**Location**: `opik/integrations/genai/`
-
-**Features**:
-- Gemini models
-- Multi-modal inputs
-- Streaming
-- Function calling
-
-**Basic Usage**:
-
-```python
-from opik.integrations.genai import track_genai
-import google.generativeai as genai
-
-# Configure
-genai.configure(api_key="your_key")
-
-# Track
-track_genai(project_name="genai-app")
-
-# Use normally
-model = genai.GenerativeModel("gemini-pro")
-response = model.generate_content("What is AI?")
-
-# Multi-modal
-image = PIL.Image.open("image.jpg")
-response = model.generate_content(["Describe this image", image])
-```
-
-### AISuite
-
-**Integration type**: Decorator-based
-
-**Location**: `opik/integrations/aisuite/`
-
-**Features**:
-- Unified interface
-- Multiple providers
-- Automatic tracking
-
-**Basic Usage**:
-
-```python
-from opik.integrations.aisuite import track_aisuite
-import aisuite
-
-client = aisuite.Client()
-tracked_client = track_aisuite(client, project_name="aisuite-app")
-
-# Use with any provider
-response = tracked_client.chat.completions.create(
-    model="openai:gpt-4",
-    messages=[{"role": "user", "content": "Hello"}]
-)
-```
-
-### ADK (Agent Development Kit)
-
-**Integration type**: Decorator-based
-
-**Location**: `opik/integrations/adk/`
-
-**Features**:
-- Agent execution
-- Graph-based workflows
-- Tool usage
-- State management
-
-**Basic Usage**:
-
-```python
-from opik.integrations.adk import track_adk
-from adk import Agent, Tool
-
-track_adk(project_name="adk-app")
-
-# Define agent
-agent = Agent(
-    name="assistant",
-    tools=[search_tool, calculator_tool]
-)
-
-# Run agent
-result = agent.run("Search for AI trends and calculate growth")
-```
-
-## Building New Integrations
-
-### Step 1: Choose Integration Pattern
-
-**Decorator-Based** if:
-- Library exposes client objects
-- Methods return responses
-- Can wrap method calls
-
-**Callback-Based** if:
-- Library has callback/hook system
-- Events fire during execution
-- Need to track execution lifecycle
-
-### Step 2: Implement Integration
-
-#### Decorator-Based Template
-
-```python
-# opik/integrations/mylib/decorator.py
-
-from opik.decorator import base_track_decorator
-from opik.decorator import arguments_helpers
-import mylib
-
-class MyLibDecorator(base_track_decorator.BaseTrackDecorator):
-    """Decorator for MyLib integration"""
-    
-    def __init__(self, project_name: Optional[str] = None):
-        super().__init__()
-        self._project_name = project_name
-    
-    def _start_span_inputs_preprocessor(
-        self,
-        func: Callable,
-        track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
-    ) -> arguments_helpers.StartSpanParameters:
-        """Extract input data before function execution"""
-        
-        # Extract relevant inputs from args/kwargs
-        # This is library-specific
-        model = kwargs.get("model")
-        messages = kwargs.get("messages", [])
-        
-        input_data = {
-            "model": model,
-            "messages": messages
-        }
-        
-        return arguments_helpers.StartSpanParameters(
-            name=f"{func.__name__}",
-            input=input_data,
-            type="llm",  # or "tool", "general"
-            tags=["mylib"],
-            project_name=self._project_name or track_options.project_name,
-        )
-    
-    def _end_span_inputs_preprocessor(
-        self,
-        output: Any,
-        capture_output: bool,
-        current_span_data: span.SpanData,
-    ) -> arguments_helpers.EndSpanParameters:
-        """Extract output data after function execution"""
-        
-        # Extract relevant data from response
-        # This is library-specific
-        if isinstance(output, mylib.Response):
-            output_text = output.content
-            usage = {
-                "completion_tokens": output.usage.completion_tokens,
-                "prompt_tokens": output.usage.prompt_tokens,
-                "total_tokens": output.usage.total_tokens,
-            }
-            
-            # Update span with library-specific data
-            current_span_data.model = output.model
-            current_span_data.provider = "mylib"
-            current_span_data.usage = usage
-            
-            # Calculate cost if possible
-            if hasattr(output, 'cost'):
-                current_span_data.total_cost = output.cost
-            
-            output_data = {"output": output_text}
-        else:
-            output_data = {"output": str(output)}
-        
-        return arguments_helpers.EndSpanParameters(output=output_data)
-
-
-def track_mylib(
-    client: mylib.Client,
-    project_name: Optional[str] = None,
-) -> mylib.Client:
-    """
-    Track MyLib calls with Opik.
-    
-    Args:
-        client: MyLib client instance
-        project_name: Optional project name
-    
-    Returns:
-        Wrapped client with tracking
-    """
-    decorator = MyLibDecorator(project_name=project_name)
-    
-    # Wrap specific methods
-    client.chat.completions.create = decorator.track(
-        client.chat.completions.create,
-        name="mylib_completion",
-        type="llm"
-    )
-    
-    return client
-```
-
-#### Callback-Based Template
-
-```python
-# opik/integrations/mylib/tracer.py
-
-from opik.api_objects import opik_client, span, trace
-from opik import context_storage
-import mylib
-
-class OpikMyLibTracer(mylib.BaseTracer):
-    """Tracer for MyLib integration"""
-    
-    def __init__(self, project_name: Optional[str] = None):
-        super().__init__()
-        self._project_name = project_name
-        self._client = opik_client.get_client_cached()
-        self._run_to_span: Dict[str, str] = {}
-    
-    def on_chain_start(self, run_id: str, chain_info: dict) -> None:
-        """Called when chain starts"""
-        
-        # Check for existing trace
-        trace_data = context_storage.get_trace_data()
-        if trace_data is None:
-            # Create new trace
-            trace_id = self._client.trace(
-                name=chain_info["name"],
-                input=chain_info["inputs"],
-                project_name=self._project_name,
-            )
-            # Store for cleanup
-            self._run_to_trace[run_id] = trace_id
-        
-        # Create span
-        span_id = self._client.span(
-            name=chain_info["name"],
-            input=chain_info["inputs"],
-            type="general",
-        )
-        
-        self._run_to_span[run_id] = span_id
-    
-    def on_llm_start(self, run_id: str, llm_info: dict) -> None:
-        """Called when LLM call starts"""
-        
-        span_id = self._client.span(
-            name="llm_call",
-            input={"messages": llm_info["messages"]},
-            type="llm",
-            model=llm_info.get("model"),
-            provider=llm_info.get("provider"),
-        )
-        
-        self._run_to_span[run_id] = span_id
-    
-    def on_llm_end(self, run_id: str, llm_result: dict) -> None:
-        """Called when LLM call ends"""
-        
-        span_id = self._run_to_span.get(run_id)
-        if span_id:
-            self._client.span(
-                id=span_id,
-                output={"response": llm_result["output"]},
-                usage=llm_result.get("usage"),
-            )
-    
-    def on_chain_end(self, run_id: str, chain_result: dict) -> None:
-        """Called when chain ends"""
-        
-        span_id = self._run_to_span.get(run_id)
-        if span_id:
-            self._client.span(
-                id=span_id,
-                output=chain_result["outputs"],
-            )
-            del self._run_to_span[run_id]
-        
-        # Clean up trace if we created it
-        if run_id in self._run_to_trace:
-            del self._run_to_trace[run_id]
-```
-
-### Step 3: Add Tests
-
-```python
-# tests/library_integration/mylib/test_mylib.py
-
-def test_mylib_basic_completion(fake_backend):
-    """Test basic MyLib completion tracking"""
-    
-    # Setup
-    client = mylib.Client()
-    tracked_client = track_mylib(client, project_name="test")
-    
-    # Execute
-    response = tracked_client.chat.completions.create(
-        model="test-model",
-        messages=[{"role": "user", "content": "Hello"}]
-    )
-    
-    opik.flush_tracker()
-    
-    # Verify
-    assert len(fake_backend.trace_trees) == 1
-    trace = fake_backend.trace_trees[0]
-    
-    assert trace.name == "mylib_completion"
-    assert trace.spans[0].type == "llm"
-    assert trace.spans[0].provider == "mylib"
-    assert trace.spans[0].usage is not None
-```
-
-### Step 4: Add Documentation
-
-```python
-# opik/integrations/mylib/__init__.py
-
-"""
-MyLib Integration for Opik.
-
-This integration provides automatic tracking for MyLib calls.
-
-Basic Usage:
-    from opik.integrations.mylib import track_mylib
-    import mylib
-    
-    client = mylib.Client()
-    tracked_client = track_mylib(client, project_name="my_project")
-    
-    response = tracked_client.chat.completions.create(
-        model="test-model",
-        messages=[{"role": "user", "content": "Hello"}]
-    )
-
-Features:
-    - Automatic span creation for LLM calls
-    - Usage tracking (tokens)
-    - Cost calculation
-    - Streaming support
-"""
-
-from .decorator import track_mylib
-
-__all__ = ["track_mylib"]
-```
-
-## Advanced Topics
-
-### Handling Streaming Responses
-
-```python
-def _streams_handler(
-    self,
-    output: Any,
-    capture_output: bool,
-    generations_aggregator: Optional[Callable],
-) -> Optional[Any]:
-    """Handle streaming responses"""
-    
-    if hasattr(output, '__iter__') and not isinstance(output, (str, bytes)):
-        # Wrap generator to accumulate chunks
-        return GeneratorProxy(
-            generator=output,
-            span_data=self._current_span_data,
-            capture_output=capture_output,
-        )
-    
-    return None
-
-class GeneratorProxy:
-    """Wraps generator to accumulate chunks"""
-    
-    def __init__(self, generator, span_data, capture_output):
-        self._generator = generator
-        self._span_data = span_data
-        self._capture_output = capture_output
-        self._accumulated_output = []
-        self._accumulated_usage = {}
-    
-    def __iter__(self):
-        return self
-    
-    def __next__(self):
-        try:
-            chunk = next(self._generator)
-            
-            # Accumulate data
-            if self._capture_output:
-                self._accumulated_output.append(extract_content(chunk))
-            
-            # Accumulate usage
-            if hasattr(chunk, 'usage'):
-                self._accumulate_usage(chunk.usage)
-            
-            return chunk
-            
-        except StopIteration:
-            # Generator exhausted, update span
-            self._finalize_span()
-            raise
-    
-    def _finalize_span(self):
-        """Update span with accumulated data"""
-        if self._accumulated_output:
-            self._span_data.output = {
-                "output": "".join(self._accumulated_output)
-            }
-        
-        if self._accumulated_usage:
-            self._span_data.usage = self._accumulated_usage
-```
-
-### Provider-Specific Usage Tracking
-
-```python
-# opik/llm_usage/opik_usage_factory.py
-
-def build_opik_usage(
-    provider: Union[str, LLMProvider],
-    usage: Dict[str, Any],
-) -> OpikUsage:
-    """Build OpikUsage from provider-specific format"""
-    
-    builders = {
-        LLMProvider.OPENAI: OpikUsage.from_openai_dict,
-        LLMProvider.ANTHROPIC: OpikUsage.from_anthropic_dict,
-        LLMProvider.BEDROCK: OpikUsage.from_bedrock_dict,
-        LLMProvider.GOOGLE: OpikUsage.from_google_dict,
-    }
-    
-    builder = builders.get(provider)
-    if builder:
-        return builder(usage)
-    
-    # Fallback to generic
-    return OpikUsage.from_dict(usage)
-```
+**Process**:
+1. Integration extracts usage dict from response
+2. Calls `build_opik_usage(provider, usage_dict)`
+3. Factory tries each builder (supports multiple formats per provider)
+4. Returns standardized `OpikUsage`
+
+**Extensibility**: Add new provider by:
+1. Create `MyProviderUsage` class
+2. Add `from_myprovider_dict()` to `OpikUsage`
+3. Register in factory
+
+### Provider Enum
+
+**Location**: `opik/types.py`
+
+Supported providers for cost tracking:
+- `OPENAI`, `ANTHROPIC`, `BEDROCK`
+- `GOOGLE_VERTEXAI`, `GOOGLE_AI`
+- `COHERE`, `GROQ`
+- See `types.py` for complete list
 
 ### Cost Calculation
 
-```python
-# Pricing tables by provider and model
-OPENAI_PRICING = {
-    "gpt-4": {
-        "input": 0.03 / 1000,   # per token
-        "output": 0.06 / 1000,
-    },
-    "gpt-3.5-turbo": {
-        "input": 0.0005 / 1000,
-        "output": 0.0015 / 1000,
-    },
-}
+**SDK Responsibility**: Provide data
+- `model`: Model name (e.g., "gpt-4")
+- `provider`: Provider enum
+- `usage`: Token counts (OpikUsage)
+- `total_cost`: Optional override
 
-def calculate_cost(model: str, usage: OpikUsage, provider: str) -> float:
-    """Calculate cost based on usage"""
-    
-    pricing = get_pricing(provider, model)
-    if not pricing:
-        return 0.0
-    
-    input_cost = usage.prompt_tokens * pricing["input"]
-    output_cost = usage.completion_tokens * pricing["output"]
-    
-    return input_cost + output_cost
-```
+**Backend Responsibility**: Calculate cost
+- Pricing tables (model → price per token)
+- Region-specific pricing (Bedrock)
+- Token usage multiplication
 
-### Distributed Tracing
-
-```python
-# Service A
-import opik
-
-@opik.track
-def service_a_function():
-    # Get headers for remote call
-    headers = opik.get_distributed_trace_headers()
-    
-    # Make remote call
-    response = requests.post(
-        "http://service-b/endpoint",
-        headers=headers,  # Pass trace context
-        json={"data": "test"}
-    )
-
-# Service B
-@opik.track
-def service_b_endpoint(request):
-    # Receives headers automatically via framework integration
-    # Continues trace from Service A
-    result = process_request(request)
-    return result
-```
+**Note**: Integrations do **not** calculate cost - only provide data for backend.
 
 ## Summary
 
-The Opik Python SDK provides comprehensive integrations for popular LLM frameworks:
+**Integration Patterns**:
+- **Method Patching**: OpenAI, Anthropic, Bedrock, GenAI, AISuite
+- **Callback**: LangChain, LlamaIndex, DSPy, Haystack  
+- **Hybrid**: ADK (callbacks + OTel), CrewAI (methods + LiteLLM)
 
-1. **Two integration patterns**: Decorator-based and callback-based
-2. **12+ integrations**: OpenAI, Anthropic, LangChain, and more
-3. **Automatic tracking**: No manual instrumentation needed
-4. **Provider-specific features**: Usage, costs, streaming
-5. **Extensible**: Easy to add new integrations
+**Streaming Strategies**:
+- Class method patching (OpenAI, Anthropic Stream)
+- Context manager patching (Anthropic MessageStreamManager)
+- Generator wrapper (Bedrock, GenAI)
+
+**Key Patterns**:
+- **Idempotent tracking**: `opik_tracked` marker prevents double-wrapping
+- **Context pop for streams**: Pop before returning stream (consumed later)
+- **Finalization guarantee**: `finally` blocks ensure span completion
+- **Registry patterns**: Pluggable providers/formats/extractors
+- **Protocol-based**: Clear extension interfaces
+
+**Notable Implementations**:
+- **Bedrock**: Extensible aggregator system (add formats without modifying code)
+- **ADK**: OpenTelemetry interception (single tracing backend)
+- **LangChain**: External context support (composes with `@track`)
+- **DSPy**: Isolated context storage (coexists with `@track`)
+- **CrewAI**: LiteLLM delegation (reuses existing integration)
+
+For implementation details, see source code in:
+- `opik/integrations/` - All integration implementations
+- `opik/llm_usage/` - Usage tracking and conversion
+- `opik/decorator/` - Base decorator and streaming utilities
 
 For more information, see:
-- [API and Data Flow](API_AND_DATA_FLOW.md) - Core architecture
+- [API and Data Flow](API_AND_DATA_FLOW.md) - Core SDK architecture
 - [Evaluation](EVALUATION.md) - Evaluation framework
 - [Testing](TESTING.md) - Testing integrations
-
