@@ -50,6 +50,6 @@ def process_optimizer_job(*args, **kwargs):
             return result
         except Exception as e:
             logger.error(f"Error processing optimizer job: {e}")
-            raise e
+            raise
 
 

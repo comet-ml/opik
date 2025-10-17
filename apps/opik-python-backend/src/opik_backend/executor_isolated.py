@@ -108,7 +108,7 @@ class IsolatedSubprocessExecutor:
         """
         timeout_secs = timeout_secs or self.timeout_secs
         creation_start = time.time()
-        process = None  # Initialize before try block to ensure it's always defined
+        process = None  # Initialize to None to handle cleanup in exception handlers if subprocess creation fails
 
         try:
             # Prepare environment for subprocess
