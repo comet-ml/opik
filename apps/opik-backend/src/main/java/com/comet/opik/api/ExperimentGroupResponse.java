@@ -5,12 +5,14 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
+import java.util.List;
 import java.util.Map;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record ExperimentGroupResponse(Map<String, GroupContent> content) {
+public record ExperimentGroupResponse(Map<String, GroupContent> content,
+        List<List<String>> groupsSorting) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
