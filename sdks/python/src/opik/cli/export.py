@@ -6,7 +6,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 import click
 from rich.console import Console
@@ -28,12 +28,12 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return False
 
 
-def _trace_to_csv_rows(trace_data: dict) -> list[dict]:
+def _trace_to_csv_rows(trace_data: dict) -> List[Dict]:
     """Convert trace data to CSV rows format."""
     trace = trace_data["trace"]
     spans = trace_data.get("spans", [])
 
-    def _flatten_dict(data: dict, prefix: str = "") -> dict:
+    def _flatten_dict(data: Dict, prefix: str = "") -> Dict:
         """Flatten a nested dictionary with a prefix."""
         flattened = {}
         for key, value in data.items():
