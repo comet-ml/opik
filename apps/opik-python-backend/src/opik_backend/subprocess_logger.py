@@ -358,14 +358,108 @@ class BatchLogCollector(logging.Handler):
         self._flush_logs()
 
     def close(self) -> None:
-        """Close the handler and flush remaining logs."""
-        self.should_stop = True
-
-        # Final flush
+        """
+        Flush any remaining logs and stop the flush thread.
+        
+        Should be called when done collecting logs to ensure all data is sent.
+        """
         self.flush()
-
-        # Wait for flush thread to complete
+        
+        # Signal flush thread to stop
+        self.should_stop = True
+        
+        # Wait for flush thread to finish (with timeout to avoid hanging)
         if self.flush_thread and self.flush_thread.is_alive():
-            self.flush_thread.join(timeout=2)
+            self.flush_thread.join(timeout=5.0)
 
-        super().close()
+    def start_stream_from_process(self, process: subprocess.Popen) -> Dict[str, str]:
+        """
+        Start real-time log streaming from subprocess pipes in background threads.
+        
+        Spawns threads to read stdout and stderr line-by-line, parsing logs,
+        and emitting them. Logs are automatically batched and flushed based on
+        time intervals or accumulated size.
+        
+        This method returns immediately - streaming continues in background threads.
+        Call close() or teardown to ensure all logs are sent before process cleanup.
+        
+        Args:
+            process: subprocess.Popen object with stdout/stderr pipes configured
+        
+        Returns:
+            Dict with 'stdout_thread' and 'stderr_thread' for the caller to join them
+        """
+        threads = {'stdout_thread': None, 'stderr_thread': None}
+        
+        def read_stream(pipe: Optional[IO], stream_name: str, output_list: List[str]) -> None:
+            """Read from a stream line-by-line, emit logs, and collect output."""
+            if pipe is None:
+                return
+            try:
+                for line in pipe:
+                    # Only process non-empty lines
+                    if line.strip():
+                        output_list.append(line)
+                        try:
+                            # Try to parse as JSON to preserve log structure
+                            log_data = json.loads(line.strip())
+                            # If it has log structure (level and logger_name), emit as-is
+                            if 'level' in log_data and 'logger_name' in log_data:
+                                self.emit(log_data)
+                            else:
+                                # Plain JSON result - treat as log message
+                                log_data = {
+                                    'timestamp': int(time.time() * 1000),
+                                    'level': 'INFO',
+                                    'logger_name': f'subprocess.{stream_name}',
+                                    'message': line.strip(),
+                                    'attributes': {}
+                                }
+                                self.emit(log_data)
+                        except json.JSONDecodeError:
+                            # Fallback: treat as plain text message
+                            log_data = {
+                                'timestamp': int(time.time() * 1000),
+                                'level': 'INFO',
+                                'logger_name': f'subprocess.{stream_name}',
+                                'message': line.strip(),
+                                'attributes': {}
+                            }
+                            self.emit(log_data)
+            except Exception as e:
+                logger.warning(f"Error reading {stream_name}: {e}")
+            finally:
+                try:
+                    if pipe:
+                        pipe.close()
+                except Exception as e:
+                    logger.warning(f"Error closing {stream_name}: {e}")
+        
+        # Lists to collect output
+        stdout_lines: List[str] = []
+        stderr_lines: List[str] = []
+        
+        # Spawn reader threads for stdout and stderr
+        if process.stdout:
+            stdout_thread = threading.Thread(
+                target=read_stream,
+                args=(process.stdout, "stdout", stdout_lines),
+                daemon=False
+            )
+            stdout_thread.start()
+            threads['stdout_thread'] = stdout_thread
+        
+        if process.stderr:
+            stderr_thread = threading.Thread(
+                target=read_stream,
+                args=(process.stderr, "stderr", stderr_lines),
+                daemon=False
+            )
+            stderr_thread.start()
+            threads['stderr_thread'] = stderr_thread
+        
+        # Store output lists for caller to access after joining threads
+        threads['stdout_lines'] = stdout_lines
+        threads['stderr_lines'] = stderr_lines
+        
+        return threads

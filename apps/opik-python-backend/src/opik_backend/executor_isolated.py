@@ -361,92 +361,25 @@ except Exception as e:
                         api_key=env_vars.get("OPIK_API_KEY", ""),
                         workspace=env_vars.get("OPIK_WORKSPACE", ""),
                     )
+                    
+                    # Start real-time log streaming in background threads
+                    self._log_collector.stream_from_process(process)
+                    
                 except (ValueError, ImportError) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
                     self.logger.error(f"Unexpected error initializing subprocess logging: {e}")
             
-            # Helper function to read stream and emit logs in real-time
-            def read_stream(pipe, stream_name, output_list):
-                """Read from pipe line-by-line and emit logs in real-time."""
-                if pipe is None:
-                    return
-                try:
-                    for line in pipe:
-                        # Only collect and emit non-empty lines
-                        if line.strip():
-                            output_list.append(line)
-                            if self._log_collector:
-                                try:
-                                    # Try to parse as JSON
-                                    log_data = json.loads(line.strip())
-                                    # If it has log structure, emit as-is, otherwise treat as message
-                                    if 'level' in log_data and 'logger_name' in log_data:
-                                        self._log_collector.emit(log_data)
-                                    else:
-                                        # Plain JSON result - treat as log message
-                                        log_data = {
-                                            'timestamp': int(time.time() * 1000),
-                                            'level': 'INFO',
-                                            'logger_name': f'subprocess.{stream_name}',
-                                            'message': line.strip(),
-                                            'attributes': {}
-                                        }
-                                        self._log_collector.emit(log_data)
-                                except json.JSONDecodeError:
-                                    # Fallback: treat as plain text
-                                    log_data = {
-                                        'timestamp': int(time.time() * 1000),
-                                        'level': 'INFO',
-                                        'logger_name': f'subprocess.{stream_name}',
-                                        'message': line.strip(),
-                                        'attributes': {}
-                                    }
-                                    self._log_collector.emit(log_data)
-                except Exception as e:
-                    self.logger.warning(f"Error reading {stream_name}: {e}")
-                finally:
-                    try:
-                        pipe.close()
-                    except:
-                        pass
-            
-            # Collect output while streaming logs
-            stdout_lines = []
-            stderr_lines = []
-            
-            # Start reader threads for real-time log streaming
-            stdout_thread = Thread(
-                target=read_stream,
-                args=(process.stdout, "stdout", stdout_lines),
-                daemon=False
-            )
-            stderr_thread = Thread(
-                target=read_stream,
-                args=(process.stderr, "stderr", stderr_lines),
-                daemon=False
-            )
-            stdout_thread.start()
-            stderr_thread.start()
-            
-            # Send input to the process
-            process.stdin.write(input_json)
-            process.stdin.close()  # Signal EOF so process knows input is done
-            
-            # Wait for process to complete
-            process.wait(timeout=timeout_secs)
-            
-            # Wait for reader threads to finish
-            stdout_thread.join()
-            stderr_thread.join()
-            
-            # Reconstruct stdout/stderr from collected lines
-            stdout = ''.join(stdout_lines)
-            stderr = ''.join(stderr_lines)
-            
-            # Flush any remaining logs
+            # Send input and wait for process to complete
+            # (logging continues in background threads via stream_from_process)
+            stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
+
+            # After process completes, send captured logs if logger was initialized
             if self._log_collector:
-                self._log_collector.flush()
+                try:
+                    self._log_collector.process_subprocess_output(stdout, stderr)
+                except Exception as e:
+                    self.logger.error(f"Unexpected error processing subprocess output: {e}")
 
             # Parse result from stdout
             if process.returncode == 0:
