@@ -2,7 +2,7 @@ import { trace } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { generateText, tool } from "ai";
-import { MockLanguageModelV1 } from "ai/test";
+import { MockLanguageModelV2 } from "ai/test";
 import { Opik } from "opik";
 import { OpikExporter } from "opik/vercel";
 import { MockInstance } from "vitest";
@@ -65,12 +65,12 @@ describe("Opik - Vercel AI SDK integration", () => {
     sdk.start();
 
     const { text } = await generateText({
-      model: new MockLanguageModelV1({
+      model: new MockLanguageModelV2({
         doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: "stop",
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: output,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: "text", text: output }],
+          warnings: [],
         }),
       }),
       prompt: input,
@@ -112,24 +112,26 @@ describe("Opik - Vercel AI SDK integration", () => {
 
     const calculator = tool({
       description: "calculate the sum of two numbers",
-      parameters: z.object({ a: z.number(), b: z.number() }),
-      execute: async ({ a, b }) => a + b,
+      inputSchema: z.object({ a: z.number(), b: z.number() }),
+      execute: ({ a, b }) => a + b,
     });
 
     const response = await generateText({
-      model: new MockLanguageModelV1({
+      model: new MockLanguageModelV2({
         doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: "tool-calls",
-          usage: { promptTokens: 10, completionTokens: 20 },
-          toolCalls: [
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
             {
-              toolCallType: "function",
+              type: "tool-call",
+              input: "How much is 2 + 4?",
               toolCallId: "1",
               toolName: "calculator",
-              args: JSON.stringify({ a: 2, b: 4 }),
+              args: { a: 2, b: 4 },
+              output: "6",
             },
           ],
+          warnings: [],
         }),
       }),
       messages: [
@@ -144,24 +146,11 @@ describe("Opik - Vercel AI SDK integration", () => {
       }),
     });
 
-    let result = "";
-    if (response.toolCalls) {
-      const [toolCall] = response.toolCalls;
-      const toolResult = await calculator.execute(toolCall.args, {
-        toolCallId: toolCall.toolCallId,
-        messages: [
-          {
-            role: "user",
-            content: "How much is 2 + 4?",
-          },
-        ],
-      });
-      result = toolResult.toString();
-    }
-
     await sdk.shutdown();
 
-    expect(result).toBe("6");
+    // Verify tool calls were captured
+    expect(response.toolCalls).toHaveLength(1);
+    expect(response.toolCalls[0].toolName).toBe("calculator");
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
     expect(createSpansSpy).toHaveBeenCalledTimes(1);
     expect(updateSpansSpy).toHaveBeenCalledTimes(0);

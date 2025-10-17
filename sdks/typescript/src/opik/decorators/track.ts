@@ -105,10 +105,12 @@ function logSuccess({
   result,
   span,
   trace,
+  enrichSpan,
 }: {
   result: any;
   span: Span;
   trace?: Trace;
+  enrichSpan?: (result: any) => Record<string, unknown>;
 }) {
   logger.debug("Recording successful execution:", {
     spanId: span.data.id,
@@ -117,7 +119,16 @@ function logSuccess({
   const output = typeof result === "object" ? result : { result };
   const endTime = new Date();
 
-  span.update({ endTime, output });
+  // Build the update object with standard fields
+  const spanUpdate: Record<string, unknown> = { endTime, output };
+
+  // Enrich the span with additional data if enrichSpan function is provided
+  if (enrichSpan) {
+    const enrichedData = enrichSpan(result);
+    Object.assign(spanUpdate, enrichedData);
+  }
+
+  span.update(spanUpdate);
 
   if (trace) {
     trace.update({ endTime, output });
@@ -174,13 +185,19 @@ function executeTrack<T extends (...args: any[]) => any>(
     name,
     projectName,
     type,
+    enrichSpan,
   }: {
     name?: string;
     projectName?: string;
     type?: SpanType;
+    enrichSpan?: (result: any) => Record<string, unknown>;
   } = {},
   originalFn: T
 ): T {
+  logger.info(
+    "Executing track with enrichSpan:",
+    JSON.stringify(enrichSpan, null, 2)
+  );
   const wrappedFn = function (this: any, ...args: any[]): ReturnType<T> {
     const context = trackStorage.getStore();
     const { span, trace } = logSpan({
@@ -207,6 +224,7 @@ function executeTrack<T extends (...args: any[]) => any>(
                 span,
                 result: res,
                 trace: currentTrace,
+                enrichSpan,
               });
               return res;
             },
@@ -226,6 +244,7 @@ function executeTrack<T extends (...args: any[]) => any>(
           span,
           result,
           trace: currentTrace,
+          enrichSpan,
         });
 
         return result;
@@ -247,6 +266,14 @@ type TrackOptions = {
   name?: string;
   projectName?: string;
   type?: SpanType;
+  /**
+   * Optional function to enrich the span with additional data extracted from the result.
+   * Called before the span is finalized with the success result.
+   *
+   * @param result - The return value from the tracked function
+   * @returns An object with fields to merge into the span (usage, model, provider, metadata, etc.)
+   */
+  enrichSpan?: (result: any) => Record<string, unknown>;
 };
 
 type OriginalFunction = (...args: any[]) => any;

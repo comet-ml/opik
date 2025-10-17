@@ -35,17 +35,52 @@ You can also create your own custom metric, learn more about it in the [Custom M
 
 ## Customizing LLM as a Judge metrics
 
-By default, Opik uses GPT-4o from OpenAI as the LLM to evaluate the output of other LLMs. However, you can easily switch to another LLM provider by specifying a different `model` in the `model_name` parameter of each LLM as a Judge metric.
+By default, Opik uses GPT-4o from OpenAI as the LLM to evaluate the output of other LLMs. However, you can easily switch to another LLM provider by specifying a different `model` parameter.
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import Hallucination
 
 metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
 
 metric.score(
-    input="What is the capital of France?",
-    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+input="What is the capital of France?",
+output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
 )
-```
 
-This functionality is based on LiteLLM framework, you can find a full list of supported LLM providers and how to configure them in the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide.
+````
+
+```typescript title="TypeScript" language="typescript"
+import { Hallucination } from 'opik';
+import { openai } from '@ai-sdk/openai';
+
+// Using model ID string (simplest approach)
+const metric1 = new Hallucination({ model: 'gpt-4o' });
+const metric2 = new Hallucination({ model: 'claude-3-5-sonnet-latest' });
+const metric3 = new Hallucination({ model: 'gemini-2.0-flash' });
+
+// With generation parameters (temperature, seed, maxTokens)
+const metric4 = new Hallucination({
+  model: 'gpt-4o',
+  temperature: 0.3,
+  seed: 42
+});
+
+// Using custom LanguageModel instance for provider-specific configuration
+const customModel = openai('gpt-4o', {
+  structuredOutputs: true
+});
+const metric5 = new Hallucination({ model: customModel });
+
+// Score using the metric
+await metric4.score({
+    input: "What is the capital of France?",
+    output: "The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+});
+````
+
+</CodeBlocks>
+
+For **Python**, this functionality is based on LiteLLM framework. You can find a full list of supported LLM providers and how to configure them in the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide.
+
+For **TypeScript**, the SDK integrates with the Vercel AI SDK. You can use model ID strings for simplicity or LanguageModel instances for advanced configuration. See the [Models documentation](/reference/typescript-sdk/evaluation/models) for more details.

@@ -4,5 +4,7 @@
  */
 
 export * from "./evaluate";
+export * from "./evaluatePrompt";
 export * from "./metrics";
+export * from "./models";
 export * from "./types";

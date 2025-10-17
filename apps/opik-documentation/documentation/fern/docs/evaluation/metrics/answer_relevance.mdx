@@ -6,19 +6,71 @@ The Answer Relevance metric allows you to evaluate how relevant and appropriate 
 
 You can use the `AnswerRelevance` metric as follows:
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import AnswerRelevance
 
 metric = AnswerRelevance()
 
 metric.score(
-    input="What is the capital of France?",
-    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
-    context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
+input="What is the capital of France?",
+output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
 )
-```
 
-Asynchronous scoring is also supported with the `ascore` scoring method.
+````
+
+```typescript title="TypeScript" language="typescript"
+import { AnswerRelevance } from 'opik';
+
+const metric = new AnswerRelevance();
+
+await metric.score({
+    input: "What is the capital of France?",
+    output: "The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+    context: ["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
+});
+````
+
+</CodeBlocks>
+
+Asynchronous scoring is also supported with the `ascore` method in Python and `score` method in TypeScript (which is always async).
+
+## Context requirement
+
+By default, the Answer Relevance metric requires context to be provided. If you try to use the metric without providing context, it will raise an error. This is to ensure the metric is being used as intended with proper context for evaluation.
+
+If you want to evaluate answer relevance without context (evaluating only against the input question), you can disable this requirement:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik.evaluation.metrics import AnswerRelevance
+
+# Allow evaluation without context
+
+metric = AnswerRelevance(require_context=False)
+
+metric.score(
+input="What is the capital of France?",
+output="The capital of France is Paris." # No context parameter needed
+)
+
+````
+
+```typescript title="TypeScript" language="typescript"
+import { AnswerRelevance } from 'opik';
+
+// Allow evaluation without context
+const metric = new AnswerRelevance({ requireContext: false });
+
+await metric.score({
+    input: "What is the capital of France?",
+    output: "The capital of France is Paris."
+    // No context parameter needed
+});
+````
+
+</CodeBlocks>
 
 ## Detecting answer relevance
 

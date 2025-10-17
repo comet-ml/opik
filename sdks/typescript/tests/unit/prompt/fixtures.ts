@@ -24,6 +24,7 @@ export function createMockOpikClient(): OpikClient {
 
 export const basicPromptData = {
   promptId: "test-prompt-id",
+  versionId: "test-version-id",
   name: "test-prompt",
   prompt: "Hello {{name}}!",
   type: PromptType.MUSTACHE,

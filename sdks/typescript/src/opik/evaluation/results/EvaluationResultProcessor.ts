@@ -80,7 +80,7 @@ export class EvaluationResultProcessor {
    * @param averageScores Map of average scores by metric name
    * @param totalTime Total execution time in seconds
    */
-  private static generateResultTable(
+  private static async generateResultTable(
     testResults: EvaluationTestResult[],
     experiment: Experiment,
     averageScores: Map<string, number>,
@@ -109,8 +109,11 @@ export class EvaluationResultProcessor {
       }),
     ].join("\n");
 
+    // Ensure name is loaded from backend if needed
+    const experimentName = await experiment.ensureNameLoaded();
+
     const boxDisplay = boxen(content, {
-      title: `${experiment.name} (${testResults.length} samples)`,
+      title: `${experimentName} (${testResults.length} samples)`,
       titleAlignment: "left",
       padding: 1,
       margin: 0,
@@ -143,13 +146,21 @@ export class EvaluationResultProcessor {
   ): Promise<EvaluationResult> {
     const averageScores = this.calculateAverageScores(testResults);
 
-    this.generateResultTable(testResults, experiment, averageScores, totalTime);
+    await this.generateResultTable(
+      testResults,
+      experiment,
+      averageScores,
+      totalTime
+    );
 
     await this.displayExperimentLink(experiment);
 
+    // Ensure name is loaded from backend if needed
+    const experimentName = await experiment.ensureNameLoaded();
+
     return {
       experimentId: experiment.id,
-      experimentName: experiment.name,
+      experimentName: experimentName,
       testResults,
     };
   }

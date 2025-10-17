@@ -5,8 +5,9 @@ subtitle: Step by step guide on how to evaluate your LLM application
 Evaluating your LLM application allows you to have confidence in the performance of your LLM application. In this guide, we will walk through the process of evaluating complex applications like LLM chains or agents.
 
 <Tip>
-  In this guide, we will focus on evaluating complex LLM applications. If you are looking at evaluating single prompts
-  you can refer to the [Evaluate A Prompt](/evaluation/evaluate_prompt) guide.
+  In this guide, we will focus on evaluating complex LLM applications. If you
+  are looking at evaluating single prompts you can refer to the [Evaluate A
+  Prompt](/evaluation/evaluate_prompt) guide.
 </Tip>
 
 The evaluation is done in five steps:
@@ -48,8 +49,8 @@ full visibility into each evaluation run. In the example below we will use a com
 </CodeBlocks>
 
 <Tip>
-  Here we have added the `track` decorator so that this trace and all its nested steps are logged to the platform for
-  further analysis.
+  Here we have added the `track` decorator so that this trace and all its nested
+  steps are logged to the platform for further analysis.
 </Tip>
 
 ### 2. Define the evaluation task
@@ -66,12 +67,12 @@ import { OpenAI } from "openai";
 
 // Define dataset item type
 type DatasetItem = {
-    input: string;
-    expected: string;
+input: string;
+expected: string;
 };
 
 const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
-    const { input } = datasetItem;
+const { input } = datasetItem;
 
     const openai = new OpenAI();
     const response = await openai.chat.completions.create({
@@ -85,20 +86,21 @@ const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
     return { output: response.choices[0].message.content };
 
 };
-```
+
+````
 
 ```python title="Python" language="python"
 def evaluation_task(x):
     return {
         "output": your_llm_application(x['user_question'])
     }
-```
+````
 
 </CodeBlocks>
 
 <Warning>
-  If the dictionary returned does not match with the parameters expected by the metrics, you will get inconsistent
-  evaluation results.
+  If the dictionary returned does not match with the parameters expected by the
+  metrics, you will get inconsistent evaluation results.
 </Warning>
 
 ### 3. Choose the evaluation Dataset
@@ -165,19 +167,20 @@ In the same evaluation experiment, you can use multiple metrics to evaluate your
 import { ExactMatch } from "opik";
 
 const exact_match_metric = new ExactMatch();
-```
+
+````
 
 ```python title="Python" language="python"
 from opik.evaluation.metrics import Hallucination
 
 hallucination_metric = Hallucination()
-```
+````
 
 </CodeBlocks>
 
 <Tip>
-  Each metric expects the data in a certain format. You will need to ensure that the task you have defined in step 2
-  returns the data in the correct format.
+  Each metric expects the data in a certain format. You will need to ensure that
+  the task you have defined in step 2 returns the data in the correct format.
 </Tip>
 
 ### 5. Run the evaluation
@@ -291,8 +294,10 @@ we want to evaluate with, we can run the evaluation:
 </CodeBlocks>
 
 <Tip>
-  You can use the `experiment_config` parameter to store information about your evaluation task. Typically we see teams
-  store information about the prompt template, the model used and model parameters used to evaluate the application.
+  You can use the `experiment_config` parameter to store information about your
+  evaluation task. Typically we see teams store information about the prompt
+  template, the model used and model parameters used to evaluate the
+  application.
 </Tip>
 
 ### 6. Analyze the evaluation results
@@ -351,7 +356,27 @@ When creating an Experiment, you can link the Experiment to a specific prompt ve
 
 <CodeBlocks>
     ```typescript title="TypeScript" language="typescript"
-    // Coming soon
+    import { Opik, evaluate, evaluatePrompt } from 'opik';
+    import { Hallucination } from 'opik';
+
+    const client = new Opik();
+
+    // Create a prompt
+    const prompt = await client.createPrompt({
+        name: "My prompt",
+        prompt: "Translate to French: {{input}}",
+    });
+
+    // Link prompt to evaluation experiment
+    await evaluatePrompt({
+        dataset: myDataset,
+        messages: [
+            { role: "user", content: "Translate to French: {{input}}" },
+        ],
+        model: "gpt-4o",
+        scoringMetrics: [new Hallucination()],
+        prompts: [prompt],
+    });
     ```
 
     ```python title="Python" language="python"
