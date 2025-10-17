@@ -55,7 +55,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
     "test": "vitest run --exclude 'tests/integration/**/*.test.ts'",
-    "test:integration:api": "vitest run tests/integration/api"
+    "test:integration": "vitest run tests/integration"
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",

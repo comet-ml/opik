@@ -15,6 +15,11 @@ export async function parseNdjsonStreamToArray<T>(
   serializer: core.serialization.Schema<unknown, T>,
   nbSamples?: number
 ): Promise<T[]> {
+  // Early return for nbSamples=0 to avoid processing any items
+  if (nbSamples === 0) {
+    return [];
+  }
+
   const decoder = new TextDecoder("utf-8");
   const results: T[] = [];
   let buffer = "";

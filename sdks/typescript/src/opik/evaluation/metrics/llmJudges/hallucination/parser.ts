@@ -21,8 +21,16 @@ export function parseModelOutput(
       unknown
     >;
 
-    const score = Number(dictContent["score"]);
+    const rawScore = dictContent["score"];
 
+    // Check for null, undefined, or missing score before converting to number
+    if (rawScore === null || rawScore === undefined) {
+      throw new Error(`Hallucination score is required but got ${rawScore}`);
+    }
+
+    const score = Number(rawScore);
+
+    // Check for NaN after conversion (catches "NaN" strings and invalid values)
     if (isNaN(score) || score < 0.0 || score > 1.0) {
       throw new Error(
         `Hallucination score must be between 0.0 and 1.0, got ${score}`
@@ -34,7 +42,8 @@ export function parseModelOutput(
     const reasonValue = dictContent["reason"];
 
     if (Array.isArray(reasonValue)) {
-      reason = reasonValue.map(String).join(" ");
+      // Map to string and join with space, preserving empty strings
+      reason = reasonValue.map((item) => String(item)).join(" ");
     } else if (reasonValue) {
       reason = String(reasonValue);
     }

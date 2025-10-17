@@ -15,9 +15,11 @@ Guidelines:
 7. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.
 8. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.
 
-Analyze the text thoroughly and assign a hallucination score between 0 and 1, where:
-- 0.0: The OUTPUT is entirely faithful to the CONTEXT
-- 1.0: The OUTPUT is entirely unfaithful to the CONTEXT
+Analyze the text thoroughly and provide a binary hallucination verdict:
+- 0.0: The OUTPUT is faithful to the CONTEXT (no hallucinations detected)
+- 1.0: The OUTPUT contains hallucinations (unfaithful content detected)
+
+You must return ONLY 0.0 or 1.0 - no intermediate values.
 
 {examples_str}
 
@@ -52,9 +54,11 @@ Guidelines:
 6. Be vigilant for subtle misattributions or conflations of information, even if the date or other details are correct.
 7. Check that the OUTPUT doesn't oversimplify or generalize information in a way that changes its meaning or accuracy.
 
-Analyze the text thoroughly and assign a hallucination score between 0 and 1, where:
-- 0.0: The OUTPUT is entirely faithful
-- 1.0: The OUTPUT is entirely unfaithful
+Analyze the text thoroughly and provide a binary hallucination verdict:
+- 0.0: The OUTPUT is faithful (no hallucinations detected)
+- 1.0: The OUTPUT contains hallucinations (unfaithful content detected)
+
+You must return ONLY 0.0 or 1.0 - no intermediate values.
 
 {examples_str}
 

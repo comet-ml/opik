@@ -96,20 +96,6 @@ export class VercelAIChatModel extends OpikBaseModel {
         logger.debug(`Initialized VercelAIChatModel with model ID: ${model}`);
       }
 
-      logger.info(
-        "Initialized VercelAIChatModel",
-        JSON.stringify(
-          {
-            model: this.model,
-            modelName: this.modelName,
-            trackGenerations,
-            restOptions,
-          },
-          null,
-          2
-        )
-      );
-
       // Wrap Vercel AI SDK methods with track decorator if tracking is enabled
       if (trackGenerations) {
         this._generateText = track(

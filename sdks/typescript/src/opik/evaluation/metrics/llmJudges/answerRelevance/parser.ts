@@ -21,8 +21,16 @@ export function parseModelOutput(
       unknown
     >;
 
-    const score = Number(dictContent["answer_relevance_score"]);
+    const rawScore = dictContent["answer_relevance_score"];
 
+    // Check for null, undefined, or missing score before converting to number
+    if (rawScore === null || rawScore === undefined) {
+      throw new Error(`Answer relevance score is required but got ${rawScore}`);
+    }
+
+    const score = Number(rawScore);
+
+    // Check for NaN after conversion (catches "NaN" strings and invalid values)
     if (isNaN(score) || score < 0.0 || score > 1.0) {
       throw new Error(
         `Answer relevance score must be between 0.0 and 1.0, got ${score}`

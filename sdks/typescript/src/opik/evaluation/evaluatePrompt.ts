@@ -24,6 +24,12 @@ export interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
 
   /** Template engine type for variable substitution. Defaults to mustache */
   templateType?: PromptType;
+
+  /** Temperature setting for model generation (0.0-2.0). Controls randomness. Lower values make output more focused and deterministic. */
+  temperature?: number;
+
+  /** Random seed for reproducible model outputs. Useful for testing and ensuring consistent results. */
+  seed?: number;
 }
 
 /**
@@ -44,13 +50,15 @@ export interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
  *
  * const dataset = await client.getDataset('my-dataset');
  *
- * // Using model ID string
+ * // Using model ID string with temperature and seed for reproducibility
  * const result1 = await evaluatePrompt({
  *   dataset,
  *   messages: [
  *     { role: 'user', content: 'Translate to {{language}}: {{text}}' }
  *   ],
  *   model: 'gpt-4o', // or omit to use default model
+ *   temperature: 0.7,
+ *   seed: 42,
  *   scoringMetrics: [new Equals()],
  * });
  *
@@ -79,6 +87,18 @@ export async function evaluatePrompt(
     throw new Error("Messages array is required and cannot be empty");
   }
 
+  // Validate experimentConfig type
+  if (
+    options.experimentConfig !== undefined &&
+    (typeof options.experimentConfig !== "object" ||
+      options.experimentConfig === null ||
+      Array.isArray(options.experimentConfig))
+  ) {
+    throw new Error(
+      "experimentConfig must be a plain object, not an array or primitive value"
+    );
+  }
+
   // Resolve model (string → OpikBaseModel, undefined → default)
   const model = resolveModel(options.model);
 
@@ -87,13 +107,21 @@ export async function evaluatePrompt(
     ...options.experimentConfig,
     prompt_template: options.messages,
     model: model.modelName,
+    ...(options.temperature !== undefined && {
+      temperature: options.temperature,
+    }),
+    ...(options.seed !== undefined && { seed: options.seed }),
   };
 
   // Build task function that wraps prompt formatting
   const task = _buildPromptEvaluationTask(
     model,
     options.messages,
-    options.templateType ?? PromptType.MUSTACHE
+    options.templateType ?? PromptType.MUSTACHE,
+    {
+      temperature: options.temperature,
+      seed: options.seed,
+    }
   );
 
   // Delegate to existing evaluate function
@@ -122,12 +150,14 @@ export async function evaluatePrompt(
  * @param model - The model to use for generation
  * @param messages - Message templates with placeholders
  * @param templateType - Template engine type (mustache or jinja2)
+ * @param modelOptions - Optional model generation parameters (temperature, seed)
  * @returns Evaluation task function
  */
 function _buildPromptEvaluationTask(
   model: OpikBaseModel,
   messages: OpikMessage[],
-  templateType: PromptType
+  templateType: PromptType,
+  modelOptions?: { temperature?: number; seed?: number }
 ): EvaluationTask<Record<string, unknown>> {
   return async (datasetItem: Record<string, unknown>) => {
     // Format each message's content with dataset variables
@@ -136,8 +166,11 @@ function _buildPromptEvaluationTask(
       content: formatPromptTemplate(msg.content, datasetItem, templateType),
     }));
 
-    // Generate response from model
-    const response = await model.generateProviderResponse(formattedMessages);
+    // Generate response from model with optional temperature and seed
+    const response = await model.generateProviderResponse(
+      formattedMessages,
+      modelOptions
+    );
 
     // Extract text from provider response
     const outputText = extractResponseText(response);
