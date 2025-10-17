@@ -62,10 +62,11 @@ Send alerts to a Slack channel using Slack's Incoming Webhooks:
 
 1. [Create a Slack app and enable Incoming Webhooks](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
 2. Create a webhook URL (e.g., `https://hooks.slack.com/services/T00000000/B00000000/XXXX`)
-3. In Opik, create an alert with your Slack webhook URL
-4. Format the payload (Slack will display JSON by default)
+3. Create a middleware service that transforms Opik's payload into Slack's Block Kit format
+4. In middleware service use Slack webhook URL created in step 2
+5. In Opik, create an alert with your middleware service URL as webhook URL
 
-For better formatting, create a middleware service that transforms Opik's payload into Slack's Block Kit format:
+Example of middleware formatting service:
 
 ```python
 import requests
@@ -112,47 +113,6 @@ def opik_to_slack():
         json=slack_payload
     )
     
-    return {'status': 'success'}, 200
-```
-
-### PagerDuty integration
-
-Send critical alerts to PagerDuty for on-call incident management:
-
-```python
-import requests
-
-PAGERDUTY_ROUTING_KEY = "your-routing-key"
-PAGERDUTY_URL = "https://events.pagerduty.com/v2/enqueue"
-
-@app.route('/opik-to-pagerduty', methods=['POST'])
-def opik_to_pagerduty():
-    data = request.json
-    event_type = data.get('eventType')
-    
-    # Only send critical errors to PagerDuty
-    if event_type != 'trace:errors':
-        return {'status': 'ignored'}, 200
-    
-    payload = data['payload']
-    errors = payload.get('metadata', [])
-    
-    # Create PagerDuty event
-    pagerduty_payload = {
-        "routing_key": PAGERDUTY_ROUTING_KEY,
-        "event_action": "trigger",
-        "payload": {
-            "summary": f"{payload['alertName']}: {len(errors)} errors",
-            "severity": "error",
-            "source": "opik",
-            "custom_details": {
-                "event_count": payload['eventCount'],
-                "errors": errors[:5]  # First 5 errors
-            }
-        }
-    }
-    
-    response = requests.post(PAGERDUTY_URL, json=pagerduty_payload)
     return {'status': 'success'}, 200
 ```
 

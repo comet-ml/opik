@@ -42,6 +42,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.UUID;
@@ -78,6 +79,13 @@ public class AlertResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        if (StringUtils.isBlank(alert.name())) {
+            log.warn("Alert name is required, workspaceId '{}'", workspaceId);
+            return Response.status(422)
+                    .entity(new ErrorMessage(List.of("Alert name is required")))
+                    .build();
+        }
+
         log.info("Creating alert with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
 
         var alertId = alertService.create(alert);
@@ -103,6 +111,13 @@ public class AlertResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+
+        if (StringUtils.isBlank(alert.name())) {
+            log.warn("Alert name is required, workspaceId '{}'", workspaceId);
+            return Response.status(422)
+                    .entity(new ErrorMessage(List.of("Alert name is required")))
+                    .build();
+        }
 
         log.info("Updating alert with id '{}', on workspace_id '{}'", id, workspaceId);
 
