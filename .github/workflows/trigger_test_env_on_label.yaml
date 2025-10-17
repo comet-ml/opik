@@ -1,5 +1,5 @@
 name: Trigger Test Environment Deployment
-run-name: ${{ github.event.label.name == 'test-environment' && format('Trigger Test Environment Deployment for PR #{0} by @{1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
+run-name: ${{ github.event.label.name == 'test-environment' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
 
 on:
   pull_request:
