@@ -723,6 +723,12 @@ navigation:
               - page: Evaluate Function
                 path: docs/reference/typescript-sdk/evaluation/evaluate.mdx
                 slug: evaluate_function
+              - page: Evaluate Prompt Function
+                path: docs/reference/typescript-sdk/evaluation/evaluatePrompt.mdx
+                slug: evaluate_prompt_function
+              - page: Models
+                path: docs/reference/typescript-sdk/evaluation/models.mdx
+                slug: models
               - page: Metrics
                 path: docs/reference/typescript-sdk/evaluation/metrics.mdx
                 slug: metrics
