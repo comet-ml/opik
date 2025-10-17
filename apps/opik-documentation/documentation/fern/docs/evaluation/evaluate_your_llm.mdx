@@ -647,46 +647,6 @@ from typing import Optional
 from opik.evaluation.metrics import BaseMetric, score_result
 from opik.message_processing.emulation.models import SpanModel
 
-class TaskSpanQualityMetric(BaseMetric):
-    def __init__(
-        self,
-        name: str = "task_span_quality",
-        track: bool = True,
-        project_name: Optional[str] = None,
-    ):
-        super().__init__(name=name, track=track, project_name=project_name)
-
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
-        # Access detailed span information
-        span_name = task_span.name
-        input_data = task_span.input
-        output_data = task_span.output
-        metadata = task_span.metadata
-
-        # Example: Check if the task executed successfully
-        has_error = task_span.error_info is not None
-
-        # Example: Analyze input complexity
-        input_complexity = len(str(input_data)) if input_data else 0
-
-        # Custom scoring logic
-        if has_error:
-            score_value = 0.0
-            reason = "Task execution failed"
-        elif input_complexity > 1000:
-            score_value = 0.8
-            reason = "High complexity input handled well"
-        else:
-            score_value = 1.0
-            reason = "Task executed successfully"
-
-        return score_result.ScoreResult(
-            value=score_value,
-            name=self.name,
-            reason=reason
-        )
-
-# Another example: Check specific task characteristics
 class ExecutionTimeMetric(BaseMetric):
     def score(self, task_span: SpanModel) -> score_result.ScoreResult:
         # Calculate execution duration
@@ -726,7 +686,6 @@ from opik.evaluation.metrics import Equals
 
 # Create both regular and task span metrics
 equals_metric = Equals()
-quality_metric = TaskSpanQualityMetric()
 timing_metric = ExecutionTimeMetric()
 
 # Run evaluation with mixed metric types
@@ -735,7 +694,6 @@ evaluation = evaluate(
     task=evaluation_task,
     scoring_metrics=[
         equals_metric,        # Regular metric
-        quality_metric,       # Task span metric
         timing_metric,        # Task span metric
     ],
     experiment_name="Comprehensive Evaluation"
