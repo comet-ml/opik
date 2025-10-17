@@ -28,24 +28,73 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return False
 
 
+def _flatten_dict_with_prefix(data: Dict, prefix: str = "") -> Dict:
+    """Flatten a nested dictionary with a prefix for CSV export."""
+    if not data:
+        return {}
+
+    flattened = {}
+    for key, value in data.items():
+        prefixed_key = f"{prefix}_{key}" if prefix else key
+        if isinstance(value, (dict, list)):
+            flattened[prefixed_key] = str(value)
+        else:
+            flattened[prefixed_key] = value if value is not None else ""
+
+    return flattened
+
+
+def _dump_to_file(
+    data: dict,
+    file_path: Path,
+    file_format: str,
+    csv_writer: Optional[csv.DictWriter] = None,
+    csv_fieldnames: Optional[List[str]] = None,
+) -> tuple:
+    """
+    Helper function to dump data to file in the specified format.
+
+    Args:
+        data: The data to dump
+        file_path: Path where to save the file
+        file_format: Format to use ("json" or "csv")
+        csv_writer: Existing CSV writer (for CSV format)
+        csv_fieldnames: Existing CSV fieldnames (for CSV format)
+
+    Returns:
+        Tuple of (csv_writer, csv_fieldnames) for CSV format, or (None, None) for JSON
+    """
+    if file_format.lower() == "csv":
+        # Convert to CSV rows
+        csv_rows = _trace_to_csv_rows(data)
+
+        # Initialize CSV writer if not already done
+        if csv_writer is None and csv_rows:
+            csv_file_handle = open(file_path, "w", newline="", encoding="utf-8")
+            csv_fieldnames = list(csv_rows[0].keys())
+            csv_writer = csv.DictWriter(csv_file_handle, fieldnames=csv_fieldnames)
+            csv_writer.writeheader()
+
+        # Write rows
+        if csv_writer and csv_rows:
+            csv_writer.writerows(csv_rows)
+
+        return csv_writer, csv_fieldnames
+    else:
+        # Save to JSON file
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str)
+
+        return None, None
+
+
 def _trace_to_csv_rows(trace_data: dict) -> List[Dict]:
     """Convert trace data to CSV rows format."""
     trace = trace_data["trace"]
     spans = trace_data.get("spans", [])
 
-    def _flatten_dict(data: Dict, prefix: str = "") -> Dict:
-        """Flatten a nested dictionary with a prefix."""
-        flattened = {}
-        for key, value in data.items():
-            prefixed_key = f"{prefix}_{key}" if prefix else key
-            if isinstance(value, (dict, list)):
-                flattened[prefixed_key] = str(value)
-            else:
-                flattened[prefixed_key] = value if value is not None else ""
-        return flattened
-
     # Flatten trace data with "trace" prefix
-    trace_flat = _flatten_dict(trace, "trace")
+    trace_flat = _flatten_dict_with_prefix(trace, "trace")
 
     # If no spans, create a single row for the trace
     if not spans:
@@ -61,13 +110,53 @@ def _trace_to_csv_rows(trace_data: dict) -> List[Dict]:
     rows = []
     for span in spans:
         # Flatten span data with "span" prefix
-        span_flat = _flatten_dict(span, "span")
+        span_flat = _flatten_dict_with_prefix(span, "span")
 
         # Combine trace and span data
         row = {**trace_flat, **span_flat}
         rows.append(row)
 
     return rows
+
+
+def _export_data_type(
+    data_type: str,
+    client: opik.Opik,
+    output_dir: Path,
+    max_results: int,
+    name_pattern: Optional[str] = None,
+    debug: bool = False,
+) -> int:
+    """
+    Helper function to export a specific data type.
+
+    Args:
+        data_type: Type of data to export ("traces", "datasets", "prompts")
+        client: Opik client instance
+        output_dir: Directory to save exported data
+        max_results: Maximum number of items to export
+        name_pattern: Optional name pattern filter
+        debug: Whether to enable debug output
+
+    Returns:
+        Number of items exported
+    """
+    if data_type == "traces":
+        # This requires additional parameters, so we'll handle it separately
+        raise ValueError(
+            "Traces export requires additional parameters - use _export_traces directly"
+        )
+    elif data_type == "datasets":
+        if debug:
+            console.print("[blue]Downloading datasets...[/blue]")
+        return _export_datasets(client, output_dir, max_results, name_pattern, debug)
+    elif data_type == "prompts":
+        if debug:
+            console.print("[blue]Downloading prompts...[/blue]")
+        return _export_prompts(client, output_dir, max_results, name_pattern)
+    else:
+        console.print(f"[red]Unknown data type: {data_type}[/red]")
+        return 0
 
 
 def _export_traces(
@@ -193,31 +282,20 @@ def _export_traces(
                             "project_name": project_name,
                         }
 
+                        # Determine file path based on format
                         if trace_format.lower() == "csv":
-                            # Stream CSV rows directly to file
-                            csv_rows = _trace_to_csv_rows(trace_data)
-
-                            # Initialize CSV writer on first trace
-                            if csv_writer is None:
-                                csv_file = project_dir / f"traces_{project_name}.csv"
-                                csv_file_handle = open(
-                                    csv_file, "w", newline="", encoding="utf-8"
-                                )
-                                if csv_rows:
-                                    csv_fieldnames = csv_rows[0].keys()
-                                    csv_writer = csv.DictWriter(
-                                        csv_file_handle, fieldnames=csv_fieldnames
-                                    )
-                                    csv_writer.writeheader()
-
-                            # Write rows immediately
-                            if csv_writer and csv_rows:
-                                csv_writer.writerows(csv_rows)
+                            file_path = project_dir / f"traces_{project_name}.csv"
                         else:
-                            # Save to JSON file
-                            trace_file = project_dir / f"trace_{trace.id}.json"
-                            with open(trace_file, "w", encoding="utf-8") as f:
-                                json.dump(trace_data, f, indent=2, default=str)
+                            file_path = project_dir / f"trace_{trace.id}.json"
+
+                        # Use helper function to dump data
+                        csv_writer, csv_fieldnames = _dump_to_file(
+                            trace_data,
+                            file_path,
+                            trace_format,
+                            csv_writer,
+                            csv_fieldnames,
+                        )
 
                         exported_count += 1
                         total_processed += 1
@@ -603,23 +681,13 @@ def export(
                     )
                 total_exported += traces_exported
 
-            # Download datasets (workspace-level data, but export to project directory for consistency)
-            if "datasets" in data_types:
-                if debug:
-                    console.print("[blue]Downloading datasets...[/blue]")
-                datasets_exported = _export_datasets(
-                    client, project_dir, max_results, name, debug
-                )
-                total_exported += datasets_exported
-
-            # Download prompts (workspace-level data, but export to project directory for consistency)
-            if "prompts" in data_types:
-                if debug:
-                    console.print("[blue]Downloading prompts...[/blue]")
-                prompts_exported = _export_prompts(
-                    client, project_dir, max_results, name
-                )
-                total_exported += prompts_exported
+            # Download datasets and prompts (workspace-level data, but export to project directory for consistency)
+            for data_type in ["datasets", "prompts"]:
+                if data_type in data_types:
+                    exported_count = _export_data_type(
+                        data_type, client, project_dir, max_results, name, debug
+                    )
+                    total_exported += exported_count
 
             console.print(
                 f"[green]Successfully exported {total_exported} items to {project_dir}[/green]"
@@ -669,23 +737,13 @@ def export(
                 workspace_dir = output_path / workspace
                 workspace_dir.mkdir(parents=True, exist_ok=True)
 
-                # Download datasets
-                if "datasets" in data_types:
-                    if debug:
-                        console.print("[blue]Downloading datasets...[/blue]")
-                    datasets_exported = _export_datasets(
-                        client, workspace_dir, max_results, name, debug
-                    )
-                    total_exported += datasets_exported
-
-                # Download prompts
-                if "prompts" in data_types:
-                    if debug:
-                        console.print("[blue]Downloading prompts...[/blue]")
-                    prompts_exported = _export_prompts(
-                        client, workspace_dir, max_results, name
-                    )
-                    total_exported += prompts_exported
+                # Download datasets and prompts (workspace-level data)
+                for data_type in ["datasets", "prompts"]:
+                    if data_type in data_types:
+                        exported_count = _export_data_type(
+                            data_type, client, workspace_dir, max_results, name, debug
+                        )
+                        total_exported += exported_count
 
                 # Download traces from each project
                 if "traces" in data_types:
