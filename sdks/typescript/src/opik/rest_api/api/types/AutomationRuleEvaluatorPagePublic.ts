@@ -9,4 +9,5 @@ export interface AutomationRuleEvaluatorPagePublic {
     size?: number;
     total?: number;
     content?: OpikApi.AutomationRuleEvaluatorObjectPublic[];
+    sortableBy?: string[];
 }

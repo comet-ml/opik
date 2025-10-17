@@ -8,7 +8,10 @@
  */
 export interface FindEvaluatorsRequest {
     projectId?: string;
+    id?: string;
     name?: string;
+    filters?: string;
+    sorting?: string;
     page?: number;
     size?: number;
 }
