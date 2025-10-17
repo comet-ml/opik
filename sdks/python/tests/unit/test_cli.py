@@ -512,11 +512,14 @@ class TestUploadCommand:
                     in result.output
                 )
                 assert "Found 1 projects in workspace" in result.output
-                assert "Uploading traces to project: test_project" in result.output
+                assert (
+                    "Note: Traces are project-specific. Use workspace/project format to import traces"
+                    in result.output
+                )
 
-                # Verify that the client methods were called
-                mock_client.trace.assert_called_once()
-                mock_client.span.assert_called_once()
+                # Verify that the client methods were NOT called since traces are no longer uploaded to all projects
+                mock_client.trace.assert_not_called()
+                mock_client.span.assert_not_called()
 
     def test_upload_command_with_name_filter(self):
         """Test upload command with name filtering."""

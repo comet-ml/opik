@@ -550,29 +550,12 @@ def import_data(
                     )
                     total_imported += prompts_imported
 
-                # Upload traces to each project
+                # Note: Traces are project-specific and should be imported to a specific project
+                # rather than being uploaded to all projects in a workspace
                 if "traces" in data_types:
-                    for project in projects:
-                        project_name = project.name
-                        console.print(
-                            f"[blue]Uploading traces to project: {project_name}...[/blue]"
-                        )
-
-                        # Create a new client instance with the specific project name
-                        assert project_name is not None  # Type narrowing for mypy
-                        project_client = opik.Opik(
-                            workspace=workspace, project_name=project_name
-                        )
-
-                        traces_imported = _import_traces(
-                            project_client, project_dir, dry_run, name
-                        )
-                        total_imported += traces_imported
-
-                        if traces_imported > 0:
-                            console.print(
-                                f"[green]Imported {traces_imported} traces to {project_name}[/green]"
-                            )
+                    console.print(
+                        "[yellow]Note: Traces are project-specific. Use workspace/project format to import traces to a specific project.[/yellow]"
+                    )
 
                 if dry_run:
                     console.print(
