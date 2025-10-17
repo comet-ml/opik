@@ -72,7 +72,7 @@ export const GroupRow = <TColumnData,>({
           <DictionaryRow group={group} onChange={onChange} config={config} />
         );
       default:
-        return <DefaultRow group={group} onChange={onChange} />;
+        return <DefaultRow group={group} onChange={onChange} config={config} />;
     }
   };
 

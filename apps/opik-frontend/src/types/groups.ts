@@ -20,6 +20,7 @@ export type GroupRowConfig = {
   };
   keyComponentProps: unknown;
   validateGroup?: (group: Group) => string | undefined;
+  sortingMessage?: string;
 };
 
 export type Groups = Group[];
