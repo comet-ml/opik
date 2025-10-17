@@ -54,7 +54,9 @@ const HelpLinks: HelpLinksComponent = ({
         <h3 className="comet-title-s mb-2">{title}</h3>
         <p className="comet-body-s mb-4 py-2 text-muted-slate">{description}</p>
 
-        <div className={cn("flex gap-2.5", buttonsContainerClassName)}>
+        <div
+          className={cn("flex gap-2.5 flex-wrap", buttonsContainerClassName)}
+        >
           {children}
         </div>
       </div>

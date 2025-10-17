@@ -11,8 +11,10 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 
+const MOBILE_BREAKPOINT = 1024; // lg breakpoint in Tailwind
+
 const PageLayout = () => {
-  const [expanded = true, setExpanded] =
+  const [storedExpanded = true, setStoredExpanded] =
     useLocalStorageState<boolean>("sidebar-expanded");
   const [bannerHeight, setBannerHeight] = useState(0);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
@@ -26,6 +28,11 @@ const PageLayout = () => {
   });
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
+
+  // Force sidebar collapsed on mobile, use stored preference on desktop
+  const isMobile =
+    typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
+  const expanded = isMobile ? false : storedExpanded;
 
   // Show welcome wizard if enabled and not completed
   useEffect(() => {
@@ -66,7 +73,7 @@ const PageLayout = () => {
         <RetentionBanner onChangeHeight={setBannerHeight} />
       ) : null}
 
-      <SideBar expanded={expanded} setExpanded={setExpanded} />
+      <SideBar expanded={expanded} setExpanded={setStoredExpanded} />
       <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
         <TopBar />
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">

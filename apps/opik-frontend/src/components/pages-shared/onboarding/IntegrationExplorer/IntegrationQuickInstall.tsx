@@ -45,17 +45,17 @@ const IntegrationQuickInstall: React.FC = () => {
             <img
               alt="Cursor"
               src={INTEGRATION_ICON_THEME_MAP.cursor[themeMode]}
-              className="size-[32px] shrink-0"
+              className="hidden size-[32px] shrink-0 md:block"
             />
             <img
               alt="Copilot"
               src={INTEGRATION_ICON_THEME_MAP.copilot[themeMode]}
-              className="size-[20px] shrink-0"
+              className="size-[36px] shrink-0 md:size-[22px]"
             />
             <img
               alt="Windsurf"
               src={INTEGRATION_ICON_THEME_MAP.windsurf[themeMode]}
-              className="size-[32px] shrink-0"
+              className="hidden size-[32px] shrink-0 md:block"
             />
           </div>
         }
