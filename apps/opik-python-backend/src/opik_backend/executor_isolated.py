@@ -352,6 +352,7 @@ except Exception as e:
                 from opik_backend.subprocess_logger import BatchLogCollector
                 
                 backend_url = SubprocessLogConfig.get_backend_url()
+                mylogger = None
                 
                 # Validate backend_url based on configuration               
                 try:
@@ -369,6 +370,13 @@ except Exception as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
                     self.logger.error(f"Unexpected error during subprocess log collection: {e}")
+                finally:
+                    # Ensure logger is properly closed regardless of success or failure
+                    if mylogger:
+                        try:
+                            mylogger.close()
+                        except Exception as e:
+                            self.logger.warning(f"Error closing subprocess logger: {e}")
 
             # Parse result from stdout
             if process.returncode == 0:
