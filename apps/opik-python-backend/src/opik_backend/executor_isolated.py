@@ -108,7 +108,7 @@ class IsolatedSubprocessExecutor:
         """
         timeout_secs = timeout_secs or self.timeout_secs
         creation_start = time.time()
-        process = None  # Initialize to None to handle cleanup in exception handlers if subprocess creation fails
+        process = None  # Initialize to None for exception handling
 
         try:
             # Prepare environment for subprocess
@@ -162,9 +162,7 @@ class IsolatedSubprocessExecutor:
             self.logger.error(
                 f"Isolated subprocess execution timed out after {timeout_secs}s"
             )
-            # Remove from active processes
-            if process in self._active_processes:
-                self._active_processes.remove(process)
+            self._remove_active_process(process)
             return {
                 "code": 500,
                 "error": f"Execution timed out after {timeout_secs} seconds",
@@ -173,7 +171,13 @@ class IsolatedSubprocessExecutor:
             self.logger.error(
                 f"Error during isolated subprocess execution: {e}", exc_info=True
             )
+            self._remove_active_process(process)
             return {"code": 500, "error": f"Failed to execute code: {str(e)}"}
+
+    def _remove_active_process(self, process: Optional[subprocess.Popen]) -> None:
+        """Remove process from active processes list if it exists."""
+        if process and process in self._active_processes:
+            self._active_processes.remove(process)
 
     def _prepare_environment(self, env_vars: Optional[dict] = None) -> dict:
         """
