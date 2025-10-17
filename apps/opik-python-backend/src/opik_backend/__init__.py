@@ -91,7 +91,7 @@ def create_app(test_config=None, should_init_executor=True):
             try:
                 client = get_redis_client()
                 client.close()
-            except Exception:
+            except Exception as e:
                 app.logger.warning(f"Error closing Redis client: {e}")
 
     # Also close on process exit
@@ -99,7 +99,7 @@ def create_app(test_config=None, should_init_executor=True):
         try:
             client = get_redis_client()
             client.close()
-        except Exception:
+        except Exception as e:
             app.logger.warning(f"Error closing Redis client: {e}")
 
     atexit.register(_close_redis_on_exit)
