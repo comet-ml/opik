@@ -77,6 +77,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     if (!annotationQueue?.id) return [];
     return [
       createFilter({
+        id: "annotation_queue_ids",
         field: "annotation_queue_ids",
         value: annotationQueue.id,
         operator: "contains",
@@ -279,12 +280,10 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
           <Button
             variant="outline"
             size="sm"
-            disabled={
-              disabled || isLoading || !hasData || reviewers.length === 0
-            }
+            disabled={disabled || isLoading || !hasData}
           >
             <Download className="mr-1.5 size-3.5" />
-            Export
+            Export queue
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">

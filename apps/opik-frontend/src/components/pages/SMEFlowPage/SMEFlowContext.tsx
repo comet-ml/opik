@@ -321,6 +321,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     if (!annotationQueue?.id) return [];
     return [
       createFilter({
+        id: "annotation_queue_ids",
         field: "annotation_queue_ids",
         value: annotationQueue.id,
         operator: "contains",
