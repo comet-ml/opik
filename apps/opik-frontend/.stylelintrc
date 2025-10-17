@@ -1,8 +1,5 @@
 {
-  "plugins": [
-    "stylelint-scss",
-    "stylelint-prettier"
-  ],
+  "plugins": ["stylelint-scss", "stylelint-prettier"],
   "rules": {
     "prettier/prettier": true,
     "scss/dollar-variable-pattern": "^foo",
@@ -13,12 +10,18 @@
         "ignoreAtRules": ["tailwind"]
       }
     ],
-    "selector-pseudo-class-no-unknown": [true, {
-      "ignorePseudoClasses": ["global"]
-    }],
-    "selector-pseudo-element-no-unknown": [true, {
-      "ignorePseudoElements": ["global"]
-    }]
+    "selector-pseudo-class-no-unknown": [
+      true,
+      {
+        "ignorePseudoClasses": ["global"]
+      }
+    ],
+    "selector-pseudo-element-no-unknown": [
+      true,
+      {
+        "ignorePseudoElements": ["global"]
+      }
+    ]
   },
   "extends": [
     "stylelint-config-recommended-scss",
