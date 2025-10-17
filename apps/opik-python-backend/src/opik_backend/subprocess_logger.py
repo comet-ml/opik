@@ -10,14 +10,11 @@ Configuration: All settings passed as parameters - no environment variables.
 
 import json
 import logging
-import sys
 import threading
 import time
-from datetime import datetime
 from typing import Optional, List, Dict, Any, IO
 import subprocess
 from opik_backend.subprocess_log_config import SubprocessLogConfig
-import os
 
 try:
     import requests
@@ -232,136 +229,12 @@ class BatchLogCollector(logging.Handler):
             if self.log_buffer:
                 self._flush_logs()
 
-    def stream_from_process(self, process: subprocess.Popen) -> None:
-        """
-        Stream logs from a subprocess's stdout/stderr.
-        
-        Expects subprocess to output JSON-formatted log lines on stderr:
-        {"timestamp": ms, "level": "INFO", "message": "...", "attributes": {...}}
-        
-        This method spawns threads to read from the process's pipes,
-        automatically batch and flush logs based on time/size.
-        The method returns immediately - logging continues in background threads.
-        
-        Args:
-            process: subprocess.Popen object with stdout/stderr pipes
-        """
-
-        def read_stream(stream: IO, stream_name: str = "stdout") -> None:
-            """Read from a stream line-by-line and emit logs."""
-            try:
-                if stream is None:
-                    return
-                
-                for line in stream:
-                    if line.strip():
-                        try:
-                            # Try to parse as JSON to preserve log level and details
-                            log_data = json.loads(line.strip())
-                            self.emit(log_data)
-                        except json.JSONDecodeError:
-                            # Fallback: treat as plain text message
-                            log_data = {
-                                'timestamp': int(time.time() * 1000),
-                                'level': 'INFO',
-                                'logger_name': f'subprocess.{stream_name}',
-                                'message': line.strip(),
-                                'attributes': {}
-                            }
-                            self.emit(log_data)
-
-            except Exception as e:
-                # Log errors silently to stderr, don't crash
-                logger.warning(f"Error reading {stream_name}: {e}")
-            finally:
-                try:
-                    if stream:
-                        stream.close()
-                except Exception as e:
-                    logger.warning(f"Error closing {stream_name}: {e}")
-        
-        # Spawn reader threads for stdout and stderr
-        if process.stdout:
-            stdout_thread = threading.Thread(
-                target=read_stream,
-                args=(process.stdout, "stdout"),
-                daemon=True,
-            )
-            stdout_thread.start()
-        
-        if process.stderr:
-            stderr_thread = threading.Thread(
-                target=read_stream,
-                args=(process.stderr, "stderr"),
-                daemon=True,
-            )
-            stderr_thread.start()
-
-    def process_subprocess_output(self, stdout: str, stderr: str) -> None:
-        """
-        Process subprocess stdout/stderr output and emit as logs.
-        
-        Args:
-            stdout: Standard output from subprocess
-            stderr: Standard error from subprocess
-        """
-        # Process stderr lines as logs
-        if stderr:
-            for line in stderr.split('\n'):
-                if line.strip():
-                    try:
-                        log_data = json.loads(line.strip())
-                        self.emit(log_data)
-                    except json.JSONDecodeError:
-                        # Fallback: treat as plain text message
-                        log_data = {
-                            'timestamp': int(time.time() * 1000),
-                            'level': 'INFO',
-                            'logger_name': 'subprocess.stderr',
-                            'message': line.strip(),
-                            'attributes': {}
-                        }
-                        self.emit(log_data)
-        
-        # Process stdout lines as logs
-        if stdout:
-            lines = [l.strip() for l in stdout.split('\n') if l.strip()]
-            for line in lines:
-                try:
-                    # Try to parse as JSON
-                    log_data = json.loads(line)
-                    # If it has log structure, treat as log
-                    if 'message' in log_data and 'level' in log_data:
-                        self.emit(log_data)
-                    else:
-                        # Plain JSON - treat as log message
-                        log_data_log = {
-                            'timestamp': int(time.time() * 1000),
-                            'level': 'INFO',
-                            'logger_name': 'subprocess.stdout',
-                            'message': line,
-                            'attributes': {}
-                        }
-                        self.emit(log_data_log)
-                except json.JSONDecodeError:
-                    # Fallback: treat as plain text
-                    log_data = {
-                        'timestamp': int(time.time() * 1000),
-                        'level': 'INFO',
-                        'logger_name': 'subprocess.stdout',
-                        'message': line,
-                        'attributes': {}
-                    }
-                    self.emit(log_data)
-        
-        # Flush remaining logs
-        self._flush_logs()
-
     def close(self) -> None:
         """
-        Flush any remaining logs and stop the flush thread.
+        Flush any remaining logs and stop the flush thread and reader threads.
         
-        Should be called when done collecting logs to ensure all data is sent.
+        Should be called when done collecting logs to ensure all data is sent
+        and all threads are properly cleaned up.
         """
         self.flush()
         
@@ -371,6 +244,19 @@ class BatchLogCollector(logging.Handler):
         # Wait for flush thread to finish (with timeout to avoid hanging)
         if self.flush_thread and self.flush_thread.is_alive():
             self.flush_thread.join(timeout=5.0)
+        
+        # Wait for reader threads to finish (with timeout to avoid hanging)
+        if self._stdout_thread and self._stdout_thread.is_alive():
+            try:
+                self._stdout_thread.join(timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Error joining stdout thread: {e}")
+        
+        if self._stderr_thread and self._stderr_thread.is_alive():
+            try:
+                self._stderr_thread.join(timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Error joining stderr thread: {e}")
 
     def start_stream_from_process(self, process: subprocess.Popen) -> Dict[str, str]:
         """
@@ -387,49 +273,89 @@ class BatchLogCollector(logging.Handler):
             process: subprocess.Popen object with stdout/stderr pipes configured
         
         Returns:
-            Dict with 'stdout_thread' and 'stderr_thread' for the caller to join them
+            Dict with 'stdout_thread' and 'stderr_thread' for the caller to join them,
+            and 'last_stdout_line' and 'last_stderr_line' for the result
         """
         threads = {'stdout_thread': None, 'stderr_thread': None}
         
-        # Lists to collect output
-        stdout_lines: List[str] = []
-        stderr_lines: List[str] = []
+        # Store only the last line from each stream (for result parsing)
+        last_lines = {'stdout': '', 'stderr': ''}
+        
+        # Keep reference to threads for cleanup in close()
+        self._stdout_thread = None
+        self._stderr_thread = None
         
         # Spawn reader threads for stdout and stderr
         if process.stdout:
             stdout_thread = threading.Thread(
                 target=self._read_stream,
-                args=(process.stdout, "stdout", stdout_lines),
+                args=(process.stdout, "stdout", last_lines),
                 daemon=False
             )
             stdout_thread.start()
             threads['stdout_thread'] = stdout_thread
+            self._stdout_thread = stdout_thread
         
         if process.stderr:
             stderr_thread = threading.Thread(
                 target=self._read_stream,
-                args=(process.stderr, "stderr", stderr_lines),
+                args=(process.stderr, "stderr", last_lines),
                 daemon=False
             )
             stderr_thread.start()
             threads['stderr_thread'] = stderr_thread
+            self._stderr_thread = stderr_thread
         
-        # Store output lists for caller to access after joining threads
-        threads['stdout_lines'] = stdout_lines
-        threads['stderr_lines'] = stderr_lines
+        # Store last lines for caller to access after joining threads
+        threads['last_stdout_line'] = last_lines['stdout']
+        threads['last_stderr_line'] = last_lines['stderr']
+        threads['last_lines'] = last_lines  # Keep reference for updates
+        
+        # Keep last_lines for later retrieval
+        self._last_lines = last_lines
         
         return threads
-
-    def _read_stream(self, pipe: Optional[IO], stream_name: str, output_list: List[str]) -> None:
+    
+    def get_last_lines(self) -> Dict[str, str]:
         """
-        Read from a stream line-by-line, emit logs, and collect output.
+        Get the last line collected from each stream.
+        
+        Should be called after threads have finished to get the final output.
+        """
+        return getattr(self, '_last_lines', {'stdout': '', 'stderr': ''})
+    
+    def wait_for_reader_threads(self, timeout: float = 5.0) -> None:
+        """
+        Wait for reader threads to finish reading from process pipes.
+        
+        This should be called after the process has finished to ensure all output
+        has been read before retrieving last_lines.
+        
+        Args:
+            timeout: Maximum time to wait for threads in seconds
+        """
+        if self._stdout_thread and self._stdout_thread.is_alive():
+            try:
+                self._stdout_thread.join(timeout=timeout)
+            except Exception as e:
+                logger.warning(f"Error waiting for stdout thread: {e}")
+        
+        if self._stderr_thread and self._stderr_thread.is_alive():
+            try:
+                self._stderr_thread.join(timeout=timeout)
+            except Exception as e:
+                logger.warning(f"Error waiting for stderr thread: {e}")
+
+    def _read_stream(self, pipe: Optional[IO], stream_name: str, last_lines: Dict[str, str]) -> None:
+        """
+        Read from a stream line-by-line, emit logs, and keep only the last line.
         
         Private method used by start_stream_from_process to handle individual streams.
         
         Args:
             pipe: Input stream to read from (stdout or stderr)
             stream_name: Name of stream ("stdout" or "stderr") for logging
-            output_list: List to collect output lines into
+            last_lines: Dict to store the last line from this stream
         """
         if pipe is None:
             return
@@ -437,7 +363,8 @@ class BatchLogCollector(logging.Handler):
             for line in pipe:
                 # Only process non-empty lines
                 if line.strip():
-                    output_list.append(line)
+                    # Keep only the last line (for result parsing)
+                    last_lines[stream_name] = line
                     try:
                         # Try to parse as JSON to preserve log structure
                         log_data = json.loads(line.strip())

@@ -6,9 +6,8 @@ import resource
 import subprocess
 import sys
 import time
-from typing import Optional
-from threading import Lock, Thread
-from typing import Callable, List
+from typing import Optional, Callable, List
+from threading import Lock
 
 from opik_backend.executor import CodeExecutorBase
 from opik_backend.subprocess_log_config import SubprocessLogConfig
@@ -344,8 +343,6 @@ except Exception as e:
             }
         )
 
-        self._log_collector = None
-
         try:
             # Initialize logger BEFORE process starts if configured
             if SubprocessLogConfig.is_fully_configured():
@@ -361,82 +358,34 @@ except Exception as e:
                         api_key=env_vars.get("OPIK_API_KEY", ""),
                         workspace=env_vars.get("OPIK_WORKSPACE", ""),
                     )
-                    
-                    # Start real-time log streaming from subprocess (handles both logging and collection)
-                    stream_info = {}
-                    if self._log_collector:
-                        stream_info = self._log_collector.start_stream_from_process(process)
-                    else:
-                        # If no logging, we still need to collect output
-                        stdout_lines = []
-                        stderr_lines = []
-                        stream_info = {
-                            'stdout_lines': stdout_lines,
-                            'stderr_lines': stderr_lines,
-                            'stdout_thread': None,
-                            'stderr_thread': None,
-                        }
-                        
-                        def collect_output(pipe, output_list):
-                            """Collect output from pipe into list."""
-                            if pipe is None:
-                                return
-                            try:
-                                for line in pipe:
-                                    if line.strip():
-                                        output_list.append(line)
-                            except Exception as e:
-                                self.logger.warning(f"Error collecting output: {e}")
-                            finally:
-                                try:
-                                    if pipe:
-                                        pipe.close()
-                                except:
-                                    pass
-                        
-                        if process.stdout:
-                            stdout_thread = Thread(
-                                target=collect_output,
-                                args=(process.stdout, stdout_lines),
-                                daemon=False
-                            )
-                            stdout_thread.start()
-                            stream_info['stdout_thread'] = stdout_thread
-                        
-                        if process.stderr:
-                            stderr_thread = Thread(
-                                target=collect_output,
-                                args=(process.stderr, stderr_lines),
-                                daemon=False
-                            )
-                            stderr_thread.start()
-                            stream_info['stderr_thread'] = stderr_thread
-                
                 except (ValueError, ImportError) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
                     self.logger.error(f"Unexpected error initializing subprocess logging: {e}")
             
-            # Send input to the process
-            process.stdin.write(input_json)
-            process.stdin.close()  # Signal EOF so process knows input is done
-            
-            # Wait for process to complete
-            process.wait(timeout=timeout_secs)
-            
-            # Wait for reader/collector threads to finish
-            if stream_info.get('stdout_thread'):
-                stream_info['stdout_thread'].join()
-            if stream_info.get('stderr_thread'):
-                stream_info['stderr_thread'].join()
-            
-            # Reconstruct stdout/stderr from collected lines
-            stdout = ''.join(stream_info.get('stdout_lines', []))
-            stderr = ''.join(stream_info.get('stderr_lines', []))
-
-            # After process completes, flush any remaining logs if logger was initialized
+            # Decide execution strategy based on logging configuration
             if self._log_collector:
-                self._log_collector.flush()
+                # Real-time streaming: start log collector threads, then wait for process
+                self._log_collector.start_stream_from_process(process)
+                
+                # Send input to the process
+                process.stdin.write(input_json)
+                process.stdin.close()  # Signal EOF so process knows input is done
+                
+                # Wait for process to complete
+                process.wait(timeout=timeout_secs)
+                
+                # Wait for reader threads to finish reading all output
+                self._log_collector.wait_for_reader_threads(timeout=5.0)
+                
+                # Get stdout/stderr from last lines (no memory accumulation)
+                # Safe to do now that threads have finished
+                last_lines = self._log_collector.get_last_lines()
+                stdout = last_lines.get('stdout', '')
+                stderr = last_lines.get('stderr', '')
+            else:
+                # Simple mode: use communicate() without logging overhead
+                stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
 
             # Parse result from stdout
             if process.returncode == 0:
@@ -472,7 +421,7 @@ except Exception as e:
                 process.kill()
             raise
         finally:
-            # Ensure log collector is properly closed
+            # Ensure log collector is properly closed and threads are joined
             self._close_log_collector()
 
     def _close_log_collector(self):

@@ -96,7 +96,7 @@ class LogCapturingHandler(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def mock_backend():
-    """Start and stop mock HTTP backend for tests with dynamic port."""
+    """Start a mock HTTP server to capture log POST requests."""
     port = find_free_port()
     server = HTTPServer(('localhost', port), LogCapturingHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -112,6 +112,14 @@ def mock_backend():
         server.shutdown()
     except:
         pass
+
+
+@pytest.fixture(autouse=True)
+def clear_captured_requests():
+    """Clear captured requests before each test to prevent test pollution."""
+    LogCapturingHandler.captured_requests = []
+    yield
+    LogCapturingHandler.captured_requests = []
 
 
 # ============================================================================
