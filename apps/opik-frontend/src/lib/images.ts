@@ -105,9 +105,9 @@ const DATA_IMAGE_REGEX = new RegExp(
 );
 // Exclude characters that are invalid in URLs: whitespace, quotes, angle brackets, curly braces, backslash, pipe, caret, backtick
 const IMAGE_URL_REGEX = new RegExp(
-  `https?:\\/\\/[^\\s"'<>{}\\\\|^\`]+\\.(${IMAGE_URL_EXTENSIONS.join(
+  `https?:\\/\\/[^\\s"'<>{}\\\\|\\^\`]+\\.(${IMAGE_URL_EXTENSIONS.join(
     "|",
-  )})(\\?[^"'<>{}\\\\|^\`]*(?<!\\\\))?(#[^"'<>{}\\\\|^\`]*(?<!\\\\))?`,
+  )})(\\?[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?(#[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?`,
   "gi",
 );
 
