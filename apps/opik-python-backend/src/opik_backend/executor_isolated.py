@@ -84,7 +84,8 @@ class IsolatedSubprocessExecutor:
         self.logger = logging.getLogger(__name__)
         self._active_processes: List[subprocess.Popen] = []  # Track active processes for cleanup
         self._process_lock = Lock()
-        self._teardown_callbacks: List[Callable[[], None]] = []  # Callbacks to run on teardown
+        self._teardown_callbacks: List[Callable[[], None]] = [] 
+        self._log_collector = None # Callbacks to run on teardown
 
     def execute(
         self,
@@ -346,7 +347,7 @@ except Exception as e:
         log_collector = None
 
         try:
-            # Read stdout/stderr using communicate()
+            # Send input and wait for process to complete
             stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
 
             # After process completes, collect and send logs if backend is configured
@@ -354,7 +355,6 @@ except Exception as e:
                 from opik_backend.subprocess_logger import BatchLogCollector
                 
                 backend_url = SubprocessLogConfig.get_backend_url()
-                log_collector = None
                 
                 try:
                     log_collector = BatchLogCollector(
@@ -372,10 +372,6 @@ except Exception as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
                     self.logger.error(f"Unexpected error during subprocess log collection: {e}")
-                finally:
-                    # Ensure logger is properly closed immediately after processing
-                    if log_collector:
-                        log_collector.close()
 
             # Parse result from stdout
             if process.returncode == 0:
@@ -402,15 +398,20 @@ except Exception as e:
                 }
         
         except subprocess.TimeoutExpired:
-            # Ensure log manager is closed even on timeout
-            if log_collector:
-                log_collector.close()
             process.kill()
             try:
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 process.kill()
             raise
+        finally:
+            # Ensure log collector is properly closed
+            if log_collector:
+                try:
+                    log_collector.flush()
+                    log_collector.close()
+                except Exception as e:
+                    self.logger.warning(f"Error closing log collector: {e}")
 
     def register_teardown_callback(self, callback):
         """
