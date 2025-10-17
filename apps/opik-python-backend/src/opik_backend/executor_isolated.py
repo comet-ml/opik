@@ -7,8 +7,11 @@ import subprocess
 import sys
 import time
 from typing import Optional
+from threading import Lock, Thread
+from typing import Callable, List
 
 from opik_backend.executor import CodeExecutorBase
+from opik_backend.subprocess_log_config import SubprocessLogConfig
 
 logger = logging.getLogger(__name__)
 
@@ -21,20 +24,25 @@ isolated_creation_histogram = meter.create_histogram(
     description="Latency of isolated subprocess creation in milliseconds",
     unit="ms",
 )
+
 isolated_execution_histogram = meter.create_histogram(
     name="isolated_subprocess_execution_latency",
     description="Latency of isolated code execution in milliseconds",
     unit="ms",
 )
 
+active_process_counter = meter.create_up_down_counter(
+    name="isolated_subprocess_active_count",
+    description="Current number of active isolated subprocesses",
+    unit="1",
+)
+
 # Memory limit for subprocesses in bytes (20MB)
 SUBPROCESS_MEMORY_LIMIT_BYTES = 20 * 1024 * 1024  # 20MB
-
 
 def _calculate_latency_ms(start_time):
     """Calculate elapsed time in milliseconds."""
     return (time.time() - start_time) * 1000
-
 
 def _set_memory_limit():
     """Set memory limit for subprocess to 20MB.
@@ -50,7 +58,6 @@ def _set_memory_limit():
         resource.setrlimit(resource.RLIMIT_STACK, (SUBPROCESS_MEMORY_LIMIT_BYTES, SUBPROCESS_MEMORY_LIMIT_BYTES))
     except Exception as e:
         logger.warning(f"Failed to set stack memory limit: {e}")
-
 
 class IsolatedSubprocessExecutor:
     """
@@ -71,12 +78,13 @@ class IsolatedSubprocessExecutor:
         Initialize the isolated subprocess executor.
 
         Args:
-            timeout_secs: Timeout for each execution in seconds
+            timeout_secs: Timeout for each execution in seconds (default: 30)
         """
         self.timeout_secs = timeout_secs
         self.logger = logging.getLogger(__name__)
-        self._active_processes = []  # Track active processes for cleanup
-        self._teardown_callbacks = []  # Callbacks to run on teardown
+        self._active_processes: List[subprocess.Popen] = []  # Track active processes for cleanup
+        self._process_lock = Lock()
+        self._teardown_callbacks: List[Callable[[], None]] = []  # Callbacks to run on teardown
 
     def execute(
         self,
@@ -85,6 +93,8 @@ class IsolatedSubprocessExecutor:
         env_vars: Optional[dict] = None,
         timeout_secs: Optional[int] = None,
         payload_type: Optional[str] = None,
+        optimization_id: Optional[str] = None,
+        job_id: Optional[str] = None,
     ) -> dict:
         """
         Execute Python code in an isolated subprocess with scoped environment variables.
@@ -100,6 +110,8 @@ class IsolatedSubprocessExecutor:
                      These override/augment the parent environment for this execution only.
             timeout_secs: Execution timeout in seconds (uses default if not provided)
             payload_type: Type of payload being executed (e.g., 'trace_thread')
+            optimization_id: Optimization identifier for log correlation
+            job_id: Job identifier for log correlation
 
         Returns:
             dict: Result dictionary with format:
@@ -111,6 +123,10 @@ class IsolatedSubprocessExecutor:
         process = None  # Initialize to None for exception handling
 
         try:
+            # Ensure env_vars is always a dict
+            if env_vars is None:
+                env_vars = {}
+            
             # Prepare environment for subprocess
             subprocess_env = self._prepare_environment(env_vars)
 
@@ -128,11 +144,14 @@ class IsolatedSubprocessExecutor:
                 stderr=subprocess.PIPE,
                 env=subprocess_env,
                 text=True,
+                bufsize=1,
                 preexec_fn=_set_memory_limit,  # Apply memory limit to subprocess
             )
 
-            # Track active process
-            self._active_processes.append(process)
+            # Track active process with lock
+            with self._process_lock:
+                self._active_processes.append(process)
+            active_process_counter.add(1)
 
             creation_latency = _calculate_latency_ms(creation_start)
             isolated_creation_histogram.record(creation_latency)
@@ -143,7 +162,13 @@ class IsolatedSubprocessExecutor:
             # Execute code in subprocess
             execution_start = time.time()
             result = self._execute_in_subprocess(
-                process, data, payload_type, timeout_secs
+                process, 
+                data, 
+                payload_type, 
+                timeout_secs,
+                optimization_id, 
+                job_id, 
+                env_vars
             )
 
             execution_latency = _calculate_latency_ms(execution_start)
@@ -153,8 +178,10 @@ class IsolatedSubprocessExecutor:
             )
 
             # Remove from active processes
-            if process in self._active_processes:
-                self._active_processes.remove(process)
+            with self._process_lock:
+                if process in self._active_processes:
+                    self._active_processes.remove(process)
+            active_process_counter.add(-1)
 
             return result
 
@@ -176,8 +203,10 @@ class IsolatedSubprocessExecutor:
 
     def _remove_active_process(self, process: Optional[subprocess.Popen]) -> None:
         """Remove process from active processes list if it exists."""
-        if process and process in self._active_processes:
-            self._active_processes.remove(process)
+        if process:
+            with self._process_lock:
+                if process in self._active_processes:
+                    self._active_processes.remove(process)
 
     def _prepare_environment(self, env_vars: Optional[dict] = None) -> dict:
         """
@@ -196,6 +225,9 @@ class IsolatedSubprocessExecutor:
         env = os.environ.copy()
         if env_vars:
             env.update(env_vars)
+
+        env["PYTHONUNBUFFERED"] = '1'
+        env["LOG_FORMAT"] = 'json'
         return env
 
     def _load_code_from_file(self, code: str) -> str:
@@ -241,7 +273,7 @@ class IsolatedSubprocessExecutor:
         1. Reads JSON from stdin containing data and payload_type
         2. Makes data and payload_type available to user code
         3. Executes the user code
-        4. Captures and outputs result as JSON to stdout
+        4. Outputs result as JSON to stdout
 
         Args:
             code: User's Python code to execute
@@ -250,7 +282,6 @@ class IsolatedSubprocessExecutor:
             str: Python code that can be passed to python -c
         """
         # The wrapper reads input, makes variables available, and executes user code
-        # User code should not read from stdin - it receives data as variables
         # Note: Can't use '\n' directly in f-string, so we use a variable
         newline = '\n'
         indented_code = newline.join('    ' + line for line in code.split(newline))
@@ -283,17 +314,23 @@ except Exception as e:
         data: dict,
         payload_type: Optional[str],
         timeout_secs: int,
+        optimization_id: str = None,
+        job_id: str = None,
+        env_vars: dict = {},
     ) -> dict:
         """
         Execute code in the subprocess and collect result.
 
         Uses python -c to execute code inline with stdin for data passing.
+        Streams stderr to the logging backend in real-time if configured.
 
         Args:
             process: Subprocess Popen instance
             data: Data dictionary
             payload_type: Type of payload
             timeout_secs: Execution timeout
+            optimization_id: Optional ID for log correlation
+            job_id: Optional ID for log correlation
 
         Returns:
             dict: Execution result
@@ -307,18 +344,42 @@ except Exception as e:
         )
 
         try:
-            # Send data via stdin, collect stdout
-            stdout, stderr = process.communicate(
-                input=input_json,
-                timeout=timeout_secs,
-            )
+            # Read stdout/stderr using communicate()
+            stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
+
+            # After process completes, collect and send logs if backend is configured
+            if SubprocessLogConfig.is_fully_configured():
+                from opik_backend.subprocess_logger import BatchLogCollector
+                
+                backend_url = SubprocessLogConfig.get_backend_url()
+                
+                # Validate backend_url based on configuration               
+                try:
+                    mylogger = BatchLogCollector(
+                        backend_url=backend_url,
+                        optimization_id=optimization_id or "",
+                        job_id=job_id or "",
+                        api_key=env_vars.get("OPIK_API_KEY", ""),
+                        workspace=env_vars.get("OPIK_WORKSPACE", ""),
+                    )
+
+                    # Process subprocess output and send logs to backend
+                    mylogger.process_subprocess_output(stdout, stderr)
+                except (ValueError, ImportError) as e:
+                    self.logger.error(f"Failed to initialize subprocess logging: {e}")
+                except Exception as e:
+                    self.logger.error(f"Unexpected error during subprocess log collection: {e}")
 
             # Parse result from stdout
             if process.returncode == 0:
                 try:
-                    result = json.loads(stdout.strip())
+                    # Extract last non-empty line from stdout as the result JSON
+                    lines = [l for l in stdout.split('\n') if l.strip()]
+                    if not lines:
+                        raise ValueError("No output produced by subprocess")
+                    result = json.loads(lines[-1])
                     return result
-                except json.JSONDecodeError as e:
+                except (json.JSONDecodeError, ValueError) as e:
                     self.logger.error(f"Failed to parse subprocess output: {stdout}")
                     return {
                         "code": 500,
@@ -332,7 +393,7 @@ except Exception as e:
                     "code": 500,
                     "error": f"Subprocess execution failed: {stderr}",
                 }
-
+        
         except subprocess.TimeoutExpired:
             process.kill()
             try:
