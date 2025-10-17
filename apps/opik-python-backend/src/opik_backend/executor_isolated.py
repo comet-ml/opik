@@ -344,34 +344,37 @@ except Exception as e:
             }
         )
 
-        log_collector = None
+        self._log_collector = None
 
         try:
-            # Send input and wait for process to complete
-            stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
-
-            # After process completes, collect and send logs if backend is configured
+            # Initialize logger BEFORE process starts if configured
             if SubprocessLogConfig.is_fully_configured():
                 from opik_backend.subprocess_logger import BatchLogCollector
                 
                 backend_url = SubprocessLogConfig.get_backend_url()
                 
                 try:
-                    log_collector = BatchLogCollector(
+                    self._log_collector = BatchLogCollector(
                         backend_url=backend_url,
                         optimization_id=optimization_id or "",
                         job_id=job_id or "",
                         api_key=env_vars.get("OPIK_API_KEY", ""),
                         workspace=env_vars.get("OPIK_WORKSPACE", ""),
                     )
-                    
-                    # Process subprocess output and send logs to backend
-                    log_collector.process_subprocess_output(stdout, stderr)
-                    
                 except (ValueError, ImportError) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
-                    self.logger.error(f"Unexpected error during subprocess log collection: {e}")
+                    self.logger.error(f"Unexpected error initializing subprocess logging: {e}")
+            
+            # Send input and wait for process to complete
+            stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
+
+            # After process completes, send captured logs if logger was initialized
+            if self._log_collector:
+                try:
+                    self._log_collector.process_subprocess_output(stdout, stderr)
+                except Exception as e:
+                    self.logger.error(f"Unexpected error processing subprocess output: {e}")
 
             # Parse result from stdout
             if process.returncode == 0:
@@ -398,6 +401,9 @@ except Exception as e:
                 }
         
         except subprocess.TimeoutExpired:
+            # Ensure log manager is closed even on timeout
+            if self._log_collector:
+                self._log_collector.close()
             process.kill()
             try:
                 process.wait(timeout=2)
@@ -406,10 +412,10 @@ except Exception as e:
             raise
         finally:
             # Ensure log collector is properly closed
-            if log_collector:
+            if self._log_collector:
                 try:
-                    log_collector.flush()
-                    log_collector.close()
+                    self._log_collector.flush()
+                    self._log_collector.close()
                 except Exception as e:
                     self.logger.warning(f"Error closing log collector: {e}")
 
