@@ -1,5 +1,6 @@
 """Download command for Opik CLI."""
 
+import csv
 import json
 import re
 import sys
@@ -27,6 +28,48 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return False
 
 
+def _trace_to_csv_rows(trace_data: dict) -> list[dict]:
+    """Convert trace data to CSV rows format."""
+    trace = trace_data["trace"]
+    spans = trace_data.get("spans", [])
+
+    def _flatten_dict(data: dict, prefix: str = "") -> dict:
+        """Flatten a nested dictionary with a prefix."""
+        flattened = {}
+        for key, value in data.items():
+            prefixed_key = f"{prefix}_{key}" if prefix else key
+            if isinstance(value, (dict, list)):
+                flattened[prefixed_key] = str(value)
+            else:
+                flattened[prefixed_key] = value if value is not None else ""
+        return flattened
+
+    # Flatten trace data with "trace" prefix
+    trace_flat = _flatten_dict(trace, "trace")
+
+    # If no spans, create a single row for the trace
+    if not spans:
+        # Create empty span fields to maintain consistent structure
+        span_flat = {f"span_{key}": "" for key in trace.keys()}
+        span_flat["span_parent_span_id"] = ""  # Special case for parent_span_id
+
+        # Combine trace and empty span data
+        row = {**trace_flat, **span_flat}
+        return [row]
+
+    # Create rows for each span
+    rows = []
+    for span in spans:
+        # Flatten span data with "span" prefix
+        span_flat = _flatten_dict(span, "span")
+
+        # Combine trace and span data
+        row = {**trace_flat, **span_flat}
+        rows.append(row)
+
+    return rows
+
+
 def _export_traces(
     client: opik.Opik,
     project_name: str,
@@ -34,6 +77,7 @@ def _export_traces(
     max_results: int,
     filter: Optional[str],
     name_pattern: Optional[str] = None,
+    trace_format: str = "json",
 ) -> int:
     """Download traces and their spans with pagination support for large projects."""
     console.print(
@@ -44,129 +88,168 @@ def _export_traces(
     last_trace_time = None
     total_processed = 0
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Searching for traces...", total=None)
+    # For CSV format, set up streaming writer
+    csv_file = None
+    csv_file_handle = None
+    csv_writer = None
+    csv_fieldnames = None
 
-        while total_processed < max_results:
-            # Calculate how many traces to fetch in this batch
-            remaining = max_results - total_processed
-            current_page_size = min(page_size, remaining)
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Searching for traces...", total=None)
 
-            # Build filter string with pagination
-            pagination_filter = filter or ""
-            if last_trace_time:
-                # Add timestamp filter to continue from where we left off
-                time_filter = f"start_time < '{last_trace_time.isoformat()}'"
-                if pagination_filter:
-                    pagination_filter = f"({pagination_filter}) AND {time_filter}"
-                else:
-                    pagination_filter = time_filter
+            while total_processed < max_results:
+                # Calculate how many traces to fetch in this batch
+                remaining = max_results - total_processed
+                current_page_size = min(page_size, remaining)
 
-            try:
-                console.print(
-                    f"[blue]DEBUG: Searching traces with project_name: {project_name}, filter: {pagination_filter}, max_results: {current_page_size}[/blue]"
-                )
-                traces = client.search_traces(
-                    project_name=project_name,
-                    filter_string=pagination_filter if pagination_filter else None,
-                    max_results=current_page_size,
-                    truncate=False,  # Don't truncate data for download
-                )
-                console.print(
-                    f"[blue]DEBUG: Found {len(traces) if traces else 0} traces[/blue]"
-                )
-            except Exception as e:
-                console.print(f"[red]Error searching traces: {e}[/red]")
-                break
+                # Build filter string with pagination
+                pagination_filter = filter or ""
+                if last_trace_time:
+                    # Add timestamp filter to continue from where we left off
+                    time_filter = f"start_time < '{last_trace_time.isoformat()}'"
+                    if pagination_filter:
+                        pagination_filter = f"({pagination_filter}) AND {time_filter}"
+                    else:
+                        pagination_filter = time_filter
 
-            if not traces:
-                # No more traces to process
-                break
-
-            # Update progress description
-            progress.update(
-                task, description=f"Found {len(traces)} traces in current batch"
-            )
-
-            # Store original traces for pagination before filtering
-            original_traces = traces
-
-            # Filter traces by name pattern if specified
-            if name_pattern:
-                original_count = len(traces)
-                traces = [
-                    trace
-                    for trace in traces
-                    if _matches_name_pattern(trace.name or "", name_pattern)
-                ]
-                if len(traces) < original_count:
-                    console.print(
-                        f"[blue]Filtered to {len(traces)} traces matching pattern '{name_pattern}' in current batch[/blue]"
-                    )
-
-            if not traces:
-                # No traces match the name pattern, but we might have more to process
-                # Use original_traces for pagination, not the filtered empty list
-                last_trace_time = (
-                    original_traces[0].start_time if original_traces else None
-                )
-                total_processed += current_page_size
-                continue
-
-            # Update progress for downloading
-            progress.update(
-                task,
-                description=f"Downloading traces... (batch {total_processed // page_size + 1})",
-            )
-
-            # Download each trace with its spans
-            for trace in traces:
                 try:
-                    # Get spans for this trace
-                    spans = client.search_spans(
-                        project_name=project_name,
-                        trace_id=trace.id,
-                        max_results=1000,  # Get all spans for the trace
-                        truncate=False,
+                    console.print(
+                        f"[blue]DEBUG: Searching traces with project_name: {project_name}, filter: {pagination_filter}, max_results: {current_page_size}[/blue]"
                     )
-
-                    # Create trace data structure
-                    trace_data = {
-                        "trace": trace.model_dump(),
-                        "spans": [span.model_dump() for span in spans],
-                        "downloaded_at": datetime.now().isoformat(),
-                        "project_name": project_name,
-                    }
-
-                    # Save to file
-                    trace_file = project_dir / f"trace_{trace.id}.json"
-                    with open(trace_file, "w", encoding="utf-8") as f:
-                        json.dump(trace_data, f, indent=2, default=str)
-
-                    exported_count += 1
-                    total_processed += 1
-
+                    traces = client.search_traces(
+                        project_name=project_name,
+                        filter_string=pagination_filter if pagination_filter else None,
+                        max_results=current_page_size,
+                        truncate=False,  # Don't truncate data for download
+                    )
+                    console.print(
+                        f"[blue]DEBUG: Found {len(traces) if traces else 0} traces[/blue]"
+                    )
                 except Exception as e:
-                    console.print(f"[red]Error exporting trace {trace.id}: {e}[/red]")
+                    console.print(f"[red]Error searching traces: {e}[/red]")
+                    break
+
+                if not traces:
+                    # No more traces to process
+                    break
+
+                # Update progress description
+                progress.update(
+                    task, description=f"Found {len(traces)} traces in current batch"
+                )
+
+                # Store original traces for pagination before filtering
+                original_traces = traces
+
+                # Filter traces by name pattern if specified
+                if name_pattern:
+                    original_count = len(traces)
+                    traces = [
+                        trace
+                        for trace in traces
+                        if _matches_name_pattern(trace.name or "", name_pattern)
+                    ]
+                    if len(traces) < original_count:
+                        console.print(
+                            f"[blue]Filtered to {len(traces)} traces matching pattern '{name_pattern}' in current batch[/blue]"
+                        )
+
+                if not traces:
+                    # No traces match the name pattern, but we might have more to process
+                    # Use original_traces for pagination, not the filtered empty list
+                    last_trace_time = (
+                        original_traces[0].start_time if original_traces else None
+                    )
+                    total_processed += current_page_size
                     continue
 
-            # Update last trace time for pagination
-            if traces:
-                last_trace_time = traces[-1].start_time
+                # Update progress for downloading
+                progress.update(
+                    task,
+                    description=f"Downloading traces... (batch {total_processed // page_size + 1})",
+                )
 
-            # If we got fewer traces than requested, we've reached the end
-            if len(traces) < current_page_size:
-                break
+                # Download each trace with its spans
+                for trace in traces:
+                    try:
+                        # Get spans for this trace
+                        spans = client.search_spans(
+                            project_name=project_name,
+                            trace_id=trace.id,
+                            max_results=1000,  # Get all spans for the trace
+                            truncate=False,
+                        )
 
-        # Final progress update
-        if exported_count == 0:
-            console.print("[yellow]No traces found in the project.[/yellow]")
-        else:
-            progress.update(task, description=f"Exported {exported_count} traces total")
+                        # Create trace data structure
+                        trace_data = {
+                            "trace": trace.model_dump(),
+                            "spans": [span.model_dump() for span in spans],
+                            "downloaded_at": datetime.now().isoformat(),
+                            "project_name": project_name,
+                        }
+
+                        if trace_format.lower() == "csv":
+                            # Stream CSV rows directly to file
+                            csv_rows = _trace_to_csv_rows(trace_data)
+
+                            # Initialize CSV writer on first trace
+                            if csv_writer is None:
+                                csv_file = project_dir / f"traces_{project_name}.csv"
+                                csv_file_handle = open(
+                                    csv_file, "w", newline="", encoding="utf-8"
+                                )
+                                if csv_rows:
+                                    csv_fieldnames = csv_rows[0].keys()
+                                    csv_writer = csv.DictWriter(
+                                        csv_file_handle, fieldnames=csv_fieldnames
+                                    )
+                                    csv_writer.writeheader()
+
+                            # Write rows immediately
+                            if csv_writer and csv_rows:
+                                csv_writer.writerows(csv_rows)
+                        else:
+                            # Save to JSON file
+                            trace_file = project_dir / f"trace_{trace.id}.json"
+                            with open(trace_file, "w", encoding="utf-8") as f:
+                                json.dump(trace_data, f, indent=2, default=str)
+
+                        exported_count += 1
+                        total_processed += 1
+
+                    except Exception as e:
+                        console.print(
+                            f"[red]Error exporting trace {trace.id}: {e}[/red]"
+                        )
+                        continue
+
+                # Update last trace time for pagination
+                if traces:
+                    last_trace_time = traces[-1].start_time
+
+                # If we got fewer traces than requested, we've reached the end
+                if len(traces) < current_page_size:
+                    break
+
+            # Final progress update
+            if exported_count == 0:
+                console.print("[yellow]No traces found in the project.[/yellow]")
+            else:
+                progress.update(
+                    task, description=f"Exported {exported_count} traces total"
+                )
+
+    finally:
+        # Close CSV file if it was opened
+        if csv_file_handle:
+            csv_file_handle.close()
+        if csv_file and csv_file.exists():
+            console.print(f"[green]CSV file saved to {csv_file}[/green]")
 
     return exported_count
 
@@ -381,6 +464,12 @@ def _export_prompts(
     is_flag=True,
     help="Enable debug output to show detailed information about the export process.",
 )
+@click.option(
+    "--trace-format",
+    type=click.Choice(["json", "csv"], case_sensitive=False),
+    default="json",
+    help="Format for exporting traces. Defaults to json.",
+)
 def export(
     workspace_or_project: str,
     path: str,
@@ -391,6 +480,7 @@ def export(
     exclude: tuple,
     name: Optional[str],
     debug: bool,
+    trace_format: str,
 ) -> None:
     """
     Download data from a workspace or workspace/project to local files.
@@ -499,7 +589,13 @@ def export(
                         f"[blue]DEBUG: Calling _export_traces with project_name: {project_name}, project_dir: {project_dir}[/blue]"
                     )
                 traces_exported = _export_traces(
-                    client, project_name, project_dir, max_results, filter, name
+                    client,
+                    project_name,
+                    project_dir,
+                    max_results,
+                    filter,
+                    name,
+                    trace_format,
                 )
                 if debug:
                     console.print(
@@ -605,7 +701,13 @@ def export(
                         project_dir.mkdir(parents=True, exist_ok=True)
 
                         traces_exported = _export_traces(
-                            client, project_name, project_dir, max_results, filter, name
+                            client,
+                            project_name,
+                            project_dir,
+                            max_results,
+                            filter,
+                            name,
+                            trace_format,
                         )
                         total_exported += traces_exported
 
