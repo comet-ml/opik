@@ -6,6 +6,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
 import { containsHTML } from "@/lib/utils";
+import { stripImageTags } from "@/lib/llm";
 import useLocalStorageState from "use-local-storage-state";
 import sanitizeHtml from "sanitize-html";
 
@@ -15,10 +16,14 @@ const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
 
 /**
  * Strips HTML/Markdown tags from text to show clean plain text
+ * Removes image tag markup, keeping only the URL
  */
 const stripHtmlTags = (text: string): string => {
-  // First, sanitize all HTML tags and entities
-  let sanitized = sanitizeHtml(text, {
+  // Strip image tags first, keeping only URLs
+  let sanitized = stripImageTags(text);
+
+  // Sanitize all HTML tags and entities
+  sanitized = sanitizeHtml(sanitized, {
     allowedTags: [],
     allowedAttributes: {},
   });
