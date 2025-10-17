@@ -62,7 +62,7 @@ Send alerts to a Slack channel using Slack's Incoming Webhooks:
 
 1. [Create a Slack app and enable Incoming Webhooks](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
 2. Create a webhook URL (e.g., `https://hooks.slack.com/services/T00000000/B00000000/XXXX`)
-3. For better formatting, create a middleware service that transforms Opik's payload into Slack's Block Kit format
+3. Create a middleware service that transforms Opik's payload into Slack's Block Kit format
 4. In middleware service use Slack webhook URL created in step 2
 5. In Opik, create an alert with your middleware service URL as webhook URL
 
