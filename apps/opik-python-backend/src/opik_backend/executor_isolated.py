@@ -354,6 +354,7 @@ except Exception as e:
                 from opik_backend.subprocess_log_manager import SubprocessLogManager
                 
                 backend_url = SubprocessLogConfig.get_backend_url()
+                log_manager = None
                 
                 try:
                     log_manager = SubprocessLogManager(
@@ -368,13 +369,14 @@ except Exception as e:
                     log_manager.initialize()
                     log_manager.process_output(stdout, stderr)
                     
-                    # Register cleanup in teardown callbacks
-                    self.register_teardown_callback(log_manager.close)
-                    
                 except (ValueError, ImportError) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
                     self.logger.error(f"Unexpected error during subprocess log collection: {e}")
+                finally:
+                    # Ensure logger is properly closed immediately after processing
+                    if log_manager:
+                        log_manager.close()
 
             # Parse result from stdout
             if process.returncode == 0:
