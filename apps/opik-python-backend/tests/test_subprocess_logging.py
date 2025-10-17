@@ -167,16 +167,11 @@ print(json.dumps(result))
             )
             after_time = int(time.time() * 1000)
             
-            # Verify result
             assert result['status'] == 'ok'
             
             time.sleep(0.5)
-            # The mock_post patch is removed, so we can't check the call_count directly here.
-            # The mock_backend fixture captures the requests.
             
             # Extract and validate payload
-            # The mock_backend fixture captures the requests, so we can't check the payload directly here.
-            # We need to inspect the captured requests from the mock_backend fixture.
             captured_requests = LogCapturingHandler.captured_requests
             assert len(captured_requests) == 1
             
@@ -253,12 +248,8 @@ print(json.dumps(result))
             assert result['status'] == 'ok'
             
             time.sleep(0.5)
-            # The mock_post patch is removed, so we can't check the call_count directly here.
-            # The mock_backend fixture captures the requests.
             
             # Extract and validate payload
-            # The mock_backend fixture captures the requests, so we can't check the payload directly here.
-            # We need to inspect the captured requests from the mock_backend fixture.
             captured_requests = LogCapturingHandler.captured_requests
             assert len(captured_requests) == 1
             
@@ -354,8 +345,6 @@ print(json.dumps(result))
             assert result['task_id'] == 42
             
             time.sleep(0.5)
-            # The mock_post patch is removed, so we can't check the call_count directly here.
-            # The mock_backend fixture captures the requests.
             
             captured_requests = LogCapturingHandler.captured_requests
             assert len(captured_requests) == 1
@@ -437,8 +426,6 @@ print(json.dumps(result))
             assert result['processed'] == 3
             
             time.sleep(0.5)
-            # The mock_post patch is removed, so we can't check the call_count directly here.
-            # The mock_backend fixture captures the requests.
             
             captured_requests = LogCapturingHandler.captured_requests
             assert len(captured_requests) == 1
