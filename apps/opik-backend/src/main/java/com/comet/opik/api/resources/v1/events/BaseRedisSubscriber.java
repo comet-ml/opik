@@ -240,7 +240,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return Flux.interval(config.getPoolingInterval().toJavaDuration(), timerScheduler)
                 .onBackpressureDrop(i -> {
                     intervalDrops.add(1);
-                    log.warn("Interval dropped due to backpressure");
+                    //                    log.debug("Interval dropped due to backpressure");
                 })
                 // TODO: test publish on here
                 // TODO: Implement claimer of orphan pending messages
