@@ -66,13 +66,13 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
+        optimizer._increment_llm_counter()
         assert optimizer.llm_call_counter == 1
 
-        optimizer.increment_tool_counter()
+        optimizer._increment_tool_counter()
         assert optimizer.tool_call_counter == 1
 
-        optimizer.reset_counters()
+        optimizer._reset_counters()
         assert optimizer.llm_call_counter == 0
         assert optimizer.tool_call_counter == 0
 
@@ -84,8 +84,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -98,8 +98,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -112,8 +112,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -126,8 +126,8 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1
@@ -140,7 +140,7 @@ class TestCounterFunctionality:
         assert optimizer.tool_call_counter == 0
 
         # Test counter methods
-        optimizer.increment_llm_counter()
+        optimizer._increment_llm_counter()
         optimizer.increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
@@ -151,15 +151,15 @@ class TestCounterFunctionality:
         optimizer = GepaOptimizer(model="gpt-4o-mini")
 
         # Increment counters
-        optimizer.increment_llm_counter()
-        optimizer.increment_llm_counter()
-        optimizer.increment_tool_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_llm_counter()
+        optimizer._increment_tool_counter()
 
         assert optimizer.llm_call_counter == 2
         assert optimizer.tool_call_counter == 1
 
         # Reset counters
-        optimizer.reset_counters()
+        optimizer._reset_counters()
 
         assert optimizer.llm_call_counter == 0
         assert optimizer.tool_call_counter == 0
@@ -174,7 +174,7 @@ class TestCounterFunctionality:
         )
 
         # Setup agent class
-        agent_class = optimizer.setup_agent_class(prompt)
+        agent_class = optimizer._setup_agent_class(prompt)
         agent = agent_class(prompt)
 
         # Check that agent has optimizer reference

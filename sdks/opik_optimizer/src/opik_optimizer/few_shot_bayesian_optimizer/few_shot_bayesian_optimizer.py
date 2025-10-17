@@ -8,13 +8,11 @@ import logging
 import random
 from datetime import datetime
 
-import litellm
 import optuna
 import optuna.samplers
 
 import opik
 from opik import Dataset
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
@@ -77,7 +75,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def __init__(
         self,
-        model: str,
+        model: str = "gpt-4o",
         min_examples: int = 2,
         max_examples: int = 8,
         seed: int = 42,
@@ -87,7 +85,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> None:
         """
         Args:
-            model: The model to used to evaluate the prompt
+            model: The model used for the optimization algorithm (generating few-shot templates)
             min_examples: Minimum number of examples to include
             max_examples: Maximum number of examples to include
             seed: Random seed for reproducibility
@@ -123,49 +121,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "min_examples": self.min_examples,
             "max_examples": self.max_examples,
         }
-
-    @_throttle.rate_limited(_limiter)
-    def _call_model(
-        self,
-        model: str,
-        messages: list[dict[str, str]],
-        seed: int,
-        model_kwargs: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Args:
-            model: The model to use for the call
-            messages: List of message dictionaries with 'role' and 'content' keys
-            seed: Random seed for reproducibility
-            model_kwargs: Additional model parameters
-
-        Returns:
-            Dict containing the model's response
-        """
-        self.increment_llm_counter()
-
-        current_model_kwargs = self.model_kwargs.copy()
-        current_model_kwargs.update(model_kwargs)
-
-        filtered_call_kwargs = current_model_kwargs.copy()
-        filtered_call_kwargs.pop("n_trials", None)
-        filtered_call_kwargs.pop("n_samples", None)
-        filtered_call_kwargs.pop("n_iterations", None)
-        filtered_call_kwargs.pop("min_examples", None)
-        filtered_call_kwargs.pop("max_examples", None)
-
-        final_params_for_litellm = (
-            opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
-        )
-
-        response = litellm.completion(
-            model=self.model,
-            messages=messages,
-            seed=seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-        return response
 
     def _split_dataset(
         self, dataset: list[dict[str, Any]], train_ratio: float
@@ -230,18 +185,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         ]
 
         logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
-        response = self._call_model(model, messages, self.seed, self.model_kwargs)
-        logger.debug(f"fewshot_prompt_template - LLM response: {response}")
+        response_content = self._call_model(messages, model=model, seed=self.seed)
+        logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
 
         try:
-            res = utils.json_to_dict(response["choices"][0]["message"]["content"])
+            res = utils.json_to_dict(response_content)
             return FewShotPromptTemplate(
                 message_list_with_placeholder=res["message_list_with_placeholder"],
                 example_template=res["example_template"],
             )
         except Exception as e:
             logger.error(
-                f"Failed to compute few-shot prompt template: {e} - response: {response}"
+                f"Failed to compute few-shot prompt template: {e} - response: {response_content}"
             )
             raise
 
@@ -523,8 +478,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             OptimizationResult: Result of the optimization
         """
         # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        self._validate_optimization_inputs(prompt, dataset, metric)
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
         # Extract n_trials from kwargs for backward compatibility
         n_trials = kwargs.get("n_trials", 10)
@@ -608,7 +563,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples=n_samples,
         )
         if optimization:
-            self.update_optimization(optimization, status="completed")
+            self._update_optimization(optimization, status="completed")
 
         utils.enable_experiment_reporting()
         return result

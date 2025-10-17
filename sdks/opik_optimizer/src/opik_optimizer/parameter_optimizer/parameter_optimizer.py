@@ -29,7 +29,7 @@ class ParameterOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str,
+        model: str = "gpt-4o",
         *,
         default_n_trials: int = 20,
         n_threads: int = 4,
@@ -96,7 +96,7 @@ class ParameterOptimizer(BaseOptimizer):
             extra_keys = ", ".join(sorted(kwargs.keys()))
             raise TypeError(f"Unsupported keyword arguments: {extra_keys}")
 
-        self.validate_optimization_inputs(prompt, dataset, metric)
+        self._validate_optimization_inputs(prompt, dataset, metric)
 
         base_model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
         base_prompt = prompt.copy()
@@ -104,7 +104,7 @@ class ParameterOptimizer(BaseOptimizer):
 
         metric_name = getattr(metric, "__name__", str(metric))
 
-        self.agent_class = self.setup_agent_class(base_prompt, agent_class)
+        self.agent_class = self._setup_agent_class(base_prompt, agent_class)
         baseline_score = self.evaluate_prompt(
             prompt=base_prompt,
             dataset=dataset,
@@ -166,7 +166,7 @@ class ParameterOptimizer(BaseOptimizer):
                 sampled_values,
                 base_model_kwargs=base_model_kwargs,
             )
-            tuned_agent_class = self.setup_agent_class(tuned_prompt, agent_class)
+            tuned_agent_class = self._setup_agent_class(tuned_prompt, agent_class)
             score = self.evaluate_prompt(
                 prompt=tuned_prompt,
                 dataset=dataset,

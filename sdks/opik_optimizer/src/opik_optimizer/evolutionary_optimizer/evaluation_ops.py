@@ -15,7 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 class EvaluationOps:
     if TYPE_CHECKING:
         agent_class: type[Any]
-        num_threads: int
+        n_threads: int
 
     def _evaluate_prompt(
         self,
@@ -126,7 +126,7 @@ class EvaluationOps:
             dataset_item_ids=dataset_item_ids,
             metric=metric,
             evaluated_task=llm_task,
-            num_threads=self.num_threads,
+            num_threads=self.n_threads,
             project_name=experiment_config.get("project_name"),
             n_samples=n_samples if dataset_item_ids is None else None,
             experiment_config=experiment_config,

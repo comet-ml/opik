@@ -20,7 +20,7 @@ from . import _throttle, optimization_result
 from .cache_config import initialize_cache
 from .optimization_config import chat_prompt, mappers
 from .optimizable_agent import OptimizableAgent
-from .utils import create_litellm_agent_class, optimization_context
+from .utils import create_litellm_agent_class
 from . import task_evaluator
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -81,16 +81,16 @@ class BaseOptimizer(ABC):
         # Initialize shared cache
         initialize_cache()
 
-    def reset_counters(self) -> None:
+    def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
         self.llm_call_counter = 0
         self.tool_call_counter = 0
 
-    def increment_llm_counter(self) -> None:
+    def _increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
         self.llm_call_counter += 1
 
-    def increment_tool_counter(self) -> None:
+    def _increment_tool_counter(self) -> None:
         """Increment the tool call counter."""
         self.tool_call_counter += 1
 
@@ -100,7 +100,7 @@ class BaseOptimizer(ABC):
         Should be called when the optimizer is no longer needed.
         """
         # Reset counters
-        self.reset_counters()
+        self._reset_counters()
 
         # Clear history to free memory
         self._history.clear()
@@ -129,7 +129,7 @@ class BaseOptimizer(ABC):
             self._opik_client = opik.Opik()
         return self._opik_client
 
-    def validate_optimization_inputs(
+    def _validate_optimization_inputs(
         self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
     ) -> None:
         """
@@ -154,7 +154,7 @@ class BaseOptimizer(ABC):
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
 
-    def setup_agent_class(
+    def _setup_agent_class(
         self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
     ) -> Any:
         """
@@ -172,6 +172,136 @@ class BaseOptimizer(ABC):
         else:
             return agent_class
 
+    def _extract_tool_prompts(
+        self, tools: list[dict[str, Any]] | None
+    ) -> dict[str, str] | None:
+        """
+        Extract tool names and descriptions from tools list.
+
+        Args:
+            tools: List of tool definitions in OpenAI/LiteLLM format
+
+        Returns:
+            Dictionary mapping tool names to descriptions, or None if no tools
+        """
+        if not tools:
+            return None
+
+        return {
+            (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
+                "function", {}
+            ).get("description", "")
+            for idx, tool in enumerate(tools)
+        }
+
+    # ------------------------------------------------------------------
+    # LLM call methods
+    # ------------------------------------------------------------------
+
+    def _prepare_model_params(
+        self,
+        model_kwargs: dict[str, Any],
+        response_model: type[BaseModel] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Prepare parameters for LiteLLM call by filtering and adding monitoring.
+
+        Args:
+            model_kwargs: Additional model parameters
+            response_model: Optional Pydantic model for structured output
+
+        Returns:
+            Dictionary of parameters ready for litellm.completion/acompletion
+        """
+        from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+
+        current_model_kwargs = self.model_kwargs.copy()
+        current_model_kwargs.update(model_kwargs)
+
+        # Filter out optimizer-specific kwargs that shouldn't be passed to LiteLLM
+        filtered_call_kwargs = current_model_kwargs.copy()
+        filtered_call_kwargs.pop("n_trials", None)
+        filtered_call_kwargs.pop("n_samples", None)
+        filtered_call_kwargs.pop("n_iterations", None)
+        filtered_call_kwargs.pop("min_examples", None)
+        filtered_call_kwargs.pop("max_examples", None)
+        filtered_call_kwargs.pop("project_name", None)
+
+        final_params_for_litellm = (
+            opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
+        )
+
+        # Add structured output support if response_model is provided
+        # According to LiteLLM docs: https://docs.litellm.ai/docs/completion/json_mode
+        # Pass the Pydantic model directly to response_format
+        if response_model is not None:
+            final_params_for_litellm["response_format"] = response_model
+
+        return final_params_for_litellm
+
+    def _parse_response(
+        self,
+        response: Any,
+        response_model: type[BaseModel] | None = None,
+    ) -> BaseModel | str:
+        """
+        Parse LiteLLM response, with optional structured output parsing.
+
+        Args:
+            response: The response from litellm.completion/acompletion
+            response_model: Optional Pydantic model for structured output
+
+        Returns:
+            If response_model is provided, returns an instance of that model.
+            Otherwise, returns the raw string response.
+        """
+        content = response.choices[0].message.content
+
+        # When using structured outputs with Pydantic models, LiteLLM automatically
+        # parses the response. Parse the JSON string into the Pydantic model
+        if response_model is not None:
+            return response_model.model_validate_json(content)
+
+        return content
+
+    @_throttle.rate_limited(_limiter)
+    def _call_model(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        seed: int | None = None,
+        response_model: type[BaseModel] | None = None,
+        **model_kwargs: Any,
+    ) -> BaseModel | str:
+        """
+        Call the LLM model with optional structured output.
+
+        Args:
+            messages: List of message dictionaries with 'role' and 'content' keys
+            model: The model to use (defaults to self.model)
+            seed: Random seed for reproducibility (defaults to self.seed)
+            response_model: Optional Pydantic model for structured output
+            **model_kwargs: Additional model parameters
+
+        Returns:
+            If response_model is provided, returns an instance of that model.
+            Otherwise, returns the raw string response.
+        """
+        self._increment_llm_counter()
+
+        final_params_for_litellm = self._prepare_model_params(
+            model_kwargs, response_model
+        )
+
+        response = litellm.completion(
+            model=model or self.model,
+            messages=messages,
+            seed=seed if seed is not None else self.seed,
+            num_retries=6,
+            **final_params_for_litellm,
+        )
+
+        return self._parse_response(response, response_model)
 
     # ------------------------------------------------------------------
     # Experiment metadata helpers
@@ -353,35 +483,6 @@ class BaseOptimizer(ABC):
 
         return self._drop_none(base_config)
 
-    def create_optimization_context(
-        self, dataset: "Dataset", metric: Callable, metadata: dict | None = None
-    ) -> Any:
-        """
-        Create optimization context for tracking.
-
-        Args:
-            dataset: The dataset being optimized
-            metric: The metric function
-            metadata: Additional metadata
-
-        Returns:
-            Optimization context manager
-        """
-        context_metadata = {
-            "optimizer": self.__class__.__name__,
-            "model": self.model,
-            "seed": self.seed,
-        }
-        if metadata:
-            context_metadata.update(metadata)
-
-        return optimization_context(
-            client=self.opik_client,
-            dataset_name=dataset.name,
-            objective_name=metric.__name__,
-            metadata=context_metadata,
-        )
-
     @abstractmethod
     def optimize_prompt(
         self,
@@ -510,7 +611,7 @@ class BaseOptimizer(ABC):
         """
         self._history.append(round_data)
 
-    def update_optimization(
+    def _update_optimization(
         self, optimization: optimization.Optimization, status: str
     ) -> None:
         """

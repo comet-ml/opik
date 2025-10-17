@@ -130,7 +130,7 @@ optimizer = EvolutionaryOptimizer(
                                         # e.g., "Produce concise, factual, single-sentence answers."
     infer_output_style=True,            # If true and output_style_guidance is not set, infer from dataset
     # Technical Parameters
-    n_threads=12,                       # Threads for parallel evaluation
+    n_threads=12,                       # Threads for parallel evaluation (default: 6)
     seed=42,                            # Random seed for reproducibility
     # LLM parameters (passed via **model_kwargs)
     temperature=0.5,                    # Temperature for LLM calls (evaluation and reasoning)

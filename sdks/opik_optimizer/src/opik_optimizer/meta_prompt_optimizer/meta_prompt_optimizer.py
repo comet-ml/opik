@@ -13,7 +13,6 @@ from litellm.caching import Cache
 from litellm.types.caching import LiteLLMCacheType
 from opik import Dataset
 from opik.environment import get_tqdm_for_current_environment
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from opik_optimizer import task_evaluator
 
@@ -137,7 +136,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         model: str = "gpt-4o",
         rounds: int = DEFAULT_ROUNDS,
         num_prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
-        num_threads: int | None = None,
         verbose: int = 1,
         enable_context: bool = True,
         n_threads: int = 12,
@@ -166,20 +164,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
         self.rounds = rounds
         self.num_prompts_per_round = num_prompts_per_round
-        if num_threads is not None:
-            warnings.warn(
-                "The 'num_threads' parameter is deprecated and will be removed in a future version. "
-                "Use 'n_threads' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            n_threads = num_threads
-        self.num_threads = n_threads
+        self.n_threads = n_threads
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
-        logger.debug(
-            f"Initialized MetaPromptOptimizer with model={model}"
-        )
+        logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(
             f"Optimization rounds: {rounds}, Prompts/round: {num_prompts_per_round}"
         )
@@ -190,85 +178,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             "num_prompts_per_round": self.num_prompts_per_round,
             "enable_context": self.enable_context,
         }
-
-    @_throttle.rate_limited(_rate_limiter)
-    def _call_model(
-        self,
-        project_name: str,
-        messages: list[dict[str, str]],
-        optimization_id: str | None = None,
-    ) -> str:
-        """Call the model with the given prompt and return the response."""
-        self.increment_llm_counter()
-        # Note: Basic retry logic could be added here using tenacity
-        try:
-            # Basic LLM parameters (e.g., temperature, max_tokens)
-            base_temperature = getattr(self, "temperature", 0.3)
-            base_max_tokens = getattr(self, "max_tokens", 3000)  # Use higher default for reasoning
-
-            llm_config_params = {
-                "temperature": base_temperature,
-                "max_tokens": base_max_tokens,
-                "top_p": getattr(self, "top_p", 1.0),
-                "frequency_penalty": getattr(self, "frequency_penalty", 0.0),
-                "presence_penalty": getattr(self, "presence_penalty", 0.0),
-            }
-
-            # Prepare metadata that we want to be part of the LLM call context.
-            metadata_for_opik: dict[str, Any] = {}
-            if project_name:
-                metadata_for_opik["project_name"] = (
-                    project_name  # Top-level for general use
-                )
-                metadata_for_opik["opik"] = {"project_name": project_name}
-
-            if optimization_id:
-                # Also add to opik-specific structure if project_name was added
-                if "opik" in metadata_for_opik:
-                    metadata_for_opik["opik"]["optimization_id"] = optimization_id
-
-            metadata_for_opik["optimizer_name"] = self.__class__.__name__
-            metadata_for_opik["opik_call_type"] = "optimization_algorithm"
-
-            if metadata_for_opik:
-                llm_config_params["metadata"] = metadata_for_opik
-
-            model_to_use = self.model
-
-            # Pass llm_config_params (which now includes our metadata) to the Opik monitor.
-            # The monitor is expected to return a dictionary suitable for spreading into litellm.completion,
-            # having handled our metadata and added any Opik-specific configurations.
-            final_call_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
-                llm_config_params.copy()
-            )
-
-            logger.debug(
-                f"Calling model '{model_to_use}' with messages: {messages}, "
-                f"final params for litellm (from monitor): {final_call_params}"
-            )
-
-            response = litellm.completion(
-                model=model_to_use,
-                messages=messages,
-                num_retries=6,
-                **final_call_params,
-            )
-            return response.choices[0].message.content
-        except litellm.exceptions.RateLimitError as e:
-            logger.error(f"LiteLLM Rate Limit Error: {e}")
-            raise
-        except litellm.exceptions.APIConnectionError as e:
-            logger.error(f"LiteLLM API Connection Error: {e}")
-            raise
-        except litellm.exceptions.ContextWindowExceededError as e:
-            logger.error(f"LiteLLM Context Window Exceeded Error: {e}")
-            # Log prompt length if possible? Needs access to prompt_for_llm here.
-            raise
-        except Exception:
-            # logger.error(
-            #    f"Error calling model '{model_to_use}': {type(e).__name__} - {e}"
-            # )
-            raise
 
     def _evaluate_prompt(
         self,
@@ -429,7 +338,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             metric=metric,
             evaluated_task=llm_task,
             dataset_item_ids=dataset_item_ids,
-            num_threads=self.num_threads,
+            num_threads=self.n_threads,
             project_name=self.agent_class.project_name,
             n_samples=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
@@ -474,8 +383,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             OptimizationResult: Structured result containing optimization details
         """
         # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        self._validate_optimization_inputs(prompt, dataset, metric)
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
@@ -531,13 +440,13 @@ class MetaPromptOptimizer(BaseOptimizer):
                 **kwargs,
             )
             if optimization:
-                self.update_optimization(optimization, status="completed")
+                self._update_optimization(optimization, status="completed")
                 logger.debug("Optimization completed successfully")
             return result
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
             if optimization:
-                self.update_optimization(optimization, status="cancelled")
+                self._update_optimization(optimization, status="cancelled")
                 logger.debug("Optimization marked as cancelled")
             raise e
 
@@ -620,7 +529,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.auto_continue = auto_continue
         self.dataset = dataset
         self.prompt = prompt
-        self.reset_counters()  # Reset counters for run
+        self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
         current_prompt = prompt
@@ -855,14 +764,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         if best_tools:
             details["final_tools"] = best_tools
 
-        tool_prompts = None
-        if best_tools:
-            tool_prompts = {
-                (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
-                    "function", {}
-                ).get("description")
-                for idx, tool in enumerate(best_tools)
-            }
+        tool_prompts = self._extract_tool_prompts(best_tools)
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -965,14 +867,24 @@ class MetaPromptOptimizer(BaseOptimizer):
             Return a valid JSON array as specified."""
 
             try:
+                # Prepare metadata for optimization algorithm call
+                metadata_for_call: dict[str, Any] = {}
+                if project_name:
+                    metadata_for_call["project_name"] = project_name
+                    metadata_for_call["opik"] = {"project_name": project_name}
+                if optimization_id and "opik" in metadata_for_call:
+                    metadata_for_call["opik"]["optimization_id"] = optimization_id
+                metadata_for_call["optimizer_name"] = self.__class__.__name__
+                metadata_for_call["opik_call_type"] = "optimization_algorithm"
+
                 # Use _call_model for optimization algorithm
                 content = self._call_model(
-                    project_name,
                     messages=[
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
                     optimization_id=optimization_id,
+                    metadata=metadata_for_call,
                 )
                 logger.debug(f"Raw response from reasoning model: {content}")
 
@@ -1127,13 +1039,23 @@ class MetaPromptOptimizer(BaseOptimizer):
             self.num_prompts_per_round, verbose=self.verbose
         ) as candidate_generation_report:
             try:
+                # Prepare metadata for optimization algorithm call
+                metadata_for_call_tools: dict[str, Any] = {}
+                if project_name:
+                    metadata_for_call_tools["project_name"] = project_name
+                    metadata_for_call_tools["opik"] = {"project_name": project_name}
+                if optimization_id and "opik" in metadata_for_call_tools:
+                    metadata_for_call_tools["opik"]["optimization_id"] = optimization_id
+                metadata_for_call_tools["optimizer_name"] = self.__class__.__name__
+                metadata_for_call_tools["opik_call_type"] = "optimization_algorithm"
+
                 content = self._call_model(
-                    project_name,
                     messages=[
                         {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": instruction},
                     ],
                     optimization_id=optimization_id,
+                    metadata=metadata_for_call_tools,
                 )
 
                 try:

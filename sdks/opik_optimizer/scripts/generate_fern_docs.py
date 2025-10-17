@@ -320,7 +320,6 @@ classes_to_document = [
     opik_optimizer.ParameterOptimizer,
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
-    opik_optimizer.MiproOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
     opik_optimizer.GepaOptimizer,
     opik_optimizer.HierarchicalReflectiveOptimizer,

@@ -30,7 +30,7 @@ class GepaOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str = "gpt-4o",
-        project_name: str | None = None,
+        n_threads: int = 6,
         verbose: int = 1,
         seed: int = 42,
         **model_kwargs: Any,
@@ -44,11 +44,6 @@ class GepaOptimizer(BaseOptimizer):
             raise ValueError("model cannot be empty or whitespace-only")
 
         # Validate optional parameters
-        if project_name is not None and not isinstance(project_name, str):
-            raise ValueError(
-                f"project_name must be a string or None, got {type(project_name).__name__}"
-            )
-
         if not isinstance(verbose, int):
             raise ValueError(
                 f"verbose must be an integer, got {type(verbose).__name__}"
@@ -60,29 +55,15 @@ class GepaOptimizer(BaseOptimizer):
             raise ValueError(f"seed must be an integer, got {type(seed).__name__}")
 
         super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
-        self.project_name = project_name
-        self.num_threads = self.model_kwargs.pop("num_threads", 6)
+        self.n_threads = n_threads
         self._gepa_live_metric_calls = 0
         self._adapter = None  # Will be set during optimization
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
-            "project_name": self.project_name,
             "model": self.model,
+            "n_threads": self.n_threads,
         }
-
-    def cleanup(self) -> None:
-        """
-        Clean up GEPA-specific resources.
-        """
-        # Call parent cleanup
-        super().cleanup()
-
-        # Clear GEPA-specific resources
-        self._adapter = None
-        self._gepa_live_metric_calls = 0
-
-        logger.debug("Cleaned up GEPA-specific resources")
 
     # ------------------------------------------------------------------
     # Helpers
@@ -186,7 +167,7 @@ class GepaOptimizer(BaseOptimizer):
             OptimizationResult: Result of the optimization
         """
         # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
+        self._validate_optimization_inputs(prompt, dataset, metric)
 
         # Extract GEPA-specific parameters from kwargs
         max_metric_calls: int | None = kwargs.get("max_metric_calls", 30)
@@ -206,8 +187,6 @@ class GepaOptimizer(BaseOptimizer):
         kwargs.pop("mcp_config", None)  # Added for MCP support (for future use)
 
         prompt = prompt.copy()
-        if self.project_name:
-            prompt.project_name = self.project_name
         if prompt.model is None:
             prompt.model = self.model
         if not prompt.model_kwargs:
@@ -229,7 +208,7 @@ class GepaOptimizer(BaseOptimizer):
         opt_id: str | None = None
         ds_id: str | None = getattr(dataset, "id", None)
 
-        opik_client = opik.Opik(project_name=self.project_name)
+        opik_client = opik.Opik(project_name=prompt.project_name)
 
         disable_experiment_reporting()
 
@@ -299,7 +278,7 @@ class GepaOptimizer(BaseOptimizer):
                     logger.exception("Baseline evaluation failed")
 
             adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
-            adapter_prompt.project_name = self.project_name
+            adapter_prompt.project_name = base_prompt.project_name
             adapter_prompt.model = self.model
             # Filter out GEPA-specific parameters that shouldn't be passed to LLM
             filtered_model_kwargs = {
@@ -382,7 +361,7 @@ class GepaOptimizer(BaseOptimizer):
                 candidate, seed_prompt_text
             )
             prompt_variant = self._apply_system_text(prompt, candidate_prompt)
-            prompt_variant.project_name = self.project_name
+            prompt_variant.project_name = prompt.project_name
             prompt_variant.model = self.model
             # Filter out GEPA-specific parameters that shouldn't be passed to LLM
             filtered_model_kwargs = {
@@ -447,7 +426,7 @@ class GepaOptimizer(BaseOptimizer):
         )
 
         final_prompt = self._apply_system_text(prompt, best_prompt_text)
-        final_prompt.project_name = self.project_name
+        final_prompt.project_name = prompt.project_name
         final_prompt.model = self.model
         # Filter out GEPA-specific parameters that shouldn't be passed to LLM
         filtered_model_kwargs = {
@@ -635,7 +614,7 @@ class GepaOptimizer(BaseOptimizer):
             dataset_item_ids=dataset_item_ids,
             metric=metric,
             evaluated_task=llm_task,
-            num_threads=self.num_threads,
+            num_threads=self.n_threads,
             project_name=experiment_config.get("project_name"),
             experiment_config=experiment_config,
             optimization_id=optimization_id,

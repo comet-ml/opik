@@ -42,7 +42,7 @@ class LlmSupport:
         frequency_penalty: float
         presence_penalty: float
 
-        def increment_llm_counter(self) -> None: ...
+        def _increment_llm_counter(self) -> None: ...
 
     @_throttle.rate_limited(_rate_limiter)
     def _call_model(
@@ -106,7 +106,7 @@ class LlmSupport:
                 response = litellm.completion(
                     model=self.model, messages=messages, **llm_config_params
                 )
-                self.increment_llm_counter()
+                self._increment_llm_counter()
                 return response.choices[0].message.content
             except (
                 litellm_exceptions.RateLimitError,

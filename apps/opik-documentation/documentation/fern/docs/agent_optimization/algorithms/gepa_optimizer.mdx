@@ -61,7 +61,7 @@ prompt = ChatPrompt(
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
     reflection_model="openai/gpt-4o",  # stronger reflector is often helpful
-    project_name="GEPA_TinyTest",
+    n_threads=6,
     temperature=0.2,
     max_tokens=200,
 )
@@ -130,7 +130,7 @@ prompt = ChatPrompt(
 optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",   # task model
     reflection_model="openai/gpt-4o",  # reflection model
-    project_name="GEPA-Hotpot",
+    n_threads=6,
     temperature=0.7,
     max_tokens=400,
 )
@@ -165,10 +165,11 @@ Constructor:
 
 ```python
 GepaOptimizer(
-    model: str,
-    project_name: str | None = None,
+    model: str = "gpt-4o",
     reflection_model: str | None = None,  # defaults to model if None
+    n_threads: int = 6,
     verbose: int = 1,
+    seed: int = 42,
     **model_kwargs,
 )
 ```

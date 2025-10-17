@@ -31,7 +31,6 @@ from opik_optimizer.utils.prompt_segments import extract_prompt_segments
 from .mcp import EvolutionaryMCPContext, finalize_mcp_result
 
 from . import reporting
-from .llm_support import LlmSupport
 from .mutation_ops import MutationOps
 from .crossover_ops import CrossoverOps
 from .population_ops import PopulationOps
@@ -98,18 +97,17 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
     def __init__(
         self,
-        model: str,
+        model: str = "gpt-4o",
         population_size: int = DEFAULT_POPULATION_SIZE,
         num_generations: int = DEFAULT_NUM_GENERATIONS,
         mutation_rate: float = DEFAULT_MUTATION_RATE,
         crossover_rate: float = DEFAULT_CROSSOVER_RATE,
         tournament_size: int = DEFAULT_TOURNAMENT_SIZE,
-        num_threads: int | None = None,
         elitism_size: int = DEFAULT_ELITISM_SIZE,
         adaptive_mutation: bool = DEFAULT_ADAPTIVE_MUTATION,
         enable_moo: bool = DEFAULT_ENABLE_MOO,
         enable_llm_crossover: bool = DEFAULT_ENABLE_LLM_CROSSOVER,
-        seed: int | None = DEFAULT_SEED,
+        seed: int = DEFAULT_SEED,
         output_style_guidance: str | None = None,
         infer_output_style: bool = False,
         verbose: int = 1,
@@ -157,20 +155,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
         self.tournament_size = tournament_size
-        if num_threads is not None:
-            warnings.warn(
-                "The 'num_threads' parameter is deprecated and will be removed in a future version. "
-                "Use 'n_threads' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            n_threads = num_threads
-        self.num_threads = n_threads
+        self.n_threads = n_threads
         self.elitism_size = elitism_size
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
-        self.seed = seed if seed is not None else self.DEFAULT_SEED
+        self.seed = seed
         self.output_style_guidance = (
             output_style_guidance
             if output_style_guidance is not None
@@ -249,8 +239,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 func = getattr(cls, name)
                 setattr(self, name, func.__get__(self, self.__class__))
 
-        # LLM calls
-        bind(LlmSupport, ["_call_model"])
+        # LLM calls - now inherited from BaseOptimizer
+        # bind(LlmSupport, ["_call_model"])  # Removed - using BaseOptimizer._call_model
 
         # Mutations
         bind(
@@ -537,8 +527,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
         """
         # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        self._validate_optimization_inputs(prompt, dataset, metric)
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
         # Extract MCP config from kwargs (for optional MCP workflows)
         mcp_config = kwargs.pop("mcp_config", None)
@@ -582,7 +572,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # Step 1. Step variables and define fitness function
-        self.reset_counters()  # Reset counters for run
+        self._reset_counters()  # Reset counters for run
         self._history: list[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
@@ -973,14 +963,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         final_tools = getattr(final_best_prompt, "tools", None)
         if final_tools:
             final_details["final_tools"] = final_tools
-            tool_prompts = {
-                (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
-                    "function", {}
-                ).get("description")
-                for idx, tool in enumerate(final_tools)
-            }
-        else:
-            tool_prompts = None
+        tool_prompts = self._extract_tool_prompts(final_tools)
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,
@@ -1089,7 +1072,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             self._mcp_context = previous_context
             self.enable_llm_crossover = previous_crossover
 
-        finalize_mcp_result(result, context, panel_style)
+        finalize_mcp_result(result, context, panel_style, optimizer=self)
         return result
 
     # Evaluation is provided by EvaluationOps
@@ -1101,7 +1084,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     def _get_reasoning_system_prompt_for_variation(self) -> str:
         return evo_prompts.variation_system_prompt(self.output_style_guidance)
 
-    def get_llm_crossover_system_prompt(self) -> str:
+    def _get_llm_crossover_system_prompt(self) -> str:
         return evo_prompts.llm_crossover_system_prompt(self.output_style_guidance)
 
     def _get_radical_innovation_system_prompt(self) -> str:

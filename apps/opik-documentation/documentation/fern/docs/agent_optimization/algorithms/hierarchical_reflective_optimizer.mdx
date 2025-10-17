@@ -113,7 +113,7 @@ optimizer = HierarchicalReflectiveOptimizer(
     max_iterations=5,                     # Maximum optimization iterations (default: 5)
     convergence_threshold=0.01,           # Stop if improvement < 1% (default: 0.01)
     # Technical Parameters
-    num_threads=12,                       # Parallel threads for evaluation
+    n_threads=12,                         # Parallel threads for evaluation
     max_parallel_batches=5,               # Max batches analyzed concurrently
     batch_size=25,                        # Test cases per batch (default: 25)
     verbose=1,                            # 0=quiet, 1=show progress
@@ -135,7 +135,7 @@ Key parameters include:
 **Model and Analysis:**
 - `reasoning_model`: The LLM used for root cause analysis, failure mode synthesis, and generating prompt improvements. This is typically a powerful model like GPT-4.
 - `batch_size`: Number of test cases per batch for root cause analysis (default: 25). Larger batches provide more context but use more tokens per analysis call.
-- `num_threads`: Number of parallel threads used for evaluating prompts against the dataset. Higher values speed up evaluation but increase concurrent API calls.
+- `n_threads`: Number of parallel threads used for evaluating prompts against the dataset. Higher values speed up evaluation but increase concurrent API calls.
 - `max_parallel_batches`: Maximum number of batches to analyze concurrently during hierarchical root cause analysis. Controls parallelism vs. memory/API usage.
 
 **Other:**
@@ -189,7 +189,7 @@ initial_prompt = ChatPrompt(
 # 4. Initialize the HierarchicalReflectiveOptimizer
 optimizer = HierarchicalReflectiveOptimizer(
     reasoning_model="openai/gpt-4.1",  # Strong model for analysis
-    num_threads=8,
+    n_threads=8,
     max_parallel_batches=5,
     seed=42,
     temperature=0.7
@@ -296,11 +296,11 @@ optimizer = HierarchicalReflectiveOptimizer(
 
 **Issue:** Optimization is slow
 
-- **Solution:** Reduce `n_samples`, increase `num_threads`, or decrease `max_parallel_batches` to balance speed vs. thoroughness.
+- **Solution:** Reduce `n_samples`, increase `n_threads`, or decrease `max_parallel_batches` to balance speed vs. thoroughness.
 
 **Issue:** Rate limiting errors
 
-- **Solution:** Decrease `max_parallel_batches` and `num_threads` to reduce concurrent API calls.
+- **Solution:** Decrease `max_parallel_batches` and `n_threads` to reduce concurrent API calls.
 
 ## Research and References
 

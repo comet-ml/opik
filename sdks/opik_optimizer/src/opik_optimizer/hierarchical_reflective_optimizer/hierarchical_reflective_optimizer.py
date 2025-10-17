@@ -6,7 +6,6 @@ import litellm
 from litellm.caching import Cache
 from litellm.types.caching import LiteLLMCacheType
 from opik.evaluation.evaluation_result import EvaluationResult
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 from opik.evaluation import evaluator as opik_evaluator
 
 from typing import Any, TypeVar
@@ -52,7 +51,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
     Args:
         model: LiteLLM model name for the optimization algorithm (reasoning and analysis) (default: "gpt-4o")
-        num_threads: Number of parallel threads for evaluation (default: 12)
+        n_threads: Number of parallel threads for evaluation (default: 12)
         verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
         seed: Random seed for reproducibility (default: 42)
         max_parallel_batches: Maximum number of batches to process concurrently during
@@ -70,7 +69,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str = "gpt-4o",
-        num_threads: int = 12,
+        n_threads: int = 12,
         verbose: int = 1,
         seed: int = 42,
         max_parallel_batches: int = 5,
@@ -79,10 +78,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         convergence_threshold: float = DEFAULT_CONVERGENCE_THRESHOLD,
         **model_kwargs: Any,
     ):
-        super().__init__(
-            model=model, verbose=verbose, seed=seed, **model_kwargs
-        )
-        self.num_threads = num_threads
+        super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
+        self.n_threads = n_threads
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
         self.max_iterations = max_iterations
@@ -97,109 +94,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             batch_size=self.batch_size,
             verbose=self.verbose,
         )
-
-    def _prepare_model_params(
-        self,
-        model_kwargs: dict[str, Any],
-        response_model: type[T] | None = None,
-    ) -> dict[str, Any]:
-        """
-        Prepare parameters for LiteLLM call by filtering and adding monitoring.
-
-        Args:
-            model_kwargs: Additional model parameters
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            Dictionary of parameters ready for litellm.completion/acompletion
-        """
-        current_model_kwargs = self.model_kwargs.copy()
-        current_model_kwargs.update(model_kwargs)
-
-        # Filter out optimizer-specific kwargs that shouldn't be passed to LiteLLM
-        filtered_call_kwargs = current_model_kwargs.copy()
-        filtered_call_kwargs.pop("n_trials", None)
-        filtered_call_kwargs.pop("n_samples", None)
-        filtered_call_kwargs.pop("n_iterations", None)
-        filtered_call_kwargs.pop("min_examples", None)
-        filtered_call_kwargs.pop("max_examples", None)
-        filtered_call_kwargs.pop("project_name", None)
-
-        final_params_for_litellm = (
-            opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
-        )
-
-        # Add structured output support if response_model is provided
-        # According to LiteLLM docs: https://docs.litellm.ai/docs/completion/json_mode
-        # Pass the Pydantic model directly to response_format
-        if response_model is not None:
-            final_params_for_litellm["response_format"] = response_model
-
-        return final_params_for_litellm
-
-    def _parse_response(
-        self,
-        response: Any,
-        response_model: type[T] | None = None,
-    ) -> T | str:
-        """
-        Parse LiteLLM response, with optional structured output parsing.
-
-        Args:
-            response: The response from litellm.completion/acompletion
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        content = response.choices[0].message.content
-
-        # When using structured outputs with Pydantic models, LiteLLM automatically
-        # parses the response. Parse the JSON string into the Pydantic model
-        if response_model is not None:
-            return response_model.model_validate_json(content)
-
-        return content
-
-    @_throttle.rate_limited(_rate_limiter)
-    def _call_model(
-        self,
-        model: str,
-        messages: list[dict[str, str]],
-        seed: int,
-        model_kwargs: dict[str, Any],
-        response_model: type[T] | None = None,
-    ) -> T | str:
-        """
-        Call the LLM model with optional structured output.
-
-        Args:
-            model: The model to use for the call
-            messages: List of message dictionaries with 'role' and 'content' keys
-            seed: Random seed for reproducibility
-            model_kwargs: Additional model parameters
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        self.increment_llm_counter()
-
-        final_params_for_litellm = self._prepare_model_params(
-            model_kwargs, response_model
-        )
-
-        response = litellm.completion(
-            model=model,
-            messages=messages,
-            seed=seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-
-        return self._parse_response(response, response_model)
 
     @_throttle.rate_limited(_rate_limiter)
     async def _call_model_async(
@@ -224,7 +118,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             If response_model is provided, returns an instance of that model.
             Otherwise, returns the raw string response.
         """
-        self.increment_llm_counter()
+        self._increment_llm_counter()
 
         final_params_for_litellm = self._prepare_model_params(
             model_kwargs, response_model
@@ -249,7 +143,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         """
         return {
             "model": self.model,
-            "num_threads": self.num_threads,
+            "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "max_iterations": self.max_iterations,
             "convergence_threshold": self.convergence_threshold,
@@ -343,7 +237,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             dataset=dataset,
             task=llm_task,
             scoring_metrics=[_create_metric_class(metric)],
-            task_threads=self.num_threads,
+            task_threads=self.n_threads,
             nb_samples=n_samples,
             experiment_config=experiment_config,
             verbose=self.verbose,
@@ -402,10 +296,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             )
 
         improve_prompt_response = self._call_model(
-            model=self.model,
             messages=[{"role": "user", "content": improve_prompt_prompt}],
+            model=self.model,
             seed=attempt_seed,
-            model_kwargs={},
             response_model=ImprovedPrompt,
         )
 
@@ -506,10 +399,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         **kwargs: Any,
     ) -> OptimizationResult:
         # Reset counters at the start of optimization
-        self.reset_counters()
+        self._reset_counters()
 
         # Setup agent class
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
@@ -730,7 +623,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "model": self.model,
             "temperature": (best_prompt.model_kwargs or {}).get("temperature")
             or self.model_kwargs.get("temperature"),
-            "num_threads": self.num_threads,
+            "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "max_retries": max_retries,
             "n_samples": n_samples,
@@ -741,14 +634,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         }
 
         # Extract tool prompts if tools exist
-        tool_prompts = None
-        if final_tools := getattr(best_prompt, "tools", None):
-            tool_prompts = {
-                tool.get("function", {}).get("name", f"tool_{idx}"): tool.get(
-                    "function", {}
-                ).get("description", "")
-                for idx, tool in enumerate(final_tools)
-            }
+        final_tools = getattr(best_prompt, "tools", None)
+        tool_prompts = self._extract_tool_prompts(final_tools)
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,

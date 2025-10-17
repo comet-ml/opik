@@ -1,15 +1,10 @@
 ---
 title: "Opik Agent Optimization Overview"
 subtitle: "Automate enhancing LLM prompts and agent performance."
-description: "Learn about Opik's automated LLM prompt and agent optimization SDK. Discover MetaPrompt, Few-shot Bayesian, MIPRO, and Evolutionary optimization algorithms for enhanced performance."
-keywords: "LLM optimization, prompt engineering, agent optimization, MetaPrompt, Few-shot learning, Bayesian optimization, MIPRO, Evolutionary algorithms, DSPy"
+description: "Learn about Opik's automated LLM prompt and agent optimization SDK. Discover MetaPrompt, Few-shot Bayesian, and Evolutionary optimization algorithms for enhanced performance."
+keywords: "LLM optimization, prompt engineering, agent optimization, MetaPrompt, Few-shot learning, Bayesian optimization, Evolutionary algorithms, DSPy"
 og:image: "/img/agent_optimization/introducing.png"
 ---
-
-<Warning>
-  Opik Agent Optimizer, including the optimizers described are currently in **Public Beta**. We are actively working on
-  improving these features and welcome your [feedback on GitHub](https://github.com/comet-ml/opik/issues)!
-</Warning>
 
 <Frame>
   <img src="/img/agent_optimization/introducing.png" alt="Introducing Opik Agent Optimizer" />
@@ -23,10 +18,127 @@ and running evaluation, you can use Opik Agent Optimizer to automatically optimi
   <img src="/img/agent_optimization/dashboard.png" alt="Opik Agent Optimizer Dashboard" />
 </Frame>
 
+## Opik Optimizer
+
+What set's the Opik optimizer apart from other optimization libraries is that you can optimize your
+existing agent, you do not need to rewrite your application using our framework ! Simply pass in
+your existing agent to get started:
+
+<Tabs>
+  <Tab title="Agent Optimization">
+    ```python
+        import opik
+    from opik.evaluation.metrics import score_result
+    import opik_optimizer
+
+    # Define the prompt to optimize
+    ## Define a simple tool
+    def get_context(question):
+      return "42 is the answer to everything."
+
+    prompt = opik_optimizer.ChatPrompt(
+      messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "{question}"},
+      ],
+      tools=[
+        {
+          "type": "function",
+          "function": {
+            "name": "get_context",
+            "description": "Always call this tool to get additional context",
+          }
+        }
+      ],
+      function_map={
+        "get_answer": opik.track(type="tool")(get_answer)
+      },
+      model="gpt-4o"
+    )
+
+    # Define the dataset to optimizer
+    client = opik.Opik()
+    dataset = client.get_or_create_dataset(name='prompt_optimization')
+    dataset.insert([
+      {"question": "What is agent optimization?"},
+      {"question": "What are best practices for prompt optimization?"},
+    ])
+
+    # Define the metric
+    def short_response(dataset_item, llm_output):
+      if len(llm_output) < 100:
+        return score_result.ScoreResult(
+          name="short_response",
+          value=1,
+          reason="Response is short as expected."
+        )
+      else:
+        return score_result.ScoreResult(
+          name="short_response",
+          value=0,
+          reason="Response is too long, should be less than 100 characters."
+        )
+
+    # Run the optimizer
+    optimizer = opik_optimizer.HierarchicalReflectiveOptimizer()
+    result = optimizer.optimize_prompt(
+      prompt=prompt,
+      dataset=dataset,
+      metric=short_response
+    )
+
+    result.display()
+    ```
+  </Tab>
+  <Tab title="Prompt Optimization">
+    Let's optimize a system prompt to make sure the response is not too long.
+
+    ```python
+    import opik
+    from opik.evaluation.metrics import score_result
+    import opik_optimizer
+
+    # Define the prompt to optimize
+    prompt = opik_optimizer.ChatPrompt(
+      messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "{question}"},
+      ],
+      model="gpt-4o"
+    )
+
+    # Define the dataset to optimizer
+    client = opik.Opik()
+    dataset = client.get_or_create_dataset(name='prompt_optimization')
+    dataset.insert([
+      {"question": "What is agent optimization?"},
+      {"question": "What are best practices for prompt optimization?"},
+    ])
+
+    # Define the metric
+    def short_response(dataset_item, llm_output):
+      if len(llm_output) < 100:
+        return score_result.ScoreResult(name="short_response", value=1, reason="Response is short as expected.")
+      else:
+        return score_result.ScoreResult(name="short_response", value=0, reason="Response is too long.")
+
+    # Run the optimizer
+    optimizer = opik_optimizer.HierarchicalReflectiveOptimizer()
+    result = optimizer.optimize_prompt(
+      prompt=prompt,
+      dataset=dataset,
+      metric=short_response
+    )
+
+    result.display()
+    ```
+  </Tab>
+</Tabs>
+
 ## Key Features
 
 - **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
-- **Multiple Optimization Algorithms**: Choose from evolutionary, few-shot, meta-prompt, MIPRO, and GEPA optimizers
+- **Multiple Optimization Algorithms**: Choose from evolutionary, few-shot, meta-prompt, and GEPA optimizers
 - **Optimizer Chaining**: Results from one optimizer can be used as input for another
 - **MCP Support**: Built-in support for Model Context Protocol tool calling
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
@@ -165,7 +277,6 @@ The following algorithms have been implemented:
 | [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. **Supports [MCP tool calling optimization](/agent_optimization/algorithms/tool_optimization).** |
 | [Hierarchical Reflective Optimization](/agent_optimization/algorithms/hierarchical_reflective_optimizer) | Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes. Best for complex prompts requiring systematic refinement based on understanding why they fail. |
 | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                      |
-| [MIPRO Optimization](/agent_optimization/algorithms/mipro_optimizer)                        | A prompt engineering algorithm that uses a MIPRO (Multi-Instance Prompt Refinement) approach to generate a set of candidate prompts and then uses a Bayesian optimization algorithm to identify the best prompt.     |
 | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
 | [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)                   | Wraps the external GEPA package to optimize a single system prompt for single-turn tasks using a reflection model. Requires `pip install gepa`.                                         |
 | [Parameter Optimization](/agent_optimization/algorithms/parameter_optimizer)                   | Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization. Uses Optuna for efficient parameter search with global and local search phases. Best for tuning model behavior without changing the prompt.                                         |
@@ -198,7 +309,6 @@ Each optimization algorithm is evaluated against different use-cases and dataset
 | ---- | -------------------------------- | ------------- | ------ | ------ | -------- | -------- |
 | 1    | Few-shot Bayesian Optimization   | 67.33%        | 28.09% | 59.26% | 91.80%   | 90.15%   |
 | 2    | Evolutionary Optimization        | 63.13%        | 40.00% | 25.53% | 95.00%   | 92.00%   |
-| 3    | Mipro Optimization (w/ no tools) | 55.91%        | 19.70% | 39.70% | 92.70%   | 89.28%   |
 | 4    | MetaPrompt Optimization          | 52.01%        | 25.00% | 26.93% | 91.79%   | 64.31%   |
 | 5    | GEPA Optimization                | 46.80%        | 6.55%  | 26.08% | 90.42%   | 64.17%   |
 | 6    | No optimization                  | 11.99%        | 1.69%  | 24.06% | 12.38%   | 9.81%    |
