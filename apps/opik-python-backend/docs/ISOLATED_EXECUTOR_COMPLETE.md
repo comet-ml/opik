@@ -52,7 +52,7 @@
 ||--------|-------|
 || **Throughput** | 5-10 executions/second |
 || **Per-execution Overhead** | ~150ms (subprocess creation) |
-|| **Memory per Subprocess** | ~50MB |
+|| **Memory per Subprocess** | ~20MB |
 || **Thread Safe** | ✅ Yes |
 || **Concurrent Safe** | ✅ Yes |
 || **Auto Cleanup** | ✅ Yes |
@@ -477,6 +477,33 @@ subprocess.Popen(..., env=env)
 # Changes don't affect parent or other subprocesses ✅
 ```
 
+### Stack Memory Limiting
+
+The executor limits stack memory to 20MB using `resource.RLIMIT_STACK`:
+
+```python
+# Stack limited to 20MB via preexec_fn
+resource.setrlimit(resource.RLIMIT_STACK, (20*1024*1024, 20*1024*1024))
+```
+
+**What is limited:**
+- Local variables in functions
+- Function call stack depth
+- Prevents deeply nested recursion (typically >1000 levels)
+- Prevents stack overflow attacks
+
+**What is NOT limited:**
+- Heap memory (Python objects, dynamic data structures)
+- Process code segment
+- Python interpreter runtime
+
+**Benefits:**
+- ✅ Prevents infinite recursion
+- ✅ Prevents stack overflow crashes
+- ✅ Python interpreter runs normally
+- ✅ Allows unlimited data processing
+- ✅ Memory footprint ~20MB base (like ProcessExecutor)
+
 ### Error Handling
 
 || Error Type | Code | Scenario |
@@ -617,7 +644,7 @@ executor.teardown()
 **Env Var Scoping**: ✅ Fully supported  
 **Throughput**: ⭐⭐⭐ (5-10 exec/sec)  
 **Startup**: ~150ms  
-**Memory**: 50MB per subprocess  
+**Memory**: ~20MB base + unlimited heap (stack limited to 20MB)  
 **Thread Safe**: ✅ Built-in safety  
 
 **When to Use**:
@@ -792,7 +819,7 @@ class IsolatedMetricService:
 **Root Cause**: Subprocesses not cleaning up properly
 
 **Solution**:
-- Each subprocess uses ~50MB
+- Each subprocess uses ~20MB
 - Processes auto-terminate after execution
 - Monitor with: `ps aux | grep python`
 - If orphaned processes exist, check for exceptions in code

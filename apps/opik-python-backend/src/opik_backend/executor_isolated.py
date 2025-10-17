@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import resource
 import subprocess
 import sys
 import time
@@ -26,10 +27,29 @@ isolated_execution_histogram = meter.create_histogram(
     unit="ms",
 )
 
+# Memory limit for subprocesses in bytes (20MB)
+SUBPROCESS_MEMORY_LIMIT_BYTES = 20 * 1024 * 1024  # 20MB
+
 
 def _calculate_latency_ms(start_time):
     """Calculate elapsed time in milliseconds."""
     return (time.time() - start_time) * 1000
+
+
+def _set_memory_limit():
+    """Set memory limit for subprocess to 20MB.
+    
+    Uses RLIMIT_STACK to limit only stack size.
+    This prevents deeply nested calls and excessive local variables
+    while allowing the Python interpreter and runtime heap to function normally.
+    """
+    try:
+        # RLIMIT_STACK limits stack size only (local variables, call stack depth)
+        # Prevents stack overflow from deeply nested recursion
+        # Does NOT limit heap or runtime data structures
+        resource.setrlimit(resource.RLIMIT_STACK, (SUBPROCESS_MEMORY_LIMIT_BYTES, SUBPROCESS_MEMORY_LIMIT_BYTES))
+    except Exception as e:
+        logger.warning(f"Failed to set stack memory limit: {e}")
 
 
 class IsolatedSubprocessExecutor:
@@ -107,6 +127,7 @@ class IsolatedSubprocessExecutor:
                 stderr=subprocess.PIPE,
                 env=subprocess_env,
                 text=True,
+                preexec_fn=_set_memory_limit,  # Apply memory limit to subprocess
             )
 
             # Track active process
