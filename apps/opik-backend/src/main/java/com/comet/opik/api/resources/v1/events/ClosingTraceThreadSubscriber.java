@@ -30,14 +30,13 @@ public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWit
     @Inject
     protected ClosingTraceThreadSubscriber(@NonNull @Config TraceThreadConfig config,
             @NonNull RedissonReactiveClient redisson, TraceThreadService traceThreadService) {
-        super(config, redisson, TraceThreadBufferConfig.BUFFER_SET_NAME, TraceThreadConfig.PAYLOAD_FIELD);
+        super(config,
+                redisson,
+                TraceThreadConfig.PAYLOAD_FIELD,
+                SUBSCRIBER_NAMESPACE,
+                TraceThreadBufferConfig.BUFFER_SET_NAME);
         this.traceThreadService = traceThreadService;
         this.config = config;
-    }
-
-    @Override
-    protected String getMetricNamespace() {
-        return SUBSCRIBER_NAMESPACE;
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -29,6 +30,11 @@ public class OnlineScoringConfig {
     private Duration poolingInterval;
 
     @Valid @JsonProperty
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
+    private Duration longPollingDuration;
+
+    @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
 
     @Data
@@ -48,5 +54,10 @@ public class OnlineScoringConfig {
         @Valid @JsonProperty
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         private Duration poolingInterval;
+
+        @Valid @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
+        private Duration longPollingDuration;
     }
 }
