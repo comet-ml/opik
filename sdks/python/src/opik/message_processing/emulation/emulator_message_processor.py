@@ -3,7 +3,7 @@ import collections
 import datetime
 import logging
 import threading
-from typing import List, Dict, Union, Optional, Any
+from typing import List, Dict, Union, Optional, Any, Type, Callable
 
 from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
@@ -42,6 +42,8 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
     def __init__(self, active: bool, merge_duplicates: bool) -> None:
         self.merge_duplicates = merge_duplicates
         self._active = active
+
+        self._register_handlers()
 
         self._rlock = threading.RLock()
 
@@ -177,183 +179,15 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             self._span_trees.sort(key=lambda x: x.start_time)
 
     def _dispatch_message(self, message: messages.BaseMessage) -> None:
-        if isinstance(message, messages.CreateTraceMessage):
-            trace = self.create_trace_model(
-                trace_id=message.trace_id,
-                name=message.name,
-                input=message.input,
-                output=message.output,
-                tags=message.tags,
-                metadata=message.metadata,
-                start_time=message.start_time,
-                end_time=message.end_time,
-                project_name=message.project_name,
-                error_info=message.error_info,
-                thread_id=message.thread_id,
-                last_updated_at=message.last_updated_at,
-                feedback_scores=None,
-                spans=None,
-            )
+        message_type = type(message)
+        handler = self._handlers.get(message_type)
+        if handler is None:
+            LOGGER.debug("Unknown type of message - %s", message_type.__name__)
+            return
 
-            self._save_trace(trace)
+        handler(message)
 
-        elif isinstance(message, trace_write.TraceWrite):
-            if message.error_info is not None:
-                error_info = ErrorInfoDict(
-                    exception_type=message.error_info.exception_type,
-                    message=message.error_info.message,
-                    traceback=message.error_info.traceback,
-                )
-            else:
-                error_info = None
-
-            trace = self.create_trace_model(
-                trace_id=message.id,
-                name=message.name,
-                input=message.input,
-                output=message.output,
-                tags=message.tags,
-                metadata=message.metadata,
-                start_time=message.start_time,
-                end_time=message.end_time,
-                project_name=message.project_name,
-                thread_id=message.thread_id,
-                last_updated_at=message.last_updated_at,
-                spans=None,
-                feedback_scores=None,
-                error_info=error_info,
-            )
-            self._save_trace(trace)
-
-        elif isinstance(message, messages.CreateSpanMessage):
-            span = self.create_span_model(
-                span_id=message.span_id,
-                name=message.name,
-                input=message.input,
-                output=message.output,
-                tags=message.tags,
-                metadata=message.metadata,
-                type=message.type,
-                start_time=message.start_time,
-                end_time=message.end_time,
-                usage=message.usage,
-                project_name=message.project_name,
-                model=message.model,
-                provider=message.provider,
-                error_info=message.error_info,
-                total_cost=message.total_cost,
-                last_updated_at=message.last_updated_at,
-                spans=None,
-                feedback_scores=None,
-            )
-
-            self._save_span(
-                span, trace_id=message.trace_id, parent_span_id=message.parent_span_id
-            )
-
-        elif isinstance(message, span_write.SpanWrite):
-            if message.error_info is not None:
-                error_info = ErrorInfoDict(
-                    exception_type=message.error_info.exception_type,
-                    message=message.error_info.message,
-                    traceback=message.error_info.traceback,
-                )
-            else:
-                error_info = None
-
-            span = self.create_span_model(
-                span_id=message.id,
-                name=message.name,
-                input=message.input,
-                output=message.output,
-                tags=message.tags,
-                metadata=message.metadata,
-                type=message.type,
-                start_time=message.start_time,
-                end_time=message.end_time,
-                usage=message.usage,
-                project_name=message.project_name,
-                model=message.model,
-                provider=message.provider,
-                total_cost=message.total_estimated_cost,
-                last_updated_at=message.last_updated_at,
-                spans=None,
-                feedback_scores=None,
-                error_info=error_info,
-            )
-
-            self._save_span(
-                span, trace_id=message.trace_id, parent_span_id=message.parent_span_id
-            )
-
-        elif isinstance(message, messages.CreateSpansBatchMessage):
-            for item in message.batch:
-                self.process(item)
-        elif isinstance(message, messages.CreateTraceBatchMessage):
-            for item in message.batch:
-                self.process(item)
-        elif isinstance(message, messages.UpdateSpanMessage):
-            span = self._span_observations[message.span_id]
-            update_payload = {
-                "output": message.output,
-                "usage": message.usage,
-                "provider": message.provider,
-                "model": message.model,
-                "end_time": message.end_time,
-                "metadata": message.metadata,
-                "error_info": message.error_info,
-                "tags": message.tags,
-                "input": message.input,
-                "total_cost": message.total_cost,
-            }
-            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
-            span.__dict__.update(cleaned_update_payload)
-
-        elif isinstance(message, messages.UpdateTraceMessage):
-            current_trace = self._trace_observations[message.trace_id]
-            update_payload = {
-                "output": message.output,
-                "end_time": message.end_time,
-                "metadata": message.metadata,
-                "error_info": message.error_info,
-                "tags": message.tags,
-                "input": message.input,
-                "thread_id": message.thread_id,
-            }
-            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
-            current_trace.__dict__.update(cleaned_update_payload)
-
-        elif isinstance(message, messages.AddSpanFeedbackScoresBatchMessage):
-            for feedback_score_message in message.batch:
-                feedback_model = self.create_feedback_score_model(
-                    score_id=feedback_score_message.id,
-                    name=feedback_score_message.name,
-                    value=feedback_score_message.value,
-                    category_name=feedback_score_message.category_name,
-                    reason=feedback_score_message.reason,
-                )
-                self._span_to_feedback_scores[feedback_score_message.id].append(
-                    feedback_model
-                )
-        elif isinstance(message, messages.AddTraceFeedbackScoresBatchMessage):
-            for feedback_score_message in message.batch:
-                feedback_model = self.create_feedback_score_model(
-                    score_id=feedback_score_message.id,
-                    name=feedback_score_message.name,
-                    value=feedback_score_message.value,
-                    category_name=feedback_score_message.category_name,
-                    reason=feedback_score_message.reason,
-                )
-                self._trace_to_feedback_scores[feedback_score_message.id].append(
-                    feedback_model
-                )
-
-    def process(
-        self,
-        message: Union[
-            messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
-        ],
-    ) -> None:
+    def process(self, message: messages.BaseMessage) -> None:
         with self._rlock:
             if not self.is_active():
                 return
@@ -506,6 +340,204 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             NotImplementedError: This method must be implemented in a subclass.
         """
         raise NotImplementedError("This method must be implemented in a subclass.")
+
+    def _register_handlers(self) -> None:
+        self._handlers: Dict[Type, Callable[[messages.BaseMessage], None]] = {
+            messages.CreateSpanMessage: self._handle_create_span_message,  # type: ignore
+            messages.CreateTraceMessage: self._handle_create_trace_message,  # type: ignore
+            messages.UpdateSpanMessage: self._handle_update_span_message,  # type: ignore
+            messages.UpdateTraceMessage: self._handle_update_trace_message,  # type: ignore
+            messages.AddTraceFeedbackScoresBatchMessage: self._handle_add_trace_feedback_scores_batch_message,  # type: ignore
+            messages.AddSpanFeedbackScoresBatchMessage: self._handle_add_span_feedback_scores_batch_message,  # type: ignore
+            messages.CreateSpansBatchMessage: self._handle_create_spans_batch_message,  # type: ignore
+            messages.CreateTraceBatchMessage: self._handle_create_traces_batch_message,  # type: ignore
+        }
+
+    def _handle_create_trace_message(
+        self, message: messages.CreateTraceMessage
+    ) -> None:
+        trace = self.create_trace_model(
+            trace_id=message.trace_id,
+            name=message.name,
+            input=message.input,
+            output=message.output,
+            tags=message.tags,
+            metadata=message.metadata,
+            start_time=message.start_time,
+            end_time=message.end_time,
+            project_name=message.project_name,
+            error_info=message.error_info,
+            thread_id=message.thread_id,
+            last_updated_at=message.last_updated_at,
+            feedback_scores=None,
+            spans=None,
+        )
+
+        self._save_trace(trace)
+
+    def _handle_create_span_message(self, message: messages.CreateSpanMessage) -> None:
+        span = self.create_span_model(
+            span_id=message.span_id,
+            name=message.name,
+            input=message.input,
+            output=message.output,
+            tags=message.tags,
+            metadata=message.metadata,
+            type=message.type,
+            start_time=message.start_time,
+            end_time=message.end_time,
+            usage=message.usage,
+            project_name=message.project_name,
+            model=message.model,
+            provider=message.provider,
+            error_info=message.error_info,
+            total_cost=message.total_cost,
+            last_updated_at=message.last_updated_at,
+            spans=None,
+            feedback_scores=None,
+        )
+
+        self._save_span(
+            span, trace_id=message.trace_id, parent_span_id=message.parent_span_id
+        )
+
+    def _handle_update_span_message(self, message: messages.UpdateSpanMessage) -> None:
+        span = self._span_observations[message.span_id]
+        update_payload = {
+            "output": message.output,
+            "usage": message.usage,
+            "provider": message.provider,
+            "model": message.model,
+            "end_time": message.end_time,
+            "metadata": message.metadata,
+            "error_info": message.error_info,
+            "tags": message.tags,
+            "input": message.input,
+            "total_cost": message.total_cost,
+        }
+        cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
+        span.__dict__.update(cleaned_update_payload)
+
+    def _handle_update_trace_message(
+        self, message: messages.UpdateTraceMessage
+    ) -> None:
+        current_trace = self._trace_observations[message.trace_id]
+        update_payload = {
+            "output": message.output,
+            "end_time": message.end_time,
+            "metadata": message.metadata,
+            "error_info": message.error_info,
+            "tags": message.tags,
+            "input": message.input,
+            "thread_id": message.thread_id,
+        }
+        cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
+        current_trace.__dict__.update(cleaned_update_payload)
+
+    def _handle_add_span_feedback_scores_batch_message(
+        self, message: messages.AddSpanFeedbackScoresBatchMessage
+    ) -> None:
+        for feedback_score_message in message.batch:
+            feedback_model = self.create_feedback_score_model(
+                score_id=feedback_score_message.id,
+                name=feedback_score_message.name,
+                value=feedback_score_message.value,
+                category_name=feedback_score_message.category_name,
+                reason=feedback_score_message.reason,
+            )
+            self._span_to_feedback_scores[feedback_score_message.id].append(
+                feedback_model
+            )
+
+    def _handle_add_trace_feedback_scores_batch_message(
+        self, message: messages.AddTraceFeedbackScoresBatchMessage
+    ) -> None:
+        for feedback_score_message in message.batch:
+            feedback_model = self.create_feedback_score_model(
+                score_id=feedback_score_message.id,
+                name=feedback_score_message.name,
+                value=feedback_score_message.value,
+                category_name=feedback_score_message.category_name,
+                reason=feedback_score_message.reason,
+            )
+            self._trace_to_feedback_scores[feedback_score_message.id].append(
+                feedback_model
+            )
+
+    def _handle_create_spans_batch_message(
+        self, message: messages.CreateSpansBatchMessage
+    ) -> None:
+        for item in message.batch:
+            self._handle_span_write(item)
+
+    def _handle_span_write(self, message: span_write.SpanWrite) -> None:
+        if message.error_info is not None:
+            error_info = ErrorInfoDict(
+                exception_type=message.error_info.exception_type,
+                message=message.error_info.message,
+                traceback=message.error_info.traceback,
+            )
+        else:
+            error_info = None
+
+        span = self.create_span_model(
+            span_id=message.id,
+            name=message.name,
+            input=message.input,
+            output=message.output,
+            tags=message.tags,
+            metadata=message.metadata,
+            type=message.type,
+            start_time=message.start_time,
+            end_time=message.end_time,
+            usage=message.usage,
+            project_name=message.project_name,
+            model=message.model,
+            provider=message.provider,
+            total_cost=message.total_estimated_cost,
+            last_updated_at=message.last_updated_at,
+            spans=None,
+            feedback_scores=None,
+            error_info=error_info,
+        )
+
+        self._save_span(
+            span, trace_id=message.trace_id, parent_span_id=message.parent_span_id
+        )
+
+    def _handle_create_traces_batch_message(
+        self, message: messages.CreateTraceBatchMessage
+    ) -> None:
+        for item in message.batch:
+            self._handle_trace_write(item)
+
+    def _handle_trace_write(self, message: trace_write.TraceWrite) -> None:
+        if message.error_info is not None:
+            error_info = ErrorInfoDict(
+                exception_type=message.error_info.exception_type,
+                message=message.error_info.message,
+                traceback=message.error_info.traceback,
+            )
+        else:
+            error_info = None
+
+        trace = self.create_trace_model(
+            trace_id=message.id,
+            name=message.name,
+            input=message.input,
+            output=message.output,
+            tags=message.tags,
+            metadata=message.metadata,
+            start_time=message.start_time,
+            end_time=message.end_time,
+            project_name=message.project_name,
+            thread_id=message.thread_id,
+            last_updated_at=message.last_updated_at,
+            spans=None,
+            feedback_scores=None,
+            error_info=error_info,
+        )
+        self._save_trace(trace)
 
 
 def _observation_already_stored(
