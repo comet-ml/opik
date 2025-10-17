@@ -5,6 +5,7 @@ export const initPosthog = (key?: string, host?: string) => {
 
   posthog.init(key, {
     api_host: host,
+    ui_host: "https://us.posthog.com",
     defaults: "2025-05-24",
   });
 };

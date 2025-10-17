@@ -25,6 +25,11 @@ declare global {
   }
 }
 
+initPosthog(
+  "phc_NAfd7RuhI3CPTaYZ7wnjStOgyvlseao9JHp5fWkTkzM",
+  "https://ph.dev.comet.com",
+);
+
 loadScript(location.origin + `/config.js?version=${new Date().getTime()}`).then(
   () => {
     initPosthog(
