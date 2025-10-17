@@ -361,12 +361,17 @@ except Exception as e:
                         api_key=env_vars.get("OPIK_API_KEY", ""),
                         workspace=env_vars.get("OPIK_WORKSPACE", ""),
                     )
+                    
+                    # Start real-time log streaming in background threads
+                    self._log_collector.stream_from_process(process)
+                    
                 except (ValueError, ImportError) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
                     self.logger.error(f"Unexpected error initializing subprocess logging: {e}")
             
             # Send input and wait for process to complete
+            # (logging continues in background threads via stream_from_process)
             stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
 
             # After process completes, send captured logs if logger was initialized
@@ -402,8 +407,7 @@ except Exception as e:
         
         except subprocess.TimeoutExpired:
             # Ensure log manager is closed even on timeout
-            if self._log_collector:
-                self._log_collector.close()
+            self._close_log_collector()
             process.kill()
             try:
                 process.wait(timeout=2)
@@ -412,12 +416,18 @@ except Exception as e:
             raise
         finally:
             # Ensure log collector is properly closed
+            self._close_log_collector()
+
+    def _close_log_collector(self):
+        """Close the log collector if it exists."""
+        try:
             if self._log_collector:
-                try:
-                    self._log_collector.flush()
-                    self._log_collector.close()
-                except Exception as e:
-                    self.logger.warning(f"Error closing log collector: {e}")
+                self._log_collector.flush()
+                self._log_collector.close()
+                self._log_collector = None
+        except Exception as e:
+            self._log_collector = None
+            self.logger.warning(f"Error closing log collector: {e}")
 
     def register_teardown_callback(self, callback):
         """
