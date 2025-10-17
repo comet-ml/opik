@@ -31,29 +31,30 @@ def process_optimizer_job(*args, **kwargs):
         logger.info(f"Received args: {args}, kwargs: {kwargs}")
         try:
             current_job = get_current_job()
+
             if current_job:
                 logger.info(
                     f"PY job id={current_job.id} func=process_optimizer_job args={args} kwargs={kwargs}"
                 )
-        except Exception:
-            pass
 
-        message_text, wait_seconds = _normalize_message_args(*args, **kwargs)
-        span.set_attribute("message", message_text)
+            message_text, wait_seconds = _normalize_message_args(*args, **kwargs)
+            span.set_attribute("message", message_text)
 
-        logger.info(f"Processing optimizer job message: {message_text} (wait: {wait_seconds}s)")
-        if wait_seconds > 0:
-            time.sleep(wait_seconds)
+            logger.info(f"Processing optimizer job message: {message_text} (wait: {wait_seconds}s)")
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
 
-        result = {
-            "status": "success",
-            "message": f"Optimizer job processed: {message_text}",
-            "processed_by": "Python RQ Worker - Optimizer",
-            "wait_time": wait_seconds,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+            result = {
+                "status": "success",
+                "message": f"Optimizer job processed: {message_text}",
+                "processed_by": "Python RQ Worker - Optimizer",
+                "wait_time": wait_seconds,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
-        logger.info(f"Optimizer job processed successfully: {result}")
-        return result
-
+            logger.info(f"Optimizer job processed successfully: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Error getting current job: {e}")
+            raise e
 
