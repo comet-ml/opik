@@ -391,50 +391,6 @@ class BatchLogCollector(logging.Handler):
         """
         threads = {'stdout_thread': None, 'stderr_thread': None}
         
-        def read_stream(pipe: Optional[IO], stream_name: str, output_list: List[str]) -> None:
-            """Read from a stream line-by-line, emit logs, and collect output."""
-            if pipe is None:
-                return
-            try:
-                for line in pipe:
-                    # Only process non-empty lines
-                    if line.strip():
-                        output_list.append(line)
-                        try:
-                            # Try to parse as JSON to preserve log structure
-                            log_data = json.loads(line.strip())
-                            # If it has log structure (level and logger_name), emit as-is
-                            if 'level' in log_data and 'logger_name' in log_data:
-                                self.emit(log_data)
-                            else:
-                                # Plain JSON result - treat as log message
-                                log_data = {
-                                    'timestamp': int(time.time() * 1000),
-                                    'level': 'INFO',
-                                    'logger_name': f'subprocess.{stream_name}',
-                                    'message': line.strip(),
-                                    'attributes': {}
-                                }
-                                self.emit(log_data)
-                        except json.JSONDecodeError:
-                            # Fallback: treat as plain text message
-                            log_data = {
-                                'timestamp': int(time.time() * 1000),
-                                'level': 'INFO',
-                                'logger_name': f'subprocess.{stream_name}',
-                                'message': line.strip(),
-                                'attributes': {}
-                            }
-                            self.emit(log_data)
-            except Exception as e:
-                logger.warning(f"Error reading {stream_name}: {e}")
-            finally:
-                try:
-                    if pipe:
-                        pipe.close()
-                except Exception as e:
-                    logger.warning(f"Error closing {stream_name}: {e}")
-        
         # Lists to collect output
         stdout_lines: List[str] = []
         stderr_lines: List[str] = []
@@ -442,7 +398,7 @@ class BatchLogCollector(logging.Handler):
         # Spawn reader threads for stdout and stderr
         if process.stdout:
             stdout_thread = threading.Thread(
-                target=read_stream,
+                target=self._read_stream,
                 args=(process.stdout, "stdout", stdout_lines),
                 daemon=False
             )
@@ -451,7 +407,7 @@ class BatchLogCollector(logging.Handler):
         
         if process.stderr:
             stderr_thread = threading.Thread(
-                target=read_stream,
+                target=self._read_stream,
                 args=(process.stderr, "stderr", stderr_lines),
                 daemon=False
             )
@@ -463,3 +419,56 @@ class BatchLogCollector(logging.Handler):
         threads['stderr_lines'] = stderr_lines
         
         return threads
+
+    def _read_stream(self, pipe: Optional[IO], stream_name: str, output_list: List[str]) -> None:
+        """
+        Read from a stream line-by-line, emit logs, and collect output.
+        
+        Private method used by start_stream_from_process to handle individual streams.
+        
+        Args:
+            pipe: Input stream to read from (stdout or stderr)
+            stream_name: Name of stream ("stdout" or "stderr") for logging
+            output_list: List to collect output lines into
+        """
+        if pipe is None:
+            return
+        try:
+            for line in pipe:
+                # Only process non-empty lines
+                if line.strip():
+                    output_list.append(line)
+                    try:
+                        # Try to parse as JSON to preserve log structure
+                        log_data = json.loads(line.strip())
+                        # If it has log structure (level and logger_name), emit as-is
+                        if 'level' in log_data and 'logger_name' in log_data:
+                            self.emit(log_data)
+                        else:
+                            # Plain JSON result - treat as log message
+                            log_data = {
+                                'timestamp': int(time.time() * 1000),
+                                'level': 'INFO',
+                                'logger_name': f'subprocess.{stream_name}',
+                                'message': line.strip(),
+                                'attributes': {}
+                            }
+                            self.emit(log_data)
+                    except json.JSONDecodeError:
+                        # Fallback: treat as plain text message
+                        log_data = {
+                            'timestamp': int(time.time() * 1000),
+                            'level': 'INFO',
+                            'logger_name': f'subprocess.{stream_name}',
+                            'message': line.strip(),
+                            'attributes': {}
+                        }
+                        self.emit(log_data)
+        except Exception as e:
+            logger.warning(f"Error reading {stream_name}: {e}")
+        finally:
+            try:
+                if pipe:
+                    pipe.close()
+            except Exception as e:
+                logger.warning(f"Error closing {stream_name}: {e}")
