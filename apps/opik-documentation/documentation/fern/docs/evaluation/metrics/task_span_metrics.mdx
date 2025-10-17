@@ -134,39 +134,6 @@ class PerformanceMetric(BaseMetric):
             )
 ```
 
-## Analyzing Nested Operations
-
-Task spans can contain nested spans representing sub-operations:
-
-```python
-class HierarchyComplexityMetric(BaseMetric):
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
-        # Analyze nested spans
-        nested_spans = task_span.spans
-        total_operations = len(nested_spans)
-
-        # Count different types of operations
-        llm_operations = [s for s in nested_spans if s.type == "llm"]
-        tool_operations = [s for s in nested_spans if s.type == "tool"]
-
-        # Analyze complexity
-        if total_operations == 0:
-            complexity_score = 0.5
-            reason = "Simple operation with no sub-steps"
-        elif len(llm_operations) > 5:
-            complexity_score = 0.7
-            reason = f"High complexity: {len(llm_operations)} LLM calls"
-        else:
-            complexity_score = 1.0
-            reason = f"Well-structured with {total_operations} operations"
-
-        return score_result.ScoreResult(
-            value=complexity_score,
-            name=self.name,
-            reason=reason
-        )
-```
-
 ## Error Analysis
 
 Task span metrics can analyze execution failures and errors:
