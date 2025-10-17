@@ -182,33 +182,25 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     @Override
     public void stop() {
-        log.info("Consumer stopping...");
         if (streamSubscription != null && !streamSubscription.isDisposed()) {
-            log.info("Disposing stream subscription...");
             streamSubscription.dispose();
         }
         if (timerScheduler != null && !timerScheduler.isDisposed()) {
-            log.info("Disposing timer scheduler...");
             timerScheduler.dispose();
         }
         if (workersScheduler != null && !workersScheduler.isDisposed()) {
-            log.info("Disposing consumer scheduler...");
             workersScheduler.dispose();
         }
-        removeConsumer();
+        if (stream != null && consumerScheduler != null && consumerScheduler.isDisposed()) {
+            removeConsumer();
+            log.info("Consumer stopped successfully");
+        }
         if (consumerScheduler != null && !consumerScheduler.isDisposed()) {
-            log.info("Disposing consumer scheduler...");
             consumerScheduler.dispose();
         }
-        log.info("Consumer stopped successfully");
     }
 
     private void removeConsumer() {
-        if (stream == null || consumerScheduler == null || consumerScheduler.isDisposed()) {
-            log.warn("Stream or consumer scheduler already stopped, cannot remove consumer '{}', from group '{}'",
-                    consumerId, config.getConsumerGroupName());
-            return;
-        }
         log.info("Removing consumer '{}', from group '{}'", consumerId, config.getConsumerGroupName());
         try {
             stream.removeConsumer(config.getConsumerGroupName(), consumerId)
