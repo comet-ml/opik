@@ -52,7 +52,7 @@ class EvaluationEngine:
         self._scoring_key_mapping = scoring_key_mapping
 
         # Analyze metrics
-        self._analyse_metrics(scoring_metrics)
+        self._analyze_metrics(scoring_metrics)
 
         if len(self._task_span_scoring_metrics) > 0:
             LOGGER.info(
@@ -60,7 +60,7 @@ class EvaluationEngine:
                 len(self._task_span_scoring_metrics),
             )
 
-    def _analyse_metrics(self, scoring_metrics: List[base_metric.BaseMetric]) -> None:
+    def _analyze_metrics(self, scoring_metrics: List[base_metric.BaseMetric]) -> None:
         for metric in scoring_metrics:
             if _has_evaluation_span_parameter(metric.score):
                 self._task_span_scoring_metrics.append(metric)
