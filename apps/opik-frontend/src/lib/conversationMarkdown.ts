@@ -134,9 +134,12 @@ export const convertConversationToMarkdown = (
         );
 
         if (toolResponse && toolResponse.content) {
+          const toolResponseContent = isString(toolResponse.content)
+            ? toolResponse.content
+            : JSON.stringify(toolResponse.content);
           lines.push(``);
           lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;**Response:**`);
-          lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${toolResponse.content.trim()}`);
+          lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${toolResponseContent.trim()}`);
         }
 
         lines.push(`</details>`);
@@ -147,8 +150,9 @@ export const convertConversationToMarkdown = (
     }
 
     // Add content if present
-    if (content.trim()) {
-      lines.push(content.trim());
+    const contentStr = isString(content) ? content : JSON.stringify(content);
+    if (contentStr.trim()) {
+      lines.push(contentStr.trim());
     }
 
     // Close the role section
