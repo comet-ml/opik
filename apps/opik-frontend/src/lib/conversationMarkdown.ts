@@ -1,5 +1,6 @@
 import isString from "lodash/isString";
 import isObject from "lodash/isObject";
+import { stripImageTags } from "@/lib/llm";
 
 export interface ConversationMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -150,8 +151,10 @@ export const convertConversationToMarkdown = (
     }
 
     // Add content if present
-    const contentStr = isString(content) ? content : JSON.stringify(content);
+    let contentStr = isString(content) ? content : JSON.stringify(content);
     if (contentStr.trim()) {
+      // Strip image tags, keeping only URLs (images are shown in attachments)
+      contentStr = stripImageTags(contentStr);
       lines.push(contentStr.trim());
     }
 

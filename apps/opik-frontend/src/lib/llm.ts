@@ -2,6 +2,10 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 import isString from "lodash/isString";
 
+// Image tag constants
+export const IMAGE_TAG_START = "<<<image>>>";
+export const IMAGE_TAG_END = "<<</image>>>";
+
 const createImageTagRegex = () => /<{3}image>{3}(.*?)<{3}\/image>{3}/g;
 
 export const generateDefaultLLMPromptMessage = (
@@ -69,8 +73,16 @@ export const combineContentWithImages = (
   }
 
   const imageTags = images
-    .map((image) => `<<<image>>>${image}<<</image>>>`)
+    .map((image) => `${IMAGE_TAG_START}${image}${IMAGE_TAG_END}`)
     .join("\n");
 
   return safeText ? `${safeText}\n${imageTags}` : imageTags;
+};
+
+/**
+ * Strips image tags from text, keeping only the URL content
+ * Converts: "<<<image>>>https://example.com/image.jpg<<</image>>>" → "https://example.com/image.jpg"
+ */
+export const stripImageTags = (text: string): string => {
+  return text.replace(/<<<image>>>(.*?)<<<\/image>>>/g, "$1");
 };
