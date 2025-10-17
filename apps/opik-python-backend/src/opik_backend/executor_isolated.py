@@ -251,6 +251,9 @@ class IsolatedSubprocessExecutor:
         """
         # The wrapper reads input, makes variables available, and executes user code
         # User code should not read from stdin - it receives data as variables
+        # Note: Can't use '\n' directly in f-string, so we use a variable
+        newline = '\n'
+        indented_code = newline.join('    ' + line for line in code.split(newline))
         wrapper = f"""
 import json
 import sys
@@ -264,7 +267,7 @@ try:
 
     # Execute user code in this namespace
     # User code has access to: data, payload_type, json, sys, traceback
-{chr(10).join('    ' + line for line in code.split(chr(10)))}
+{indented_code}
 
     # Expected: User code should print JSON result to stdout
 except Exception as e:
