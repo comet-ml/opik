@@ -11,6 +11,7 @@ import {
 } from "@/components/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import CodeMirrorHighlighter from "@/components/shared/SyntaxHighlighter/CodeMirrorHighlighter";
 import MarkdownHighlighter from "@/components/shared/SyntaxHighlighter/MarkdownHighlighter";
+import { ExpandedState } from "@tanstack/react-table";
 
 export type SyntaxHighlighterProps = {
   data: object;
@@ -18,6 +19,10 @@ export type SyntaxHighlighterProps = {
   preserveKey?: string;
   search?: string;
   withSearch?: boolean;
+  controlledExpanded?: ExpandedState;
+  onExpandedChange?: (
+    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+  ) => void;
 };
 
 const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
@@ -26,6 +31,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   preserveKey,
   search: searchValue,
   withSearch,
+  controlledExpanded,
+  onExpandedChange,
 }) => {
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
@@ -82,6 +89,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
         modeSelector={modeSelector}
         copyButton={copyButton}
         withSearch={withSearch}
+        controlledExpanded={controlledExpanded}
+        onExpandedChange={onExpandedChange}
       />
     );
   }
