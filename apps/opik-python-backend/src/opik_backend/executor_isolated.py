@@ -362,24 +362,81 @@ except Exception as e:
                         workspace=env_vars.get("OPIK_WORKSPACE", ""),
                     )
                     
-                    # Start real-time log streaming in background threads
-                    self._log_collector.stream_from_process(process)
-                    
+                    # Start real-time log streaming from subprocess (handles both logging and collection)
+                    stream_info = {}
+                    if self._log_collector:
+                        stream_info = self._log_collector.start_stream_from_process(process)
+                    else:
+                        # If no logging, we still need to collect output
+                        stdout_lines = []
+                        stderr_lines = []
+                        stream_info = {
+                            'stdout_lines': stdout_lines,
+                            'stderr_lines': stderr_lines,
+                            'stdout_thread': None,
+                            'stderr_thread': None,
+                        }
+                        
+                        def collect_output(pipe, output_list):
+                            """Collect output from pipe into list."""
+                            if pipe is None:
+                                return
+                            try:
+                                for line in pipe:
+                                    if line.strip():
+                                        output_list.append(line)
+                            except Exception as e:
+                                self.logger.warning(f"Error collecting output: {e}")
+                            finally:
+                                try:
+                                    if pipe:
+                                        pipe.close()
+                                except:
+                                    pass
+                        
+                        if process.stdout:
+                            stdout_thread = Thread(
+                                target=collect_output,
+                                args=(process.stdout, stdout_lines),
+                                daemon=False
+                            )
+                            stdout_thread.start()
+                            stream_info['stdout_thread'] = stdout_thread
+                        
+                        if process.stderr:
+                            stderr_thread = Thread(
+                                target=collect_output,
+                                args=(process.stderr, stderr_lines),
+                                daemon=False
+                            )
+                            stderr_thread.start()
+                            stream_info['stderr_thread'] = stderr_thread
+                
                 except (ValueError, ImportError) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
                 except Exception as e:
                     self.logger.error(f"Unexpected error initializing subprocess logging: {e}")
             
-            # Send input and wait for process to complete
-            # (logging continues in background threads via stream_from_process)
-            stdout, stderr = process.communicate(input=input_json, timeout=timeout_secs)
+            # Send input to the process
+            process.stdin.write(input_json)
+            process.stdin.close()  # Signal EOF so process knows input is done
+            
+            # Wait for process to complete
+            process.wait(timeout=timeout_secs)
+            
+            # Wait for reader/collector threads to finish
+            if stream_info.get('stdout_thread'):
+                stream_info['stdout_thread'].join()
+            if stream_info.get('stderr_thread'):
+                stream_info['stderr_thread'].join()
+            
+            # Reconstruct stdout/stderr from collected lines
+            stdout = ''.join(stream_info.get('stdout_lines', []))
+            stderr = ''.join(stream_info.get('stderr_lines', []))
 
-            # After process completes, send captured logs if logger was initialized
+            # After process completes, flush any remaining logs if logger was initialized
             if self._log_collector:
-                try:
-                    self._log_collector.process_subprocess_output(stdout, stderr)
-                except Exception as e:
-                    self.logger.error(f"Unexpected error processing subprocess output: {e}")
+                self._log_collector.flush()
 
             # Parse result from stdout
             if process.returncode == 0:
