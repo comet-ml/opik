@@ -259,7 +259,7 @@ const PromptModelSelect = ({
       return null;
     }
 
-    return <Icon className="min-w-3.5" />;
+    return <Icon className="min-w-3.5 text-foreground" />;
   };
 
   const renderSelectTrigger = () => {

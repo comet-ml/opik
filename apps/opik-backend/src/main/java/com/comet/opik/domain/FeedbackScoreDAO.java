@@ -337,6 +337,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return asyncTemplate.nonTransaction(connection -> {
 
@@ -353,8 +354,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             })
                     .doOnSuccess(cnt -> {
                         switch (entityType) {
-                            case TRACE -> publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId);
-                            case THREAD -> publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId);
+                            case TRACE ->
+                                publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId, userName);
+                            case THREAD ->
+                                publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId, userName);
                             default -> {
                                 // no-op
                             }
@@ -364,7 +367,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType,
-            String workspaceId) {
+            String workspaceId, String userName) {
         if (CollectionUtils.isEmpty(scores)) {
             return;
         }
@@ -382,6 +385,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         eventBus.post(AlertEvent.builder()
                 .eventType(eventType)
                 .workspaceId(workspaceId)
+                .userName(userName)
                 .projectId(scores.getFirst().projectId())
                 .payload(scoresWithAuthor)
                 .build());

@@ -5,11 +5,35 @@ import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 import { prettifyMessage } from "@/lib/traces";
+import { containsHTML } from "@/lib/utils";
 import useLocalStorageState from "use-local-storage-state";
+import sanitizeHtml from "sanitize-html";
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
 const MAX_DATA_LENGTH_MESSAGE = "Preview limit exceeded";
+
+/**
+ * Strips HTML/Markdown tags from text to show clean plain text
+ */
+const stripHtmlTags = (text: string): string => {
+  // First, sanitize all HTML tags and entities
+  let sanitized = sanitizeHtml(text, {
+    allowedTags: [],
+    allowedAttributes: {},
+  });
+
+  // Then, convert HTML-specific newlines/entities (from previous UI) if desired
+  sanitized = sanitized
+    .replace(/<br\s*\/?>/gi, "\n") // Convert <br> tags (just in case any survived)
+    .replace(/<\/p>/gi, "\n\n") // Convert </p> tags to double newlines
+    .replace(/<\/div>/gi, "\n") // Convert </div> tags to newlines
+    .replace(/&nbsp;/g, " ") // Replace &nbsp; with regular spaces
+    .replace(/\n\s*\n\s*\n/g, "\n\n") // Replace multiple newlines with double newlines
+    .trim();
+
+  return sanitized;
+};
 
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
@@ -59,25 +83,38 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const content = useMemo(() => {
+    // Strip HTML tags from prettified content, but only if it contains actual HTML markup
+    // Uses containsHTML utility to distinguish between real HTML and text with angle brackets
+    const hasValidHtmlTags = response.prettified && containsHTML(message);
+    const displayMessage = hasValidHtmlTags ? stripHtmlTags(message) : message;
+
     if (isSmall) {
       return (
         <CellTooltipWrapper
-          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
+          content={hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
         >
           <span className="comet-code truncate">
             {hasExceededLimit
               ? rawValue.slice(0, maxDataLength) + "..."
-              : message}
+              : displayMessage}
           </span>
         </CellTooltipWrapper>
       );
     }
+
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : message}
+        {hasExceededLimit ? MAX_DATA_LENGTH_MESSAGE : displayMessage}
       </div>
     );
-  }, [isSmall, message, hasExceededLimit, rawValue, maxDataLength]);
+  }, [
+    isSmall,
+    hasExceededLimit,
+    message,
+    rawValue,
+    maxDataLength,
+    response.prettified,
+  ]);
 
   return (
     <CellWrapper

@@ -323,6 +323,7 @@ classes_to_document = [
     opik_optimizer.MiproOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
     opik_optimizer.GepaOptimizer,
+    opik_optimizer.HierarchicalReflectiveOptimizer,
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
     opik_optimizer.OptimizableAgent,
@@ -357,6 +358,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 - **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
+- **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
 
 ## Standardized Method Signatures
 

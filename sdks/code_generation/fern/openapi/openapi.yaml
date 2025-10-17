@@ -326,6 +326,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/alerts/webhooks/examples:
+    get:
+      tags:
+      - Alerts
+      summary: Get webhook payload examples
+      description: Get webhook payload examples for all alert event types
+      operationId: getWebhookExamples
+      responses:
+        "200":
+          description: Webhook examples
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookExamples"
   /v1/private/alerts/webhooks/tests:
     post:
       tags:
@@ -928,7 +942,21 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: id
+        in: query
+        schema:
+          type: string
+          description: "Filter automation rules with rule ID containing this value\
+            \ (partial match, like %id%)"
       - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: sorting
         in: query
         schema:
           type: string
@@ -4775,7 +4803,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4891,7 +4919,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -5027,7 +5055,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -5120,6 +5148,66 @@ components:
           type: string
         details:
           type: string
+    WebhookEventObject:
+      required:
+      - alert_id
+      - created_at
+      - event_type
+      - id
+      - payload
+      - url
+      - user_name
+      - workspace_id
+      type: object
+      properties:
+        id:
+          minLength: 1
+          type: string
+        event_type:
+          type: string
+          enum:
+          - trace:errors
+          - trace:feedback_score
+          - trace_thread:feedback_score
+          - prompt:created
+          - prompt:committed
+          - trace:guardrails_triggered
+          - prompt:deleted
+        alert_id:
+          type: string
+          format: uuid
+        workspace_id:
+          minLength: 1
+          type: string
+        user_name:
+          minLength: 1
+          type: string
+        payload:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        max_retries:
+          maximum: 10
+          minimum: 1
+          type: integer
+          format: int32
+        url:
+          minLength: 1
+          type: string
+        secret:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+    WebhookExamples:
+      type: object
+      properties:
+        response_examples:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WebhookEventObject"
     WebhookTestResult:
       type: object
       properties:
@@ -5132,7 +5220,7 @@ components:
           type: integer
           format: int32
         request_body:
-          type: string
+          $ref: "#/components/schemas/WebhookEventObject"
         error_message:
           type: string
     AnnotationQueueItemIds:
@@ -6147,6 +6235,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
+        sortable_by:
+          type: array
+          items:
+            type: string
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
       - action
@@ -11355,6 +11447,8 @@ components:
         thread_id:
           minLength: 1
           type: string
+        truncate:
+          type: boolean
     TraceThreadPage:
       type: object
       properties:

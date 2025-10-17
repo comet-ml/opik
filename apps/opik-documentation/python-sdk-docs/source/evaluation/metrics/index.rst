@@ -38,3 +38,4 @@ You can learn more about each metric in the following sections:
    ContextRecall
    
    BaseMetric
+   ConversationThreadMetric

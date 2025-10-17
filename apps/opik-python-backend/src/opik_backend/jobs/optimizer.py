@@ -31,12 +31,6 @@ def process_optimizer_job(*args, **kwargs):
         logger.info(f"Received args: {args}, kwargs: {kwargs}")
         try:
             current_job = get_current_job()
-
-            if current_job:
-                logger.info(
-                    f"PY job id={current_job.id} func=process_optimizer_job args={args} kwargs={kwargs}"
-                )
-
             message_text, wait_seconds = _normalize_message_args(*args, **kwargs)
             span.set_attribute("message", message_text)
 
