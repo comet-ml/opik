@@ -25,3 +25,7 @@ opentelemetry-instrumentation-system-metrics==0.57b0
 opentelemetry-instrumentation-logging==0.57b0
 schedule==1.2.1
 tiktoken==0.9.0
+redis==6.4.0
+rq==2.6.0
+opik-optimizer==2.1.2
+gepa==0.0.17
