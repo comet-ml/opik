@@ -1,11 +1,13 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Plus } from "lucide-react";
 import uniqid from "uniqid";
+import round from "lodash/round";
+import isArray from "lodash/isArray";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { FormField, FormItem } from "@/components/ui/form";
+import { FormErrorSkeleton, FormField, FormItem } from "@/components/ui/form";
 import {
   Accordion,
   AccordionContent,
@@ -21,7 +23,7 @@ import {
 } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { createFilter, isFilterValid } from "@/lib/filters";
+import { createFilter } from "@/lib/filters";
 import { ThreadStatus } from "@/types/thread";
 import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
@@ -31,7 +33,6 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
-import round from "lodash/round";
 
 // Trace-specific columns for automation rule filtering
 export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
@@ -153,10 +154,17 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
   const scope = form.watch("scope");
   const isTraceScope = scope === EVALUATORS_RULE_SCOPE.trace;
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+  const filters = form.watch("filters");
 
   const currentFilterColumns = useMemo(() => {
     return isThreadScope ? THREAD_FILTER_COLUMNS : TRACE_FILTER_COLUMNS;
   }, [isThreadScope]);
+
+  useEffect(() => {
+    if (form.formState.errors.filters) {
+      form.clearErrors("filters");
+    }
+  }, [filters.length, form]);
 
   const filtersConfig = useMemo(
     () => ({
@@ -285,14 +293,9 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             <FormField
               control={form.control}
               name="filters"
-              render={({ field }) => {
-                const invalidFilters = field.value
-                  .map((filter, index) => ({
-                    filter,
-                    index,
-                    isValid: isFilterValid(filter),
-                  }))
-                  .filter((item) => !item.isValid);
+              render={({ field, formState }) => {
+                const filterErrors = formState.errors.filters;
+                const hasErrors = filterErrors && isArray(filterErrors);
 
                 return (
                   <FormItem>
@@ -309,47 +312,34 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
                         />
                       )}
 
-                      {invalidFilters.length > 0 && (
+                      {/* Display validation errors from form submission */}
+                      {hasErrors && filterErrors.length > 0 && (
                         <div className="space-y-1">
-                          {invalidFilters.map(({ filter, index }) => {
+                          {filterErrors.map((filterError, index) => {
+                            if (!filterError) return null;
+
                             const errors: string[] = [];
 
-                            // Check what's missing
-                            if (!filter.field || filter.field.trim() === "") {
-                              errors.push("field is required");
+                            // Collect all error messages for this filter
+                            if (filterError.field?.message) {
+                              errors.push(filterError.field.message);
                             }
-                            if (
-                              !filter.operator ||
-                              filter.operator.trim() === ""
-                            ) {
-                              errors.push("operator is required");
+                            if (filterError.operator?.message) {
+                              errors.push(filterError.operator.message);
                             }
-                            if (
-                              filter.operator !== "is_empty" &&
-                              filter.operator !== "is_not_empty" &&
-                              (!filter.value ||
-                                String(filter.value).trim() === "")
-                            ) {
-                              errors.push("value is required");
+                            if (filterError.value?.message) {
+                              errors.push(filterError.value.message);
                             }
-                            if (
-                              (filter.type === COLUMN_TYPE.dictionary ||
-                                filter.type === COLUMN_TYPE.numberDictionary) &&
-                              (!filter.key || filter.key.trim() === "")
-                            ) {
-                              errors.push("key is required");
-                            }
-                            if (filter.error) {
-                              errors.push(filter.error);
+                            if (filterError.key?.message) {
+                              errors.push(filterError.key.message);
                             }
 
+                            if (errors.length === 0) return null;
+
                             return (
-                              <p
-                                key={index}
-                                className="text-sm font-medium text-destructive"
-                              >
+                              <FormErrorSkeleton key={index}>
                                 Filter {index + 1}: {errors.join(", ")}
-                              </p>
+                              </FormErrorSkeleton>
                             );
                           })}
                         </div>

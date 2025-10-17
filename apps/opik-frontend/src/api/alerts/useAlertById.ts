@@ -1,5 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { ALERTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import api, { ALERTS_KEY, ALERTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Alert } from "@/types/alerts";
 
 const getAlertById = async (
@@ -22,7 +22,7 @@ export default function useAlertById(
   options?: QueryConfig<Alert>,
 ) {
   return useQuery({
-    queryKey: ["alert", params],
+    queryKey: [ALERTS_KEY, params],
     queryFn: (context) => getAlertById(context, params),
     ...options,
   });

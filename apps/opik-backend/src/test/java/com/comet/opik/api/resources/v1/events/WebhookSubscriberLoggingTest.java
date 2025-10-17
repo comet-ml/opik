@@ -216,7 +216,6 @@ class WebhookSubscriberLoggingTest {
                 .eventType(AlertEventType.PROMPT_CREATED)
                 .alertId(alertId)
                 .workspaceId(WORKSPACE_ID)
-                .userName(USER_NAME)
                 .url(url)
                 .payload(Map.of("message", "test payload", "timestamp", Instant.now().toString()))
                 .createdAt(Instant.now())
