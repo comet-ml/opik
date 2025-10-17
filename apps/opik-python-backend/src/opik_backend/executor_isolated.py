@@ -343,7 +343,7 @@ except Exception as e:
             }
         )
 
-        log_manager = None
+        log_collector = None
 
         try:
             # Read stdout/stderr using communicate()
@@ -351,13 +351,13 @@ except Exception as e:
 
             # After process completes, collect and send logs if backend is configured
             if SubprocessLogConfig.is_fully_configured():
-                from opik_backend.subprocess_log_manager import SubprocessLogManager
+                from opik_backend.subprocess_logger import BatchLogCollector
                 
                 backend_url = SubprocessLogConfig.get_backend_url()
-                log_manager = None
+                log_collector = None
                 
                 try:
-                    log_manager = SubprocessLogManager(
+                    log_collector = BatchLogCollector(
                         backend_url=backend_url,
                         optimization_id=optimization_id or "",
                         job_id=job_id or "",
@@ -365,9 +365,8 @@ except Exception as e:
                         workspace=env_vars.get("OPIK_WORKSPACE", ""),
                     )
                     
-                    # Initialize and process subprocess output
-                    log_manager.initialize()
-                    log_manager.process_output(stdout, stderr)
+                    # Process subprocess output and send logs to backend
+                    log_collector.process_subprocess_output(stdout, stderr)
                     
                 except (ValueError, ImportError) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
@@ -375,8 +374,8 @@ except Exception as e:
                     self.logger.error(f"Unexpected error during subprocess log collection: {e}")
                 finally:
                     # Ensure logger is properly closed immediately after processing
-                    if log_manager:
-                        log_manager.close()
+                    if log_collector:
+                        log_collector.close()
 
             # Parse result from stdout
             if process.returncode == 0:
@@ -404,8 +403,8 @@ except Exception as e:
         
         except subprocess.TimeoutExpired:
             # Ensure log manager is closed even on timeout
-            if log_manager:
-                log_manager.close()
+            if log_collector:
+                log_collector.close()
             process.kill()
             try:
                 process.wait(timeout=2)
