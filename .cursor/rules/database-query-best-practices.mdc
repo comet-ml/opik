@@ -1,0 +1,589 @@
+---
+description: SQL query best practices, performance optimization, and security guidelines for MySQL and ClickHouse
+---
+
+# Database Query Best Practices
+
+This rule documents SQL query best practices, performance optimization techniques, and security guidelines for both MySQL and ClickHouse databases in Opik.
+
+## Universal Principles
+
+### 1. Workspace Isolation (CRITICAL)
+**Every query MUST filter by workspace_id for multi-tenant isolation.**
+
+```sql
+-- ✅ CORRECT: Always include workspace_id
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId AND id = :id
+
+SELECT * FROM traces 
+WHERE workspace_id = :workspaceId AND project_id = :projectId
+
+-- ❌ WRONG: Missing workspace_id
+SELECT * FROM projects WHERE id = :id
+```
+
+### 2. Use Parameterized Queries
+**Never concatenate user input into SQL strings.**
+
+```java
+// ✅ CORRECT: Parameterized query (JDBI)
+@SqlQuery("SELECT * FROM projects WHERE name = :name")
+Project findByName(@Bind("name") String name);
+
+// ✅ CORRECT: Parameterized query (R2DBC)
+statement.bind("name", name);
+
+// ❌ WRONG: String concatenation (SQL injection risk!)
+String sql = "SELECT * FROM projects WHERE name = '" + name + "'";
+```
+
+### 3. Index-Aware Queries
+**Design queries to leverage existing indexes.**
+
+```sql
+-- ✅ GOOD: Uses index on (workspace_id, name)
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId AND name = :name
+
+-- ⚠️ SLOWER: Can't use composite index efficiently
+SELECT * FROM projects WHERE name = :name
+```
+
+### 4. Limit Result Sets
+**Always use LIMIT for queries that could return many rows.**
+
+```sql
+-- ✅ CORRECT: Bounded result set
+SELECT * FROM traces 
+WHERE workspace_id = :workspaceId 
+LIMIT 1000
+
+-- ❌ WRONG: Unbounded query
+SELECT * FROM traces WHERE workspace_id = :workspaceId
+```
+
+## MySQL-Specific Best Practices
+
+### Query Optimization
+
+#### Use Appropriate Joins
+```sql
+-- ✅ GOOD: INNER JOIN for required relationships
+SELECT p.*, COUNT(t.id) as trace_count
+FROM projects p
+INNER JOIN traces t ON t.project_id = p.id
+WHERE p.workspace_id = :workspaceId
+GROUP BY p.id
+
+-- ✅ GOOD: LEFT JOIN for optional relationships
+SELECT p.*, pp.template
+FROM prompts p
+LEFT JOIN prompt_versions pp ON pp.prompt_id = p.id AND pp.commit = 'latest'
+WHERE p.workspace_id = :workspaceId
+```
+
+#### COALESCE for Optional Updates
+```sql
+-- ✅ BEST: Only update if new value provided
+UPDATE projects SET
+    name = COALESCE(:name, name),
+    description = COALESCE(:description, description),
+    visibility = COALESCE(:visibility, visibility)
+WHERE id = :id AND workspace_id = :workspaceId
+
+-- ❌ WRONG: Always overwrites with NULL if not provided
+UPDATE projects SET
+    name = :name,
+    description = :description
+WHERE id = :id
+```
+
+#### Efficient LIKE Queries
+```sql
+-- ✅ GOOD: Can use index for prefix search
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId 
+  AND name LIKE CONCAT(:prefix, '%')
+
+-- ⚠️ SLOWER: Can't use index (leading wildcard)
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId 
+  AND name LIKE CONCAT('%', :search, '%')
+
+-- ✅ BEST: Use for UX, but be aware of performance
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId 
+  AND name LIKE CONCAT('%', :search, '%')
+LIMIT 100  -- Always limit wildcard searches
+```
+
+#### IN Clause Optimization
+```sql
+-- ✅ GOOD: IN clause with small list
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId 
+  AND id IN (<ids>)  -- < 100 items
+
+-- ⚠️ CONSIDER: For large lists, use temp table or batch queries
+-- If ids list > 1000, consider alternative approach
+```
+
+### Transaction Guidelines
+
+```java
+// ✅ CORRECT: Use appropriate isolation level
+transactionTemplate.execute(WRITE, handle -> {
+    ProjectDAO dao = handle.attach(ProjectDAO.class);
+    dao.save(workspaceId, project);
+    return project;
+});
+
+// ✅ CORRECT: READ_ONLY for queries
+transactionTemplate.execute(READ_ONLY, handle -> {
+    return dao.findById(id, workspaceId);
+});
+```
+
+### MySQL Index Usage
+
+```sql
+-- ✅ GOOD: Leftmost prefix of composite index used
+WHERE workspace_id = :workspaceId AND name = :name
+-- Uses index: (workspace_id, name)
+
+-- ⚠️ PARTIAL: Only workspace_id part of index used
+WHERE workspace_id = :workspaceId AND description LIKE '%test%'
+-- Uses index: (workspace_id, name) - only first column
+
+-- ❌ NO INDEX: Skips leftmost column
+WHERE name = :name
+-- Can't use index: (workspace_id, name)
+```
+
+## ClickHouse-Specific Best Practices
+
+### ORDER BY Key Optimization
+
+**Critical**: Queries should filter by ORDER BY key columns in left-to-right order for best performance.
+
+```sql
+-- ✅ OPTIMAL: Filters match ORDER BY key exactly
+-- ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id)
+SELECT * FROM spans 
+WHERE workspace_id = :workspaceId 
+  AND project_id = :projectId 
+  AND trace_id = :traceId
+
+-- ✅ GOOD: Uses leftmost columns
+SELECT * FROM spans 
+WHERE workspace_id = :workspaceId 
+  AND project_id = :projectId
+
+-- ⚠️ SLOWER: Skips ORDER BY columns
+SELECT * FROM spans 
+WHERE workspace_id = :workspaceId 
+  AND parent_span_id = :parentId  -- Skipped project_id
+```
+
+### Deduplication with FINAL
+
+```sql
+-- ✅ GOOD: Without FINAL for most queries (faster)
+SELECT * FROM traces 
+WHERE workspace_id = :workspaceId 
+ORDER BY last_updated_at DESC
+LIMIT 1 BY id  -- Deduplicates
+
+-- ⚠️ SLOWER: Use FINAL only when needed
+SELECT * FROM traces FINAL
+WHERE workspace_id = :workspaceId 
+-- Forces deduplication before query
+
+-- ✅ BEST: Manual deduplication in query
+SELECT *
+FROM traces
+WHERE workspace_id = :workspaceId
+ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+LIMIT 1 BY id
+```
+
+### LIMIT BY for Deduplication
+
+```sql
+-- ✅ CORRECT: Get latest version of each trace
+SELECT *
+FROM traces
+WHERE workspace_id = :workspaceId AND project_id = :projectId
+ORDER BY last_updated_at DESC
+LIMIT 1 BY id  -- Per-trace deduplication
+
+-- ✅ CORRECT: Get latest feedback score per entity
+SELECT *
+FROM feedback_scores
+WHERE workspace_id = :workspaceId AND project_id = :projectId
+ORDER BY last_updated_at DESC
+LIMIT 1 BY entity_id, name  -- Per entity+name combination
+```
+
+### Aggregation Optimization
+
+```sql
+-- ✅ GOOD: Aggregation after deduplication
+SELECT 
+    project_id,
+    COUNT(DISTINCT id) as trace_count,
+    AVG(duration) as avg_duration
+FROM (
+    SELECT *
+    FROM traces
+    WHERE workspace_id = :workspaceId
+    ORDER BY last_updated_at DESC
+    LIMIT 1 BY id
+)
+GROUP BY project_id
+
+-- ✅ GOOD: Use pre-computed columns when available
+SELECT 
+    COUNT(*) as count,
+    SUM(IF(input_has_images, 1, 0)) as with_images
+FROM traces
+WHERE workspace_id = :workspaceId AND project_id = :projectId
+```
+
+### Array and Map Operations
+
+```sql
+-- ✅ GOOD: Check array membership
+SELECT * FROM traces
+WHERE workspace_id = :workspaceId
+  AND has(tags, 'production')
+
+-- ✅ GOOD: Array aggregation
+SELECT 
+    project_id,
+    groupArray(name) as trace_names,
+    groupArray(duration) as durations
+FROM traces
+WHERE workspace_id = :workspaceId
+GROUP BY project_id
+
+-- ✅ GOOD: Map operations
+SELECT 
+    id,
+    usage['prompt_tokens'] as prompt_tokens,
+    usage['completion_tokens'] as completion_tokens
+FROM spans
+WHERE workspace_id = :workspaceId AND has(usage, 'prompt_tokens')
+```
+
+### DateTime Handling
+
+```sql
+-- ✅ CORRECT: Parse datetime strings
+INSERT INTO traces (start_time, end_time)
+VALUES (
+    parseDateTime64BestEffort(:start_time, 9),
+    parseDateTime64BestEffort(:end_time, 9)
+)
+
+-- ✅ CORRECT: Date range queries
+SELECT * FROM traces
+WHERE workspace_id = :workspaceId
+  AND start_time >= :from_date
+  AND start_time < :to_date
+
+-- ✅ GOOD: Use toStartOfDay, toStartOfHour for bucketing
+SELECT 
+    toStartOfDay(start_time) as date,
+    COUNT(*) as count
+FROM traces
+WHERE workspace_id = :workspaceId
+GROUP BY date
+ORDER BY date DESC
+```
+
+### SubQuery Optimization
+
+```sql
+-- ✅ GOOD: Subquery with proper filtering
+SELECT *
+FROM traces
+WHERE workspace_id = :workspaceId
+  AND id IN (
+      SELECT entity_id 
+      FROM feedback_scores
+      WHERE workspace_id = :workspaceId
+        AND name = 'accuracy'
+        AND value > 0.8
+  )
+
+-- ✅ BETTER: Use JOIN when possible
+SELECT DISTINCT t.*
+FROM traces t
+INNER JOIN feedback_scores f ON f.entity_id = t.id
+WHERE t.workspace_id = :workspaceId
+  AND f.workspace_id = :workspaceId
+  AND f.name = 'accuracy'
+  AND f.value > 0.8
+```
+
+## Pagination Best Practices
+
+### MySQL Pagination
+
+```sql
+-- ✅ CORRECT: OFFSET-based pagination
+SELECT * FROM projects
+WHERE workspace_id = :workspaceId
+ORDER BY created_at DESC, id DESC
+LIMIT :limit OFFSET :offset
+
+-- ✅ BETTER: Cursor-based pagination for large datasets
+SELECT * FROM projects
+WHERE workspace_id = :workspaceId
+  AND (created_at, id) < (:last_created_at, :last_id)
+ORDER BY created_at DESC, id DESC
+LIMIT :limit
+```
+
+### ClickHouse Pagination
+
+```sql
+-- ✅ CORRECT: OFFSET with deduplication
+SELECT *
+FROM (
+    SELECT *
+    FROM traces
+    WHERE workspace_id = :workspaceId
+    ORDER BY last_updated_at DESC
+    LIMIT 1 BY id
+)
+ORDER BY start_time DESC
+LIMIT :limit OFFSET :offset
+
+-- ⚠️ NOTE: OFFSET can be slow for large offsets in ClickHouse
+-- Consider cursor-based pagination for deep pagination
+```
+
+## Filtering and Sorting
+
+### Dynamic Filtering Pattern (JDBI)
+
+```java
+@SqlQuery("SELECT * FROM datasets " +
+          "WHERE workspace_id = :workspace_id " +
+          "<if(name)> AND name LIKE CONCAT('%', :name, '%') <endif> " +
+          "<if(filters)> AND <filters> <endif> " +
+          "<if(visibility)> AND visibility = :visibility <endif> " +
+          "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
+          "LIMIT :limit OFFSET :offset")
+@UseStringTemplateEngine
+@AllowUnusedBindings
+List<Dataset> find(
+    @Bind("workspace_id") String workspaceId,
+    @Define("name") @Bind("name") String name,
+    @Define("filters") String filterSql,
+    @BindMap Map<String, Object> filterParams,
+    @Define("visibility") @Bind("visibility") Visibility visibility,
+    @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+    @Bind("limit") int limit,
+    @Bind("offset") int offset
+);
+```
+
+### Dynamic Filtering Pattern (R2DBC)
+
+```java
+private ST buildSearchTemplate(SearchCriteria criteria) {
+    ST template = new ST(SELECT_QUERY);
+    
+    if (StringUtils.isNotBlank(criteria.name())) {
+        template.add("name_filter", true);
+    }
+    
+    if (criteria.tags() != null && !criteria.tags().isEmpty()) {
+        template.add("tags_filter", true);
+    }
+    
+    return template;
+}
+
+// In SQL template:
+// WHERE workspace_id = :workspace_id
+// <if(name_filter)> AND name LIKE '%' || :name || '%' <endif>
+// <if(tags_filter)> AND has(tags, :tag) <endif>
+```
+
+## Performance Monitoring
+
+### Query Instrumentation
+
+```java
+// JDBI - automatic through Dropwizard metrics
+
+// R2DBC - manual segmentation
+Segment segment = startSegment("traces", "Clickhouse", "findById");
+
+return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+    .flatMap(this::mapToTraces)
+    .doFinally(signalType -> endSegment(segment));
+```
+
+### Identifying Slow Queries
+
+**MySQL**:
+```sql
+-- Enable slow query log in config
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 1  -- queries > 1 second
+```
+
+**ClickHouse**:
+```sql
+-- Check query log
+SELECT 
+    query,
+    query_duration_ms,
+    read_rows,
+    read_bytes
+FROM system.query_log
+WHERE query_duration_ms > 1000
+ORDER BY query_duration_ms DESC
+LIMIT 10
+```
+
+## Common Anti-Patterns
+
+### ❌ Missing Workspace Isolation
+```sql
+-- NEVER do this - security vulnerability!
+SELECT * FROM projects WHERE id = :id
+```
+
+### ❌ SELECT * in Production
+```sql
+-- ❌ BAD: Fetches unnecessary columns
+SELECT * FROM traces WHERE workspace_id = :workspaceId
+
+-- ✅ GOOD: Select only needed columns
+SELECT id, name, start_time, end_time 
+FROM traces WHERE workspace_id = :workspaceId
+```
+
+### ❌ N+1 Query Problem
+```java
+// ❌ BAD: N+1 queries
+List<Project> projects = projectDAO.findAll(workspaceId);
+for (Project project : projects) {
+    long count = traceDAO.countByProject(project.id());  // N queries!
+}
+
+// ✅ GOOD: Single query with JOIN
+List<ProjectWithCount> projects = projectDAO.findAllWithTraceCounts(workspaceId);
+```
+
+### ❌ Using FINAL Unnecessarily (ClickHouse)
+```sql
+-- ❌ SLOW: FINAL on every query
+SELECT * FROM traces FINAL WHERE workspace_id = :workspaceId
+
+-- ✅ FAST: Use LIMIT BY for deduplication
+SELECT * FROM traces 
+WHERE workspace_id = :workspaceId
+ORDER BY last_updated_at DESC
+LIMIT 1 BY id
+```
+
+### ❌ Deep OFFSET Pagination
+```sql
+-- ❌ SLOW: Large offset
+SELECT * FROM traces LIMIT 100 OFFSET 100000  -- Very slow!
+
+-- ✅ BETTER: Cursor-based
+SELECT * FROM traces 
+WHERE id > :last_id
+LIMIT 100
+```
+
+### ❌ Unindexed Sorting
+```sql
+-- ❌ SLOW: Sorts on non-indexed column
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId
+ORDER BY description  -- Not indexed!
+
+-- ✅ FAST: Sort on indexed column
+SELECT * FROM projects 
+WHERE workspace_id = :workspaceId
+ORDER BY created_at DESC  -- Indexed
+```
+
+## Security Best Practices
+
+### 1. Always Use Parameter Binding
+```java
+// ✅ CORRECT: Parameterized
+statement.bind("name", userInput);
+
+// ❌ WRONG: String concatenation
+String sql = "WHERE name = '" + userInput + "'";  // SQL injection!
+```
+
+### 2. Validate Enum Values
+```java
+// ✅ CORRECT: Use Java enums
+@SqlQuery("SELECT * FROM projects WHERE visibility = :visibility")
+List<Project> find(@Bind("visibility") Visibility visibility);
+
+// ❌ WRONG: String parameter for enum
+@SqlQuery("SELECT * FROM projects WHERE visibility = :visibility")
+List<Project> find(@Bind("visibility") String visibility);  // Injection risk
+```
+
+### 3. Sanitize Dynamic SQL
+```java
+// ✅ CORRECT: Whitelist approach for sorting
+String sortField = ALLOWED_SORT_FIELDS.contains(sort) ? sort : "id";
+template.add("sort_field", sortField);
+
+// ❌ WRONG: Unsanitized user input
+template.add("sort_field", request.getSortField());  // Injection risk!
+```
+
+### 4. Limit Query Complexity
+```java
+// ✅ GOOD: Bounded complexity
+if (ids.size() > 1000) {
+    throw new IllegalArgumentException("Too many IDs");
+}
+
+// ✅ GOOD: Timeout protection
+@SqlQuery("SELECT /*+ MAX_EXECUTION_TIME(5000) */ * FROM traces ...")
+```
+
+## Best Practices Checklist
+
+- [ ] ✅ Query includes `workspace_id` filter
+- [ ] ✅ Using parameterized queries (no string concatenation)
+- [ ] ✅ Result set is limited (LIMIT clause)
+- [ ] ✅ Using appropriate indexes
+- [ ] ✅ Avoiding SELECT *
+- [ ] ✅ Using COALESCE for optional updates (MySQL)
+- [ ] ✅ Using LIMIT BY for deduplication (ClickHouse)
+- [ ] ✅ Filtering by ORDER BY key columns (ClickHouse)
+- [ ] ✅ Handling nullable columns properly
+- [ ] ✅ Using appropriate transaction isolation (MySQL)
+- [ ] ✅ Context propagation for reactive queries (ClickHouse)
+- [ ] ✅ Performance instrumentation added
+- [ ] ✅ Error handling implemented
+
+## Related Rules
+
+- [Database Overview](mdc:.cursor/rules/database-overview.mdc)
+- [MySQL Schema Patterns](mdc:.cursor/rules/mysql-schema-patterns.mdc)
+- [ClickHouse Schema Patterns](mdc:.cursor/rules/clickhouse-schema-patterns.mdc)
+- [JDBI DAO Patterns](mdc:.cursor/rules/jdbi-dao-patterns.mdc)
+- [R2DBC Reactive Patterns](mdc:.cursor/rules/r2dbc-reactive-patterns.mdc)
+- [Database Migration Workflow](mdc:.cursor/rules/database-migration-workflow.mdc)

@@ -1,0 +1,393 @@
+---
+description: ClickHouse schema structure, table engines, and analytics patterns for high-volume data
+---
+
+# ClickHouse Schema Patterns (Analytics Database)
+
+> **How to Use This Rule:**
+> - **Patterns & Conventions**: Always current - follow these for all tables
+> - **Engine Patterns**: Stable architectural patterns
+> - **Current Schema**: Check migrations or search for DAO implementations
+> 
+> **Finding Current Schema:**
+> 1. Migrations: [db-app-analytics/migrations/](mdc:apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/)
+> 2. Search: `codebase_search("TraceDAOImpl")` or similar for DAO implementations
+> 3. Check: Existing DAO methods to see actual columns used
+
+This rule documents ClickHouse schema patterns for Opik's analytics database for high-volume time-series and analytics data.
+
+## Core Principles
+
+1. **ReplacingMergeTree Engine**: Use for deduplication with version-based updates
+2. **Version Column**: Always use `last_updated_at` as the version column
+3. **ORDER BY Keys**: Design carefully for query performance (leftmost columns matter most)
+4. **Workspace Isolation**: Include `workspace_id` as first column in ORDER BY
+5. **Immutable by Default**: Treat as append-only; updates create new versions
+6. **Nanosecond Precision**: Use `DateTime64(9, 'UTC')` for timestamps
+7. **No Foreign Keys**: ClickHouse doesn't support traditional foreign key constraints
+
+## Standard Table Engine Pattern
+
+### ReplacingMergeTree Template
+```sql
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.{table_name}
+(
+    id              FixedString(36),
+    workspace_id    String,
+    project_id      FixedString(36),
+    -- entity-specific columns
+    created_at      DateTime64(9, 'UTC') DEFAULT now64(9),
+    last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9),
+    created_by      String DEFAULT '',
+    last_updated_by String DEFAULT ''
+) ENGINE = ReplacingMergeTree(last_updated_at)
+  ORDER BY (workspace_id, project_id, id);
+```
+
+### Replicated Pattern (for clusters)
+```sql
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.{table_name} ON CLUSTER '{cluster}'
+(
+    -- columns same as above
+) ENGINE = ReplicatedReplacingMergeTree(
+    '/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/{table_name}', 
+    '{replica}', 
+    last_updated_at
+)
+  ORDER BY (workspace_id, project_id, id);
+```
+
+## Key Column Types
+
+### ID Fields
+```sql
+id FixedString(36)              -- UUIDs for primary identifiers
+project_id FixedString(36)      -- UUID references
+trace_id FixedString(36)        -- UUID references
+workspace_id String             -- Variable-length workspace identifier
+thread_id String                -- Variable-length identifiers
+```
+
+### String Fields
+```sql
+name String                     -- Variable-length strings
+input String DEFAULT ''         -- Large text content
+output String DEFAULT ''        -- Large text content
+metadata String DEFAULT ''      -- JSON stored as string
+reason String DEFAULT ''        -- Optional text
+model Nullable(String)          -- Optional strings
+```
+
+### Numeric Fields
+```sql
+value Decimal32(4)              -- Feedback scores with 4 decimal places
+total_estimated_cost Decimal64(8)  -- Cost tracking with 8 decimals
+usage Map(String, Int32)        -- Key-value numeric mappings
+duration Int64                  -- Duration in milliseconds
+```
+
+### Date/Time Fields
+```sql
+-- Nanosecond precision (older tables)
+created_at DateTime64(9, 'UTC') DEFAULT now64(9)
+last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9)
+start_time DateTime64(9, 'UTC') DEFAULT now64(9)
+end_time Nullable(DateTime64(9, 'UTC'))
+
+-- Microsecond precision (newer tables - preferred)
+created_at DateTime64(6, 'UTC') DEFAULT now64(6)
+last_updated_at DateTime64(6, 'UTC') DEFAULT now64(6)
+```
+
+### ENUM Fields
+```sql
+type Enum8('unknown' = 0, 'general' = 1, 'tool' = 2, 'llm' = 3)
+entity_type ENUM('unknown' = 0, 'span' = 1, 'trace' = 2)
+source Enum8('sdk', 'ui')
+status ENUM('unknown' = 0, 'active' = 1, 'inactive' = 2)
+```
+
+### Array and Map Fields
+```sql
+tags Array(String)              -- Array of tags
+usage Map(String, Int32)        -- Key-value pairs
+providers Array(String)         -- Array of provider names
+```
+
+### Nullable Fields
+```sql
+end_time Nullable(DateTime64(9, 'UTC'))
+model Nullable(String)
+error_info Nullable(String)
+parent_span_id Nullable(FixedString(36))
+```
+
+## Table Pattern Examples
+
+> **Note**: These show stable patterns. Actual tables may have additional columns - check DAO implementations.
+
+### Telemetry Entity Pattern (Traces, Spans)
+```sql
+CREATE TABLE {telemetry_entity}
+(
+    id FixedString(36),
+    workspace_id String,
+    project_id FixedString(36),
+    name String,
+    input String DEFAULT '',
+    output String DEFAULT '',
+    metadata String DEFAULT '',
+    tags Array(String),
+    start_time DateTime64(9, 'UTC'),
+    end_time Nullable(DateTime64(9, 'UTC')),
+    -- entity-specific columns
+    created_at DateTime64(9, 'UTC') DEFAULT now64(9),
+    last_updated_at DateTime64(9, 'UTC') DEFAULT now64(9),
+    created_by String DEFAULT '',
+    last_updated_by String DEFAULT ''
+) ENGINE = ReplacingMergeTree(last_updated_at)
+  ORDER BY (workspace_id, project_id, id);
+```
+
+**Key Patterns**:
+- Time-series data with start/end times
+- Large text fields (input/output)
+- Metadata stored as JSON string
+- Tags array for categorization
+
+### Score/Feedback Pattern
+```sql
+CREATE TABLE {score_entity}
+(
+    id FixedString(36),
+    workspace_id String,
+    project_id FixedString(36),
+    entity_id FixedString(36),          -- References trace or span
+    entity_type ENUM('trace', 'span'),
+    name String,
+    value Decimal32(4),
+    reason String DEFAULT '',
+    source Enum8('sdk', 'ui'),
+    -- standard audit fields
+) ENGINE = ReplacingMergeTree(last_updated_at)
+  ORDER BY (workspace_id, project_id, entity_id, name, id);
+```
+
+**Key Patterns**:
+- References to parent entities (trace/span)
+- Decimal values for scores
+- Entity type enum for polymorphic references
+- Source tracking
+
+### Experiment/Dataset Pattern
+```sql
+CREATE TABLE {experiment_entity}
+(
+    id FixedString(36),
+    workspace_id String,
+    project_id FixedString(36),
+    dataset_id FixedString(36),
+    name String,
+    -- experiment-specific columns
+    -- standard audit fields
+) ENGINE = ReplacingMergeTree(last_updated_at)
+  ORDER BY (workspace_id, project_id, dataset_id, id);
+```
+
+**Key Patterns**:
+- Hierarchical relationships (project → dataset → experiment)
+- ORDER BY reflects query patterns
+- Standard versioning with last_updated_at
+
+## ORDER BY Design Patterns
+
+### Workspace-First Pattern (Most Common)
+```sql
+ORDER BY (workspace_id, project_id, id)
+```
+**Use when**: Most queries filter by workspace and project
+
+### Time-Series Pattern
+```sql
+ORDER BY (workspace_id, project_id, start_time, id)
+```
+**Use when**: Queries frequently filter by time ranges
+
+### Hierarchical Pattern
+```sql
+ORDER BY (workspace_id, project_id, parent_id, id)
+```
+**Use when**: Queries navigate parent-child relationships
+
+### Composite Key Pattern
+```sql
+ORDER BY (workspace_id, project_id, entity_id, name, id)
+```
+**Use when**: Queries filter by multiple dimensions
+
+## ReplacingMergeTree Behavior
+
+### How Deduplication Works
+```sql
+ENGINE = ReplacingMergeTree(last_updated_at)
+```
+
+**Behavior**:
+- Rows with same ORDER BY key are deduplicated
+- Row with highest `last_updated_at` is kept
+- Deduplication happens during merges (not immediately)
+- Use `FINAL` in queries to force deduplication
+
+### Querying with FINAL
+```sql
+-- ✅ GOOD: Use FINAL to get latest version
+SELECT * FROM traces FINAL
+WHERE workspace_id = :workspaceId AND id = :id
+
+-- ⚠️ CAUTION: Without FINAL may return multiple versions
+SELECT * FROM traces
+WHERE workspace_id = :workspaceId AND id = :id
+```
+
+## Migration Patterns
+
+### Creating New Table
+```sql
+--liquibase formatted sql
+--changeset author:000XXX_add_{table_name}_table
+--comment: Add {table_name} table for {purpose}
+
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.{table_name}
+(
+    -- columns following standard pattern
+) ENGINE = ReplacingMergeTree(last_updated_at)
+  ORDER BY (workspace_id, project_id, id);
+
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.{table_name};
+```
+
+### Adding Column
+```sql
+--liquibase formatted sql
+--changeset author:000XXX_add_{column}_to_{table}
+--comment: Add {column} column to support {feature}
+
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.{table_name}
+ADD COLUMN {column_name} {type} {default};
+
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.{table_name} DROP COLUMN {column_name};
+```
+
+### Modifying Column (Requires Recreation)
+```sql
+-- ClickHouse doesn't support ALTER COLUMN TYPE directly
+-- Must create new table and migrate data
+
+--changeset author:000XXX_modify_{column}_in_{table}
+--comment: Change {column} type from {old_type} to {new_type}
+
+-- 1. Create new table with new schema
+CREATE TABLE ${ANALYTICS_DB_DATABASE_NAME}.{table_name}_new AS 
+${ANALYTICS_DB_DATABASE_NAME}.{table_name} 
+ENGINE = ReplacingMergeTree(last_updated_at)
+ORDER BY (workspace_id, project_id, id);
+
+-- 2. Migrate data
+INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.{table_name}_new 
+SELECT * FROM ${ANALYTICS_DB_DATABASE_NAME}.{table_name};
+
+-- 3. Swap tables
+RENAME TABLE 
+    ${ANALYTICS_DB_DATABASE_NAME}.{table_name} TO ${ANALYTICS_DB_DATABASE_NAME}.{table_name}_old,
+    ${ANALYTICS_DB_DATABASE_NAME}.{table_name}_new TO ${ANALYTICS_DB_DATABASE_NAME}.{table_name};
+
+-- 4. Drop old table
+DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.{table_name}_old;
+```
+
+## Performance Patterns
+
+### Efficient Queries
+
+**✅ GOOD: Leverage ORDER BY**
+```sql
+-- Query uses leftmost ORDER BY columns
+SELECT * FROM traces FINAL
+WHERE workspace_id = :workspaceId 
+  AND project_id = :projectId
+  AND id = :id
+```
+
+**⚠️ SLOWER: Skip ORDER BY columns**
+```sql
+-- Query skips workspace_id - less efficient
+SELECT * FROM traces FINAL
+WHERE project_id = :projectId
+```
+
+### Aggregation Queries
+```sql
+-- ✅ GOOD: Aggregate with GROUP BY on ORDER BY columns
+SELECT 
+    workspace_id,
+    project_id,
+    count(*) as trace_count
+FROM traces FINAL
+WHERE workspace_id = :workspaceId
+GROUP BY workspace_id, project_id
+```
+
+### Time-Range Queries
+```sql
+-- ✅ GOOD: Filter by time with workspace
+SELECT * FROM traces FINAL
+WHERE workspace_id = :workspaceId
+  AND start_time >= :startTime
+  AND start_time < :endTime
+ORDER BY start_time DESC
+LIMIT 100
+```
+
+## Workspace Isolation
+
+**CRITICAL**: Every query MUST filter by workspace_id
+
+```sql
+-- ✅ CORRECT: Always include workspace_id
+SELECT * FROM traces FINAL
+WHERE workspace_id = :workspaceId AND id = :id
+
+-- ❌ WRONG: Missing workspace_id
+SELECT * FROM traces FINAL WHERE id = :id
+```
+
+## Finding Current Schema
+
+### Using Codebase Search
+```
+codebase_search("TraceDAOImpl class")
+codebase_search("How are traces inserted into ClickHouse?")
+codebase_search("CREATE TABLE traces")
+```
+
+### Checking Migrations
+```bash
+# Find latest migrations
+ls -la apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/ | tail -10
+
+# Search for specific table
+grep -r "CREATE TABLE.*traces" apps/opik-backend/src/main/resources/liquibase/
+```
+
+### Checking DAO Implementations
+Look for DAO implementations in:
+- `apps/opik-backend/src/main/java/com/comet/opik/domain/`
+- Search for `*DAOImpl.java` files
+- Check SQL strings in implementation classes
+
+## Related Rules
+
+- [R2DBC Reactive Patterns](mdc:.cursor/rules/r2dbc-reactive-patterns.mdc) - How to access ClickHouse with R2DBC
+- [Database Overview](mdc:.cursor/rules/database-overview.mdc) - When to use MySQL vs ClickHouse
+- [Database Migration Workflow](mdc:.cursor/rules/database-migration-workflow.mdc) - How to create migrations
+- [Database Query Best Practices](mdc:.cursor/rules/database-query-best-practices.mdc) - Query optimization

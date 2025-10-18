@@ -1,0 +1,547 @@
+---
+description: JDBI3 DAO interface patterns for MySQL database access with annotations and query patterns
+---
+
+# JDBI DAO Patterns (MySQL)
+
+> **Note**: This rule documents patterns and conventions. For current table schemas:
+> - Check [MySQL Schema Patterns](mdc:.cursor/rules/mysql-schema-patterns.mdc)
+> - Search for existing DAO interfaces: `codebase_search("ProjectDAO interface")`
+> - Review migrations: [db-app-state/migrations/](mdc:apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/)
+
+This rule documents JDBI3 DAO interface patterns used in Opik for MySQL database access.
+
+## Core Principles
+
+1. **Interface-Based**: DAOs are interfaces, not classes (JDBI generates implementations)
+2. **SQL Object API**: Use `@SqlQuery`, `@SqlUpdate`, `@SqlBatch` annotations
+3. **Type Safety**: Register mappers and argument factories for custom types
+4. **Template Engine**: Use StringTemplate4 for dynamic SQL
+5. **Transaction Management**: Use `TransactionTemplate` in services, not DAOs
+6. **No Business Logic**: DAOs only handle data access
+
+## DAO Interface Structure
+
+### Basic DAO Template
+```java
+package com.comet.opik.domain;
+
+import com.comet.opik.api.Entity;
+import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlQuery;
+import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+@RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterConstructorMapper(Entity.class)
+interface EntityDAO {
+    
+    @SqlUpdate("INSERT INTO entities (id, name, workspace_id, created_by, last_updated_by) " +
+               "VALUES (:bean.id, :bean.name, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy)")
+    void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Entity entity);
+    
+    @SqlQuery("SELECT * FROM entities WHERE id = :id AND workspace_id = :workspaceId")
+    Optional<Entity> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+    
+    @SqlUpdate("DELETE FROM entities WHERE id = :id AND workspace_id = :workspaceId")
+    void delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+}
+```
+
+## JDBI Annotations
+
+### Class-Level Annotations
+
+#### Register Mappers
+```java
+// Map constructor parameters from result set
+@RegisterConstructorMapper(Project.class)
+
+// Map columns to objects
+@RegisterColumnMapper(CustomMapper.class)
+
+// Map rows with custom logic
+@RegisterRowMapper(CustomRowMapper.class)
+```
+
+#### Register Argument Factories
+```java
+// Handle UUID binding
+@RegisterArgumentFactory(UUIDArgumentFactory.class)
+
+// Handle JSON binding
+@RegisterArgumentFactory(JsonNodeArgumentFactory.class)
+
+// Handle Set<String> binding
+@RegisterArgumentFactory(SetFlatArgumentFactory.class)
+
+// Handle Map<String, String> binding
+@RegisterArgumentFactory(MapFlatArgumentFactory.class)
+```
+
+### Method-Level Annotations
+
+#### Query Operations
+```java
+// SELECT queries
+@SqlQuery("SELECT * FROM projects WHERE id = :id")
+Project findById(@Bind("id") UUID id);
+
+// Return Optional for single result
+@SqlQuery("SELECT * FROM projects WHERE id = :id")
+Optional<Project> findById(@Bind("id") UUID id);
+
+// Return List for multiple results
+@SqlQuery("SELECT * FROM projects WHERE workspace_id = :workspaceId")
+List<Project> findAll(@Bind("workspaceId") String workspaceId);
+```
+
+#### Update Operations
+```java
+// INSERT
+@SqlUpdate("INSERT INTO projects (id, name, workspace_id) VALUES (:id, :name, :workspaceId)")
+void save(@Bind("id") UUID id, @Bind("name") String name, @Bind("workspaceId") String workspaceId);
+
+// UPDATE (returns affected row count)
+@SqlUpdate("UPDATE projects SET name = :name WHERE id = :id")
+int update(@Bind("id") UUID id, @Bind("name") String name);
+
+// DELETE
+@SqlUpdate("DELETE FROM projects WHERE id = :id")
+void delete(@Bind("id") UUID id);
+```
+
+#### Batch Operations
+```java
+// Batch insert
+@SqlBatch("INSERT INTO projects (id, name, workspace_id) VALUES (:id, :name, :workspaceId)")
+void saveBatch(@BindMethods("bean") List<Project> projects, @Bind("workspaceId") String workspaceId);
+
+// Batch update
+@SqlBatch("UPDATE projects SET last_updated_trace_at = :lastUpdatedAt WHERE id = :id AND workspace_id = :workspaceId")
+void batchUpdateLastUpdatedTraceAt(@Bind("workspaceId") String workspaceId,
+                                    @BindMethods("bean") List<ProjectIdLastUpdated> updates);
+```
+
+## Parameter Binding
+
+### @Bind - Simple Values
+```java
+@SqlQuery("SELECT * FROM projects WHERE id = :id")
+Project findById(@Bind("id") UUID id);
+
+@SqlQuery("SELECT * FROM projects WHERE workspace_id = :workspaceId AND name = :name")
+Project findByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name);
+```
+
+### @BindList - Collections (IN clauses)
+```java
+@SqlQuery("SELECT * FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+List<Project> findByIds(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+
+@SqlUpdate("DELETE FROM projects WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+```
+
+### @BindMethods - Bean Properties
+```java
+// Binds getters from the object (removes 'get' prefix, lowercases)
+@SqlUpdate("INSERT INTO projects (id, name, description) VALUES (:bean.id, :bean.name, :bean.description)")
+void save(@BindMethods("bean") Project project);
+
+// Access nested properties
+@SqlUpdate("INSERT INTO entities (id, name) VALUES (:entity.id, :entity.name)")
+void save(@BindMethods("entity") Entity entity);
+```
+
+### @BindMap - Dynamic Key-Value Pairs
+```java
+@SqlQuery("SELECT * FROM datasets WHERE <filters>")
+@UseStringTemplateEngine
+List<Dataset> find(@BindMap Map<String, Object> filterMapping, @Define("filters") String filters);
+
+// filterMapping might be: {"score": 0.8, "status": "active"}
+// filters might be: "score > :score AND status = :status"
+```
+
+### @Define - Template Variables (NOT SQL parameters)
+```java
+@SqlQuery("SELECT * FROM projects " +
+          "<if(name)> WHERE name LIKE concat('%', :name, '%') <endif>")
+@UseStringTemplateEngine
+List<Project> find(@Define("name") @Bind("name") String name);
+
+// @Define controls template rendering
+// @Bind provides SQL parameter value
+```
+
+## String Template Engine
+
+### Enable Template Engine
+```java
+@UseStringTemplateEngine  // Required for <if>, <items>, etc.
+@AllowUnusedBindings      // Allow bound params that might not be used
+```
+
+### Conditional SQL
+
+#### Simple Conditionals
+```java
+@SqlQuery("SELECT * FROM projects WHERE workspace_id = :workspaceId " +
+          "<if(name)> AND name LIKE concat('%', :name, '%') <endif>")
+@UseStringTemplateEngine
+List<Project> find(@Bind("workspaceId") String workspaceId, 
+                    @Define("name") @Bind("name") String name);
+```
+
+#### Multiple Conditions
+```java
+@SqlQuery("SELECT COUNT(*) FROM datasets " +
+          "WHERE workspace_id = :workspace_id " +
+          "<if(name)> AND name LIKE concat('%', :name, '%') <endif> " +
+          "<if(filters)> AND <filters> <endif> " +
+          "<if(visibility)> AND visibility = :visibility <endif> " +
+          "<if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>")
+@UseStringTemplateEngine
+@AllowUnusedBindings
+long findCount(@Bind("workspace_id") String workspaceId,
+               @Define("name") @Bind("name") String name,
+               @Define("with_experiments_only") boolean withExperimentsOnly,
+               @Define("visibility") @Bind("visibility") Visibility visibility,
+               @Define("filters") String filters,
+               @BindMap Map<String, Object> filterMapping);
+```
+
+### Dynamic Sorting
+```java
+@SqlQuery("SELECT * FROM projects " +
+          "WHERE workspace_id = :workspaceId " +
+          "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
+          "LIMIT :limit OFFSET :offset")
+@UseStringTemplateEngine
+List<Project> find(@Bind("workspaceId") String workspaceId,
+                    @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+                    @Bind("limit") int limit,
+                    @Bind("offset") int offset);
+
+// sortingFields might be: "name ASC, created_at DESC"
+```
+
+### Iteration (for batch inserts)
+```java
+// Not common in JDBI (use @SqlBatch instead), but possible:
+@SqlUpdate("""
+    INSERT INTO items (id, value) VALUES
+    <items:{item | (:id<item.index>, :value<item.index>)<if(item.hasNext)>,<endif>}>
+    """)
+@UseStringTemplateEngine
+void batchInsert(@Define("items") List<?> items, ...);
+```
+
+## Common DAO Patterns
+
+### CRUD Operations
+
+**Example**: [ProjectDAO.java](mdc:apps/opik-backend/src/main/java/com/comet/opik/domain/ProjectDAO.java)
+
+```java
+@RegisterConstructorMapper(Project.class)
+@RegisterArgumentFactory(UUIDArgumentFactory.class)
+interface ProjectDAO {
+    
+    // Create
+    @SqlUpdate("INSERT INTO projects (id, name, description, workspace_id, visibility, created_by, last_updated_by) " +
+               "VALUES (:bean.id, :bean.name, :bean.description, :workspaceId, COALESCE(:bean.visibility, 'private'), :bean.createdBy, :bean.lastUpdatedBy)")
+    void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Project project);
+    
+    // Read
+    @SqlQuery("SELECT * FROM projects WHERE id = :id AND workspace_id = :workspaceId")
+    Project findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+    
+    // Update
+    @SqlUpdate("UPDATE projects SET " +
+               "name = COALESCE(:name, name), " +
+               "description = COALESCE(:description, description), " +
+               "visibility = COALESCE(:visibility, visibility), " +
+               "last_updated_by = :lastUpdatedBy " +
+               "WHERE id = :id AND workspace_id = :workspaceId")
+    void update(@Bind("id") UUID id,
+                @Bind("workspaceId") String workspaceId,
+                @Bind("name") String name,
+                @Bind("description") String description,
+                @Bind("visibility") Visibility visibility,
+                @Bind("lastUpdatedBy") String lastUpdatedBy);
+    
+    // Delete
+    @SqlUpdate("DELETE FROM projects WHERE id = :id AND workspace_id = :workspaceId")
+    void delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+    
+    // Optional wrapper
+    default Optional<Project> fetch(UUID id, String workspaceId) {
+        return Optional.ofNullable(findById(id, workspaceId));
+    }
+}
+```
+
+### Pagination Pattern
+
+**Example**: [DatasetDAO.java](mdc:apps/opik-backend/src/main/java/com/comet/opik/domain/DatasetDAO.java)
+
+```java
+// Count total
+@SqlQuery("SELECT COUNT(*) FROM datasets " +
+          "WHERE workspace_id = :workspace_id " +
+          "<if(name)> AND name LIKE concat('%', :name, '%') <endif> " +
+          "<if(visibility)> AND visibility = :visibility <endif>")
+@UseStringTemplateEngine
+@AllowUnusedBindings
+long findCount(@Bind("workspace_id") String workspaceId,
+               @Define("name") @Bind("name") String name,
+               @Define("visibility") @Bind("visibility") Visibility visibility);
+
+// Fetch page
+@SqlQuery("SELECT * FROM datasets " +
+          "WHERE workspace_id = :workspace_id " +
+          "<if(name)> AND name LIKE concat('%', :name, '%') <endif> " +
+          "<if(visibility)> AND visibility = :visibility <endif> " +
+          "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
+          "LIMIT :limit OFFSET :offset")
+@UseStringTemplateEngine
+@AllowUnusedBindings
+List<Dataset> find(@Bind("workspace_id") String workspaceId,
+                    @Define("name") @Bind("name") String name,
+                    @Define("visibility") @Bind("visibility") Visibility visibility,
+                    @Define("sort_fields") @Bind("sort_fields") String sortingFields,
+                    @Bind("limit") int limit,
+                    @Bind("offset") int offset);
+```
+
+### Batch Operations Pattern
+
+```java
+@SqlBatch("UPDATE projects SET last_updated_trace_at = :lastUpdatedAt " +
+          "WHERE id = :id AND workspace_id = :workspaceId")
+void batchUpdateLastUpdatedTraceAt(@Bind("workspaceId") String workspaceId,
+                                    @BindMethods("bean") List<ProjectIdLastUpdated> updates);
+
+@SqlBatch("INSERT INTO items (id, name, workspace_id) VALUES (:id, :name, :workspaceId)")
+void saveBatch(@BindMethods List<Item> items, @Bind("workspaceId") String workspaceId);
+```
+
+### Filter Building Pattern
+
+**Example**: Dynamic filters with BindMap
+
+```java
+@SqlQuery("SELECT * FROM datasets " +
+          "WHERE workspace_id = :workspace_id " +
+          "<if(filters)> AND <filters> <endif> " +
+          "ORDER BY id DESC LIMIT :limit OFFSET :offset")
+@UseStringTemplateEngine
+@AllowUnusedBindings
+List<Dataset> find(@Bind("workspace_id") String workspaceId,
+                    @Define("filters") String filterSql,
+                    @BindMap Map<String, Object> filterParams,
+                    @Bind("limit") int limit,
+                    @Bind("offset") int offset);
+
+// Usage in service:
+// filterSql = "score > :score AND status = :status"
+// filterParams = Map.of("score", 0.8, "status", "active")
+```
+
+## Transaction Management
+
+### Service Layer Pattern
+
+**DAOs don't manage transactions**. Use `TransactionTemplate` in services:
+
+```java
+@Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
+class ProjectService {
+    
+    private final TransactionTemplate transactionTemplate;
+    private final Provider<RequestContext> requestContext;
+    
+    public Project create(ProjectCreate request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+        
+        var project = Project.builder()
+            .id(generator.generateId())
+            .name(request.name())
+            .workspaceId(workspaceId)
+            .createdBy(userName)
+            .lastUpdatedBy(userName)
+            .build();
+        
+        return transactionTemplate.execute(WRITE, handle -> {
+            ProjectDAO dao = handle.attach(ProjectDAO.class);
+            dao.save(workspaceId, project);
+            return project;
+        });
+    }
+    
+    public Project getById(UUID id) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        
+        return transactionTemplate.execute(READ_ONLY, handle -> {
+            ProjectDAO dao = handle.attach(ProjectDAO.class);
+            return dao.findById(id, workspaceId);
+        });
+    }
+}
+```
+
+### Transaction Constants
+
+```java
+import static com.comet.opik.infrastructure.db.TransactionTemplate.WRITE;
+import static com.comet.opik.infrastructure.db.TransactionTemplate.READ_ONLY;
+
+// WRITE - for INSERT, UPDATE, DELETE
+transactionTemplate.execute(WRITE, handle -> { ... });
+
+// READ_ONLY - for SELECT queries
+transactionTemplate.execute(READ_ONLY, handle -> { ... });
+```
+
+## Custom Argument Factories
+
+### UUID Handling
+
+**Location**: [UUIDArgumentFactory.java](mdc:apps/opik-backend/src/main/java/com/comet/opik/infrastructure/db/UUIDArgumentFactory.java)
+
+```java
+@RegisterArgumentFactory(UUIDArgumentFactory.class)
+interface EntityDAO {
+    @SqlQuery("SELECT * FROM entities WHERE id = :id")
+    Entity findById(@Bind("id") UUID id);  // Automatically converted to CHAR(36)
+}
+```
+
+### JSON Handling
+
+**Location**: [JsonNodeArgumentFactory.java](mdc:apps/opik-backend/src/main/java/com/comet/opik/infrastructure/db/JsonNodeArgumentFactory.java)
+
+```java
+@RegisterArgumentFactory(JsonNodeArgumentFactory.class)
+interface EntityDAO {
+    @SqlUpdate("INSERT INTO entities (id, data) VALUES (:id, :data)")
+    void save(@Bind("id") UUID id, @Bind("data") JsonNode data);
+}
+```
+
+### Set<String> Handling
+
+**Location**: [SetFlatArgumentFactory.java](mdc:apps/opik-backend/src/main/java/com/comet/opik/infrastructure/db/SetFlatArgumentFactory.java)
+
+```java
+@RegisterArgumentFactory(SetFlatArgumentFactory.class)
+@RegisterColumnMapper(SetFlatArgumentFactory.class)
+interface EntityDAO {
+    @SqlUpdate("INSERT INTO entities (id, tags) VALUES (:id, :tags)")
+    void save(@Bind("id") UUID id, @Bind("tags") Set<String> tags);
+}
+```
+
+## Common Anti-Patterns to Avoid
+
+❌ **Missing workspace isolation**
+```java
+// BAD: No workspace_id check
+@SqlQuery("SELECT * FROM projects WHERE id = :id")
+Project findById(@Bind("id") UUID id);
+```
+
+✅ **Correct**
+```java
+@SqlQuery("SELECT * FROM projects WHERE id = :id AND workspace_id = :workspaceId")
+Project findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+```
+
+❌ **Business logic in DAO**
+```java
+// BAD: Business logic in DAO default method
+default Project createProject(String name) {
+    UUID id = UUID.randomUUID();
+    Project project = new Project(id, name, ...);
+    save(project);
+    sendNotification(project);  // Business logic!
+    return project;
+}
+```
+
+✅ **Correct**
+```java
+// DAO only does data access
+@SqlUpdate("INSERT INTO projects (...) VALUES (...)")
+void save(@BindMethods Project project);
+
+// Service handles business logic
+class ProjectService {
+    public Project createProject(String name) {
+        Project project = buildProject(name);
+        dao.save(project);
+        notificationService.send(project);
+        return project;
+    }
+}
+```
+
+❌ **Using @Define for SQL parameters**
+```java
+// BAD: @Define doesn't create SQL parameters
+@SqlQuery("SELECT * FROM projects WHERE id = <id>")
+Project findById(@Define("id") UUID id);  // SQL injection risk!
+```
+
+✅ **Correct**
+```java
+@SqlQuery("SELECT * FROM projects WHERE id = :id")
+Project findById(@Bind("id") UUID id);  // Parameterized query
+```
+
+❌ **Forgetting @UseStringTemplateEngine**
+```java
+// BAD: Template syntax won't work without annotation
+@SqlQuery("SELECT * FROM projects <if(name)>WHERE name = :name<endif>")
+List<Project> find(@Define("name") String name);  // Won't render <if>
+```
+
+✅ **Correct**
+```java
+@SqlQuery("SELECT * FROM projects <if(name)>WHERE name = :name<endif>")
+@UseStringTemplateEngine  // Required!
+List<Project> find(@Define("name") @Bind("name") String name);
+```
+
+## Best Practices
+
+1. **Always include workspace_id** in WHERE clauses
+2. **Use Optional<T>** for single results that might not exist
+3. **Use @BindMethods** for object binding, not individual fields
+4. **Register custom argument factories** at class level
+5. **Use COALESCE** for optional updates: `COALESCE(:newValue, existingColumn)`
+6. **Use @AllowUnusedBindings** with conditional SQL
+7. **Keep SQL readable** with multi-line strings or text blocks (`"""`)
+8. **Return affected row count** from updates when needed (`int update(...)`)
+9. **Use default methods** only for simple Optional wrappers
+10. **Let services handle transactions**, not DAOs
+
+## Related Rules
+
+- [Database Overview](mdc:.cursor/rules/database-overview.mdc)
+- [MySQL Schema Patterns](mdc:.cursor/rules/mysql-schema-patterns.mdc)
+- [Database Query Best Practices](mdc:.cursor/rules/database-query-best-practices.mdc)
+- [Database Migration Workflow](mdc:.cursor/rules/database-migration-workflow.mdc)
