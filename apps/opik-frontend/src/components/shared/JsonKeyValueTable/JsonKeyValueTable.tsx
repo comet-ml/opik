@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   ColumnDef,
   ExpandedState,
@@ -32,6 +32,10 @@ interface JsonKeyValueTableProps {
   className?: string;
   maxDepth?: number;
   localStorageKey?: string;
+  controlledExpanded?: ExpandedState;
+  onExpandedChange?: (
+    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+  ) => void;
 }
 
 interface JsonRowData {
@@ -40,7 +44,54 @@ interface JsonRowData {
   depth: number;
   isExpandable: boolean;
   children?: JsonRowData[];
+  keyPath: string; // e.g., "metadata.user.name" - full path of keys
 }
+
+/**
+ * Build bidirectional maps between keyPath and index path for the current table structure
+ * This allows us to:
+ * 1. Map saved expansion state (by key path) to current structure (index paths)
+ * 2. Track which key paths are expanded when user interacts with the table
+ */
+const buildPathMaps = (
+  rows: JsonRowData[],
+  parentIndexPath: string = "",
+): {
+  keyPathToIndex: Map<string, string>;
+  indexToKeyPath: Map<string, string>;
+} => {
+  const keyPathToIndex = new Map<string, string>();
+  const indexToKeyPath = new Map<string, string>();
+
+  rows.forEach((row, index) => {
+    const currentIndexPath = parentIndexPath
+      ? `${parentIndexPath}.${index}`
+      : index.toString();
+
+    // Bidirectional mapping
+    keyPathToIndex.set(row.keyPath, currentIndexPath);
+    indexToKeyPath.set(currentIndexPath, row.keyPath);
+
+    // If this row is expandable, recursively map its children
+    if (row.isExpandable && isObject(row.value)) {
+      const childRows = createChildRows(
+        row.value,
+        row.depth,
+        5, // Use max depth here
+        row.keyPath,
+      );
+      const childMaps = buildPathMaps(childRows, currentIndexPath);
+      childMaps.keyPathToIndex.forEach((value, key) =>
+        keyPathToIndex.set(key, value),
+      );
+      childMaps.indexToKeyPath.forEach((value, key) =>
+        indexToKeyPath.set(key, value),
+      );
+    }
+  });
+
+  return { keyPathToIndex, indexToKeyPath };
+};
 
 /**
  * Helper function to filter out null values from object entries
@@ -65,6 +116,7 @@ const createChildRows = (
   value: unknown,
   parentDepth: number,
   maxDepth: number,
+  parentKeyPath: string,
 ): JsonRowData[] => {
   if (isArray(value)) {
     return filterNullArrayItems(value).map((item, index) => ({
@@ -72,6 +124,7 @@ const createChildRows = (
       value: item,
       depth: parentDepth + 1,
       isExpandable: isObject(item) && parentDepth + 1 < maxDepth,
+      keyPath: `${parentKeyPath}[${index}]`,
     }));
   }
 
@@ -81,6 +134,7 @@ const createChildRows = (
       value: val,
       depth: parentDepth + 1,
       isExpandable: isObject(val) && !isNull(val) && parentDepth + 1 < maxDepth,
+      keyPath: parentKeyPath ? `${parentKeyPath}.${key}` : key,
     }));
   }
 
@@ -157,7 +211,12 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
   className,
   maxDepth = 5,
   localStorageKey,
+  controlledExpanded,
+  onExpandedChange,
 }) => {
+  const isControlled =
+    controlledExpanded !== undefined && onExpandedChange !== undefined;
+
   const tableData = useMemo(() => {
     if (!isObject(data)) {
       return [];
@@ -169,14 +228,23 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
       value,
       depth: 0,
       isExpandable: isObject(value) && 0 < maxDepth,
+      keyPath: key, // Top-level keys use just the key name
     }));
   }, [data, maxDepth]);
 
+  // Build path mapping for current data structure
+  const pathMaps = useMemo(() => buildPathMaps(tableData), [tableData]);
+
+  // Track expanded key paths (persisted across data changes) in controlled mode only
+  const prevExpandedRef = useRef<ExpandedState>(controlledExpanded || {});
+  const expandedKeyPathsRef = useRef<Set<string>>(new Set());
+
   // Initialize expanded state based on tableData - memoized to prevent unnecessary re-renders
+  // Now uses key-based paths instead of index-based paths
   const initialExpanded = useMemo(() => {
     const expanded: ExpandedState = {};
 
-    // Recursively expand all rows at all levels
+    // Recursively expand all rows at all levels using key paths
     const expandAllRows = (rows: JsonRowData[], parentPath: string = "") => {
       rows.forEach((row, index) => {
         const currentPath = parentPath
@@ -186,7 +254,12 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
 
         // If this row is expandable, recursively expand its children
         if (row.isExpandable) {
-          const childRows = createChildRows(row.value, row.depth, maxDepth);
+          const childRows = createChildRows(
+            row.value,
+            row.depth,
+            maxDepth,
+            row.keyPath,
+          );
           if (childRows.length > 0) {
             expandAllRows(childRows, currentPath);
           }
@@ -210,17 +283,73 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
     () => initialExpanded,
   );
 
-  // Use the state values directly - they already have initialExpanded as default
-  // This allows user interactions while maintaining the default expanded state
-  const [expanded, setExpanded] = localStorageKey
-    ? [localStorageExpanded, setLocalStorageExpanded]
-    : [regularExpanded, setRegularExpanded];
+  // In controlled mode, track which key paths are expanded and map back when data changes
+  useEffect(() => {
+    if (isControlled && controlledExpanded) {
+      // Extract key paths from current expanded state
+      const newKeyPaths = new Set<string>();
+      Object.entries(controlledExpanded).forEach(([indexPath, isExpanded]) => {
+        if (isExpanded === true) {
+          const keyPath = pathMaps.indexToKeyPath.get(indexPath);
+          if (keyPath) {
+            newKeyPaths.add(keyPath);
+          }
+        }
+      });
+      expandedKeyPathsRef.current = newKeyPaths;
+      prevExpandedRef.current = controlledExpanded;
+    }
+  }, [controlledExpanded, isControlled, pathMaps]);
+
+  // When data changes in controlled mode, map stored key paths to new structure
+  useEffect(() => {
+    if (
+      isControlled &&
+      onExpandedChange &&
+      expandedKeyPathsRef.current.size > 0
+    ) {
+      const newExpanded: ExpandedState = {};
+
+      // Map each stored key path to its new index path (if it exists)
+      expandedKeyPathsRef.current.forEach((keyPath: string) => {
+        const newIndexPath = pathMaps.keyPathToIndex.get(keyPath);
+        if (newIndexPath !== undefined) {
+          newExpanded[newIndexPath as keyof ExpandedState] = true;
+        }
+      });
+
+      // Only update if different from current state
+      const currentKeys = Object.keys(prevExpandedRef.current || {}).filter(
+        (k) => prevExpandedRef.current[k as keyof ExpandedState],
+      );
+      const newKeys = Object.keys(newExpanded).filter(
+        (k) => newExpanded[k as keyof ExpandedState],
+      );
+
+      if (
+        currentKeys.length !== newKeys.length ||
+        !currentKeys.every((k) => newExpanded[k as keyof ExpandedState])
+      ) {
+        onExpandedChange(newExpanded);
+      }
+    }
+  }, [tableData, isControlled, onExpandedChange, pathMaps]);
+
+  // Choose expanded state and setter based on mode (controlled vs uncontrolled)
+  const [expanded, setExpanded] = isControlled
+    ? [controlledExpanded, onExpandedChange]
+    : localStorageKey
+      ? [localStorageExpanded, setLocalStorageExpanded]
+      : [regularExpanded, setRegularExpanded];
 
   // Reset expansion state when data changes to ensure all sections are expanded by default
+  // But ONLY in uncontrolled mode - in controlled mode, parent manages the state
   useEffect(() => {
-    setExpanded(initialExpanded);
+    if (!isControlled) {
+      setExpanded(initialExpanded);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialExpanded]);
+  }, [initialExpanded, isControlled]);
 
   const columns: ColumnDef<JsonRowData>[] = useMemo(
     () => [
@@ -278,7 +407,12 @@ const JsonKeyValueTable: React.FC<JsonKeyValueTableProps> = ({
         return undefined;
       }
 
-      const childRows = createChildRows(row.value, row.depth, maxDepth);
+      const childRows = createChildRows(
+        row.value,
+        row.depth,
+        maxDepth,
+        row.keyPath,
+      );
       return childRows.length > 0 ? childRows : undefined;
     },
   });

@@ -11,6 +11,7 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
 import SyntaxHighlighterSearch from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
+import { ExpandedState } from "@tanstack/react-table";
 
 const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
 
@@ -22,6 +23,10 @@ export interface MarkdownHighlighterProps {
   modeSelector: ReactNode;
   copyButton: ReactNode;
   withSearch?: boolean;
+  controlledExpanded?: ExpandedState;
+  onExpandedChange?: (
+    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+  ) => void;
 }
 
 const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
@@ -32,6 +37,8 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   modeSelector,
   copyButton,
   withSearch,
+  controlledExpanded,
+  onExpandedChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { searchPlugin, searchPlainText, findNext, findPrev } =
@@ -51,7 +58,11 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         <JsonKeyValueTable
           data={codeOutput.message}
           maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-          localStorageKey="json-table-expanded-state"
+          localStorageKey={
+            controlledExpanded ? undefined : "json-table-expanded-state"
+          }
+          controlledExpanded={controlledExpanded}
+          onExpandedChange={onExpandedChange}
         />
       );
     }
@@ -71,7 +82,11 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
           <JsonKeyValueTable
             data={structuredResult.data}
             maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-            localStorageKey="json-table-expanded-state"
+            localStorageKey={
+              controlledExpanded ? undefined : "json-table-expanded-state"
+            }
+            controlledExpanded={controlledExpanded}
+            onExpandedChange={onExpandedChange}
           />
         );
       }
@@ -102,7 +117,13 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         {searchPlainText(codeOutput.message)}
       </div>
     );
-  }, [codeOutput.message, searchPlugin, searchPlainText]);
+  }, [
+    codeOutput.message,
+    searchPlugin,
+    searchPlainText,
+    controlledExpanded,
+    onExpandedChange,
+  ]);
 
   // Check if the content is a JSON table (not searchable)
   const isJsonTable = useMemo(() => {
