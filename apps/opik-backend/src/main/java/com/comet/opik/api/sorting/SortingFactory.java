@@ -32,6 +32,11 @@ public abstract class SortingFactory {
         return sorting;
     }
 
+    protected List<SortingField> validateAndReturn(@NonNull List<SortingField> sorting) {
+        validateFields(sorting);
+        return sorting;
+    }
+
     public abstract List<String> getSortableFields();
 
     private void validateFields(@NonNull List<SortingField> sorting) {
