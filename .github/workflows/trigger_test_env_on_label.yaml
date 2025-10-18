@@ -1,5 +1,5 @@
 name: Trigger Test Environment Deployment
-run-name: ${{ github.event.label.name == 'deploy_pr_public' && format('Trigger Public Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || github.event.label.name == 'deploy_pr_internal' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
+run-name: ${{ github.event.label.name == 'deploy-pr-public' && format('Trigger Public Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || github.event.label.name == 'deploy-pr-internal' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ permissions:
 jobs:
 
   other-labels:
-    if: github.event.label.name != 'deploy_pr_internal' && github.event.label.name != 'deploy_pr_public'
+    if: github.event.label.name != 'deploy-pr-internal' && github.event.label.name != 'deploy-pr-public'
     runs-on: ubuntu-latest
     steps:
       - name: Skip
@@ -22,7 +22,7 @@ jobs:
           echo "Skipping deployment of test environment for this PR"
 
   determine-environment:
-    if: github.event.label.name == 'deploy_pr_internal' || github.event.label.name == 'deploy_pr_public'
+    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.env.outputs.environment }}
@@ -31,16 +31,16 @@ jobs:
       - name: Determine environment
         id: env
         run: |
-          if [[ "${{ github.event.label.name }}" == "deploy_pr_internal" ]]; then
+          if [[ "${{ github.event.label.name }}" == "deploy-pr-internal" ]]; then
             echo "environment=development" >> $GITHUB_OUTPUT
             echo "base_domain=dev.comet.com" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.label.name }}" == "deploy_pr_public" ]]; then
+          elif [[ "${{ github.event.label.name }}" == "deploy-pr-public" ]]; then
             echo "environment=opik-public" >> $GITHUB_OUTPUT
             echo "base_domain=opikpub.comet.com" >> $GITHUB_OUTPUT
           fi
 
   notify-started:
-    if: github.event.label.name == 'deploy_pr_internal' || github.event.label.name == 'deploy_pr_public'
+    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
     needs:
       - determine-environment
     runs-on: ubuntu-latest
@@ -61,7 +61,7 @@ jobs:
             });
 
   build-apps:
-    if: github.event.label.name == 'deploy_pr_internal' || github.event.label.name == 'deploy_pr_public'
+    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
     needs:
       - determine-environment
       - notify-started
@@ -74,7 +74,7 @@ jobs:
       ref: ${{ github.event.pull_request.head.ref }}
 
   notify-build-finished:
-    if: github.event.label.name == 'deploy_pr_internal' || github.event.label.name == 'deploy_pr_public'
+    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
     needs:
       - determine-environment
       - build-apps
@@ -97,7 +97,7 @@ jobs:
             });
 
   trigger_deployment:
-    if: github.event.label.name == 'deploy_pr_internal' || github.event.label.name == 'deploy_pr_public'
+    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
     needs:
       - determine-environment
       - build-apps
