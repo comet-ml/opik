@@ -125,26 +125,24 @@ public class WebhookHttpClient {
                 requestBuilder.async().post(entity, new InvocationCallback<Response>() {
                     @Override
                     public void completed(Response response) {
-                        try {
-                            if (isSuccessfulResponse(response)) {
+                        try (Response r = response) {
+                            if (isSuccessfulResponse(r)) {
                                 logInfo(event, workspaceId, "Webhook '{}' sent successfully. Status: '{}'",
-                                        event.getId(), response.getStatus());
-                                var responseBody = readResponseBody(response);
+                                        event.getId(), r.getStatus());
+                                var responseBody = readResponseBody(r);
                                 // Return body if present, otherwise return "ok"
                                 sink.success(responseBody.orElse("ok"));
                             } else {
-                                var responseBody = readResponseBody(response);
+                                var responseBody = readResponseBody(r);
                                 String errorMessage = responseBody
-                                        .map(body -> "Webhook failed with status %d: %s".formatted(response.getStatus(),
+                                        .map(body -> "Webhook failed with status %d: %s".formatted(r.getStatus(),
                                                 body))
                                         .orElseGet(
-                                                () -> "Webhook failed with status %d".formatted(response.getStatus()));
+                                                () -> "Webhook failed with status %d".formatted(r.getStatus()));
                                 sink.error(new RetryUtils.RetryableHttpException(
                                         errorMessage,
-                                        response.getStatus()));
+                                        r.getStatus()));
                             }
-                        } finally {
-                            response.close();
                         }
                     }
 
