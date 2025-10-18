@@ -5864,7 +5864,14 @@ class DatasetsResourceTest {
                     Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
                             .build()),
                     Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
-                            .build()));
+                            .build()),
+
+                    // Dynamic dataset fields (data.*) - Testing the transformation logic
+                    // These fields get transformed from "field_name" to "data.field_name" by SortingFactoryDatasets
+                    Arguments.of(SortingField.builder().field("expected_answer").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("expected_answer").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("input").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("input").direction(Direction.DESC).build()));
         }
 
         @Test
@@ -6866,6 +6873,172 @@ class DatasetsResourceTest {
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
+
+        @ParameterizedTest(name = "Duration filter: {0} {1}ms")
+        @MethodSource("durationFilterTestCases")
+        @DisplayName("Success: Get experiment items with duration filter")
+        void getExperimentItems__withDurationFilter__thenReturnFilteredItems(
+                Operator operator,
+                long filterValueMs,
+                List<Integer> expectedTraceIndices) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // Create dataset items
+            var datasetItem1 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem2 = factory.manufacturePojo(DatasetItem.class);
+            var datasetItem3 = factory.manufacturePojo(DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .items(List.of(datasetItem1, datasetItem2, datasetItem3))
+                            .datasetId(datasetId)
+                            .build(),
+                    workspaceName,
+                    apiKey);
+
+            // Create traces with KNOWN, CONTROLLED durations
+            // Using explicit start and end times to ensure predictable durations
+            var baseTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+            // Trace 1: Duration = 500ms
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .startTime(baseTime)
+                    .endTime(baseTime.plusMillis(500))
+                    .build();
+            traceResourceClient.createTrace(trace1, apiKey, workspaceName);
+
+            // Trace 2: Duration = 1500ms
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .startTime(baseTime)
+                    .endTime(baseTime.plusMillis(1500))
+                    .build();
+            traceResourceClient.createTrace(trace2, apiKey, workspaceName);
+
+            // Trace 3: Duration = 2500ms
+            var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(experiment.name())
+                    .startTime(baseTime)
+                    .endTime(baseTime.plusMillis(2500))
+                    .build();
+            traceResourceClient.createTrace(trace3, apiKey, workspaceName);
+
+            // Create experiment items linking dataset items to traces
+            var experimentItem1 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .build();
+            var experimentItem2 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .build();
+            var experimentItem3 = ExperimentItem.builder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem3.id())
+                    .traceId(trace3.id())
+                    .build();
+
+            var experimentItemsBatch = new ExperimentItemsBatch(
+                    Set.of(experimentItem1, experimentItem2, experimentItem3));
+            DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Apply duration filter
+            var filters = List.of(
+                    ExperimentsComparisonFilter.builder()
+                            .field(ExperimentsComparisonValidKnownField.DURATION.getQueryParamField())
+                            .operator(operator)
+                            .value(String.valueOf(filterValueMs))
+                            .build());
+
+            // Query stats with duration filter
+            var stats = datasetResourceClient.getDatasetExperimentItemsStats(
+                    datasetId,
+                    List.of(experiment.id()),
+                    apiKey,
+                    workspaceName,
+                    filters);
+
+            // Verify experiment items count matches expected filtered results
+            var expectedItemsCount = (long) expectedTraceIndices.size();
+
+            // Assert: Verify experiment items count and trace count match expected filtered results
+            // Using direct assertion since we only care about the count matching the expected filter results
+            assertThat(stats.stats()).isNotNull();
+
+            var experimentItemsCountStat = stats.stats().stream()
+                    .filter(stat -> StatsMapper.EXPERIMENT_ITEMS_COUNT.equals(stat.getName()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Expected EXPERIMENT_ITEMS_COUNT stat to be present"));
+
+            assertThat(((CountValueStat) experimentItemsCountStat).getValue())
+                    .as("Duration filter %s %dms should return %d items (traces %s)",
+                            operator, filterValueMs, expectedItemsCount, expectedTraceIndices)
+                    .isEqualTo(expectedItemsCount);
+
+            // Verify trace count matches expected filtered results
+            var traceCountStat = stats.stats().stream()
+                    .filter(stat -> StatsMapper.TRACE_COUNT.equals(stat.getName()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Expected TRACE_COUNT stat to be present"));
+
+            assertThat(((CountValueStat) traceCountStat).getValue())
+                    .isEqualTo(expectedItemsCount);
+        }
+
+        /**
+         * Test cases for duration filtering with different operators.
+         * Parameters: operator, filter value in ms, expected trace indices (0-based)
+         *
+         * Test data:
+         * - Trace 0: 500ms
+         * - Trace 1: 1500ms
+         * - Trace 2: 2500ms
+         */
+        static Stream<Arguments> durationFilterTestCases() {
+            return Stream.of(
+                    // GREATER_THAN: Return traces with duration > threshold
+                    Arguments.of(Operator.GREATER_THAN, 1000L, List.of(1, 2)), // > 1000ms: 1500ms, 2500ms
+                    Arguments.of(Operator.GREATER_THAN, 2000L, List.of(2)), // > 2000ms: 2500ms
+                    Arguments.of(Operator.GREATER_THAN, 3000L, List.of()), // > 3000ms: none
+
+                    // GREATER_THAN_EQUAL: Return traces with duration >= threshold
+                    Arguments.of(Operator.GREATER_THAN_EQUAL, 1500L, List.of(1, 2)), // >= 1500ms: 1500ms, 2500ms
+                    Arguments.of(Operator.GREATER_THAN_EQUAL, 2500L, List.of(2)), // >= 2500ms: 2500ms
+
+                    // LESS_THAN: Return traces with duration < threshold
+                    Arguments.of(Operator.LESS_THAN, 1000L, List.of(0)), // < 1000ms: 500ms
+                    Arguments.of(Operator.LESS_THAN, 2000L, List.of(0, 1)), // < 2000ms: 500ms, 1500ms
+                    Arguments.of(Operator.LESS_THAN, 400L, List.of()), // < 400ms: none
+
+                    // LESS_THAN_EQUAL: Return traces with duration <= threshold
+                    Arguments.of(Operator.LESS_THAN_EQUAL, 500L, List.of(0)), // <= 500ms: 500ms
+                    Arguments.of(Operator.LESS_THAN_EQUAL, 1500L, List.of(0, 1)), // <= 1500ms: 500ms, 1500ms
+
+                    // EQUAL: Return traces with duration = threshold
+                    Arguments.of(Operator.EQUAL, 500L, List.of(0)), // = 500ms: 500ms
+                    Arguments.of(Operator.EQUAL, 1500L, List.of(1)), // = 1500ms: 1500ms
+                    Arguments.of(Operator.EQUAL, 1000L, List.of()), // = 1000ms: none
+
+                    // NOT_EQUAL: Return traces with duration != threshold
+                    Arguments.of(Operator.NOT_EQUAL, 1500L, List.of(0, 2)), // != 1500ms: 500ms, 2500ms
+                    Arguments.of(Operator.NOT_EQUAL, 1000L, List.of(0, 1, 2)) // != 1000ms: all
+            );
         }
     }
 
