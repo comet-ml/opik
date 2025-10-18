@@ -565,6 +565,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
         error_info={
             "exception_type": ANY_STRING,
             "traceback": ANY_STRING,
+            "message": None,
         },
         spans=[
             SpanModel(
@@ -582,6 +583,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                 error_info={
                     "exception_type": ANY_STRING,
                     "traceback": ANY_STRING,
+                    "message": None,
                 },
                 spans=[
                     SpanModel(
@@ -614,6 +616,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                         error_info={
                             "exception_type": ANY_STRING,
                             "traceback": ANY_STRING,
+                            "message": None,
                         },
                         spans=[],
                     ),
