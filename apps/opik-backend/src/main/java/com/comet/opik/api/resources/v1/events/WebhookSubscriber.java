@@ -102,7 +102,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                     WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
 
                     return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
-                            .subscribeOn(Schedulers.parallel())
+                            .subscribeOn(Schedulers.boundedElastic())
                             .flatMap(webhookHttpClient::sendWebhook)
                             .doOnSuccess(unused2 -> {
                                 log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
