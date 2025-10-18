@@ -62,9 +62,10 @@ public class WebhookHttpClient {
                 event.getId(), event.getUrl(), event.getMaxRetries());
 
         return Mono.deferContextual(ctx ->
-        // Serialize payload asynchronously (non-blocking JSON serialization)
+        // Serialize payload asynchronously (CPU-bound JSON serialization)
         Mono.fromCallable(() -> JsonUtils.writeValueAsString(
                 event.toBuilder().url(null).headers(null).secret(null).build()))
+                .subscribeOn(Schedulers.parallel())
                 .flatMap(jsonPayload -> performWebhookRequest(event, jsonPayload, ctx.get(RequestContext.WORKSPACE_ID)))
                 .retryWhen(createRetrySpec(event.getId(), event.getMaxRetries()))
                 .doOnError(throwable -> logError(event,
@@ -156,7 +157,6 @@ public class WebhookHttpClient {
                 sink.error(exception);
             }
         })
-                // Ensure response is properly closed in all cases (success, error, cancel)
                 .doFinally(signalType -> {
                     log.debug("Webhook '{}' request completed with signal: '{}'", event.getId(), signalType);
                 });

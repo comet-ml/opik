@@ -102,7 +102,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                     WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
 
                     return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
-                            .subscribeOn(Schedulers.boundedElastic())
+                            .subscribeOn(Schedulers.parallel())
                             .flatMap(webhookHttpClient::sendWebhook)
                             .doOnSuccess(unused2 -> {
                                 log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
@@ -144,7 +144,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     }
 
     private Mono<Void> validateEvent(@NonNull WebhookEvent<?> event) {
-        return Mono.fromCallable(() -> {
+        return Mono.fromRunnable(() -> {
             if (event.getUrl() == null || event.getUrl().trim().isEmpty()) {
                 throw new IllegalArgumentException("Webhook URL cannot be null or empty");
             }
@@ -162,7 +162,6 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
             }
 
             log.debug("Webhook event validation passed for event: '{}'", event.getId());
-            return null;
         }).then();
     }
 
