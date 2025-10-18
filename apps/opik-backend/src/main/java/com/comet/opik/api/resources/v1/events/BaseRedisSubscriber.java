@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import lombok.NonNull;
@@ -51,6 +52,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     protected final LongHistogram messageProcessingTime;
     protected final LongHistogram messageQueueDelay;
     protected final String payloadField;
+    protected final LongCounter backpressureDropCounter;
 
     protected BaseRedisSubscriber(@NonNull StreamConfiguration config, @NonNull RedissonReactiveClient redisson,
             @NonNull String metricsBaseName, @NonNull String payloadField) {
@@ -77,6 +79,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .setDescription("Delay between message insertion in Redis and processing start")
                 .setUnit("ms")
                 .ofLongs()
+                .build();
+
+        this.backpressureDropCounter = meter
+                .counterBuilder("%s_backpressure_drops_total".formatted(metricNamespace))
+                .setDescription("Total number of events dropped due to backpressure")
                 .build();
     }
 
@@ -170,7 +177,12 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private void setupStreamListener(RStreamReactive<String, M> stream) {
         this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
-                .onBackpressureDrop()
+                .onBackpressureDrop(dropped -> {
+                    log.warn("Backpressure drop detected: Unable to keep up with event stream. Event dropped: '{}'",
+                            dropped);
+                    // Record metric for dropped events
+                    backpressureDropCounter.add(1);
+                })
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
                 .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
                 .flatMapIterable(Map::entrySet)

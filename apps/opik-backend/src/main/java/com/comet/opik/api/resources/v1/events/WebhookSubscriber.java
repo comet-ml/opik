@@ -12,6 +12,7 @@ import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +63,8 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     private static final TypeReference<List<Guardrail>> LIST_GUARDRAIL_TYPE_REFERENCE = new TypeReference<>() {
     };
 
+    private final LongCounter webhookEventProcessedCounter;
+
     @Inject
     public WebhookSubscriber(@NonNull WebhookConfig webhookConfig,
             @NonNull RedissonReactiveClient redisson,
@@ -69,6 +72,12 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         super(webhookConfig, redisson, METRICS_BASE_NAME, WebhookConfig.PAYLOAD_FIELD);
         this.webhookHttpClient = webhookHttpClient;
         this.webhookConfig = webhookConfig;
+
+        // Pre-build metrics during initialization
+        this.webhookEventProcessedCounter = meter
+                .counterBuilder("opik_webhook_events_processed_total")
+                .setDescription("Total number of webhook events processed")
+                .build();
     }
 
     @Override
@@ -81,28 +90,31 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         log.debug("Processing webhook event: id='{}', type='{}', url='{}'",
                 event.getId(), event.getEventType(), event.getUrl());
 
-        // Record metrics
-        var attributes = Attributes.builder()
-                .put("event_type", event.getEventType().getValue())
-                .put("workspace_id", event.getWorkspaceId())
-                .build();
+        return validateEvent(event)
+                .then(Mono.fromCallable(() -> Attributes.builder()
+                        .put("event_type", event.getEventType().getValue())
+                        .put("workspace_id", event.getWorkspaceId())
+                        .build())
+                        .flatMap(attributes -> {
+                            @SuppressWarnings("unchecked")
+                            WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
 
-        return Mono.defer(() -> validateEvent(event))
-                .then(Mono.defer(() -> webhookHttpClient
-                        .sendWebhook(deserializeEventPayload((WebhookEvent<Map<String, Object>>) event))))
+                            return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
+                                    .subscribeOn(Schedulers.boundedElastic())
+                                    .flatMap(webhookHttpClient::sendWebhook)
+                                    .doOnSuccess(unused -> {
+                                        log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
+                                                event.getId(), event.getEventType(), event.getUrl());
+
+                                        // Record success metrics
+                                        webhookEventProcessedCounter.add(1,
+                                                attributes.toBuilder().put("status", "success").build());
+                                    })
+                                    .onErrorResume(
+                                            throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()));
+                        }))
                 .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId()))
                 .subscribeOn(Schedulers.boundedElastic())
-                .doOnSuccess(unused -> {
-                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
-                            event.getId(), event.getEventType(), event.getUrl());
-
-                    // Record success metrics
-                    meter.counterBuilder("opik_webhook_events_processed_total")
-                            .setDescription("Total number of webhook events processed")
-                            .build()
-                            .add(1, attributes.toBuilder().put("status", "success").build());
-                })
-                .onErrorResume(throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()))
                 .then();
     }
 
@@ -131,7 +143,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     }
 
     private Mono<Void> validateEvent(@NonNull WebhookEvent<?> event) {
-        return Mono.fromRunnable(() -> {
+        return Mono.fromCallable(() -> {
             if (event.getUrl() == null || event.getUrl().trim().isEmpty()) {
                 throw new IllegalArgumentException("Webhook URL cannot be null or empty");
             }
@@ -149,12 +161,14 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
             }
 
             log.debug("Webhook event validation passed for event: '{}'", event.getId());
-        });
+            return null;
+        }).then();
     }
 
     public static WebhookEvent<Map<String, Object>> deserializeEventPayload(
             @NonNull WebhookEvent<Map<String, Object>> event) {
         Map<String, Object> payload = event.getPayload();
+        @SuppressWarnings("unchecked")
         List<String> metadatas = (List<String>) payload.getOrDefault("metadata", List.of());
 
         var deserializeMetadata = metadatas.stream()
