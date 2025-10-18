@@ -384,9 +384,26 @@ clickhouse:
   enabled: true
   shardsCount: 1
   replicasCount: 1
-  image: altinity/clickhouse-server:24.3.5.47.altinitystable
+  image: altinity/clickhouse-server:25.3.6.10034.altinitystable
   storage: 50Gi
   logsLevel: information
+  # Custom health checks with longer timeouts for major version upgrades
+  livenessProbe:
+    httpGet:
+      path: /ping
+      port: 8123
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 10
+  readinessProbe:
+    httpGet:
+      path: /ping
+      port: 8123
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
   # deprecated: use templates instead
   service:
     serviceTemplate: clickhouse-cluster-svc-template
