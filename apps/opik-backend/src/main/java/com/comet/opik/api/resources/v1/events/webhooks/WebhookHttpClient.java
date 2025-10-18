@@ -65,12 +65,12 @@ public class WebhookHttpClient {
         // Serialize payload asynchronously (non-blocking JSON serialization)
         Mono.fromCallable(() -> JsonUtils.writeValueAsString(
                 event.toBuilder().url(null).headers(null).secret(null).build()))
-                .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(jsonPayload -> performWebhookRequest(event, jsonPayload, ctx.get(RequestContext.WORKSPACE_ID)))
                 .retryWhen(createRetrySpec(event.getId(), event.getMaxRetries()))
                 .doOnError(throwable -> logError(event,
                         ctx.get(RequestContext.WORKSPACE_ID),
-                        "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable)));
+                        "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable)))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {
@@ -125,19 +125,15 @@ public class WebhookHttpClient {
                 requestBuilder.async().post(entity, new InvocationCallback<Response>() {
                     @Override
                     public void completed(Response response) {
-                        if (isSuccessfulResponse(response)) {
-                            logInfo(event, workspaceId, "Webhook '{}' sent successfully. Status: '{}'",
-                                    event.getId(), response.getStatus());
-                            // Use try-with-resources to ensure response is closed after reading body
-                            try (Response r = response) {
-                                var responseBody = readResponseBody(r);
+                        try {
+                            if (isSuccessfulResponse(response)) {
+                                logInfo(event, workspaceId, "Webhook '{}' sent successfully. Status: '{}'",
+                                        event.getId(), response.getStatus());
+                                var responseBody = readResponseBody(response);
                                 // Return body if present, otherwise return "ok"
                                 sink.success(responseBody.orElse("ok"));
-                            }
-                        } else {
-                            // Use try-with-resources to ensure response is closed after reading error body
-                            try (Response r = response) {
-                                var responseBody = readResponseBody(r);
+                            } else {
+                                var responseBody = readResponseBody(response);
                                 String errorMessage = responseBody
                                         .map(body -> "Webhook failed with status %d: %s".formatted(response.getStatus(),
                                                 body))
@@ -147,6 +143,8 @@ public class WebhookHttpClient {
                                         errorMessage,
                                         response.getStatus()));
                             }
+                        } finally {
+                            response.close();
                         }
                     }
 
@@ -163,8 +161,7 @@ public class WebhookHttpClient {
                 // Ensure response is properly closed in all cases (success, error, cancel)
                 .doFinally(signalType -> {
                     log.debug("Webhook '{}' request completed with signal: '{}'", event.getId(), signalType);
-                })
-                .subscribeOn(Schedulers.boundedElastic());
+                });
     }
 
     private boolean isSuccessfulResponse(Response response) {
@@ -195,12 +192,9 @@ public class WebhookHttpClient {
                 .doBeforeRetry(retrySignal -> {
                     int attemptNumber = (int) retrySignal.totalRetries() + 1;
                     Throwable error = retrySignal.failure();
-                    long delay = retrySignal.totalRetries() > 0
-                            ? webhookConfig.getInitialRetryDelay().toMilliseconds()
-                            : 0;
 
-                    log.warn("Retrying webhook '{}' - Attempt: {}/{}, Error: '{}', Delay: '{}ms'",
-                            eventId, attemptNumber, maxRetries, error.getMessage(), delay);
+                    log.warn("Retrying webhook '{}' - Attempt: {}/{}, Error: '{}'",
+                            eventId, attemptNumber, maxRetries, error.getMessage());
                 });
     }
 }

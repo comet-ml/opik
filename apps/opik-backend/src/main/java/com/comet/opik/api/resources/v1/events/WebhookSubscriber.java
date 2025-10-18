@@ -90,31 +90,32 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         log.debug("Processing webhook event: id='{}', type='{}', url='{}'",
                 event.getId(), event.getEventType(), event.getUrl());
 
+        // Build attributes synchronously (lightweight, non-blocking operation)
+        var attributes = Attributes.builder()
+                .put("event_type", event.getEventType().getValue())
+                .put("workspace_id", event.getWorkspaceId())
+                .build();
+
         return validateEvent(event)
-                .then(Mono.fromCallable(() -> Attributes.builder()
-                        .put("event_type", event.getEventType().getValue())
-                        .put("workspace_id", event.getWorkspaceId())
-                        .build())
-                        .flatMap(attributes -> {
-                            @SuppressWarnings("unchecked")
-                            WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
+                .flatMap(unused -> {
+                    @SuppressWarnings("unchecked")
+                    WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
 
-                            return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
-                                    .subscribeOn(Schedulers.boundedElastic())
-                                    .flatMap(webhookHttpClient::sendWebhook)
-                                    .doOnSuccess(unused -> {
-                                        log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
-                                                event.getId(), event.getEventType(), event.getUrl());
+                    return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(webhookHttpClient::sendWebhook)
+                            .doOnSuccess(unused2 -> {
+                                log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
+                                        event.getId(), event.getEventType(), event.getUrl());
 
-                                        // Record success metrics
-                                        webhookEventProcessedCounter.add(1,
-                                                attributes.toBuilder().put("status", "success").build());
-                                    })
-                                    .onErrorResume(
-                                            throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()));
-                        }))
+                                // Record success metrics
+                                webhookEventProcessedCounter.add(1,
+                                        attributes.toBuilder().put("status", "success").build());
+                            })
+                            .onErrorResume(
+                                    throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()));
+                })
                 .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId()))
-                .subscribeOn(Schedulers.boundedElastic())
                 .then();
     }
 

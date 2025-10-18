@@ -178,9 +178,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private void setupStreamListener(RStreamReactive<String, M> stream) {
         this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
                 .onBackpressureDrop(dropped -> {
-                    log.warn("Backpressure drop detected: Unable to keep up with event stream. Event dropped: '{}'",
+                    log.warn(
+                            "Backpressure drop detected: Unable to keep up with polling intervals. Polling interval tick dropped (sequence number: '{}').",
                             dropped);
-                    // Record metric for dropped events
+                    // Record metric for dropped polling intervals
                     backpressureDropCounter.add(1);
                 })
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
