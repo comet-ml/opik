@@ -51,15 +51,13 @@ public class SortingFactoryDatasets extends SortingFactory {
             throw new BadRequestException(ERR_INVALID_SORTING_PARAM_TEMPLATE.formatted(queryParam), exception);
         }
 
-        // Validate BEFORE transforming to catch invalid field names
-        super.validateAndReturn(sorting);
-
-        // Transform field names for dataset columns after validation
+        // Transform field names for dataset columns first
         sorting = sorting.stream()
                 .map(this::transformFieldName)
                 .toList();
 
-        return sorting;
+        // Validate AFTER transforming so "data.*" pattern can match
+        return super.validateAndReturn(sorting);
     }
 
     private SortingField transformFieldName(SortingField sortingField) {
