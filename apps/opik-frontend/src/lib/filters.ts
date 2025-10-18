@@ -179,7 +179,15 @@ export const processFilters = (
   }
 
   if (processedFilters.length > 0) {
-    retVal.filters = JSON.stringify(processedFilters);
+    // Only send fields that the backend expects: field, operator, value, and key (for dictionary types)
+    const backendFilters = processedFilters.map(({ field, operator, value, key, type }) => {
+      // Include key only for dictionary types
+      const isDictionary = type === COLUMN_TYPE.dictionary || type === COLUMN_TYPE.numberDictionary;
+      return isDictionary 
+        ? { field, operator, value, key }
+        : { field, operator, value };
+    });
+    retVal.filters = JSON.stringify(backendFilters);
   }
 
   return retVal;

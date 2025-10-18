@@ -115,7 +115,7 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
     id: COLUMN_DURATION_ID,
     label: "Duration",
-    type: COLUMN_TYPE.time,
+    type: COLUMN_TYPE.duration,
   },
   {
     id: COLUMN_COMMENTS_ID,

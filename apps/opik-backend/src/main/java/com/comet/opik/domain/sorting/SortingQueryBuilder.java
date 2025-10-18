@@ -27,7 +27,6 @@ public class SortingQueryBuilder {
                 ? sortingField -> fieldMapping.getOrDefault(sortingField.field(), sortingField.dbField())
                 : SortingField::dbField;
 
-
         String sortFields = sorting.stream()
                 .map(sortingField -> {
                     String dbField = fieldMapper.apply(sortingField);
