@@ -1,0 +1,319 @@
+---
+description: MySQL schema structure, naming conventions, and table patterns for state database
+---
+
+# MySQL Schema Patterns (State Database)
+
+> **How to Use This Rule:**
+> - **Patterns & Conventions**: Always current - follow these for all tables
+> - **Core Examples**: Stable foundational patterns (may have additional columns)
+> - **Current Schema**: Check migrations or search for DAO interfaces
+> 
+> **Finding Current Schema:**
+> 1. Migrations: [db-app-state/migrations/](mdc:apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/)
+> 2. Search: `codebase_search("ProjectDAO interface")` or similar
+> 3. Check: Existing DAO methods to see actual columns used
+
+This rule documents MySQL schema patterns and conventions for Opik's state database.
+
+## Core Principles
+
+1. **Workspace Isolation**: Every table MUST have `workspace_id VARCHAR(150)` for multi-tenancy
+2. **UUID Primary Keys**: Use `CHAR(36)` for all primary keys (UUID format)
+3. **Audit Trails**: Include `created_at`, `last_updated_at`, `created_by`, `last_updated_by`
+4. **Unique Constraints**: Combine `workspace_id` with business key for uniqueness
+5. **UTF-8 Encoding**: Database uses `utf8mb4` character set with `utf8mb4_unicode_ci` collation
+
+## Standard Table Structure
+
+### Template Pattern
+```sql
+CREATE TABLE {table_name} (
+    id CHAR(36) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description VARCHAR(255),
+    workspace_id VARCHAR(150) NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
+    last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    last_updated_by VARCHAR(100) NOT NULL DEFAULT 'admin',
+    CONSTRAINT `{table_name}_pk` PRIMARY KEY (id),
+    CONSTRAINT `{table_name}_workspace_id_name_uk` UNIQUE (workspace_id, name)
+);
+```
+
+### Required Columns
+All MySQL tables MUST include:
+
+**Identity**:
+- `id CHAR(36)` - UUID primary key
+- `workspace_id VARCHAR(150)` - Workspace isolation
+
+**Audit Trail**:
+- `created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)` - Creation timestamp with microsecond precision
+- `created_by VARCHAR(100) NOT NULL DEFAULT 'admin'` - Creator identifier
+- `last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)` - Auto-update timestamp
+- `last_updated_by VARCHAR(100) NOT NULL DEFAULT 'admin'` - Last modifier
+
+## Naming Conventions
+
+### Tables
+- **Format**: `snake_case`, plural nouns
+- **Examples**: `projects`, `datasets`, `feedback_definitions`, `prompt_versions`
+
+### Columns
+- **Format**: `snake_case`
+- **ID References**: `{entity}_id` (e.g., `project_id`, `prompt_id`)
+- **Booleans**: Start with `is_` or use adjective (e.g., `enabled`, `is_default`)
+
+### Constraints
+- **Primary Keys**: `` `{table_name}_pk` ``
+- **Unique Keys**: `` `{table_name}_{column1}_{column2}_uk` ``
+- **Foreign Keys**: `` `{table_name}_{column}_fk` ``
+- **Indexes**: `` `{table_name}_{column1}_{column2}_idx` `` or `idx_{table_name}_{column}`
+
+## Core Table Patterns
+
+> **Note**: These show stable patterns. Actual tables may have additional columns - check DAO interfaces or migrations.
+
+### Simple Entity Pattern
+```sql
+-- Pattern for basic entities (projects, datasets, etc.)
+CREATE TABLE {entity_name} (
+    id CHAR(36) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    workspace_id VARCHAR(150) NOT NULL,
+    description VARCHAR(255),
+    -- entity-specific columns here
+    -- standard audit fields
+    CONSTRAINT `{entity_name}_pk` PRIMARY KEY (id),
+    CONSTRAINT `{entity_name}_workspace_id_name_uk` UNIQUE (workspace_id, name)
+);
+```
+
+**Key Patterns**:
+- Workspace + name uniqueness
+- Standard audit trail
+- Optional description field
+
+### Versioned Entity Pattern
+```sql
+-- Pattern for versioned entities (e.g., prompt_versions)
+CREATE TABLE {entity_name}_versions (
+    id CHAR(36) NOT NULL,
+    {entity_name}_id CHAR(36) NOT NULL,
+    version INT NOT NULL,
+    -- version-specific columns
+    -- standard audit fields
+    CONSTRAINT `{entity_name}_versions_pk` PRIMARY KEY (id),
+    CONSTRAINT `{entity_name}_versions_parent_version_uk` UNIQUE ({entity_name}_id, version),
+    CONSTRAINT `{entity_name}_versions_parent_fk` FOREIGN KEY ({entity_name}_id) 
+        REFERENCES {entity_name}(id) ON DELETE CASCADE
+);
+```
+
+**Key Patterns**:
+- Parent-child relationship with foreign key
+- Composite uniqueness (parent_id + version)
+- CASCADE delete for cleanup
+
+### Configuration Entity Pattern
+```sql
+-- Pattern for configuration entities (webhooks, alerts, etc.)
+CREATE TABLE {config_name} (
+    id CHAR(36) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    workspace_id VARCHAR(150) NOT NULL,
+    enabled TINYINT(1) DEFAULT 1,
+    -- configuration-specific columns
+    -- standard audit fields
+    CONSTRAINT `{config_name}_pk` PRIMARY KEY (id)
+);
+```
+
+**Key Patterns**:
+- Enabled flag for activation control
+- May not require workspace + name uniqueness
+- Standard audit trail
+
+## Column Type Patterns
+
+### Common Column Types
+
+**Identifiers**:
+```sql
+id CHAR(36)                     -- UUIDs
+workspace_id VARCHAR(150)       -- Workspace identifier
+project_id CHAR(36)             -- Foreign key to projects
+```
+
+**Text Fields**:
+```sql
+name VARCHAR(255)               -- Entity names
+description VARCHAR(255)        -- Short descriptions
+url VARCHAR(500)                -- URLs
+code TEXT                       -- Large text content
+template TEXT                   -- Template content
+```
+
+**Numeric Fields**:
+```sql
+version INT                     -- Version numbers
+sampling_rate DECIMAL(3,2)      -- Rates (0.00 to 1.00)
+priority INT                    -- Priority values
+```
+
+**Boolean Fields**:
+```sql
+enabled TINYINT(1)              -- Boolean flags
+is_default TINYINT(1)           -- Boolean flags
+```
+
+**Enum Fields**:
+```sql
+type ENUM('option1', 'option2', 'option3')
+visibility ENUM('private', 'public')
+status ENUM('active', 'inactive', 'archived')
+```
+
+**JSON Fields**:
+```sql
+details JSON                    -- Flexible structured data
+metadata JSON                   -- Metadata storage
+tags JSON                       -- Tag arrays
+```
+
+**Timestamp Fields**:
+```sql
+created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
+last_action_at TIMESTAMP(6)    -- Optional timestamps
+```
+
+## Index Patterns
+
+### Standard Indexes
+
+**Workspace Isolation**:
+```sql
+CREATE INDEX idx_{table_name}_workspace_id ON {table_name}(workspace_id);
+```
+
+**Foreign Key Lookups**:
+```sql
+CREATE INDEX idx_{table_name}_{parent}_id ON {table_name}({parent}_id);
+```
+
+**Composite Indexes for Common Queries**:
+```sql
+CREATE INDEX idx_{table_name}_workspace_project ON {table_name}(workspace_id, project_id);
+CREATE INDEX idx_{table_name}_workspace_name ON {table_name}(workspace_id, name);
+```
+
+**Timestamp Indexes for Sorting**:
+```sql
+CREATE INDEX idx_{table_name}_created_at ON {table_name}(created_at);
+CREATE INDEX idx_{table_name}_last_updated_at ON {table_name}(last_updated_at);
+```
+
+## Foreign Key Patterns
+
+### Standard Foreign Key
+```sql
+CONSTRAINT `{table_name}_{parent}_id_fk` 
+    FOREIGN KEY ({parent}_id) 
+    REFERENCES {parent_table}(id)
+```
+
+### Cascade Delete Pattern
+```sql
+CONSTRAINT `{table_name}_{parent}_id_fk` 
+    FOREIGN KEY ({parent}_id) 
+    REFERENCES {parent_table}(id) 
+    ON DELETE CASCADE
+```
+
+**Use CASCADE when**:
+- Child records should be deleted with parent
+- Example: prompt_versions when prompt is deleted
+
+### Restrict Delete Pattern
+```sql
+CONSTRAINT `{table_name}_{parent}_id_fk` 
+    FOREIGN KEY ({parent}_id) 
+    REFERENCES {parent_table}(id) 
+    ON DELETE RESTRICT
+```
+
+**Use RESTRICT when**:
+- Parent should not be deleted if children exist
+- Example: project with existing traces
+
+## Migration Patterns
+
+### Adding New Table
+```sql
+--liquibase formatted sql
+--changeset author:000XXX_add_{table_name}_table
+--comment: Add {table_name} table for {purpose}
+
+CREATE TABLE {table_name} (
+    -- follow standard template above
+);
+
+--rollback DROP TABLE {table_name};
+```
+
+### Adding Column
+```sql
+--liquibase formatted sql
+--changeset author:000XXX_add_{column}_to_{table}
+--comment: Add {column} column to support {feature}
+
+ALTER TABLE {table_name} 
+ADD COLUMN {column_name} {type} {constraints};
+
+--rollback ALTER TABLE {table_name} DROP COLUMN {column_name};
+```
+
+### Adding Index
+```sql
+--liquibase formatted sql
+--changeset author:000XXX_add_index_{table}_{columns}
+--comment: Add index to improve {query_type} queries
+
+CREATE INDEX idx_{table_name}_{column} ON {table_name}({column});
+
+--rollback DROP INDEX idx_{table_name}_{column} ON {table_name};
+```
+
+## Finding Current Schema
+
+### Using Codebase Search
+```
+codebase_search("ProjectDAO interface")
+codebase_search("How is the projects table queried?")
+codebase_search("CREATE TABLE projects")
+```
+
+### Checking Migrations
+```bash
+# Find latest migrations
+ls -la apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/ | tail -10
+
+# Search for specific table
+grep -r "CREATE TABLE projects" apps/opik-backend/src/main/resources/liquibase/
+```
+
+### Checking DAO Interfaces
+Look for DAO interfaces in:
+- `apps/opik-backend/src/main/java/com/comet/opik/domain/`
+- Search for `*DAO.java` files
+- Check `@SqlQuery` and `@SqlUpdate` annotations for actual columns used
+
+## Related Rules
+
+- [JDBI DAO Patterns](mdc:.cursor/rules/jdbi-dao-patterns.mdc) - How to access MySQL with JDBI
+- [Database Overview](mdc:.cursor/rules/database-overview.mdc) - When to use MySQL vs ClickHouse
+- [Database Migration Workflow](mdc:.cursor/rules/database-migration-workflow.mdc) - How to create migrations
+- [Database Query Best Practices](mdc:.cursor/rules/database-query-best-practices.mdc) - Query optimization
