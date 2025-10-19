@@ -11,7 +11,7 @@ import {
 import { TraceFeedbackScore } from "@/types/traces";
 import { cn } from "@/lib/utils";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import {
   CategoricalFeedbackDefinition,
@@ -28,6 +28,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
   onValueChange,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const currentUserName = useLoggedInUserName() ?? "admin";
   const [open, setOpen] = useState(false);
   const [keepVisible, setKeepVisible] = useState(false);
 
@@ -72,7 +73,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
     setOpen(false);
   };
 
-  const currentValue = feedbackScore?.value;
+  const currentValue = feedbackScore?.value_by_author?.[currentUserName]?.value;
 
   // Don't render if no feedback options are available
   if (feedbackOptions.length === 0) {
