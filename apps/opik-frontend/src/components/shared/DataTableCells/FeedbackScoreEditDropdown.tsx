@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +28,19 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
   onValueChange,
 }) => {
   const [open, setOpen] = useState(false);
+  const [keepVisible, setKeepVisible] = useState(false);
+
+  // Keep the button visible briefly after dropdown closes to prevent anchor shift during animation
+  useEffect(() => {
+    if (open) {
+      setKeepVisible(true);
+    } else {
+      const timeout = setTimeout(() => {
+        setKeepVisible(false);
+      }, 150); // Match Radix UI default animation duration
+      return () => clearTimeout(timeout);
+    }
+  }, [open]);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -74,7 +87,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
           variant="ghost"
           className={cn(
             "hidden group-hover:inline-flex",
-            open && "inline-flex",
+            keepVisible && "inline-flex",
           )}
           onClick={(e) => {
             e.stopPropagation();
