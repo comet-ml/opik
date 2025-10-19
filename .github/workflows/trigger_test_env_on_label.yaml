@@ -2,7 +2,7 @@ name: Trigger Test Environment Deployment
 run-name: ${{ github.event.label.name == 'deploy-pr-public' && format('Trigger Public Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || github.event.label.name == 'deploy-pr-internal' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
 
 on:
-  pull_request:
+  pull_request_target:
     types: [labeled]
   workflow_dispatch:
 
@@ -71,7 +71,7 @@ jobs:
       version: ""
       is_release: false
       build_guardrails: false
-      ref: ${{ github.event.pull_request.head.ref }}
+      ref: ${{ github.event.pull_request.head.sha }}
 
   notify-build-finished:
     if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
@@ -130,7 +130,8 @@ jobs:
               body: `🚀 **Test environment deployment triggered!**
 
               ### Access Information
-              - **URL:** https://pr-${{ github.event.number }}.dev.comet.com
+              - **Environment:** ${{ needs.determine-environment.outputs.environment }}
+              - **URL:** https://pr-${{ github.event.number }}.${{ needs.determine-environment.outputs.base_domain }}
               - **Namespace:** pr-${{ github.event.number }}
               - **Version:** ${{ needs.build-apps.outputs.version }}
                      
