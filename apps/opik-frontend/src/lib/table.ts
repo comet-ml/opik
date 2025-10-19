@@ -25,11 +25,29 @@ export const hasAnyVisibleColumns = <TColumnData>(
 ) => columns.some(({ id }) => selectedColumns.includes(id));
 
 export const isColumnSortable = (id: string, sortableColumns: string[]) => {
+  // Direct match
   if (sortableColumns.includes(id)) return true;
 
   const keys = id.split(".");
 
-  return keys.length > 1 ? sortableColumns.includes(`${keys[0]}.*`) : false;
+  // Check for wildcard pattern (e.g., "data.*" for "data.field")
+  if (keys.length > 1 && sortableColumns.includes(`${keys[0]}.*`)) {
+    return true;
+  }
+
+  // Check if field name without dots matches "data.*" pattern
+  // (e.g., "expected_answer" should match "data.*")
+  if (keys.length === 1 && sortableColumns.includes("data.*")) {
+    return true;
+  }
+
+  // Check if field with prefix matches base field name
+  // (e.g., "output.output" should match "output")
+  if (keys.length > 1 && sortableColumns.includes(keys[0])) {
+    return true;
+  }
+
+  return false;
 };
 
 export const convertColumnDataToColumn = <TColumnData, TData>(
