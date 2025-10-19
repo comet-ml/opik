@@ -1,5 +1,6 @@
 import isString from "lodash/isString";
 import isObject from "lodash/isObject";
+import { stripImageTags } from "@/lib/llm";
 
 export interface ConversationMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -134,9 +135,12 @@ export const convertConversationToMarkdown = (
         );
 
         if (toolResponse && toolResponse.content) {
+          const toolResponseContent = isString(toolResponse.content)
+            ? toolResponse.content
+            : JSON.stringify(toolResponse.content);
           lines.push(``);
           lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;**Response:**`);
-          lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${toolResponse.content.trim()}`);
+          lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${toolResponseContent.trim()}`);
         }
 
         lines.push(`</details>`);
@@ -147,8 +151,11 @@ export const convertConversationToMarkdown = (
     }
 
     // Add content if present
-    if (content.trim()) {
-      lines.push(content.trim());
+    let contentStr = isString(content) ? content : JSON.stringify(content);
+    if (contentStr.trim()) {
+      // Strip image tags, keeping only URLs (images are shown in attachments)
+      contentStr = stripImageTags(contentStr);
+      lines.push(contentStr.trim());
     }
 
     // Close the role section
