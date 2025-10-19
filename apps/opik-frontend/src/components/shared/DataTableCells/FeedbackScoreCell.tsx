@@ -4,7 +4,7 @@ import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
 
-import { formatNumericData } from "@/lib/utils";
+import { cn, formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { TraceFeedbackScore } from "@/types/traces";
@@ -84,7 +84,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className={isUserFeedbackColumn ? "group gap-1" : "gap-1"}
+      className={cn("gap-1", isUserFeedbackColumn && "group")}
     >
       <FeedbackScoreCellValue
         feedbackScore={feedbackScore}
