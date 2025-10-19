@@ -60,7 +60,7 @@ public class FilterQueryBuilder {
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
-    private static final String DURATION_ANALYTICS_DB = "duration";
+    private static final String DURATION_ANALYTICS_DB = "if(end_time IS NOT NULL AND start_time IS NOT NULL AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), (dateDiff('microsecond', start_time, end_time) / 1000.0), 0)";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
     private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
     private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
@@ -351,6 +351,15 @@ public class FilterQueryBuilder {
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
+                    .put(ExperimentsComparisonValidKnownField.ID, ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.SOURCE, SOURCE_DB)
+                    .put(ExperimentsComparisonValidKnownField.TRACE_ID, TRACE_ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.SPAN_ID, SPAN_ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.CREATED_AT, CREATED_AT_DB)
+                    .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(ExperimentsComparisonValidKnownField.CREATED_BY, CREATED_BY_DB)
+                    .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .put(ExperimentsComparisonValidKnownField.DURATION, DURATION_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .build());
@@ -416,7 +425,8 @@ public class FilterQueryBuilder {
                 TraceThreadField.FEEDBACK_SCORES));
 
         map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
-                ExperimentsComparisonValidKnownField.OUTPUT));
+                ExperimentsComparisonValidKnownField.OUTPUT,
+                ExperimentsComparisonValidKnownField.DURATION));
 
         map.put(FilterStrategy.EXPERIMENT, Set.of(
                 ExperimentField.METADATA,
@@ -481,7 +491,16 @@ public class FilterQueryBuilder {
                 DatasetItemField.CREATED_AT,
                 DatasetItemField.LAST_UPDATED_AT,
                 DatasetItemField.CREATED_BY,
-                DatasetItemField.LAST_UPDATED_BY));
+                DatasetItemField.LAST_UPDATED_BY,
+                // Also include ExperimentsComparisonValidKnownField variants for experiment items
+                ExperimentsComparisonValidKnownField.ID,
+                ExperimentsComparisonValidKnownField.SOURCE,
+                ExperimentsComparisonValidKnownField.TRACE_ID,
+                ExperimentsComparisonValidKnownField.SPAN_ID,
+                ExperimentsComparisonValidKnownField.CREATED_AT,
+                ExperimentsComparisonValidKnownField.LAST_UPDATED_AT,
+                ExperimentsComparisonValidKnownField.CREATED_BY,
+                ExperimentsComparisonValidKnownField.LAST_UPDATED_BY));
 
         map.put(FilterStrategy.ALERT, Set.of(
                 AlertField.ID,
