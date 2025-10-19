@@ -10968,8 +10968,7 @@ class TracesResourceTest {
                     .update(update)
                     .build();
 
-            // Should return 400 due to validation (min size = 1)
-            traceResourceClient.batchUpdateThreads(batchUpdate, API_KEY, TEST_WORKSPACE, 400);
+            traceResourceClient.batchUpdateThreads(batchUpdate, API_KEY, TEST_WORKSPACE, 422);
         }
 
         @Test
