@@ -34,7 +34,10 @@ import {
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
+import {
+  EXPERIMENT_ITEM_OUTPUT_PREFIX,
+  EXPERIMENT_ITEM_DATASET_PREFIX,
+} from "@/constants/experiments";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -350,7 +353,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return (data?.columns ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: c.name,
+        id: `${EXPERIMENT_ITEM_DATASET_PREFIX}.${c.name}`,
         label: c.name,
         columnType: mapDynamicColumnTypesToColumnType(c.types),
       }));

@@ -5866,12 +5866,13 @@ class DatasetsResourceTest {
                     Arguments.of(SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
                             .build()),
 
-                    // Dynamic dataset fields (data.*) - Testing the transformation logic
-                    // These fields get transformed from "field_name" to "data.field_name" by SortingFactoryDatasets
-                    Arguments.of(SortingField.builder().field("expected_answer").direction(Direction.ASC).build()),
-                    Arguments.of(SortingField.builder().field("expected_answer").direction(Direction.DESC).build()),
-                    Arguments.of(SortingField.builder().field("input").direction(Direction.ASC).build()),
-                    Arguments.of(SortingField.builder().field("input").direction(Direction.DESC).build()));
+                    // Dynamic dataset fields (data.*) - Using explicit prefix notation
+                    // Users must explicitly use "data." prefix for dataset columns
+                    Arguments.of(SortingField.builder().field("data.expected_answer").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("data.expected_answer").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("data.input").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("data.input").direction(Direction.DESC).build()));
         }
 
         @Test

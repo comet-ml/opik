@@ -632,6 +632,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 any(tfs.input) AS input,
                 any(tfs.output) AS output,
                 any(tfs.visibility_mode) AS visibility_mode,
+                any(tfs.comments_array_agg) AS comments,
                 groupArray(tuple(
                     ei.id,
                     ei.experiment_id,

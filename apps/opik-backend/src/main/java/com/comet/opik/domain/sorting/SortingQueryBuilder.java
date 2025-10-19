@@ -27,7 +27,7 @@ public class SortingQueryBuilder {
                 ? sortingField -> fieldMapping.getOrDefault(sortingField.field(), sortingField.dbField())
                 : SortingField::dbField;
 
-        String sortFields = sorting.stream()
+        return sorting.stream()
                 .map(sortingField -> {
                     String dbField = fieldMapper.apply(sortingField);
 
@@ -40,10 +40,6 @@ public class SortingQueryBuilder {
                     }
                 })
                 .collect(Collectors.joining(", "));
-
-        // Add secondary sort by id DESC for deterministic ordering
-        // This ensures consistent results when the primary sort field has duplicate values
-        return sortFields + ", id DESC";
     }
 
     public boolean hasDynamicKeys(@NonNull List<SortingField> sorting) {
