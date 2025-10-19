@@ -13,7 +13,10 @@ import { cn } from "@/lib/utils";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import useAppStore from "@/store/AppStore";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
-import { FEEDBACK_DEFINITION_TYPE } from "@/types/feedback-definitions";
+import {
+  CategoricalFeedbackDefinition,
+  FEEDBACK_DEFINITION_TYPE,
+} from "@/types/feedback-definitions";
 
 interface FeedbackScoreEditDropdownProps {
   feedbackScore?: TraceFeedbackScore;
@@ -42,23 +45,13 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
   }, [feedbackDefinitionsData?.content]);
 
   const feedbackOptions = useMemo(() => {
-    if (
-      !userFeedbackDefinition ||
-      userFeedbackDefinition.type !== FEEDBACK_DEFINITION_TYPE.categorical
-    ) {
-      // Fallback to default options if User feedback definition is not found
-      return [
-        { name: "👍", value: 1 },
-        { name: "👎", value: 0 },
-      ];
-    }
-
-    return Object.entries(userFeedbackDefinition.details.categories).map(
-      ([name, value]) => ({
-        name,
-        value,
-      }),
-    );
+    return Object.entries(
+      (userFeedbackDefinition as unknown as CategoricalFeedbackDefinition)
+        ?.details?.categories ?? {},
+    ).map(([name, value]) => ({
+      name,
+      value,
+    }));
   }, [userFeedbackDefinition]);
 
   const handleValueSelect = (value: number) => {
@@ -67,6 +60,11 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
   };
 
   const currentValue = feedbackScore?.value;
+
+  // Don't render if no feedback options are available
+  if (feedbackOptions.length === 0) {
+    return null;
+  }
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
