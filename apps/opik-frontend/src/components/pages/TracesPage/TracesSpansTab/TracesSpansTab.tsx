@@ -528,16 +528,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   // Auto-select all feedback score columns when they become available
   useEffect(() => {
-    const allScoreColumns = [USER_FEEDBACK_COLUMN_ID, ...dynamicColumnsIds];
-
-    const missingScoreColumns = allScoreColumns.filter(
-      (id) => !selectedColumns.includes(id),
+    const isUserFeedbackColumnMissing = !selectedColumns.includes(
+      USER_FEEDBACK_COLUMN_ID,
     );
 
-    if (missingScoreColumns.length > 0) {
-      setSelectedColumns((prev) => [...prev, ...missingScoreColumns]);
+    if (isUserFeedbackColumnMissing) {
+      setSelectedColumns((prev) => [...prev, USER_FEEDBACK_COLUMN_ID]);
     }
-  }, [dynamicColumnsIds, selectedColumns, setSelectedColumns]);
+  }, [selectedColumns, setSelectedColumns]);
 
   const scoresColumnsData = useMemo(() => {
     // Always include "User feedback" column, even if it has no data
@@ -555,7 +553,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
     // Filter out "User feedback" from dynamic columns to avoid duplicates
     const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.label !== USER_FEEDBACK_NAME,
+      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
     );
 
     return [
