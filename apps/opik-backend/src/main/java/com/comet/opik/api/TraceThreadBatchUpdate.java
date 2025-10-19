@@ -16,19 +16,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record TraceThreadBatchUpdate(
-        @Schema(
-            description = "List of thread model IDs to update",
-            requiredMode = Schema.RequiredMode.REQUIRED
-        )
-        @NotNull(message = "Thread model IDs are required")
-        @Size(min = 1, max = 1000, message = "Thread model IDs must contain between 1 and 1000 items")
-        List<@NotNull UUID> threadModelIds,
+        @Schema(description = "List of thread model IDs to update", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "Thread model IDs are required") @Size(min = 1, max = 1000, message = "Thread model IDs must contain between 1 and 1000 items") List<@NotNull UUID> threadModelIds,
 
-        @Schema(
-            description = "Update to apply to all threads",
-            requiredMode = Schema.RequiredMode.REQUIRED
-        )
-        @NotNull(message = "Update is required")
-        @Valid
-        TraceThreadUpdate update) {
+        @Schema(description = "Update to apply to all threads", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "Update is required") @Valid TraceThreadUpdate update) {
 }

@@ -100,7 +100,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String UPDATE_THREAD_SQL = """
             INSERT INTO trace_threads (
-            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, last_updated_at, sampling_per_rule, scored_at
+            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule, scored_at
             )
             SELECT
                 workspace_id,
@@ -112,7 +112,6 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 created_by,
                 :user_name as last_updated_by,
                 created_at,
-                now64(6),
                 sampling_per_rule,
                 scored_at
             FROM trace_threads final
