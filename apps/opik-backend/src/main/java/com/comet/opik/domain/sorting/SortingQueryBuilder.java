@@ -33,7 +33,7 @@ public class SortingQueryBuilder {
 
                     // Skip null handling for JSONExtractRaw fields (they're JSON strings, not maps)
                     boolean isJsonExtract = dbField.startsWith("JSONExtractRaw(");
-                    
+
                     // Handle null direction for dynamic fields (unless it's a JSON extract)
                     if (sortingField.handleNullDirection().isEmpty() || isJsonExtract) {
                         return "%s %s".formatted(dbField, getDirection(sortingField));
@@ -51,9 +51,9 @@ public class SortingQueryBuilder {
         return sorting.stream()
                 .filter(sortingField -> {
                     String field = sortingField.field();
-                    return !field.startsWith("output.") 
-                        && !field.startsWith("input.") 
-                        && !field.startsWith("metadata.");
+                    return !field.startsWith("output.")
+                            && !field.startsWith("input.")
+                            && !field.startsWith("metadata.");
                 })
                 .anyMatch(SortingField::isDynamic);
     }
@@ -64,9 +64,9 @@ public class SortingQueryBuilder {
                 .filter(sortingField -> {
                     // Skip JSON fields (output.*, input.*, metadata.*)
                     String field = sortingField.field();
-                    return !field.startsWith("output.") 
-                        && !field.startsWith("input.") 
-                        && !field.startsWith("metadata.");
+                    return !field.startsWith("output.")
+                            && !field.startsWith("input.")
+                            && !field.startsWith("metadata.");
                 })
                 .forEach(sortingField -> {
                     try {

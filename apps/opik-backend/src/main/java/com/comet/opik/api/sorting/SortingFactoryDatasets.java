@@ -16,21 +16,21 @@ import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
 import static com.comet.opik.api.sorting.SortableFields.DURATION;
 import static com.comet.opik.api.sorting.SortableFields.FEEDBACK_SCORES;
 import static com.comet.opik.api.sorting.SortableFields.ID;
-import static com.comet.opik.api.sorting.SortableFields.INPUT_DYNAMIC;
+import static com.comet.opik.api.sorting.SortableFields.INPUT_WILDCARD;
 import static com.comet.opik.api.sorting.SortableFields.LAST_CREATED_EXPERIMENT_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_CREATED_OPTIMIZATION_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
-import static com.comet.opik.api.sorting.SortableFields.METADATA_DYNAMIC;
+import static com.comet.opik.api.sorting.SortableFields.METADATA_WILDCARD;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
-import static com.comet.opik.api.sorting.SortableFields.OUTPUT_DYNAMIC;
+import static com.comet.opik.api.sorting.SortableFields.OUTPUT_WILDCARD;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
 
 public class SortingFactoryDatasets extends SortingFactory {
 
     private static final List<String> SUPPORTED_FIELDS = List.of(ID, NAME, DESCRIPTION, TAGS, CREATED_AT,
             LAST_UPDATED_AT, CREATED_BY, LAST_UPDATED_BY, LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_OPTIMIZATION_AT,
-            DURATION, FEEDBACK_SCORES, DATA, OUTPUT_DYNAMIC, INPUT_DYNAMIC, METADATA_DYNAMIC, COMMENTS);
+            DURATION, FEEDBACK_SCORES, DATA, OUTPUT_WILDCARD, INPUT_WILDCARD, METADATA_WILDCARD, COMMENTS);
 
     @Override
     public List<String> getSortableFields() {
