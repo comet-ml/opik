@@ -27,6 +27,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
   feedbackScore,
   onValueChange,
 }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [open, setOpen] = useState(false);
   const [keepVisible, setKeepVisible] = useState(false);
 
@@ -41,7 +42,6 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
       return () => clearTimeout(timeout);
     }
   }, [open]);
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
     workspaceName,
