@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash } from "lucide-react";
+import { Tag, Trash } from "lucide-react";
 import get from "lodash/get";
 import first from "lodash/first";
 import slugify from "slugify";
@@ -11,7 +11,9 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
+import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -19,6 +21,7 @@ type ThreadsActionsPanelProps = {
   columnsToExport: string[];
   projectName: string;
   projectId: string;
+  onClearSelection?: () => void;
 };
 
 const ThreadsActionsPanel: React.FunctionComponent<
@@ -29,6 +32,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
   columnsToExport,
   projectName,
   projectId,
+  onClearSelection,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
@@ -89,12 +93,35 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
+      <AddTagDialog
+        key={`tag-${resetKeyRef.current}`}
+        rows={selectedRows}
+        open={open === 3}
+        setOpen={setOpen}
+        projectId={projectId}
+        type={TRACE_DATA_TYPE.threads}
+        onSuccess={onClearSelection}
+      />
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
         disabled={disabled}
         dataType="threads"
       />
+      <TooltipWrapper content="Add tags">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(3);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Tag className="mr-2 size-4" />
+          Add tags
+        </Button>
+      </TooltipWrapper>
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
         getData={mapRowData}

@@ -61,6 +61,8 @@ public interface TraceThreadDAO {
 
     Mono<Void> updateThread(UUID threadModelId, UUID projectId, TraceThreadUpdate threadUpdate);
 
+    Mono<Void> batchUpdateThreads(List<UUID> threadModelIds, TraceThreadUpdate threadUpdate);
+
     Mono<Long> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
 
     Flux<List<TraceThreadModel>> streamPendingClosureThreads(UUID projectId, Instant lastUpdatedAt);
@@ -98,7 +100,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
 
     private static final String UPDATE_THREAD_SQL = """
             INSERT INTO trace_threads (
-            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, sampling_per_rule, scored_at
+            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, last_updated_at, sampling_per_rule, scored_at
             )
             SELECT
                 workspace_id,
@@ -110,12 +112,36 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 created_by,
                 :user_name as last_updated_by,
                 created_at,
+                now64(6),
                 sampling_per_rule,
                 scored_at
             FROM trace_threads final
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
             AND id = :id
+            ;
+            """;
+
+    private static final String BATCH_UPDATE_THREADS_SQL = """
+            INSERT INTO trace_threads (
+            	workspace_id, project_id, thread_id, id, status, tags, created_by, last_updated_by, created_at, last_updated_at, sampling_per_rule, scored_at
+            )
+            SELECT
+                workspace_id,
+                project_id,
+                thread_id,
+                id,
+                status,
+                <if(tags)> :tags <else> tags <endif> as tags,
+                created_by,
+                :user_name as last_updated_by,
+                created_at,
+                now64(6),
+                sampling_per_rule,
+                scored_at
+            FROM trace_threads final
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
             ;
             """;
 
@@ -510,6 +536,48 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then();
+        });
+    }
+
+    @Override
+    public Mono<Void> batchUpdateThreads(@NonNull List<UUID> threadModelIds,
+            @NonNull TraceThreadUpdate threadUpdate) {
+        if (CollectionUtils.isEmpty(threadModelIds)) {
+            log.warn("batchUpdateThreads called with empty threadModelIds list");
+            return Mono.empty();
+        }
+
+        log.info("DAO: Starting batch update for '{}' thread model IDs", threadModelIds.size());
+        log.debug("DAO: Thread model IDs: '{}', Update: '{}'", threadModelIds, threadUpdate);
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            var template = new ST(BATCH_UPDATE_THREADS_SQL);
+
+            Optional.ofNullable(threadUpdate.tags())
+                    .ifPresent(tags -> {
+                        template.add("tags", tags.toString());
+                        log.debug("DAO: Added tags to template: '{}'", tags);
+                    });
+
+            String renderedSql = template.render();
+            log.debug("DAO: Rendered SQL: '{}'", renderedSql);
+
+            var statement = connection.createStatement(renderedSql)
+                    .bind("ids", threadModelIds.toArray(UUID[]::new));
+
+            Optional.ofNullable(threadUpdate.tags())
+                    .ifPresent(tags -> {
+                        statement.bind("tags", tags.toArray(String[]::new));
+                        log.debug("DAO: Bound tags parameter: '{}'", tags);
+                    });
+
+            return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .doOnSuccess(rowsUpdated -> log.info("DAO: Batch update executed, rows updated: '{}'", rowsUpdated))
+                    .doOnError(ex -> log.error("DAO: Error executing batch update SQL", ex))
                     .then();
         });
     }

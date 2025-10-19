@@ -21,6 +21,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThread.TraceThreadPage;
+import com.comet.opik.api.TraceThreadBatchUpdate;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -10922,6 +10923,85 @@ class TracesResourceTest {
                     .tags(update.tags())
                     .build()), List.of(actualThread));
 
+        }
+
+        @Test
+        void batchUpdateThreads() {
+            // Create multiple threads
+            var thread1 = createThread();
+            var thread2 = createThread();
+            var thread3 = createThread();
+
+            // Check that they don't have tags
+            assertThat(thread1.tags()).isNull();
+            assertThat(thread2.tags()).isNull();
+            assertThat(thread3.tags()).isNull();
+
+            // Batch update threads
+            var tags = Set.of("tag1", "tag2", "tag3");
+            var update = TraceThreadUpdate.builder().tags(tags).build();
+            var batchUpdate = TraceThreadBatchUpdate.builder()
+                    .threadModelIds(List.of(thread1.threadModelId(), thread2.threadModelId(), thread3.threadModelId()))
+                    .update(update)
+                    .build();
+
+            traceResourceClient.batchUpdateThreads(batchUpdate, API_KEY, TEST_WORKSPACE, 204);
+
+            // Check that batch update was applied to all threads
+            var actualThread1 = traceResourceClient.getTraceThread(thread1.id(), thread1.projectId(), API_KEY,
+                    TEST_WORKSPACE);
+            var actualThread2 = traceResourceClient.getTraceThread(thread2.id(), thread2.projectId(), API_KEY,
+                    TEST_WORKSPACE);
+            var actualThread3 = traceResourceClient.getTraceThread(thread3.id(), thread3.projectId(), API_KEY,
+                    TEST_WORKSPACE);
+
+            TraceAssertions.assertThreads(List.of(thread1.toBuilder().tags(tags).build()), List.of(actualThread1));
+            TraceAssertions.assertThreads(List.of(thread2.toBuilder().tags(tags).build()), List.of(actualThread2));
+            TraceAssertions.assertThreads(List.of(thread3.toBuilder().tags(tags).build()), List.of(actualThread3));
+        }
+
+        @Test
+        void batchUpdateThreadsWithEmptyListShouldSucceed() {
+            var update = TraceThreadUpdate.builder().tags(Set.of("tag1")).build();
+            var batchUpdate = TraceThreadBatchUpdate.builder()
+                    .threadModelIds(List.of())
+                    .update(update)
+                    .build();
+
+            // Should return 400 due to validation (min size = 1)
+            traceResourceClient.batchUpdateThreads(batchUpdate, API_KEY, TEST_WORKSPACE, 400);
+        }
+
+        @Test
+        void batchUpdateThreadsWithExistingTags() {
+            // Create threads with existing tags
+            var thread1 = createThread();
+            var thread2 = createThread();
+
+            // Add initial tags
+            var initialTags = Set.of("existing1", "existing2");
+            var initialUpdate = TraceThreadUpdate.builder().tags(initialTags).build();
+            traceResourceClient.updateThread(initialUpdate, thread1.threadModelId(), API_KEY, TEST_WORKSPACE, 204);
+            traceResourceClient.updateThread(initialUpdate, thread2.threadModelId(), API_KEY, TEST_WORKSPACE, 204);
+
+            // Batch update with new tags
+            var newTags = Set.of("new1", "new2");
+            var update = TraceThreadUpdate.builder().tags(newTags).build();
+            var batchUpdate = TraceThreadBatchUpdate.builder()
+                    .threadModelIds(List.of(thread1.threadModelId(), thread2.threadModelId()))
+                    .update(update)
+                    .build();
+
+            traceResourceClient.batchUpdateThreads(batchUpdate, API_KEY, TEST_WORKSPACE, 204);
+
+            // Check that tags were replaced (not appended)
+            var actualThread1 = traceResourceClient.getTraceThread(thread1.id(), thread1.projectId(), API_KEY,
+                    TEST_WORKSPACE);
+            var actualThread2 = traceResourceClient.getTraceThread(thread2.id(), thread2.projectId(), API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualThread1.tags()).isEqualTo(newTags);
+            assertThat(actualThread2.tags()).isEqualTo(newTags);
         }
     }
 
