@@ -21,29 +21,34 @@ const FeedbackScoreCellValue = ({
   // If no feedback score and not editable, show dash
   if (!feedbackScore && !isUserFeedbackColumn) return "-";
 
-  // If no feedback score but editable, show only the edit dropdown
-  if (!feedbackScore && isUserFeedbackColumn && onValueChange) {
+  const shouldShowEditDropdown = isUserFeedbackColumn && onValueChange;
+
+  // If no feedback score, show only dash with optional edit button
+  if (!feedbackScore) {
     return (
       <div className="flex items-center gap-1">
-        <FeedbackScoreEditDropdown
-          feedbackScore={feedbackScore}
-          onValueChange={onValueChange}
-        />
+        {shouldShowEditDropdown && (
+          <FeedbackScoreEditDropdown
+            feedbackScore={feedbackScore}
+            onValueChange={onValueChange}
+          />
+        )}
         <span>-</span>
       </div>
     );
   }
 
-  const label = feedbackScore!.name;
+  // Feedback score exists, show it with optional edit button
+  const label = feedbackScore.name;
   const color =
     customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!];
-  const valueByAuthor = feedbackScore!.value_by_author;
-  const value = feedbackScore!.value;
-  const category = feedbackScore!.category_name;
+  const valueByAuthor = feedbackScore.value_by_author;
+  const value = feedbackScore.value;
+  const category = feedbackScore.category_name;
 
   return (
     <div className="flex items-center gap-1">
-      {isUserFeedbackColumn && onValueChange && (
+      {shouldShowEditDropdown && (
         <FeedbackScoreEditDropdown
           feedbackScore={feedbackScore}
           onValueChange={onValueChange}
@@ -58,7 +63,7 @@ const FeedbackScoreCellValue = ({
         open={openHoverCard}
         onOpenChange={setOpenHoverCard}
       >
-        <div className="truncate">{feedbackScore!.value}</div>
+        <div className="truncate">{value}</div>
       </MultiValueFeedbackScoreHoverCard>
     </div>
   );
