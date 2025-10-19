@@ -91,7 +91,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
         className="w-fit p-1"
         sideOffset={4}
       >
-        <DropdownMenuLabel className="text-secondary-foreground px-2 text-xs font-medium">
+        <DropdownMenuLabel className="px-2 text-xs font-medium text-secondary-foreground">
           Personal user feedback
         </DropdownMenuLabel>
         <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white">
@@ -107,7 +107,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
                   "bg-accent text-accent-foreground",
               )}
             >
-              <div className="flex items-center px-3 gap-2">
+              <div className="flex items-center gap-2 px-3">
                 <span className="text-lg">{option.name}</span>
                 <span className="text-sm font-medium">({option.value})</span>
               </div>
