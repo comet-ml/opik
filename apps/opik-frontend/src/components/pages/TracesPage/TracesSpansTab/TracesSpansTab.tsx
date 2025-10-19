@@ -526,16 +526,16 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setSelectedColumns,
   });
 
-  // Auto-select user feedback score column when it becomes available
-  useEffect(() => {
-    const isUserFeedbackColumnMissing = !selectedColumns.includes(
-      USER_FEEDBACK_COLUMN_ID,
-    );
+  const isUserFeedbackColumnMissing = !selectedColumns.includes(
+    USER_FEEDBACK_COLUMN_ID,
+  );
 
+  // Ensure "User Feedback" column is always selected
+  useEffect(() => {
     if (isUserFeedbackColumnMissing) {
       setSelectedColumns((prev) => [...prev, USER_FEEDBACK_COLUMN_ID]);
     }
-  }, [selectedColumns, setSelectedColumns]);
+  }, [isUserFeedbackColumnMissing, setSelectedColumns]);
 
   const scoresColumnsData = useMemo(() => {
     // Always include "User feedback" column, even if it has no data
