@@ -1,5 +1,5 @@
 name: Trigger Test Environment Deployment
-run-name: ${{ github.event.label.name == 'deploy-pr-public' && format('Trigger Public Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || github.event.label.name == 'deploy-pr-internal' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
+run-name: ${{ github.event.label.name == 'test-environment' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
 
 on:
   pull_request_target:
@@ -14,35 +14,15 @@ permissions:
 jobs:
 
   other-labels:
-    if: github.event.label.name != 'deploy-pr-internal' && github.event.label.name != 'deploy-pr-public'
+    if: github.event.label.name != 'test-environment'
     runs-on: ubuntu-latest
     steps:
       - name: Skip
         run: |
           echo "Skipping deployment of test environment for this PR"
 
-  determine-environment:
-    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
-    runs-on: ubuntu-latest
-    outputs:
-      environment: ${{ steps.env.outputs.environment }}
-      base_domain: ${{ steps.env.outputs.base_domain }}
-    steps:
-      - name: Determine environment
-        id: env
-        run: |
-          if [[ "${{ github.event.label.name }}" == "deploy-pr-internal" ]]; then
-            echo "environment=development" >> $GITHUB_OUTPUT
-            echo "base_domain=dev.comet.com" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.label.name }}" == "deploy-pr-public" ]]; then
-            echo "environment=opik-public" >> $GITHUB_OUTPUT
-            echo "base_domain=opikpub.comet.com" >> $GITHUB_OUTPUT
-          fi
-
   notify-started:
-    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
-    needs:
-      - determine-environment
+    if: github.event.label.name == 'test-environment'
     runs-on: ubuntu-latest
     steps:
       - name: Comment on PR - Deployment Started
@@ -55,15 +35,15 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `🔄 **Test environment deployment started**
+              
               Building images for PR #${{ github.event.number }}...
               
               You can monitor the build progress [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
             });
 
   build-apps:
-    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
+    if: github.event.label.name == 'test-environment'
     needs:
-      - determine-environment
       - notify-started
     uses: ./.github/workflows/build_apps.yml
     secrets: inherit
@@ -74,9 +54,8 @@ jobs:
       ref: ${{ github.event.pull_request.head.sha }}
 
   notify-build-finished:
-    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
+    if: github.event.label.name == 'test-environment'
     needs:
-      - determine-environment
       - build-apps
     runs-on: ubuntu-latest
     steps:
@@ -97,9 +76,8 @@ jobs:
             });
 
   trigger_deployment:
-    if: github.event.label.name == 'deploy-pr-internal' || github.event.label.name == 'deploy-pr-public'
+    if: github.event.label.name == 'test-environment'
     needs:
-      - determine-environment
       - build-apps
       - notify-build-finished
     runs-on: ubuntu-latest
@@ -115,8 +93,7 @@ jobs:
               event_type: 'deploy-opik-test-env',
               client_payload: {
                 pr_number: '${{ github.event.number }}',
-                version_name: '${{ needs.build-apps.outputs.version }}',
-                environment: '${{ needs.determine-environment.outputs.environment }}'
+                version_name: '${{ needs.build-apps.outputs.version }}'
               }
             });
             
@@ -130,8 +107,7 @@ jobs:
               body: `🚀 **Test environment deployment triggered!**
 
               ### Access Information
-              - **Environment:** ${{ needs.determine-environment.outputs.environment }}
-              - **URL:** https://pr-${{ github.event.number }}.${{ needs.determine-environment.outputs.base_domain }}
+              - **URL:** https://pr-${{ github.event.number }}.dev.comet.com
               - **Namespace:** pr-${{ github.event.number }}
               - **Version:** ${{ needs.build-apps.outputs.version }}
                      
