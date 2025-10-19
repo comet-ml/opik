@@ -4,9 +4,11 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -987,8 +989,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
-    private final @NonNull com.comet.opik.domain.sorting.SortingQueryBuilder sortingQueryBuilder;
-    private final @NonNull com.comet.opik.api.sorting.SortingFactoryDatasets sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull SortingFactoryDatasets sortingFactory;
 
     @Override
     @WithSpan
