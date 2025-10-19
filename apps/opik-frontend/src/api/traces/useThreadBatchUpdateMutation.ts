@@ -19,15 +19,12 @@ const useThreadBatchUpdateMutation = () => {
       threadModelIds,
       tags,
     }: UseThreadBatchUpdateMutationParams) => {
-      const { data } = await api.patch(
-        `${TRACES_REST_ENDPOINT}threads/batch`,
-        {
-          thread_model_ids: threadModelIds,
-          update: {
-            tags,
-          },
+      const { data } = await api.patch(`${TRACES_REST_ENDPOINT}threads/batch`, {
+        thread_model_ids: threadModelIds,
+        update: {
+          tags,
         },
-      );
+      });
       return data;
     },
     onError: (error: AxiosError) => {
@@ -57,4 +54,3 @@ const useThreadBatchUpdateMutation = () => {
 };
 
 export default useThreadBatchUpdateMutation;
-
