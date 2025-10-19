@@ -1,0 +1,122 @@
+import React, { useState, useMemo } from "react";
+import { Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { TraceFeedbackScore } from "@/types/traces";
+import { cn } from "@/lib/utils";
+import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
+import useAppStore from "@/store/AppStore";
+import { USER_FEEDBACK_NAME } from "@/constants/shared";
+import { FEEDBACK_DEFINITION_TYPE } from "@/types/feedback-definitions";
+
+interface FeedbackScoreEditDropdownProps {
+  feedbackScore?: TraceFeedbackScore;
+  onValueChange: (value: number) => void;
+}
+
+const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
+  feedbackScore,
+  onValueChange,
+}) => {
+  const [open, setOpen] = useState(false);
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
+    workspaceName,
+    page: 1,
+    size: 1000,
+  });
+
+  const userFeedbackDefinition = useMemo(() => {
+    return feedbackDefinitionsData?.content?.find(
+      (def) =>
+        def.name === USER_FEEDBACK_NAME &&
+        def.type === FEEDBACK_DEFINITION_TYPE.categorical,
+    );
+  }, [feedbackDefinitionsData?.content]);
+
+  const feedbackOptions = useMemo(() => {
+    if (
+      !userFeedbackDefinition ||
+      userFeedbackDefinition.type !== FEEDBACK_DEFINITION_TYPE.categorical
+    ) {
+      // Fallback to default options if User feedback definition is not found
+      return [
+        { name: "👍", value: 1 },
+        { name: "👎", value: 0 },
+      ];
+    }
+
+    return Object.entries(userFeedbackDefinition.details.categories).map(
+      ([name, value]) => ({
+        name,
+        value,
+      }),
+    );
+  }, [userFeedbackDefinition]);
+
+  const handleValueSelect = (value: number) => {
+    onValueChange(value);
+    setOpen(false);
+  };
+
+  const currentValue = feedbackScore?.value;
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          className={cn(
+            "hidden group-hover:inline-flex",
+            open && "inline-flex",
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          <Pencil className="size-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        onClick={(event) => event.stopPropagation()}
+        align="end"
+        className="w-fit p-1"
+        sideOffset={4}
+      >
+        <DropdownMenuLabel className="text-secondary-foreground px-2 text-xs font-medium">
+          Personal user feedback
+        </DropdownMenuLabel>
+        <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white">
+          {feedbackOptions.map((option) => (
+            <DropdownMenuItem
+              key={option.name}
+              onClick={() => handleValueSelect(option.value)}
+              className={cn(
+                "flex items-center justify-center px-1 py-2 cursor-pointer rounded-sm text-sm flex-1",
+                "hover:bg-accent hover:text-accent-foreground",
+                "focus:bg-accent focus:text-accent-foreground",
+                currentValue === option.value &&
+                  "bg-accent text-accent-foreground",
+              )}
+            >
+              <div className="flex items-center px-3 gap-2">
+                <span className="text-lg">{option.name}</span>
+                <span className="text-sm font-medium">({option.value})</span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+export default FeedbackScoreEditDropdown;
