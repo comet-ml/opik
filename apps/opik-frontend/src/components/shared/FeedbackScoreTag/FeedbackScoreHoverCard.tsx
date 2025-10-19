@@ -66,7 +66,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
                   />
 
                   <div className="comet-body-xs-accented pr-2 text-foreground">
-                    {tag.category_name || tag.value}
+                    {tag.value}
                   </div>
                 </div>
               );
