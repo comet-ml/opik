@@ -43,7 +43,7 @@ const FeedbackScoreCellValue = ({
 
   return (
     <div className="group flex items-center gap-1">
-      {onValueChange && (
+      {isUserFeedbackColumn && onValueChange && (
         <FeedbackScoreEditDropdown
           feedbackScore={feedbackScore}
           onValueChange={onValueChange}

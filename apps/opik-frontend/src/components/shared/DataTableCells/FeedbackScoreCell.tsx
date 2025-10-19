@@ -74,7 +74,10 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     ],
   );
 
+  const enableUserFeedbackEditing =
+    context.table.options.meta?.enableUserFeedbackEditing ?? false;
   const isUserFeedbackColumn =
+    enableUserFeedbackEditing &&
     context.column.id === "feedback_scores_User feedback";
 
   return (
