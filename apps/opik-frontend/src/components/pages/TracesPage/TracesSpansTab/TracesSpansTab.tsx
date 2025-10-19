@@ -550,6 +550,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       accessorFn: (row) =>
         row.feedback_scores?.find((f) => f.name === USER_FEEDBACK_NAME),
       statisticKey: USER_FEEDBACK_COLUMN_ID,
+      disabled: true,
     };
 
     // Filter out "User feedback" from dynamic columns to avoid duplicates
