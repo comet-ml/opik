@@ -7,6 +7,8 @@ import {
 } from "@/types/shared";
 import {
   EXPERIMENT_ITEM_DATASET_PREFIX,
+  EXPERIMENT_ITEM_INPUT_PREFIX,
+  EXPERIMENT_ITEM_METADATA_PREFIX,
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
 } from "@/constants/experiments";
 
@@ -51,6 +53,26 @@ export const mapComplexColumn = (column: ColumnSort): ColumnSort => {
       id: column.id.replace(
         `${EXPERIMENT_ITEM_OUTPUT_PREFIX}_`,
         `${EXPERIMENT_ITEM_OUTPUT_PREFIX}.`,
+      ),
+    };
+  }
+
+  if (column.id.startsWith(EXPERIMENT_ITEM_INPUT_PREFIX)) {
+    return {
+      ...column,
+      id: column.id.replace(
+        `${EXPERIMENT_ITEM_INPUT_PREFIX}_`,
+        `${EXPERIMENT_ITEM_INPUT_PREFIX}.`,
+      ),
+    };
+  }
+
+  if (column.id.startsWith(EXPERIMENT_ITEM_METADATA_PREFIX)) {
+    return {
+      ...column,
+      id: column.id.replace(
+        `${EXPERIMENT_ITEM_METADATA_PREFIX}_`,
+        `${EXPERIMENT_ITEM_METADATA_PREFIX}.`,
       ),
     };
   }

@@ -4,6 +4,7 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -631,6 +632,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 any(tfs.feedback_scores) AS feedback_scores,
                 any(tfs.input) AS input,
                 any(tfs.output) AS output,
+                any(tfs.metadata) AS metadata,
                 any(tfs.visibility_mode) AS visibility_mode,
                 any(tfs.comments_array_agg) AS comments,
                 groupArray(tuple(
@@ -649,7 +651,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     tfs.duration,
                     tfs.total_estimated_cost,
                     tfs.usage,
-                    tfs.visibility_mode
+                    tfs.visibility_mode,
+                    tfs.metadata
                 )) AS experiment_items_array
             FROM experiment_items_final AS ei
             LEFT JOIN dataset_items_final AS di ON di.id = ei.dataset_item_id
@@ -658,6 +661,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.id,
                     t.input,
                     t.output,
+                    t.metadata,
                     t.duration,
                     t.visibility_mode,
                     s.total_estimated_cost,
@@ -689,6 +693,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                          NULL) AS duration,
                         <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
                         <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        metadata,
                         visibility_mode
                     FROM traces
                     WHERE workspace_id = :workspace_id
@@ -712,6 +717,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     t.id,
                     t.input,
                     t.output,
+                    t.metadata,
                     t.duration,
                     t.visibility_mode,
                     s.total_estimated_cost,
@@ -1259,7 +1265,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     // Add sorting if present
                     var finalTemplate = selectTemplate;
                     if (datasetItemSearchCriteria.sortingFields() != null) {
-                        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(datasetItemSearchCriteria.sortingFields()))
+                        Optional.ofNullable(sortingQueryBuilder.toOrderBySql(datasetItemSearchCriteria.sortingFields(),
+                                buildFieldMapping(datasetItemSearchCriteria.sortingFields())))
                                 .ifPresent(sortFields -> {
                                     // feedback_scores is now exposed at outer query level via any(tfs.feedback_scores)
                                     // so we don't need to map it to tfs.feedback_scores anymore
@@ -1428,5 +1435,41 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
+    }
+
+    /**
+     * Builds field mapping for JSON fields (output, input, metadata).
+     * These fields are stored as JSON strings in ClickHouse, so we need to use JSONExtractRaw
+     * instead of bracket notation. We use literal keys instead of bind parameters
+     * to avoid the dynamic field tuple wrapping.
+     *
+     * @param sortingFields the sorting fields from the request
+     * @return a map from field name to ClickHouse SQL expression
+     */
+    private Map<String, String> buildFieldMapping(List<SortingField> sortingFields) {
+        Map<String, String> fieldMapping = new HashMap<>();
+
+        for (SortingField field : sortingFields) {
+            String fieldName = field.field();
+
+            // Check if this is a JSON field (output, input, or metadata)
+            // Use literal keys instead of bind parameters to avoid dynamic field handling
+            if (fieldName.startsWith("output.")) {
+                String key = fieldName.substring("output.".length());
+                fieldMapping.put(fieldName,
+                        "JSONExtractRaw(output, '%s')".formatted(key));
+            } else if (fieldName.startsWith("input.")) {
+                String key = fieldName.substring("input.".length());
+                fieldMapping.put(fieldName,
+                        "JSONExtractRaw(input, '%s')".formatted(key));
+            } else if (fieldName.startsWith("metadata.")) {
+                String key = fieldName.substring("metadata.".length());
+                fieldMapping.put(fieldName,
+                        "JSONExtractRaw(metadata, '%s')".formatted(key));
+            }
+            // For other fields (including feedback_scores, data, etc.), use default dbField()
+        }
+
+        return fieldMapping;
     }
 }

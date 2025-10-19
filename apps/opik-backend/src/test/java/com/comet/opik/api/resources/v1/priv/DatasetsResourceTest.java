@@ -5872,7 +5872,25 @@ class DatasetsResourceTest {
                     Arguments
                             .of(SortingField.builder().field("data.expected_answer").direction(Direction.DESC).build()),
                     Arguments.of(SortingField.builder().field("data.input").direction(Direction.ASC).build()),
-                    Arguments.of(SortingField.builder().field("data.input").direction(Direction.DESC).build()));
+                    Arguments.of(SortingField.builder().field("data.input").direction(Direction.DESC).build()),
+                    // Output fields
+                    Arguments.of(SortingField.builder().field("output.translation").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("output.translation").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("output.quality_score").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("output.quality_score").direction(Direction.DESC).build()),
+                    // Input fields
+                    Arguments.of(SortingField.builder().field("input.text").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("input.text").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("input.language").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("input.language").direction(Direction.DESC).build()),
+                    // Metadata fields
+                    Arguments.of(SortingField.builder().field("metadata.task_type").direction(Direction.ASC).build()),
+                    Arguments
+                            .of(SortingField.builder().field("metadata.task_type").direction(Direction.DESC).build()),
+                    Arguments.of(SortingField.builder().field("metadata.model").direction(Direction.ASC).build()),
+                    Arguments.of(SortingField.builder().field("metadata.model").direction(Direction.DESC).build()));
         }
 
         @Test

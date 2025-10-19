@@ -31,8 +31,11 @@ public class SortingQueryBuilder {
                 .map(sortingField -> {
                     String dbField = fieldMapper.apply(sortingField);
 
-                    // Handle null direction for dynamic fields
-                    if (sortingField.handleNullDirection().isEmpty()) {
+                    // Skip null handling for JSONExtractRaw fields (they're JSON strings, not maps)
+                    boolean isJsonExtract = dbField.startsWith("JSONExtractRaw(");
+                    
+                    // Handle null direction for dynamic fields (unless it's a JSON extract)
+                    if (sortingField.handleNullDirection().isEmpty() || isJsonExtract) {
                         return "%s %s".formatted(dbField, getDirection(sortingField));
                     } else {
                         return "(%s, %s) %s".formatted(dbField, sortingField.handleNullDirection(),
@@ -43,12 +46,28 @@ public class SortingQueryBuilder {
     }
 
     public boolean hasDynamicKeys(@NonNull List<SortingField> sorting) {
-        return sorting.stream().anyMatch(SortingField::isDynamic);
+        // JSON fields (output.*, input.*, metadata.*) are not considered dynamic
+        // because they use JSONExtractRaw with literal keys, not bind parameters
+        return sorting.stream()
+                .filter(sortingField -> {
+                    String field = sortingField.field();
+                    return !field.startsWith("output.") 
+                        && !field.startsWith("input.") 
+                        && !field.startsWith("metadata.");
+                })
+                .anyMatch(SortingField::isDynamic);
     }
 
     public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting) {
         sorting.stream()
                 .filter(SortingField::isDynamic)
+                .filter(sortingField -> {
+                    // Skip JSON fields (output.*, input.*, metadata.*)
+                    String field = sortingField.field();
+                    return !field.startsWith("output.") 
+                        && !field.startsWith("input.") 
+                        && !field.startsWith("metadata.");
+                })
                 .forEach(sortingField -> {
                     try {
                         statement.bind(sortingField.bindKey(), sortingField.dynamicKey());

@@ -45,6 +45,9 @@ public class SortableFields {
     public static final String INSTRUCTIONS = "instructions";
     public static final String WEBHOOK_URL = "webhook_url";
     public static final String DATA = "data.*";
+    public static final String OUTPUT_DYNAMIC = "output.*";
+    public static final String INPUT_DYNAMIC = "input.*";
+    public static final String METADATA_DYNAMIC = "metadata.*";
     public static final String COMMENTS = "comments";
     public static final String ENABLED = "enabled";
     public static final String SAMPLING_RATE = "sampling_rate";
