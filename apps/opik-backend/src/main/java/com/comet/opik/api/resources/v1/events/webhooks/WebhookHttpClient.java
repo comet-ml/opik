@@ -61,17 +61,15 @@ public class WebhookHttpClient {
         log.info("Sending webhook event '{}' to URL: '{}', max retries: '{}'",
                 event.getId(), event.getUrl(), event.getMaxRetries());
 
-        return Mono.deferContextual(ctx ->
         // Serialize payload asynchronously (non-blocking JSON serialization)
-        Mono.fromCallable(() -> JsonUtils.writeValueAsString(
+        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> JsonUtils.writeValueAsString(
                 event.toBuilder().url(null).headers(null).secret(null).build()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(jsonPayload -> performWebhookRequest(event, jsonPayload, ctx.get(RequestContext.WORKSPACE_ID)))
                 .retryWhen(createRetrySpec(event.getId(), event.getMaxRetries()))
                 .doOnError(throwable -> logError(event,
                         ctx.get(RequestContext.WORKSPACE_ID),
-                        "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable)))
-                .subscribeOn(Schedulers.boundedElastic());
+                        "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable)));
     }
 
     private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {

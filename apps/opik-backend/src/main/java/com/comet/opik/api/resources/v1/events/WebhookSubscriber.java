@@ -9,6 +9,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.opentelemetry.api.common.Attributes;
@@ -24,8 +25,6 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_ID;
 
 /**
  * Service responsible for sending webhook events to external HTTP endpoints.
@@ -90,32 +89,33 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         log.debug("Processing webhook event: id='{}', type='{}', url='{}'",
                 event.getId(), event.getEventType(), event.getUrl());
 
-        // Build attributes synchronously (lightweight, non-blocking operation)
-        var attributes = Attributes.builder()
-                .put("event_type", event.getEventType().getValue())
-                .put("workspace_id", event.getWorkspaceId())
-                .build();
-
         return validateEvent(event)
-                .flatMap(unused -> {
-                    @SuppressWarnings("unchecked")
-                    WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
+                .then(Mono.fromCallable(() -> Attributes.builder()
+                        .put("event_type", event.getEventType().getValue())
+                        .put("workspace_id", event.getWorkspaceId())
+                        .build())
+                        .flatMap(attributes -> {
+                            @SuppressWarnings("unchecked")
+                            WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
 
-                    return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .flatMap(webhookHttpClient::sendWebhook)
-                            .doOnSuccess(unused2 -> {
-                                log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
-                                        event.getId(), event.getEventType(), event.getUrl());
+                            return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
+                                    .subscribeOn(Schedulers.boundedElastic())
+                                    .flatMap(webhookHttpClient::sendWebhook)
+                                    .doOnSuccess(unused -> {
+                                        log.info("Successfully sent webhook: id='{}', type='{}', url='{}'",
+                                                event.getId(), event.getEventType(), event.getUrl());
 
-                                // Record success metrics
-                                webhookEventProcessedCounter.add(1,
-                                        attributes.toBuilder().put("status", "success").build());
-                            })
-                            .onErrorResume(
-                                    throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()));
-                })
-                .contextWrite(ctx -> ctx.put(WORKSPACE_ID, event.getWorkspaceId()))
+                                        // Record success metrics
+                                        webhookEventProcessedCounter.add(1,
+                                                attributes.toBuilder().put("status", "success").build());
+                                    })
+                                    .onErrorResume(
+                                            throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()));
+                        }))
+                .onErrorResume(
+                        throwable -> handlePermanentFailure(event, throwable).then(Mono.empty()))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.getWorkspaceId()))
+                .subscribeOn(Schedulers.boundedElastic())
                 .then();
     }
 
@@ -162,7 +162,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
             }
 
             log.debug("Webhook event validation passed for event: '{}'", event.getId());
-        }).then();
+        });
     }
 
     public static WebhookEvent<Map<String, Object>> deserializeEventPayload(
