@@ -84,7 +84,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-1"
+      className={isUserFeedbackColumn ? "group gap-1" : "gap-1"}
     >
       <FeedbackScoreCellValue
         feedbackScore={feedbackScore}

@@ -24,7 +24,7 @@ const FeedbackScoreCellValue = ({
   // If no feedback score but editable, show only the edit dropdown
   if (!feedbackScore && isUserFeedbackColumn && onValueChange) {
     return (
-      <div className="group flex items-center gap-1">
+      <div className="flex items-center gap-1">
         <FeedbackScoreEditDropdown
           feedbackScore={feedbackScore}
           onValueChange={onValueChange}
@@ -42,7 +42,7 @@ const FeedbackScoreCellValue = ({
   const category = feedbackScore!.category_name;
 
   return (
-    <div className="group flex items-center gap-1">
+    <div className="flex items-center gap-1">
       {isUserFeedbackColumn && onValueChange && (
         <FeedbackScoreEditDropdown
           feedbackScore={feedbackScore}
