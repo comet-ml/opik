@@ -28,7 +28,10 @@ class RawAutomationRuleEvaluatorsClient:
         self,
         *,
         project_id: typing.Optional[str] = None,
+        id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -40,7 +43,13 @@ class RawAutomationRuleEvaluatorsClient:
         ----------
         project_id : typing.Optional[str]
 
+        id : typing.Optional[str]
+
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -59,7 +68,10 @@ class RawAutomationRuleEvaluatorsClient:
             method="GET",
             params={
                 "project_id": project_id,
+                "id": id,
                 "name": name,
+                "filters": filters,
+                "sorting": sorting,
                 "page": page,
                 "size": size,
             },
@@ -305,7 +317,10 @@ class AsyncRawAutomationRuleEvaluatorsClient:
         self,
         *,
         project_id: typing.Optional[str] = None,
+        id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -317,7 +332,13 @@ class AsyncRawAutomationRuleEvaluatorsClient:
         ----------
         project_id : typing.Optional[str]
 
+        id : typing.Optional[str]
+
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -336,7 +357,10 @@ class AsyncRawAutomationRuleEvaluatorsClient:
             method="GET",
             params={
                 "project_id": project_id,
+                "id": id,
                 "name": name,
+                "filters": filters,
+                "sorting": sorting,
                 "page": page,
                 "size": size,
             },

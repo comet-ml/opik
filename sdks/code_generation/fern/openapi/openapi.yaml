@@ -942,7 +942,21 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: id
+        in: query
+        schema:
+          type: string
+          description: "Filter automation rules with rule ID containing this value\
+            \ (partial match, like %id%)"
       - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: sorting
         in: query
         schema:
           type: string
@@ -4736,7 +4750,6 @@ components:
           type: string
     Alert:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -4913,7 +4926,6 @@ components:
             $ref: "#/components/schemas/AlertTriggerConfig_Write"
     Alert_Write:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -5056,7 +5068,6 @@ components:
           readOnly: true
     Alert_Public:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -6221,6 +6232,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
+        sortable_by:
+          type: array
+          items:
+            type: string
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
       - action
