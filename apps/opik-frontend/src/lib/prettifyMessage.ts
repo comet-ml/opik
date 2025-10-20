@@ -7,6 +7,7 @@ import {
   ConversationData,
   convertLLMMessagesToMarkdown,
   LLMMessage,
+  ToolCall,
 } from "./conversationMarkdown";
 import { PrettifyMessageResponse, ExtractTextResult } from "./types";
 
@@ -262,7 +263,7 @@ const extractLLMMessagesArray = (obj: object): LLMMessage[] | null => {
         role: msgRecord.role as string,
         type: msgRecord.type as string,
         content: msgRecord.content as string | unknown[],
-        tool_calls: msgRecord.tool_calls as any,
+        tool_calls: isValidToolCallsArray(msgRecord.tool_calls) ? msgRecord.tool_calls : undefined,
         tool_call_id: msgRecord.tool_call_id as string,
       } as LLMMessage;
     });
@@ -292,4 +293,27 @@ const extractLLMMessagesArray = (obj: object): LLMMessage[] | null => {
   }
 
   return null;
+};
+
+/**
+ * Type guard to check if a value is a valid ToolCall array
+ * @param value - The value to check
+ * @returns True if value is a valid ToolCall array
+ */
+const isValidToolCallsArray = (value: unknown): value is ToolCall[] => {
+  if (!Array.isArray(value)) return false;
+  
+  return value.every((item: unknown) => {
+    if (typeof item !== "object" || item === null) return false;
+    
+    const toolCall = item as Record<string, unknown>;
+    return (
+      typeof toolCall.id === "string" &&
+      toolCall.type === "function" &&
+      typeof toolCall.function === "object" &&
+      toolCall.function !== null &&
+      typeof (toolCall.function as Record<string, unknown>).name === "string" &&
+      typeof (toolCall.function as Record<string, unknown>).arguments === "string"
+    );
+  });
 };
