@@ -128,9 +128,16 @@ navigation:
           - page: Cost tracking
             path: docs/tracing/cost_tracking.mdx
             slug: cost_tracking
-          - page: Export data
-            path: docs/tracing/export_data.mdx
-            slug: export_data
+          - section: Import/Export data
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Export by SDK, REST, and UI
+                path: docs/tracing/export_data.mdx
+                slug: export_data
+              - page: Import/Export by command line
+                path: docs/tracing/import_export_commands.mdx
+                slug: import_export_commands
           - page: Opik Assist
             path: docs/tracing/opik_assist.mdx
             slug: opik_assist
