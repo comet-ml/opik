@@ -277,6 +277,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     () => [
       ...filters,
       createFilter({
+        id: "annotation_queue_ids",
         field: "annotation_queue_ids",
         value: annotationQueue.id,
         operator: "contains",
