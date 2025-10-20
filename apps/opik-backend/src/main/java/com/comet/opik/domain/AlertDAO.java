@@ -243,6 +243,7 @@ interface AlertDAO {
                 SELECT
                     a.id as id,
                     a.name as name,
+                    a.alert_type as alert_type,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,

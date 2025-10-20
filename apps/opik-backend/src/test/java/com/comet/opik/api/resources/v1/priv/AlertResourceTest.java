@@ -668,6 +668,28 @@ class AlertResourceTest {
                                     .build(),
                             (Function<List<Alert>, List<Alert>>) alerts -> List.of(alerts.getFirst())),
 
+                    // alertType field filtering
+                    Arguments.of(
+                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
+                                    .field(AlertField.ALERT_TYPE)
+                                    .operator(Operator.EQUAL)
+                                    .value(alerts.getFirst().alertType().getValue())
+                                    .build(),
+                            (Function<List<Alert>, List<Alert>>) alerts -> alerts.stream()
+                                    .filter(alert -> alert.alertType()
+                                            .equals(alerts.getFirst().alertType()))
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
+                                    .field(AlertField.ALERT_TYPE)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(alerts.getFirst().alertType().getValue())
+                                    .build(),
+                            (Function<List<Alert>, List<Alert>>) alerts -> alerts.stream()
+                                    .filter(alert -> !alert.alertType()
+                                            .equals(alerts.getFirst().alertType()))
+                                    .toList()),
+
                     // CREATED_BY field filtering
                     Arguments.of(
                             (Function<List<Alert>, AlertFilter>) alerts -> AlertFilter.builder()
