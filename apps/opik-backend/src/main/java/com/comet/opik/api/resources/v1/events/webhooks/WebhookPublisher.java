@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events.webhooks;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.WebhookConfig;
@@ -47,6 +48,8 @@ public class WebhookPublisher {
      */
     public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
             @NonNull UUID alertId,
+            @NonNull String alertName,
+            AlertType alertType,
             @NonNull String workspaceId,
             @NonNull String webhookUrl,
             @NonNull T payload,
@@ -66,7 +69,9 @@ public class WebhookPublisher {
                 .id(eventId)
                 .url(webhookUrl)
                 .eventType(eventType)
+                .alertType(Optional.ofNullable(alertType).orElse(AlertType.GENERAL))
                 .alertId(alertId)
+                .alertName(alertName)
                 .payload(payload)
                 .headers(Optional.ofNullable(headers).orElse(Map.of()))
                 .secret(secretToken)

@@ -8,6 +8,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
@@ -99,6 +100,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                             WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
 
                             return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
+                                    .map(WebhookSubscriber::prepareWebhookJsonPayload)
                                     .subscribeOn(Schedulers.boundedElastic())
                                     .flatMap(webhookHttpClient::sendWebhook)
                                     .doOnSuccess(unused -> {
@@ -181,6 +183,22 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
         return event.toBuilder()
                 .payload(updatedPayload)
                 .build();
+    }
+
+    public static WebhookEvent<Map<String, Object>> prepareWebhookJsonPayload(
+            @NonNull WebhookEvent<Map<String, Object>> event) {
+
+        return event.toBuilder()
+                .jsonPayload(JsonUtils.writeValueAsString(webhookEventPayloadPerType(event)))
+                .build();
+    }
+
+    public static Object webhookEventPayloadPerType(@NonNull WebhookEvent<Map<String, Object>> event) {
+        return switch (event.getAlertType()) {
+            case GENERAL, PAGERDUTY ->
+                event.toBuilder().url(null).headers(null).secret(null).alertType(null).jsonPayload(null).build();
+            case SLACK -> SlackWebhookPayloadMapper.toSlackPayload(event);
+        };
     }
 
     private static TypeReference<?> payloadTypePerEventType(AlertEventType eventType) {

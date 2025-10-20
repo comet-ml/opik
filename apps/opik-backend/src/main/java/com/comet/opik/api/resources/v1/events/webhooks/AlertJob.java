@@ -193,6 +193,8 @@ public class AlertJob extends Job {
         return webhookPublisher.publishWebhookEvent(
                 eventType,
                 alert.id(),
+                alert.name(),
+                alert.alertType(),
                 workspaceId,
                 alert.webhook().url(),
                 payload,

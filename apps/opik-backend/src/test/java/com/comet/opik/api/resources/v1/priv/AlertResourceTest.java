@@ -5,6 +5,7 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Guardrail;
@@ -1006,6 +1007,19 @@ class AlertResourceTest {
             webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
         }
 
+        private Alert createAlertForEvent(AlertTrigger alertTrigger) {
+            var alert = generateAlert();
+            var webhook = alert.webhook().toBuilder()
+                    .url(webhookUrl)
+                    .build();
+            return alert.toBuilder()
+                    .webhook(webhook)
+                    .alertType(AlertType.GENERAL)
+                    .triggers(List.of(alertTrigger))
+                    .enabled(true)
+                    .build();
+        }
+
         @Test
         @DisplayName("Success: should successfully send prompt creation event to webhook")
         void testCreatePromptEvent__whenWebhookServerReceivesAlert() {
@@ -1129,18 +1143,6 @@ class AlertResourceTest {
                                             Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersion);
-        }
-
-        private Alert createAlertForEvent(AlertTrigger alertTrigger) {
-            var alert = generateAlert();
-            var webhook = alert.webhook().toBuilder()
-                    .url(webhookUrl)
-                    .build();
-            return alert.toBuilder()
-                    .webhook(webhook)
-                    .triggers(List.of(alertTrigger))
-                    .enabled(true)
-                    .build();
         }
 
         @ParameterizedTest
