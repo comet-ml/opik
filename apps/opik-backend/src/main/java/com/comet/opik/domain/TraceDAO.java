@@ -833,7 +833,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
-                  , s.providers AS providers
+                  <if(!exclude_providers)>, s.providers AS providers<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -2664,6 +2664,7 @@ class TraceDAOImpl implements TraceDAO {
                         .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
                                 Integer.class))
                         .orElse(0))
+                .providers(getValue(exclude, Trace.TraceField.PROVIDERS, row, "providers", String[].class))
                 .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
                 .totalEstimatedCost(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,
@@ -2984,6 +2985,8 @@ class TraceDAOImpl implements TraceDAO {
                 } else {
                     statement.bindNull("visibility_mode" + i, String.class);
                 }
+
+                statement.bind("providers", trace.providers());
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 

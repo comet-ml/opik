@@ -20,25 +20,25 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
   const hasTokenUsage = Boolean(data.usage);
 
   const usageData = useMemo(() => {
-    if (!data.usage) return null;
+    const previousUsageData = data.usage ?? {};
 
     // For Spans, include provider information if available
     if ("provider" in data && data.provider) {
       return {
         provider: data.provider,
-        ...data.usage,
+        ...previousUsageData,
       };
     }
 
-    // For Traces, include providers array if available
-    if ("providers" in data && data.providers && data.providers.length > 0) {
+    // For Traces, include providers array
+    if ("providers" in data && data.providers) {
       return {
         providers: data.providers,
-        ...data.usage,
+        ...previousUsageData,
       };
     }
 
-    return data.usage;
+    return previousUsageData;
   }, [data]);
 
   const openSections = useMemo(() => {

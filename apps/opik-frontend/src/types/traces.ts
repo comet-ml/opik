@@ -75,7 +75,7 @@ export interface Trace extends BaseTraceData {
   project_id: string;
   workspace_name?: string;
   visibility_mode?: TRACE_VISIBILITY_MODE;
-  providers?: string[];
+  providers: string[];
 }
 
 export enum SPAN_TYPE {

@@ -1547,6 +1547,208 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource("getFilterTestArguments")
+        @DisplayName("when traces have spans with providers, then return traces with aggregated providers array")
+        void findWithProvidersAggregation(String endpoint, TracePageTestAssertion testAssertion) {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create traces without providers
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(5)
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .startTime(generateStartTime())
+                            .usage(null)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(BigDecimal.ZERO)
+                            .guardrailsValidations(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create spans with different provider configurations
+            var traceIdToSpansMap = new java.util.HashMap<UUID, List<Span>>();
+
+            // Trace 0: Multiple different providers (should be sorted alphabetically)
+            traceIdToSpansMap.put(traces.get(0).id(), List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(0).id())
+                            .provider("openai")
+                            .usage(Map.of("completion_tokens", 10, "prompt_tokens", 5))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(0).id())
+                            .provider("anthropic")
+                            .usage(Map.of("completion_tokens", 20, "prompt_tokens", 10))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(0).id())
+                            .provider("google")
+                            .usage(Map.of("completion_tokens", 15, "prompt_tokens", 8))
+                            .totalEstimatedCost(null)
+                            .build()));
+
+            // Trace 1: Single provider repeated multiple times (should deduplicate)
+            traceIdToSpansMap.put(traces.get(1).id(), List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(1).id())
+                            .provider("openai")
+                            .usage(Map.of("completion_tokens", 30))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(1).id())
+                            .provider("openai")
+                            .usage(Map.of("prompt_tokens", 25))
+                            .totalEstimatedCost(null)
+                            .build()));
+
+            // Trace 2: Mix of providers with empty string (should filter out empty)
+            traceIdToSpansMap.put(traces.get(2).id(), List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(2).id())
+                            .provider("anthropic")
+                            .usage(Map.of("completion_tokens", 40))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(2).id())
+                            .provider("")
+                            .usage(Map.of("prompt_tokens", 35))
+                            .totalEstimatedCost(null)
+                            .build()));
+
+            // Trace 3: No spans (providers should be empty array)
+            traceIdToSpansMap.put(traces.get(3).id(), List.of());
+
+            // Trace 4: Multiple providers including duplicates (should be unique and sorted)
+            traceIdToSpansMap.put(traces.get(4).id(), List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(4).id())
+                            .provider("openai")
+                            .usage(Map.of("completion_tokens", 50))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(4).id())
+                            .provider("anthropic")
+                            .usage(Map.of("prompt_tokens", 45))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(4).id())
+                            .provider("openai")
+                            .usage(Map.of("completion_tokens", 60))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(4).id())
+                            .provider("google")
+                            .usage(Map.of("prompt_tokens", 55))
+                            .totalEstimatedCost(null)
+                            .build()));
+
+            // Batch create all spans
+            batchCreateSpansAndAssert(
+                    traceIdToSpansMap.values().stream().flatMap(List::stream).toList(), apiKey, workspaceName);
+
+            // Update traces with expected providers arrays
+            var expectedTraces = traces.stream().map(trace -> {
+                var spans = traceIdToSpansMap.get(trace.id());
+                var providers = spans.stream()
+                        .map(Span::provider)
+                        .filter(provider -> provider != null && !provider.isEmpty())
+                        .distinct()
+                        .sorted()
+                        .toArray(String[]::new);
+
+                return trace.toBuilder()
+                        .providers(providers)
+                        .usage(spans.stream()
+                                .map(Span::usage)
+                                .filter(usage -> usage != null)
+                                .flatMap(usage -> usage.entrySet().stream())
+                                .collect(Collectors.groupingBy(
+                                        Map.Entry::getKey, Collectors.summingLong(Map.Entry::getValue))))
+                        .build();
+            }).toList();
+
+            expectedTraces = updateSpanCounts(expectedTraces, traceIdToSpansMap);
+
+            // Verify providers field is present and correct in response
+            var values = testAssertion.transformTestParams(expectedTraces, expectedTraces.reversed(), List.of());
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), List.of(), Map.of());
+
+            // Additional assertion: Verify specific providers arrays
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .queryParam("project_name", projectName)
+                    .queryParam("page", 1)
+                    .queryParam("size", 100)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(Trace.TracePage.class);
+
+                // Verify trace 0 has providers: ["anthropic", "google", "openai"]
+                var trace0 = actualPage.content().stream()
+                        .filter(t -> t.id().equals(traces.get(0).id()))
+                        .findFirst()
+                        .orElseThrow();
+                assertThat(trace0.providers()).containsExactly("anthropic", "google", "openai");
+
+                // Verify trace 1 has providers: ["openai"]
+                var trace1 = actualPage.content().stream()
+                        .filter(t -> t.id().equals(traces.get(1).id()))
+                        .findFirst()
+                        .orElseThrow();
+                assertThat(trace1.providers()).containsExactly("openai");
+
+                // Verify trace 2 has providers: ["anthropic"] (empty string filtered out)
+                var trace2 = actualPage.content().stream()
+                        .filter(t -> t.id().equals(traces.get(2).id()))
+                        .findFirst()
+                        .orElseThrow();
+                assertThat(trace2.providers()).containsExactly("anthropic");
+
+                // Verify trace 3 has providers: [] (no spans)
+                var trace3 = actualPage.content().stream()
+                        .filter(t -> t.id().equals(traces.get(3).id()))
+                        .findFirst()
+                        .orElseThrow();
+                assertThat(trace3.providers()).isEmpty();
+
+                // Verify trace 4 has providers: ["anthropic", "google", "openai"] (deduplicated and sorted)
+                var trace4 = actualPage.content().stream()
+                        .filter(t -> t.id().equals(traces.get(4).id()))
+                        .findFirst()
+                        .orElseThrow();
+                assertThat(trace4.providers()).containsExactly("anthropic", "google", "openai");
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
         void findWithoutUsage(String endpoint, TracePageTestAssertion testAssertion) {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
