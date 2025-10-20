@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -204,13 +204,15 @@ const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
+const USER_FEEDBACK_COLUMN_ID = `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`;
+
 const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "name",
   "input",
   "output",
   "duration",
   COLUMN_COMMENTS_ID,
-  `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`,
+  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
@@ -221,7 +223,6 @@ const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
 const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 const PAGINATION_SIZE_KEY = "traces-pagination-size";
 const ROW_HEIGHT_KEY = "traces-row-height";
-const USER_FEEDBACK_COLUMN_ID = `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`;
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;

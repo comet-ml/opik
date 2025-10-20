@@ -1,7 +1,7 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import JsonView from "react18-json-view";
-import { ListTree, Pencil } from "lucide-react";
+import { ListTree } from "lucide-react";
 import get from "lodash/get";
 import isFunction from "lodash/isFunction";
 import isObject from "lodash/isObject";
@@ -80,6 +80,7 @@ const CompareExperimentsOutputCell: React.FC<
                 }
                 event.stopPropagation();
               }}
+              className="absolute right-1 top-1 hidden group-hover:flex"
             >
               <ListTree />
             </Button>
