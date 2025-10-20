@@ -15,7 +15,7 @@ import {
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import { BaseTraceData } from "@/types/traces";
-import { useLoggedInUserName } from "@/store/AppStore";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 
@@ -24,7 +24,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const reason = feedbackScore?.reason;
   const row = context.row.original as BaseTraceData;
 
-  const currentUserName = useLoggedInUserName() ?? "admin";
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
   const { mutate: deleteTraceFeedbackScore } =
     useTraceFeedbackScoreDeleteMutation();
   const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
