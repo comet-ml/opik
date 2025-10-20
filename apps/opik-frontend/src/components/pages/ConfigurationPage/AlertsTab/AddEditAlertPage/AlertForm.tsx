@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
 import get from "lodash/get";
-import capitalize from "lodash/capitalize";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
@@ -33,6 +32,7 @@ import WebhookSettings from "./WebhookSettings";
 import EventTriggers from "./EventTriggers";
 import TestWebhookSection from "./TestWebhookSection";
 import {
+  ALERT_TYPE_LABELS,
   alertTriggersToFormTriggers,
   formTriggersToAlertTriggers,
 } from "./helpers";
@@ -64,6 +64,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
       name: alert?.name || "",
       enabled: alert?.enabled ?? true,
       alertType: alert?.alert_type || ALERT_TYPE.general,
+      routingKey: alert?.metadata?.routing_key || "",
       url: alert?.webhook?.url || "",
       secretToken: alert?.webhook?.secret_token || "",
       headers: alert?.webhook?.headers
@@ -77,7 +78,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
   });
 
   const getAlert = useCallback(() => {
-    const formData = form.getValues();
+    const formData = form.watch();
 
     return {
       name: formData.name.trim(),
@@ -86,6 +87,11 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
       metadata: {
         ...alert?.metadata,
         base_url: buildFullBaseUrl(),
+        ...(formData.alertType === ALERT_TYPE.pagerduty && {
+          routing_key: formData.routingKey
+            ? formData.routingKey.trim()
+            : undefined,
+        }),
       },
       webhook: {
         url: formData.url.trim(),
@@ -293,7 +299,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
                             onChange={field.onChange}
                             options={Object.values(ALERT_TYPE).map((type) => ({
                               value: type,
-                              label: capitalize(type),
+                              label: ALERT_TYPE_LABELS[type],
                             }))}
                             placeholder="Select type"
                             className={cn({
@@ -308,6 +314,39 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
                     );
                   }}
                 />
+
+                {form.watch("alertType") === ALERT_TYPE.pagerduty && (
+                  <FormField
+                    control={form.control}
+                    name="routingKey"
+                    render={({ field, formState }) => {
+                      const validationErrors = get(formState.errors, [
+                        "routingKey",
+                      ]);
+                      return (
+                        <FormItem>
+                          <Label>Routing Key</Label>
+                          <Description>
+                            PagerDuty routing key for an integration on a
+                            service or on a global ruleset
+                          </Description>
+                          <FormControl>
+                            <Input
+                              className={cn({
+                                "border-destructive": Boolean(
+                                  validationErrors?.message,
+                                ),
+                              })}
+                              placeholder="Enter routing key"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+                )}
               </div>
 
               <Separator />
