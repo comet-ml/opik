@@ -100,7 +100,8 @@ public class SlackWebhookPayloadMapper {
         }
 
         List<String> promptIds = metadata.stream()
-                .map(item -> (Prompt) item)
+                .map(item -> (List<Prompt>) item)
+                .flatMap(List::stream)
                 .map(prompt -> String.format("`%s`", prompt.id()))
                 .toList();
 
@@ -159,7 +160,7 @@ public class SlackWebhookPayloadMapper {
                 .map(item -> (List<FeedbackScoreItem.FeedbackScoreBatchItemThread>) item)
                 .flatMap(List::stream)
                 .map(score -> String.format("• Thread ID: `%s`\n  *%s* = %.2f",
-                        score.id(), score.name(), score.value()))
+                        score.threadId(), score.name(), score.value()))
                 .toList();
 
         return String.join("\n", scores);

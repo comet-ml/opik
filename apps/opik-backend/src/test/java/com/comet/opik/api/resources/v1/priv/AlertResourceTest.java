@@ -37,6 +37,8 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.events.webhooks.AlertEventEvaluationService;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackBlock;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayload;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -1557,6 +1559,402 @@ class AlertResourceTest {
             assertThat(payloads).hasSize(1);
 
             return JsonUtils.writeValueAsString(payloads.getFirst());
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Alert Events for Slack:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TestAlertEventsForSlack {
+
+        private WireMockServer externalWebhookServer;
+        private static final String WEBHOOK_PATH = "/slack-webhook";
+        private String webhookUrl;
+        private static final String ALERT_NAME = "Test Slack Alert";
+
+        @BeforeAll
+        void setUpAll() {
+            externalWebhookServer = new WireMockServer(0);
+            externalWebhookServer.start();
+        }
+
+        @AfterAll
+        void tearDownAll() {
+            if (externalWebhookServer != null) {
+                externalWebhookServer.stop();
+            }
+        }
+
+        @BeforeEach
+        void setUp() {
+            externalWebhookServer.resetAll();
+
+            // Setup WireMock to return successful response
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"ok\":true}")));
+
+            webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
+        }
+
+        private Alert createSlackAlertForEvent(AlertTrigger alertTrigger) {
+            var alert = generateAlert();
+            var webhook = alert.webhook().toBuilder()
+                    .url(webhookUrl)
+                    .build();
+            return alert.toBuilder()
+                    .name(ALERT_NAME)
+                    .webhook(webhook)
+                    .alertType(AlertType.SLACK)
+                    .triggers(List.of(alertTrigger))
+                    .enabled(true)
+                    .build();
+        }
+
+        private SlackWebhookPayload verifySlackWebhookCalledAndGetPayload() {
+            // Wait for the webhook event to be sent
+            Awaitility.await().untilAsserted(() -> {
+                var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                assertThat(requests).hasSize(1);
+            });
+
+            var actualRequest = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH))).get(0);
+            String actualRequestBody = actualRequest.getBodyAsString();
+
+            return JsonUtils.readValue(actualRequestBody, SlackWebhookPayload.class);
+        }
+
+        private void verifySlackBlockStructure(SlackWebhookPayload slackPayload, int expectedEventCount,
+                String expectedEventType) {
+            // Verify blocks structure
+            assertThat(slackPayload.getBlocks()).isNotNull();
+            assertThat(slackPayload.getBlocks()).hasSize(3);
+
+            // Verify header block
+            SlackBlock headerBlock = slackPayload.getBlocks().get(0);
+            assertThat(headerBlock.getType()).isEqualTo("header");
+            assertThat(headerBlock.getText()).isNotNull();
+            assertThat(headerBlock.getText().getType()).isEqualTo("plain_text");
+            assertThat(headerBlock.getText().getText()).isEqualTo(ALERT_NAME);
+
+            // Verify summary block
+            SlackBlock summaryBlock = slackPayload.getBlocks().get(1);
+            assertThat(summaryBlock.getType()).isEqualTo("section");
+            assertThat(summaryBlock.getText()).isNotNull();
+            assertThat(summaryBlock.getText().getType()).isEqualTo("mrkdwn");
+            String summaryContent = summaryBlock.getText().getText();
+            assertThat(summaryContent).contains("*" + expectedEventCount + "*");
+            assertThat(summaryContent).contains(expectedEventType);
+
+            // Verify details block exists
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            assertThat(detailsBlock.getType()).isEqualTo("section");
+            assertThat(detailsBlock.getText()).isNotNull();
+            assertThat(detailsBlock.getText().getType()).isEqualTo("mrkdwn");
+            assertThat(detailsBlock.getText().getText()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Success: should send Slack formatted prompt creation event")
+        void testSlackPromptCreatedEvent() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with Slack webhook
+            var alert = createSlackAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_CREATED)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a prompt to trigger the event
+            var prompt = factory.manufacturePojo(Prompt.class)
+                    .toBuilder()
+                    .versionCount(0L)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
+
+            // Verify Slack webhook payload
+            var slackPayload = verifySlackWebhookCalledAndGetPayload();
+            verifySlackBlockStructure(slackPayload, 1, "Prompt Created");
+
+            // Verify details block contains prompt ID
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            String details = detailsBlock.getText().getText();
+            assertThat(details).contains("*Prompt IDs:*");
+            assertThat(details).contains(promptId.toString());
+        }
+
+        @Test
+        @DisplayName("Success: should send Slack formatted prompt deletion event")
+        void testSlackPromptDeletedEvent() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with Slack webhook
+            var alert = createSlackAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_DELETED)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create and delete prompts to trigger the event
+            var prompt1 = factory.manufacturePojo(Prompt.class)
+                    .toBuilder()
+                    .versionCount(0L)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            var promptId1 = promptResourceClient.createPrompt(prompt1, mock.getLeft(), mock.getRight());
+
+            var prompt2 = factory.manufacturePojo(Prompt.class)
+                    .toBuilder()
+                    .versionCount(0L)
+                    .createdBy(USER)
+                    .lastUpdatedBy(USER)
+                    .build();
+            var promptId2 = promptResourceClient.createPrompt(prompt2, mock.getLeft(), mock.getRight());
+
+            promptResourceClient.deletePromptBatch(Set.of(promptId1, promptId2), mock.getLeft(), mock.getRight());
+
+            // Verify Slack webhook payload
+            var slackPayload = verifySlackWebhookCalledAndGetPayload();
+            verifySlackBlockStructure(slackPayload, 1, "Prompt Deleted");
+
+            // Verify details block contains prompt IDs
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            String details = detailsBlock.getText().getText();
+            assertThat(details).contains("*Prompt IDs:*");
+            assertThat(details).contains(promptId1.toString());
+            assertThat(details).contains(promptId2.toString());
+        }
+
+        @Test
+        @DisplayName("Success: should send Slack formatted prompt commit event")
+        void testSlackPromptCommittedEvent() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with Slack webhook
+            var alert = createSlackAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_COMMITTED)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a prompt and commit to trigger the event
+            var expectedPrompt = factory.manufacturePojo(Prompt.class);
+            var expectedPromptVersion = promptResourceClient.createPromptVersion(expectedPrompt, mock.getLeft(),
+                    mock.getRight());
+
+            // Verify Slack webhook payload
+            var slackPayload = verifySlackWebhookCalledAndGetPayload();
+            verifySlackBlockStructure(slackPayload, 1, "Prompt Committed");
+
+            // Verify details block contains prompt and commit info
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            String details = detailsBlock.getText().getText();
+            assertThat(details).contains(expectedPromptVersion.promptId().toString());
+            assertThat(details).contains(expectedPromptVersion.commit());
+        }
+
+        @Test
+        @DisplayName("Success: should send Slack formatted trace errors event")
+        void testSlackTraceErrorsEvent() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with Slack webhook
+            var alert = createSlackAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_ERRORS)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create traces with errors
+            List<Trace> tracesWithErrors = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .visibilityMode(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
+
+            // Verify Slack webhook payload
+            var slackPayload = verifySlackWebhookCalledAndGetPayload();
+            verifySlackBlockStructure(slackPayload, 1, "Trace Errors");
+
+            // Verify details block contains trace IDs
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            String details = detailsBlock.getText().getText();
+            assertThat(details).contains("*Trace IDs:*");
+            tracesWithErrors.forEach(trace -> assertThat(details).contains(trace.id().toString()));
+        }
+
+        @Test
+        @DisplayName("Success: should send Slack formatted trace feedback score event")
+        void testSlackTraceFeedbackScoreEvent() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with Slack webhook
+            var alert = createSlackAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create a feedback score
+            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .source(ScoreSource.SDK)
+                    .build();
+            traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
+
+            // Verify Slack webhook payload
+            var slackPayload = verifySlackWebhookCalledAndGetPayload();
+            verifySlackBlockStructure(slackPayload, 1, "Trace Feedback Score");
+
+            // Verify details block contains trace ID and score
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            String details = detailsBlock.getText().getText();
+            assertThat(details).contains(trace.id().toString());
+            assertThat(details).contains(feedbackScore.name());
+        }
+
+        @Test
+        @DisplayName("Success: should send Slack formatted thread feedback score event")
+        void testSlackThreadFeedbackScoreEvent() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, mock.getLeft(), mock.getRight());
+
+            // Create alert with Slack webhook
+            var alert = createSlackAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a thread with multiple traces
+            var threadId = UUID.randomUUID().toString();
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .threadId(threadId)
+                            .projectName(project.name())
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, mock.getLeft(), mock.getRight());
+
+            // Wait for the thread to be created
+            Awaitility.await().untilAsserted(() -> {
+                var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(), mock.getRight());
+                assertThat(thread.threadModelId()).isNotNull();
+            });
+
+            // Get the thread
+            var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(), mock.getRight());
+
+            // Close thread
+            traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
+                    mock.getRight());
+
+            // Create a feedback score for the thread
+            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
+                    .threadId(thread.id())
+                    .projectName(project.name())
+                    .name(feedbackScore.name())
+                    .value(feedbackScore.value())
+                    .reason(feedbackScore.reason())
+                    .source(feedbackScore.source())
+                    .build();
+
+            traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
+
+            // Verify Slack webhook payload
+            var slackPayload = verifySlackWebhookCalledAndGetPayload();
+            verifySlackBlockStructure(slackPayload, 1, "Thread Feedback Score");
+
+            // Verify details block contains thread ID and score
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            String details = detailsBlock.getText().getText();
+            assertThat(details).contains(thread.id().toString());
+            assertThat(details).contains(feedbackScore.name());
+        }
+
+        @Test
+        @DisplayName("Success: should send Slack formatted guardrails triggered event")
+        void testSlackGuardrailsTriggeredEvent() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with Slack webhook
+            var alert = createSlackAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                    .build());
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create guardrails for the trace
+            List<Guardrail> guardrails = IntStream.range(0, 2)
+                    .mapToObj(i -> factory.manufacturePojo(Guardrail.class).toBuilder()
+                            .entityId(trace.id())
+                            .secondaryId(UUID.randomUUID())
+                            .projectName(projectName)
+                            .result(GuardrailResult.FAILED)
+                            .build())
+                    .toList();
+            guardrailsResourceClient.addBatch(guardrails, mock.getLeft(), mock.getRight());
+
+            // Verify Slack webhook payload
+            var slackPayload = verifySlackWebhookCalledAndGetPayload();
+            verifySlackBlockStructure(slackPayload, 1, "Guardrail Triggered");
+
+            // Verify details block contains trace ID
+            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
+            String details = detailsBlock.getText().getText();
+            assertThat(details).contains("*Trace IDs:*");
+            assertThat(details).contains(trace.id().toString());
         }
     }
 
