@@ -1,5 +1,6 @@
 import React from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -20,7 +21,7 @@ const TraceDataViewer: React.FC = () => {
   const nextTrace = nextItem as Trace | undefined;
 
   // Fetch full trace data (not truncated)
-  const { data: fullTrace } = useTraceById(
+  const { data: fullTrace, isFetching } = useTraceById(
     {
       traceId: trace?.id || "",
     },
@@ -46,7 +47,12 @@ const TraceDataViewer: React.FC = () => {
   const displayTrace = fullTrace || trace;
 
   return (
-    <div className="pr-4">
+    <div className="relative pr-4">
+      {isFetching && (
+        <div className="absolute right-6 top-2 z-10">
+          <Loader2 className="size-4 animate-spin text-slate-400" />
+        </div>
+      )}
       <Accordion
         type="multiple"
         className="w-full"

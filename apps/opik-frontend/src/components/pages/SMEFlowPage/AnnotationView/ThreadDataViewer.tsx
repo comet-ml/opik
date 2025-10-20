@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import last from "lodash/last";
 import { Thread } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
@@ -17,7 +18,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
   const nextThread = nextItem as Thread | undefined;
 
   // Fetch current thread traces (not truncated)
-  const { data: tracesData } = useTracesList(
+  const { data: tracesData, isFetching } = useTracesList(
     {
       projectId: thread?.project_id || "",
       filters: [
@@ -71,7 +72,12 @@ const ThreadDataViewer: React.FunctionComponent = () => {
   );
 
   return (
-    <div className="pr-4">
+    <div className="relative pr-4">
+      {isFetching && (
+        <div className="absolute right-6 top-2 z-10">
+          <Loader2 className="size-4 animate-spin text-slate-400" />
+        </div>
+      )}
       <TraceMessages traces={traces} traceId={last(traces)?.id} />
     </div>
   );
