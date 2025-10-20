@@ -209,48 +209,55 @@ prompt_v2 = prompt.create_version(
 
 ### Layered Architecture
 
-The SDK follows a strict 4-layer architecture:
+The SDK is organized into 3 layers:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              Layer 1: Public API                     │
-│                                                      │
-│  opik.Opik, @opik.track, opik_context              │
-│  - User-facing interface                            │
-│  - Input validation                                 │
-│  - Context management                               │
-└───────────────────────┬─────────────────────────────┘
-                        │ Creates messages
-                        ▼
-┌─────────────────────────────────────────────────────┐
-│         Layer 2: Message Processing                  │
-│                                                      │
-│  Streamer, MessageQueue, MessageProcessor           │
-│  - Asynchronous processing                          │
-│  - Batching and optimization                        │
-│  - Retry logic                                      │
-│  - File uploads                                     │
-└───────────────────────┬─────────────────────────────┘
-                        │ HTTP requests
-                        ▼
-┌─────────────────────────────────────────────────────┐
-│            Layer 3: REST API                         │
-│                                                      │
-│  OpikApi (auto-generated from OpenAPI)             │
-│  - HTTP client                                      │
-│  - Request/response serialization                  │
-│  - Connection management                            │
-└───────────────────────┬─────────────────────────────┘
-                        │ Network
-                        ▼
-┌─────────────────────────────────────────────────────┐
-│            Layer 4: Opik Backend                     │
-│                                                      │
-│  - REST API endpoints                               │
-│  - Data persistence (MySQL, ClickHouse)            │
-│  - Query processing                                 │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│               Layer 1: Public API                     │
+│                                                       │
+│   opik.Opik, @opik.track, opik_context              │
+│   - User-facing interface                            │
+│   - Input validation                                 │
+│   - Context management                               │
+└────────────────────────┬──────────────────────────────┘
+                         │
+                         │ Creates messages
+                         ▼
+┌──────────────────────────────────────────────────────┐
+│          Layer 2: Message Processing                  │
+│                                                       │
+│   Streamer → Queue → Consumers → MessageProcessor   │
+│   - Asynchronous background processing               │
+│   - Batching and optimization                        │
+│   - Retry logic and error handling                   │
+│   - File uploads (S3)                                │
+│                                                       │
+│   MessageProcessor uses REST API client:             │
+│   └─► OpikApi (Layer 3) for HTTP communication      │
+└────────────────────────┬──────────────────────────────┘
+                         │
+                         │ Delegates to
+                         ▼
+┌──────────────────────────────────────────────────────┐
+│             Layer 3: REST API Client                  │
+│                                                       │
+│   OpikApi (auto-generated from OpenAPI spec)        │
+│   - HTTP client (makes requests to backend)          │
+│   - Request/response serialization                   │
+│   - Connection pooling and management                │
+│                                                       │
+│   ════════════════════════════════════════════       │
+│   ║  HTTP requests to Opik Backend             ║     │
+│   ║  (External service, not part of SDK)       ║     │
+│   ════════════════════════════════════════════       │
+└──────────────────────────────────────────────────────┘
 ```
+
+**Key Points**:
+- **Layer 1 (Public API)**: What users interact with directly
+- **Layer 2 (Message Processing)**: Background workers processing messages asynchronously
+- **Layer 3 (REST API Client)**: HTTP communication layer used by message processors
+- **Opik Backend**: External service (not part of SDK) that receives HTTP requests
 
 ### Key Components
 
@@ -526,7 +533,18 @@ Message arrives
 
 #### Step 4: Batching (Optional)
 
-If batching is enabled, messages accumulate before sending:
+If batching is enabled, certain message types accumulate before sending.
+
+**Messages that support batching** (current implementation):
+- `CreateSpanMessage` → batched into `CreateSpansBatchMessage`
+- `CreateTraceMessage` → batched into `CreateTraceBatchMessage`
+- `AddTraceFeedbackScoresBatchMessage` → already a batch message
+- `AddSpanFeedbackScoresBatchMessage` → already a batch message
+
+**Messages that don't support batching** (sent individually):
+- `UpdateSpanMessage` - Updates sent immediately
+- `UpdateTraceMessage` - Updates sent immediately
+- Other message types
 
 ```python
 # In batch_manager.py

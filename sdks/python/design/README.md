@@ -31,22 +31,21 @@ Welcome to the Opik Python SDK design documentation! This directory contains com
 **Engineering guide to integration architecture.**
 
 **What's Covered**:
-- Three integration patterns (decorator, callback, hybrid) with selection criteria
-- Integration catalog grouped by pattern
-- Decorator-based deep dive (OpenAI, Anthropic, Bedrock)
-- Callback-based deep dive (LangChain, LlamaIndex, DSPy)
-- Hybrid integrations (ADK, CrewAI)
-- Token usage and cost tracking architecture
-- Streaming support (3 patching techniques with implementations)
-- Step-by-step guide for building decorator integrations
-- Notable implementation details (Bedrock's extensible aggregator, ADK's OpenTelemetry patching)
+- Three integration patterns (method patching, callback, hybrid) with selection criteria
+- Integration catalog: 12+ integrations grouped by pattern
+- Method patching integrations: OpenAI, Anthropic, Bedrock (with extensible aggregator), GenAI, AISuite
+- Callback integrations: LangChain (external context support), LlamaIndex, DSPy (isolated context), Haystack
+- Hybrid integrations: ADK (OpenTelemetry interception), CrewAI (LiteLLM delegation)
+- Streaming strategies: 3 patching techniques explained
+- Token usage and cost tracking architecture (registry pattern)
+- Key implementation details integrated into each integration section
 
 **Read this if you want to**:
-- Understand how integrations are architected
-- Build a new integration from scratch
-- Learn streaming response handling
-- Understand token usage extraction patterns
-- See real implementation examples
+- Understand integration architecture patterns
+- See how different frameworks are integrated
+- Learn streaming response handling strategies
+- Understand why hybrid patterns are needed
+- Reference actual implementations (file locations provided)
 
 #### 3. [Evaluation](EVALUATION.md)
 **Engineering guide to evaluation framework architecture.**
@@ -71,18 +70,19 @@ Welcome to the Opik Python SDK design documentation! This directory contains com
 **Complete testing guide and strategy.**
 
 **What's Covered**:
-- Test directory structure
-- 4 test categories (unit, library integration, e2e, e2e lib integration)
-- Testing infrastructure (fake backend, models, fixtures)
-- 6 common testing patterns with examples
+- Test directory structure and organization
+- 5 test categories (unit, library integration, e2e, e2e lib integration, smoke)
+- Testing infrastructure (fake backend, TraceModel/SpanModel, flexible matchers)
+- 6 testing patterns with real examples using TraceModel/SpanModel
+- Fixtures for each test category
 - How to write and run tests
-- Key insights from test analysis
+- Best practices for SDK testing
 
 **Read this if you want to**:
-- Write tests for new features
-- Understand the testing strategy
-- Use the fake backend for testing
-- Run different test categories
+- Write tests using fake backend and test models
+- Understand testing patterns (decorator, integration, E2E, errors, streaming, metrics)
+- Use flexible matchers (ANY, ANY_BUT_NONE, ANY_STRING)
+- Set up integration test requirements
 
 ## 🚀 Quick Start Guides
 
@@ -100,79 +100,89 @@ Welcome to the Opik Python SDK design documentation! This directory contains com
 | Task | Documentation | Key Sections |
 |------|---------------|--------------|
 | **Understanding tracing** | [API and Data Flow](API_AND_DATA_FLOW.md) | Decorator Data Flow, Context Management |
-| **Adding new integration** | [Integrations](INTEGRATIONS.md) | Building New Integrations, Integration Patterns |
-| **Creating custom metric** | [Evaluation](EVALUATION.md) | Custom Metrics |
+| **Adding new integration** | [Integrations](INTEGRATIONS.md) | Integration Patterns, existing integrations as reference |
+| **Creating custom metric** | [Evaluation](EVALUATION.md) | Metrics Architecture, implementation examples |
 | **Fixing a bug** | [API and Data Flow](API_AND_DATA_FLOW.md) + [Testing](TESTING.md) | Relevant component + Testing Patterns |
 | **Improving performance** | [API and Data Flow](API_AND_DATA_FLOW.md) | Batching System, Performance Considerations |
 | **Understanding message flow** | [API and Data Flow](API_AND_DATA_FLOW.md) | Message Processing Deep Dive |
 
 ## 📖 Documentation Overview
 
-### API and Data Flow (103 KB, ~2,100 lines)
+### API and Data Flow (~1,550 lines)
 
 **Priority**: 🔴 **Highest - Read First**
 
-The most comprehensive document covering:
-- Complete API reference with examples
-- Detailed architecture diagrams
-- Step-by-step data flow explanations
-- In-depth batching system documentation
-- Performance optimization guides
+Most comprehensive document covering core SDK architecture:
+- High-level API (Opik client, decorators, context management)
+- 3-layer architecture with clear separation
+- Complete data flow diagrams with step-by-step execution
+- Batching system deep dive (5 flush triggers explained)
+- Message processing internals
+- Observability and performance
 
 **Key Sections**:
-- **High-Level API**: User-facing methods and decorators
-- **Data Flow**: Complete trace/span creation flow with state diagrams
-- **Message Processing**: Detailed internals of async processing
-- **Batching System**: How batching works, flush triggers, optimization
-- **Observability**: Logging, error tracking, monitoring
+- **High-Level API**: `opik.Opik`, `@opik.track`, context management
+- **Core Architecture**: 3-layer architecture, key components
+- **Data Flow**: Trace creation, decorator execution, nested functions
+- **Message Processing Deep Dive**: Routing, queuing, consumers, handlers
+- **Batching System**: Why batching, triggers, performance comparison
+- **Observability**: Logging, error tracking, health checks
 
-### Integrations (27 KB, ~1,100 lines)
+### Integrations (~550 lines)
 
 **Priority**: 🟡 **Medium - Task-Specific**
 
-Comprehensive integration guide:
-- Pattern explanations with architecture diagrams
-- Individual integration documentation
-- Building new integrations guide
-- Provider-specific features
+Engineering guide to integration architecture:
+- Pattern selection (method patching, callback, hybrid)
+- 12+ integrations with architecture details
+- Key implementation highlights per integration
+- Streaming strategies
+- Token usage and cost tracking
 
 **Key Sections**:
-- **Integration Patterns**: Decorator vs Callback
-- **Supported Integrations**: OpenAI, Anthropic, LangChain, etc.
-- **Building New Integrations**: Step-by-step template
-- **Advanced Topics**: Streaming, distributed tracing, costs
+- **Integration Patterns**: Pattern selection criteria and comparison
+- **Method Patching**: OpenAI, Anthropic, Bedrock (extensible aggregator)
+- **Callback**: LangChain (external context support), LlamaIndex, DSPy, Haystack
+- **Hybrid**: ADK (OpenTelemetry), CrewAI (LiteLLM delegation)
+- **Streaming Strategies**: 3 patching techniques
+- **Token Usage**: Registry pattern, provider-specific builders
 
-### Evaluation (20 KB, ~900 lines)
+### Evaluation (~1,260 lines)
 
 **Priority**: 🟡 **Medium - Task-Specific**
 
-Complete evaluation framework:
-- Evaluation API documentation
-- All built-in metrics explained
-- Custom metric patterns
-- Best practices
+Engineering guide to evaluation architecture:
+- Evaluation engine internals
+- All 4 evaluation methods explained
+- Data flow with module annotations
+- Parallel execution model
+- Metrics architecture
 
 **Key Sections**:
-- **Evaluation API**: `evaluate()`, `evaluate_experiment()`
-- **Metrics**: Heuristic, LLM-based, and conversation metrics
-- **Custom Metrics**: Implementation patterns
-- **Advanced Usage**: Parallel execution, sampling
+- **Evaluation Engine**: EvaluationEngine architecture, task execution
+- **Evaluation Methods**: `evaluate()`, `evaluate_prompt()`, `evaluate_experiment()`, `evaluate_threads()`
+- **Data Flow**: Complete flows with module/class annotations
+- **Metrics Architecture**: 3 types (heuristic, LLM judges, conversation)
+- **Parallel Execution**: ThreadPoolExecutor design
+- **Error Handling**: Strategy and implementation
 
-### Testing (28 KB, ~1,060 lines)
+### Testing (~1,036 lines)
 
 **Priority**: 🟢 **High - Essential for Contributors**
 
-Comprehensive testing guide:
-- Test organization and structure
-- Testing patterns and examples
-- Fake backend usage
-- Running tests
+Complete testing guide and strategy:
+- Test organization and categories
+- Testing infrastructure (fake backend, TraceModel/SpanModel)
+- 6 testing patterns with examples
+- Fixtures for each category
+- Best practices
 
 **Key Sections**:
-- **Test Categories**: Unit, library integration, e2e
-- **Testing Infrastructure**: Fake backend, models, fixtures
-- **Testing Patterns**: 6 common patterns with examples
-- **Writing Tests**: How to add tests for new features
+- **Test Categories**: 5 categories (unit, library integration, e2e, e2e lib, smoke)
+- **Testing Infrastructure**: Fake backend, test models, flexible matchers, fixtures
+- **Testing Patterns**: 6 patterns using TraceModel/SpanModel + assert_equal()
+- **Writing Tests**: Conventions and fake backend usage
+- **Running Tests**: Commands and environment setup
 
 ## 🎯 Common Scenarios
 
@@ -188,20 +198,20 @@ Comprehensive testing guide:
    - Examples of decorator tests
    - How to verify decorator behavior
 
-### Scenario 2: Adding OpenAI Responses API Support
+### Scenario 2: Adding Support for New LLM Provider
 
 **Documents to read**:
-1. [Integrations](INTEGRATIONS.md) - Section: "OpenAI"
-   - Existing OpenAI integration patterns
-   - Decorator-based integration approach
+1. [Integrations](INTEGRATIONS.md) - Section: "OpenAI Integration" or "Anthropic Integration"
+   - Existing method patching integration patterns
+   - File structure and implementation approach
 
-2. [Testing](TESTING.md) - Section: "Pattern 2: Testing Integration Tracking"
-   - How to test integration changes
-   - Fake backend usage
+2. [Integrations](INTEGRATIONS.md) - Section: "Token Usage and Cost Tracking"
+   - How to add usage builder for new provider
+   - Registry pattern for provider builders
 
-3. [API and Data Flow](API_AND_DATA_FLOW.md) - Section: "Message Processing"
-   - Understanding message flow
-   - How data reaches the backend
+3. [Testing](TESTING.md) - Section: "Pattern 2: Testing Integration Tracking"
+   - How to test integration with fake backend
+   - Using TraceModel/SpanModel for assertions
 
 ### Scenario 3: Creating Custom Evaluation Metric
 
@@ -219,28 +229,25 @@ Comprehensive testing guide:
 
 **Documents to read**:
 1. [API and Data Flow](API_AND_DATA_FLOW.md) - Sections:
-   - "Batching System" - Understanding optimization
-   - "Performance Considerations" - Best practices
-   - "Observability" - Monitoring and logging
+   - "Batching System" - Understanding optimization and flush triggers
+   - "Performance Considerations" - Best practices and troubleshooting
+   - "Observability" - Logging, error tracking, monitoring
 
-2. [Testing](TESTING.md) - Section: "Key Insights from Tests"
-   - Async processing patterns
-   - Flush behavior
-
-### Scenario 5: Building LangGraph Integration
+### Scenario 5: Understanding Callback Integration Pattern
 
 **Documents to read**:
-1. [Integrations](INTEGRATIONS.md) - Sections:
-   - "Pattern 2: Callback-Based Integration" - LangChain uses this
-   - "LangGraph" - Existing integration
-   - "Building New Integrations" - If extending functionality
+1. [Integrations](INTEGRATIONS.md) - Section: "LangChain Integration"
+   - Callback pattern with BaseTracer
+   - External context support
+   - Provider-specific usage extraction
 
-2. [Testing](TESTING.md) - Section: "Library Integration Tests"
-   - How to structure integration tests
-   - Fake backend usage
+2. [Integrations](INTEGRATIONS.md) - Section: "Callback Reliability Issues"
+   - Why callbacks may need augmentation
+   - Context isolation challenges
 
-3. [API and Data Flow](API_AND_DATA_FLOW.md) - Section: "Context Management"
-   - How context works for nested operations
+3. [Testing](TESTING.md) - Section: "Library Integration Tests"
+   - How to test callback integrations
+   - Using fake backend with library calls
 
 ## 🔍 Key Concepts Quick Reference
 
@@ -309,11 +316,12 @@ Backend
 
 **Example: New Integration**
 
-1. Read [Integrations](INTEGRATIONS.md) - "Building New Integrations"
-2. Choose pattern (decorator or callback)
-3. Implement in `opik/integrations/mylib/`
-4. Add tests in `tests/library_integration/mylib/`
-5. Update [Integrations](INTEGRATIONS.md) with documentation
+1. Read [Integrations](INTEGRATIONS.md) - "Integration Patterns" to choose approach
+2. Reference existing integration (e.g., OpenAI for method patching, LlamaIndex for callback)
+3. Implement in `opik/integrations/mylib/` following pattern from reference
+4. Add usage builder in `opik/llm_usage/` and register in factory
+5. Add tests in `tests/library_integration/mylib/`
+6. Add entry to catalog in [Integrations](INTEGRATIONS.md)
 
 ## 📋 Additional Resources
 
@@ -378,10 +386,10 @@ If documentation doesn't answer your question:
 | Document | Lines | Read Time | Priority |
 |----------|-------|-----------|----------|
 | API and Data Flow | ~1,550 | 45-60 min | 🔴 Highest |
-| Integrations | ~2,300 | 40-55 min | 🟡 Medium |
+| Integrations | ~550 | 15-25 min | 🟡 Medium |
 | Evaluation | ~1,260 | 25-35 min | 🟡 Medium |
-| Testing | ~1,060 | 20-30 min | 🟢 High |
-| **Total** | **~6,170** | **~2.5 hours** | |
+| Testing | ~1,036 | 20-30 min | 🟢 High |
+| **Total** | **~4,400** | **~2 hours** | |
 
 ## 🔄 Maintaining This Documentation
 
@@ -406,6 +414,6 @@ Keep documentation:
 
 ---
 
-**Last Updated**: 2024-01-15
+**Last Updated**: 2025-01-20
 
 **Questions or Issues?** Please open an issue or reach out to the SDK team.

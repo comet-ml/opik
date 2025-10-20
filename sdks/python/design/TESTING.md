@@ -111,7 +111,7 @@ tests/
 - Use fake backend (`fake_backend` fixture)
 - No network calls
 - Test internal logic and edge cases
-- Run in milliseconds
+- Run in milliseconds (almost always)
 
 **Key Fixtures**:
 ```python
@@ -402,7 +402,7 @@ class FeedbackScoreModel:
 
 **Key Features**:
 - Processes messages without network calls
-- Builds trace and span trees from messages
+- Builds trace and span trees from messages in memory
 - Supports duplicate merging (simulates backend behavior)
 - Tracks feedback scores and attachments
 
@@ -457,7 +457,7 @@ assert_equal(
     expected=TraceModel(
         id=ANY_BUT_NONE,  # Don't care about ID, but must exist
         name="test",
-        start_time=ANY_BUT_NONE,  # Don't care about time
+        start_time=ANY_BUT_NONE,  # Don't care about time but must exist
         input={"key": "value"}  # Exact match
     ),
     actual=fake_backend.trace_trees[0]
@@ -654,19 +654,41 @@ def test_openai_client_responses_create__happyflow(
     
     opik.flush_tracker()
     
-    # Verify structure
+    # Build expected structure
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="responses_create",
+        input={"input": ANY_BUT_NONE},
+        output={"output": ANY_BUT_NONE, "reasoning": ANY},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="responses_create",
+                provider="openai",
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                usage=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                tags=["openai"],
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[]
+            )
+        ]
+    )
+    
     assert len(fake_backend.trace_trees) == 1
-    trace = fake_backend.trace_trees[0]
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
     
-    assert trace.project_name == expected_project_name
-    assert trace.spans[0].type == "llm"
-    assert trace.spans[0].provider == "openai"
-    assert trace.spans[0].usage is not None
-    
-    # Verify metadata contains required keys
+    # Optional: Verify specific metadata keys if needed
     assert_dict_has_keys(
-        trace.spans[0].metadata,
-        ["usage", "model", "created_from"]
+        fake_backend.trace_trees[0].spans[0].metadata,
+        ["created_from", "model"]
     )
 ```
 
@@ -738,13 +760,30 @@ def test_track__function_raises_exception__error_info_captured(fake_backend):
     
     opik.flush_tracker()
     
-    assert len(fake_backend.trace_trees) == 1
-    trace = fake_backend.trace_trees[0]
+    # Build expected structure with error_info
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="failing_function",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="failing_function",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "ValueError",
+                    "message": ANY_STRING.containing("Test error"),
+                    "traceback": ANY_BUT_NONE
+                },
+                spans=[]
+            )
+        ]
+    )
     
-    # Verify error info was captured
-    assert trace.spans[0].error_info is not None
-    assert trace.spans[0].error_info["exception_type"] == "ValueError"
-    assert "Test error" in trace.spans[0].error_info["message"]
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 ```
 
 ### Pattern 5: Testing Streaming Responses
@@ -762,18 +801,35 @@ def test_openai_streaming_response(fake_backend):
     )
     
     # Consume stream
-    full_response = ""
     for chunk in stream:
-        if chunk.choices[0].delta.content:
-            full_response += chunk.choices[0].delta.content
+        pass  # Consume all chunks
     
     opik.flush_tracker()
     
-    # Verify accumulated data
+    # Verify accumulated data using models
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completions_create",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completions_create",
+                type="llm",
+                provider="openai",
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                usage=ANY_BUT_NONE,  # Usage accumulated from chunks
+                output=ANY_BUT_NONE,  # Output accumulated from chunks
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[]
+            )
+        ]
+    )
+    
     assert len(fake_backend.trace_trees) == 1
-    span = fake_backend.trace_trees[0].spans[0]
-    assert span.output is not None
-    assert len(span.output.get("output", "")) > 0
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 ```
 
 ### Pattern 6: Testing Metrics
@@ -943,34 +999,9 @@ pytest tests/e2e/
 pytest tests/library_integration/openai/
 ```
 
-### Run Specific Test
-```bash
-# By name
-pytest tests/unit/decorator/test_tracker_outputs.py::test_track__one_nested_function__happyflow
-
-# By pattern
-pytest -k "test_track"
-pytest -k "openai"
-```
-
-### Run with Coverage
-```bash
-pytest tests/unit/ --cov=opik --cov-report=html
-```
-
-### Run in Parallel
-```bash
-pytest tests/unit/ -n auto  # Use all CPU cores
-```
-
-### Skip Slow Tests
-```bash
-pytest tests/ -m "not slow"
-```
-
 ### Environment Variables
 
-For library integration and E2E tests:
+Some library integration and E2E tests require certain environment variables to be configured:
 ```bash
 # Backend configuration
 export OPIK_URL_OVERRIDE="http://localhost:5000"
@@ -982,54 +1013,9 @@ export ANTHROPIC_API_KEY="..."
 export GOOGLE_API_KEY="..."
 ```
 
-## Key Insights from Tests
-
-### 1. Async Processing
-
-Tests reveal that all trace/span operations are **asynchronous**:
-```python
-# Always call flush to wait for async processing!
-opik.flush_tracker()
-opik_client.flush()
-```
-
-### 2. Context Isolation
-
-Tests show proper context isolation:
-- Each thread has its own context (contextvars)
-- Nested decorators properly maintain span stack
-- Context is automatically cleaned between tests
-
-### 3. Message Batching
-
-Tests demonstrate batching behavior:
-- Individual messages can be batched
-- Batch triggers: time, size, or manual flush
-- Fake backend supports testing both modes
-
-### 4. Provider-Specific Handling
-
-Integration tests show provider-specific features:
-- OpenAI: Usage tracking, streaming, function calling
-- Anthropic: Message format, tool use
-- Bedrock: Multiple model formats (converse, invoke_model)
-
-### 5. Error Propagation
-
-Tests verify error handling:
-- Exceptions are caught and logged in spans
-- Original exception is re-raised to user
-- Error info includes type, message, and traceback
-
-### 6. Integration Patterns
-
-Tests reveal two main integration approaches:
-1. **Decorator-based**: Wrap client methods (OpenAI, Anthropic)
-2. **Callback-based**: Use library callbacks (LangChain, LlamaIndex)
-
 ## Best Practices
 
-1. **Always Use Fake Backend for Unit Tests**: Avoid network calls
+1. **Always Use Fake Backend for Unit and Library Integration Tests**: Avoid network calls
 2. **Test Public API Only**: Don't test private methods
 3. **Use Flexible Matchers**: Use `ANY`, `ANY_BUT_NONE` for non-critical fields
 4. **Build Expected Structures**: Make tests readable with clear expected output
@@ -1040,20 +1026,10 @@ Tests reveal two main integration approaches:
 9. **Keep Tests Fast**: Unit tests should run in milliseconds
 10. **Use Verifiers for E2E**: Leverage existing verification helpers
 
-## Summary
-
-The Opik Python SDK test suite is comprehensive and well-organized:
-
-- **~280 test files** covering all aspects of the SDK
-- **4 test categories** for different validation levels
-- **Shared infrastructure** (`testlib/`) for consistency
-- **Clear patterns** for different test types
-- **Fake backend** enables fast, isolated testing
-- **E2E tests** provide real-world validation
-
 For more information, see:
-- [Architecture Documentation](ARCHITECTURE.md)
-- [Data Flow Documentation](DATA_FLOW.md)
+- [API and Data Flow](API_AND_DATA_FLOW.md) - Core architecture and data flow
+- [Integrations](INTEGRATIONS.md) - Integration patterns and testing
+- [Evaluation](EVALUATION.md) - Evaluation framework architecture
 - [Test Organization Rules](../.cursor/rules/test-organization.mdc)
 - [Test Implementation Rules](../.cursor/rules/test-implementation.mdc)
 
