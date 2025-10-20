@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.infrastructure.StreamConfiguration;
+import jakarta.inject.Inject;
 import lombok.Getter;
 import lombok.NonNull;
 import org.redisson.api.RedissonReactiveClient;
@@ -25,6 +26,14 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
 
     @Getter
     private final AtomicInteger failedMessageCount = new AtomicInteger(0);
+
+    /**
+     * Constructor required for dependency injection during testing
+     */
+    @Inject
+    public TestRedisSubscriber(@NonNull RedissonReactiveClient redisson) {
+        this(TestStreamConfiguration.createWithFastPolling(), redisson, msg -> Mono.empty());
+    }
 
     public TestRedisSubscriber(
             @NonNull StreamConfiguration config,

@@ -26,13 +26,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration tests for BaseRedisSubscriber using real Redis test container.
+ * Integration tests for {@link BaseRedisSubscriber}  using real Redis test container.
+ * Generally, tests should be created here instead of in the unit test class  {@link BaseRedisSubscriberTest}.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BaseRedisSubscriberTest {
@@ -95,14 +95,14 @@ class BaseRedisSubscriberTest {
         void shouldProcessMessagesInParallel() {
             var processedMessages = new CopyOnWriteArraySet<String>();
             var processingThreads = new CopyOnWriteArraySet<String>();
-            Function<String, Mono<Void>> processor = message -> Mono.fromRunnable(() -> {
-                processedMessages.add(message);
-                processingThreads.add(Thread.currentThread().getName());
-                // Simulate some processing time, increases the chances of parallelism
-                Mono.delay(Duration.ofMillis(500)).block();
-            });
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient, processor));
+            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient,
+                    message -> Mono.fromRunnable(() -> {
+                        processedMessages.add(message);
+                        processingThreads.add(Thread.currentThread().getName());
+                        // Simulate some processing time, increases the chances of parallelism
+                        Mono.delay(Duration.ofMillis(500)).block();
+                    })));
             subscriber.start();
             waitForConsumerGroupReady();
 
@@ -119,15 +119,14 @@ class BaseRedisSubscriberTest {
         @Test
         void shouldHandleNullPayloadSuccessfully() {
             var nullCount = new AtomicInteger(0);
-            Function<String, Mono<Void>> processor = message -> {
+            var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient, message -> {
                 if (message == null) {
                     nullCount.incrementAndGet();
                 }
                 return Mono.empty();
-            };
-            var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient, processor));
+            }));
             subscriber.start();
             waitForConsumerGroupReady();
 
@@ -166,15 +165,14 @@ class BaseRedisSubscriberTest {
 
         @Test
         void shouldContinueProcessingAfterFailedMessages() {
-            Function<String, Mono<Void>> processor = message -> {
+            var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient, message -> {
                 if (message == null) {
                     return Mono.error(new RuntimeException("Intentional failure"));
                 }
                 return Mono.empty();
-            };
-            var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient, processor));
+            }));
             subscriber.start();
             waitForConsumerGroupReady();
 
@@ -218,7 +216,8 @@ class BaseRedisSubscriberTest {
         @Test
         void shouldRemoveConsumerOnStop() {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(config, redissonClient));
+            // Not tracking the subscriber, as we want to test stop behavior explicitly
+            var subscriber = TestRedisSubscriber.successfulSubscriber(config, redissonClient);
             subscriber.start();
             waitForConsumerGroupReady();
             publishMessagesToStream(messages);

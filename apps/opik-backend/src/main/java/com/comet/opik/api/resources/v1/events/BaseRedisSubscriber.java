@@ -42,6 +42,16 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private static final String BUSYGROUP = "BUSYGROUP";
 
     /**
+     * Enough for 2-3 concurrent Redis operations (read, ack, remove etc.) per subscriber
+     */
+    private static final int CONSUMER_SCHEDULER_THREAD_CAP_SIZE = 4;
+
+    /**
+     * Small queue, backpressure handled upstream
+     */
+    private static final int CONSUMER_SCHEDULER_QUEUED_TASK_CAP = 100;
+
+    /**
      * Same TTL as Reactor bounded elastic scheduler default, but inner constant is not exposed.
      */
     private static final int BOUNDED_ELASTIC_SCHEDULER_TTL_SECONDS = 60;
@@ -87,7 +97,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
         this.payloadField = payloadField;
 
-        this.consumerId = "consumer-%s-%s".formatted(config.getConsumerGroupName(), UUID.randomUUID());
+        this.consumerId = "consumer-%s-%s".formatted(this.config.getConsumerGroupName(), UUID.randomUUID());
 
         this.meter = GlobalOpenTelemetry.getMeter(metricNamespace);
         this.messageProcessingTime = meter
@@ -140,8 +150,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     public void start() {
         if (consumerScheduler == null) {
             consumerScheduler = Schedulers.newBoundedElastic(
-                    Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
-                    Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
+                    CONSUMER_SCHEDULER_THREAD_CAP_SIZE,
+                    CONSUMER_SCHEDULER_QUEUED_TASK_CAP,
                     "redis-subscriber-consumer-scheduler-%s-%s".formatted(
                             config.getConsumerGroupName(), config.getStreamName()),
                     BOUNDED_ELASTIC_SCHEDULER_TTL_SECONDS,
@@ -163,8 +173,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         }
         if (workersScheduler == null) {
             workersScheduler = Schedulers.newBoundedElastic(
-                    Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
-                    Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
+                    config.getConsumerBatchSize() * 2, // Double the expected parallelism
+                    config.getConsumerBatchSize() * 100, // Enqueue up to 100 tasks per expected parallelism
                     "redis-subscriber-workers-scheduler-%s-%s".formatted(
                             config.getConsumerGroupName(), config.getStreamName()),
                     BOUNDED_ELASTIC_SCHEDULER_TTL_SECONDS,
@@ -195,7 +205,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         }
         if (stream != null && consumerScheduler != null && !consumerScheduler.isDisposed()) {
             removeConsumer();
-            log.info("Consumer stopped successfully");
+            log.info(
+                    "Consumer stopped successfully, streamName='{}', consumerGroupName='{}'",
+                    config.getStreamName(),
+                    config.getConsumerGroupName());
         }
         if (consumerScheduler != null && !consumerScheduler.isDisposed()) {
             consumerScheduler.dispose();
@@ -203,24 +216,23 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     private void removeConsumer() {
-        log.info("Removing consumer '{}', from group '{}'", consumerId, config.getConsumerGroupName());
-        try {
-            stream.removeConsumer(config.getConsumerGroupName(), consumerId)
-                    .subscribeOn(consumerScheduler)
-                    .doOnSuccess(pendingMessages -> log.info(
-                            "Removed consumer '{}', from group '{}', pendingMessages '{}'",
-                            consumerId, config.getConsumerGroupName(), pendingMessages))
-                    // TODO: investigate error handling here
-                    // TODO: test subscribe vs block
-                    .subscribe();
-        } catch (Exception exception) {
-            log.warn("Failed to remove consumer '{}', group '{}'",
-                    consumerId, config.getConsumerGroupName(), exception);
-        }
+        // Removing the consumer is best-effort, no blocking and not propagating errors to stop
+        stream.removeConsumer(config.getConsumerGroupName(), consumerId)
+                .subscribeOn(consumerScheduler)
+                .doOnSuccess(pendingMessages -> log.info(
+                        "Removed consumer '{}', from group '{}', pendingMessages '{}'",
+                        consumerId, config.getConsumerGroupName(), pendingMessages))
+                .onErrorResume(throwable -> {
+                    log.warn("Failed to remove consumer '{}', group '{}'",
+                            consumerId, config.getConsumerGroupName(), throwable);
+                    return Mono.empty();
+                })
+                .subscribe();
     }
 
     private void enforceConsumerGroup() {
-        // Make sure the stream and the consumer group exists
+        // Make sure the stream and the consumer group exists.
+        // Propagate errors except BUSYGROUP and make start fail in that case.
         var streamCreateGroupArgs = StreamCreateGroupArgs
                 .name(config.getConsumerGroupName())
                 .makeStream();
@@ -232,9 +244,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                                 config.getConsumerGroupName(), config.getStreamName());
                         return Mono.empty();
                     }
+                    log.error("Failed to create consumer group '{}' for stream '{}'",
+                            config.getConsumerGroupName(), config.getStreamName(), throwable);
                     return Mono.error(throwable);
                 })
-                .subscribe();
+                .block(config.getLongPollingDuration().toJavaDuration());
     }
 
     private Disposable setupStreamListener() {
@@ -242,9 +256,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return Flux.interval(config.getPoolingInterval().toJavaDuration(), timerScheduler)
                 .onBackpressureDrop(i -> {
                     intervalDrops.add(1);
-                    //                    log.debug("Interval dropped due to backpressure");
+                    log.info("Interval dropped due to backpressure");
                 })
-                // TODO: test publish on here
                 // TODO: Implement claimer of orphan pending messages
                 // ConcatMap ensures one readGroup at a time
                 .concatMap(i -> readMessages())
@@ -256,8 +269,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .filter(CollectionUtils::isNotEmpty)
                 .flatMap(this::postProcessSuccessMessages)
                 .flatMap(this::postProcessFailureMessages)
-                // TODO: test error never stopping the interval
-                .doOnError(throwable -> log.error("Error processing message from Redis stream", throwable))
+                // Unexpected errors handling: interval is dropped, but processing continues
+                .onErrorContinue((throwable, object) -> log.error("Error processing message from Redis stream '{}'",
+                        object, throwable))
                 .name("redis-subscriber")
                 .tag("stream", config.getStreamName())
                 .tag("consumer-group", config.getConsumerGroupName())
@@ -276,9 +290,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     readSize.set(stream.size());
                     log.debug("Successfully read from stream, size '{}'", stream.size());
                 })
-                .doOnError(throwable -> {
+                .onErrorResume(throwable -> {
                     readErrors.add(1);
                     log.error("Error reading from Redis stream, size '{}'", config.getConsumerBatchSize(), throwable);
+                    return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> readTime.record(System.currentTimeMillis() - startMillis));
     }
@@ -343,10 +358,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .then(stream.remove(idsArray)
                         .subscribeOn(consumerScheduler))
                 .doOnSuccess(size -> log.debug("Successfully ack and remove from stream, size '{}'", size))
-                .doOnError(throwable -> {
+                .onErrorResume(throwable -> {
                     ackAndRemoveErrors.add(1);
                     log.error("Error acknowledging or removing from Redis stream, size '{}'",
                             idsArray.length, throwable);
+                    return Mono.just(0L);
                 })
                 .doFinally(sig -> ackAndRemoveProcessingTime.record(System.currentTimeMillis() - startMillis));
     }
