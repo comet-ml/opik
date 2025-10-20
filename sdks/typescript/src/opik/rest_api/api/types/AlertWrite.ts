@@ -6,7 +6,7 @@ import * as OpikApi from "../index";
 
 export interface AlertWrite {
     id?: string;
-    name: string;
+    name?: string;
     enabled?: boolean;
     webhook: OpikApi.WebhookWrite;
     triggers?: OpikApi.AlertTriggerWrite[];

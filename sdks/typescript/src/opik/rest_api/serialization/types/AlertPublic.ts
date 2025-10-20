@@ -11,7 +11,7 @@ import { AlertTriggerPublic } from "./AlertTriggerPublic";
 export const AlertPublic: core.serialization.ObjectSchema<serializers.AlertPublic.Raw, OpikApi.AlertPublic> =
     core.serialization.object({
         id: core.serialization.string().optional(),
-        name: core.serialization.string(),
+        name: core.serialization.string().optional(),
         enabled: core.serialization.boolean().optional(),
         webhook: WebhookPublic,
         triggers: core.serialization.list(AlertTriggerPublic).optional(),
@@ -24,7 +24,7 @@ export const AlertPublic: core.serialization.ObjectSchema<serializers.AlertPubli
 export declare namespace AlertPublic {
     export interface Raw {
         id?: string | null;
-        name: string;
+        name?: string | null;
         enabled?: boolean | null;
         webhook: WebhookPublic.Raw;
         triggers?: AlertTriggerPublic.Raw[] | null;
