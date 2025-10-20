@@ -9,6 +9,7 @@ import {
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import { ButtonLayoutSize } from "@/components/pages-shared/traces/DetailsActionSection";
 import { isObjectSpan } from "@/lib/traces";
+import OpenInPlaygroundButton from "./OpenInPlaygroundButton";
 
 type TraceDataViewerActionsPanelProps = {
   layoutSize: ButtonLayoutSize;
@@ -35,6 +36,8 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         selectedRows={rows}
         dataType={dataType}
       />
+
+      {isSpan && <OpenInPlaygroundButton data={data} layoutSize={layoutSize} />}
 
       <DetailsActionSectionToggle
         activeSection={activeSection}
