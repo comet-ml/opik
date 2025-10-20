@@ -11,7 +11,7 @@ import { AlertTriggerWrite } from "./AlertTriggerWrite";
 export const AlertWrite: core.serialization.ObjectSchema<serializers.AlertWrite.Raw, OpikApi.AlertWrite> =
     core.serialization.object({
         id: core.serialization.string().optional(),
-        name: core.serialization.string(),
+        name: core.serialization.string().optional(),
         enabled: core.serialization.boolean().optional(),
         webhook: WebhookWrite,
         triggers: core.serialization.list(AlertTriggerWrite).optional(),
@@ -20,7 +20,7 @@ export const AlertWrite: core.serialization.ObjectSchema<serializers.AlertWrite.
 export declare namespace AlertWrite {
     export interface Raw {
         id?: string | null;
-        name: string;
+        name?: string | null;
         enabled?: boolean | null;
         webhook: WebhookWrite.Raw;
         triggers?: AlertTriggerWrite.Raw[] | null;

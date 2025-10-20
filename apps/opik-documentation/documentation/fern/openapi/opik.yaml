@@ -4750,7 +4750,6 @@ components:
           type: string
     Alert:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -4927,7 +4926,6 @@ components:
             $ref: "#/components/schemas/AlertTriggerConfig_Write"
     Alert_Write:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -5070,7 +5068,6 @@ components:
           readOnly: true
     Alert_Public:
       required:
-      - name
       - webhook
       type: object
       properties:

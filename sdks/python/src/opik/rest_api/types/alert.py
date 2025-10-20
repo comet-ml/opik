@@ -11,7 +11,7 @@ from .webhook import Webhook
 
 class Alert(UniversalBaseModel):
     id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     enabled: typing.Optional[bool] = None
     webhook: Webhook
     triggers: typing.Optional[typing.List[AlertTrigger]] = None
