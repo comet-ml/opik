@@ -38,9 +38,16 @@ const useCustomProviderModels = () => {
               // Build model ID with provider name prefix: {provider-name}/{model-name}
               const modelId = buildCustomModelId(providerName, trimmedModel);
 
+              // For display label: hide "default/" prefix for backward compatibility
+              // For other provider names, show the full provider-name/model-name
+              const displayLabel =
+                providerName === "default"
+                  ? trimmedModel
+                  : modelId;
+
               return {
                 value: modelId as PROVIDER_MODEL_TYPE,
-                label: convertCustomProviderModels(modelId),
+                label: displayLabel,
               };
             });
 
