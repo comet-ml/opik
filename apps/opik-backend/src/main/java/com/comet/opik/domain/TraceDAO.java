@@ -703,7 +703,8 @@ class TraceDAOImpl implements TraceDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
-                    toInt64(countIf(type = 'llm')) as llm_span_count
+                    toInt64(countIf(type = 'llm')) as llm_span_count,
+                    arraySort(groupUniqArray(provider)) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -832,6 +833,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
+                  , s.providers AS providers
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
@@ -1203,7 +1205,8 @@ class TraceDAOImpl implements TraceDAO {
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
-                    toInt64(countIf(type = 'llm')) as llm_span_count
+                    toInt64(countIf(type = 'llm')) as llm_span_count,
+                    arraySort(groupUniqArray(provider)) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
@@ -1500,7 +1503,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    arraySort(groupUniqArray(provider)) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -1777,7 +1781,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    arraySort(groupUniqArray(provider)) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -2106,7 +2111,8 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost
+                    sum(total_estimated_cost) as total_estimated_cost,
+                    arraySort(groupUniqArray(provider)) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
