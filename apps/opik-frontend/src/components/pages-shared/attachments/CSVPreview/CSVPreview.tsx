@@ -40,6 +40,13 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
     queryFn: async () => {
       try {
         const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch CSV file: ${response.status} ${response.statusText}`,
+          );
+        }
+        
         return await response.text();
       } catch (error) {
         let message: string | undefined;
