@@ -19,6 +19,7 @@ import {
   CategoricalFeedbackDefinition,
   FEEDBACK_DEFINITION_TYPE,
 } from "@/types/feedback-definitions";
+import sortBy from "lodash/sortBy";
 
 interface FeedbackScoreEditDropdownProps {
   feedbackScore?: TraceFeedbackScore;
@@ -61,13 +62,16 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
   }, [feedbackDefinitionsData?.content]);
 
   const feedbackOptions = useMemo(() => {
-    return Object.entries(
-      (userFeedbackDefinition as unknown as CategoricalFeedbackDefinition)
-        ?.details?.categories ?? {},
-    ).map(([name, value]) => ({
-      name,
-      value,
-    }));
+    return sortBy(
+      Object.entries(
+        (userFeedbackDefinition as unknown as CategoricalFeedbackDefinition)
+          ?.details?.categories ?? {},
+      ).map(([name, value]) => ({
+        name,
+        value,
+      })),
+      "value",
+    );
   }, [userFeedbackDefinition]);
 
   const handleValueSelect = (name: string, value: number) => {
