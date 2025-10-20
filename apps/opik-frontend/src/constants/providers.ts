@@ -78,6 +78,10 @@ export const PROVIDERS_OPTIONS = Object.values(PROVIDERS);
 
 export const CUSTOM_PROVIDER_MODEL_PREFIX = "custom-llm";
 
+// Legacy custom providers (created before multi-provider support) don't have a provider_name
+// We use this constant as a placeholder for those providers
+export const LEGACY_CUSTOM_PROVIDER_NAME = "default";
+
 // Model prefix format: {provider_name}/model-name
 export const buildCustomModelId = (
   providerName: string,
