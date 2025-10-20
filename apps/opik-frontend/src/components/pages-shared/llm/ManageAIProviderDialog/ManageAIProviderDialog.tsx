@@ -51,6 +51,7 @@ type ManageAIProviderDialogProps = {
   onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
   configuredProvidersList?: ProviderKey[];
   defaultProvider?: PROVIDER_TYPE;
+  forceCreateMode?: boolean; // When true, always show create form even if provider exists
 };
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
@@ -61,8 +62,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onDeleteProvider,
   configuredProvidersList,
   defaultProvider,
+  forceCreateMode = false,
 }) => {
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
+  const [isAddingCustomProvider, setIsAddingCustomProvider] = useState(false);
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
@@ -91,8 +94,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   );
 
   const calculatedProviderKey = useMemo(() => {
+    // Don't auto-load existing provider in forceCreateMode or when adding custom provider
+    if (forceCreateMode || isAddingCustomProvider) {
+      return undefined;
+    }
     return configuredProvidersList?.find((p) => provider === p.provider);
-  }, [configuredProvidersList, provider]);
+  }, [configuredProvidersList, provider, forceCreateMode, isAddingCustomProvider]);
 
   const isConfiguredProvider = Boolean(calculatedProviderKey);
   const isEdit = Boolean(providerKey || calculatedProviderKey);
@@ -151,6 +158,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         },
       });
     }
+    setIsAddingCustomProvider(false);
     setOpen(false);
   }, [
     form,
@@ -174,6 +182,18 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       onDeleteProvider(provider as PROVIDER_TYPE);
     }
   }, [provider, calculatedProviderKey, onDeleteProvider, deleteMutate]);
+
+  const handleAddCustomProvider = useCallback(() => {
+    setIsAddingCustomProvider(true);
+    form.reset({
+      provider: PROVIDER_TYPE.CUSTOM,
+      apiKey: "",
+      location: "",
+      url: "",
+      providerName: "",
+      models: "",
+    } as AIProviderFormType);
+  }, [form]);
 
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
@@ -214,7 +234,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                       <Label>Provider</Label>
                       <FormControl>
                         <ProviderSelect
-                          disabled={Boolean(providerKey)}
+                          disabled={Boolean(providerKey) || forceCreateMode || isAddingCustomProvider}
                           value={(field.value as PROVIDER_TYPE) || ""}
                           onChange={(v) => {
                             const p = v as PROVIDER_TYPE;
@@ -242,6 +262,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                           }}
                           configuredProviderKeys={configuredProviderKeys}
                           hasError={Boolean(validationErrors?.message)}
+                          onAddCustomProvider={handleAddCustomProvider}
                         />
                       </FormControl>
                       <FormMessage />
