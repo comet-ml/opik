@@ -86,10 +86,12 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         expected_llm_span_input = {
             "messages": [
                 [
-                    ANY_DICT.containing({
-                        "content": expected_input_prompt,
-                        "type": "human",
-                    }),
+                    ANY_DICT.containing(
+                        {
+                            "content": expected_input_prompt,
+                            "type": "human",
+                        }
+                    ),
                 ]
             ]
         }
@@ -183,10 +185,12 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
         input={
             "messages": [
                 [
-                    ANY_DICT.containing({
-                        "content": input_prompt,
-                        "type": "human",
-                    }),
+                    ANY_DICT.containing(
+                        {
+                            "content": input_prompt,
+                            "type": "human",
+                        }
+                    ),
                 ]
             ]
         },
@@ -216,10 +220,12 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
                 input={
                     "messages": [
                         [
-                            ANY_DICT.containing({
-                                "content": input_prompt,
-                                "type": "human",
-                            }),
+                            ANY_DICT.containing(
+                                {
+                                    "content": input_prompt,
+                                    "type": "human",
+                                }
+                            ),
                         ]
                     ]
                 },
@@ -351,10 +357,12 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                         input={
                             "messages": [
                                 [
-                                    ANY_DICT.containing({
-                                        "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
-                                        "type": "human",
-                                    }),
+                                    ANY_DICT.containing(
+                                        {
+                                            "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
+                                            "type": "human",
+                                        }
+                                    ),
                                 ]
                             ]
                         },
