@@ -446,7 +446,7 @@ export interface LLMOpenAIConfigsType {
 export interface LLMAnthropicConfigsType {
   temperature: number;
   maxCompletionTokens: number;
-  topP: number;
+  topP?: number;
   seed?: number | null;
 }
 

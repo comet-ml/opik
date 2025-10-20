@@ -466,7 +466,7 @@ serviceToggles:
   opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not Alert feature is enabled
-  alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"false"}
+  alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
@@ -538,7 +538,7 @@ queues:
 webhook:
   # Default: false
   # Description: Whether or not webhook functionality is enabled
-  enabled: ${WEBHOOK_ENABLED:-false}
+  enabled: ${WEBHOOK_ENABLED:-true}
   # Default: webhook-events
   # Description: Redis stream name for webhook events
   streamName: ${WEBHOOK_STREAM_NAME:-webhook-events}
