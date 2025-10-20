@@ -11,7 +11,7 @@ from .webhook_public import WebhookPublic
 
 class AlertPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     enabled: typing.Optional[bool] = None
     webhook: WebhookPublic
     triggers: typing.Optional[typing.List[AlertTriggerPublic]] = None
