@@ -13,11 +13,29 @@ type MetadataTabProps = {
   search?: string;
 };
 
+const isSpan = (data: Trace | Span): data is Span => {
+  return "provider" in data;
+};
+
 const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
   data,
   search,
 }) => {
   const hasTokenUsage = Boolean(data.usage);
+
+  const usageData = useMemo(() => {
+    if (!data.usage) return null;
+
+    // For Spans, include provider information if available
+    if (isSpan(data) && data.provider) {
+      return {
+        provider: data.provider,
+        ...data.usage,
+      };
+    }
+
+    return data.usage;
+  }, [data]);
 
   const openSections = useMemo(() => {
     return hasTokenUsage ? ["metadata", "usage"] : ["metadata"];
@@ -36,7 +54,7 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
           <AccordionTrigger>Token usage</AccordionTrigger>
           <AccordionContent>
             <SyntaxHighlighter
-              data={data.usage as object}
+              data={usageData as object}
               withSearch
               search={search}
             />
