@@ -13,10 +13,6 @@ type MetadataTabProps = {
   search?: string;
 };
 
-const isSpan = (data: Trace | Span): data is Span => {
-  return "provider" in data;
-};
-
 const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
   data,
   search,
@@ -27,9 +23,17 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
     if (!data.usage) return null;
 
     // For Spans, include provider information if available
-    if (isSpan(data) && data.provider) {
+    if ("provider" in data && data.provider) {
       return {
         provider: data.provider,
+        ...data.usage,
+      };
+    }
+
+    // For Traces, include providers array if available
+    if ("providers" in data && data.providers && data.providers.length > 0) {
+      return {
+        providers: data.providers,
         ...data.usage,
       };
     }
