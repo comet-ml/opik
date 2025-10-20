@@ -212,52 +212,158 @@ prompt_v2 = prompt.create_version(
 The SDK is organized into 3 layers:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│               Layer 1: Public API                     │
-│                                                       │
-│   opik.Opik, @opik.track, opik_context              │
-│   - User-facing interface                            │
-│   - Input validation                                 │
-│   - Context management                               │
-└────────────────────────┬──────────────────────────────┘
-                         │
-                         │ Creates messages
-                         ▼
-┌──────────────────────────────────────────────────────┐
-│          Layer 2: Message Processing                  │
-│                                                       │
-│   Streamer → Queue → Consumers → MessageProcessor   │
-│   - Asynchronous background processing               │
-│   - Batching and optimization                        │
-│   - Retry logic and error handling                   │
-│   - File uploads (S3)                                │
-│                                                       │
-│   MessageProcessor uses REST API client:             │
-│   └─► OpikApi (Layer 3) for HTTP communication      │
-└────────────────────────┬──────────────────────────────┘
-                         │
-                         │ Delegates to
-                         ▼
-┌──────────────────────────────────────────────────────┐
-│             Layer 3: REST API Client                  │
-│                                                       │
-│   OpikApi (auto-generated from OpenAPI spec)        │
-│   - HTTP client (makes requests to backend)          │
-│   - Request/response serialization                   │
-│   - Connection pooling and management                │
-│                                                       │
-│   ════════════════════════════════════════════       │
-│   ║  HTTP requests to Opik Backend             ║     │
-│   ║  (External service, not part of SDK)       ║     │
-│   ════════════════════════════════════════════       │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    Layer 1: Public API                       │
+│                                                              │
+│   opik.Opik, @opik.track, opik_context                       │
+│   - User-facing interface                                    │
+│   - Input validation                                         │
+│   - Context management                                       │
+└─────────────┬────────────────────────────┬───────────────────┘
+              │                            │
+              │ Observability              │ Resource Management
+              │ (trace, span, feedback)    │ (dataset, experiment,
+              │                            │  prompt, search, etc.)
+              │                            │
+              ▼                            ▼
+┌──────────────────────────────┐  ┌──────────────────────────┐
+│  Layer 2: Message Processing │  │  API Object Clients      │
+│  (Observability operations)  │  │  (Resource operations)   │
+│                              │  │                          │
+│  Streamer                    │  │  Dataset, Experiment,    │
+│    ↓                         │  │  Prompt, Attachment,     │
+│  Queue                       │  │  Threads clients         │
+│    ↓                         │  │                          │
+│  Consumers                   │  │  - Manage state          │
+│    ↓                         │  │  - Handle complex logic  │
+│  MessageProcessor            │  │  - Wrap REST calls       │
+│                              │  │                          │
+│  - Background async          │  │  Delegates to ↓          │
+│  - Batching                  │  └──────────────┬───────────┘
+│  - Retry logic               │                 │
+│                              │                 │
+│  Delegates to ↓              │                 │
+└───────────────┬──────────────┘                 │
+                │                                │
+                └────────────────┬───────────────┘
+                                 ▼
+              ┌───────────────────────────────────────────────┐
+              │       Layer 3: REST API Client                │
+              │                                               │
+              │  OpikApi (auto-generated from OpenAPI)        │
+              │  - HTTP client                                │
+              │  - Request/response serialization             │
+              │  - Connection pooling                         │
+              │                                               │
+              │  ═══════════════════════════════════════      │
+              │  ║  HTTP requests to Opik Backend      ║      │
+              │  ║  (External service, not part of SDK)║      │
+              │  ═══════════════════════════════════════      │
+              └───────────────────────────────────────────────┘
 ```
 
 **Key Points**:
-- **Layer 1 (Public API)**: What users interact with directly
-- **Layer 2 (Message Processing)**: Background workers processing messages asynchronously
-- **Layer 3 (REST API Client)**: HTTP communication layer used by message processors
+- **Layer 1 (Public API)**: What users interact with directly (`opik.Opik`, `@opik.track`)
+- **Layer 2 (Message Processing)**: Background workers - **only for observability operations** (trace/span/feedback)
+- **API Object Clients**: Intermediate layer for resource management - handle state and complex logic
+- **Layer 3 (REST API Client)**: HTTP communication layer (used by both Layer 2 and API Object Clients)
 - **Opik Backend**: External service (not part of SDK) that receives HTTP requests
+
+**Two Execution Paths**:
+
+1. **Observability operations** (trace/span/feedback):
+   - `opik.Opik` → **Message Processing** (Layer 2) → REST API Client → Backend
+   - Non-blocking, uses background workers
+
+2. **Resource management operations** (dataset/experiment/prompt):
+   - `opik.Opik` → **API Object Clients** → REST API Client → Backend
+   - Blocking, returns objects
+   
+**API Object Clients** (`opik/api_objects/`):
+
+For complex resource types, intermediate client classes provide:
+- **State management**: Dataset items, experiment state, prompt versions
+- **Business logic**: Item insertion, versioning, validation
+- **Convenience methods**: `dataset.insert()`, `experiment.get_items()`, `prompt.format()`
+- **REST abstraction**: Wrap multiple REST calls into higher-level operations
+
+**Examples**:
+- `Dataset` (`dataset/dataset.py`) - Manages dataset items, handles insertion/deletion
+- `Experiment` (`experiment/experiment.py`) - Tracks experiment items, links to dataset
+- `Prompt` (`prompt/prompt.py`) - Manages prompt versions and templating
+- `AttachmentClient` (`attachment/client.py`) - Handles file attachments
+- `ThreadsClient` (`threads/threads_client.py`) - Manages conversational threads
+
+For simple operations (search, get), `opik.Opik` calls REST client directly without intermediate client.
+
+### Synchronous vs Asynchronous Operations
+
+The Opik client provides two types of operations with different execution paths:
+
+#### Asynchronous Operations (via Layer 2: Message Processing)
+
+**Observability operations** that use background processing:
+
+| Operation | Purpose | Returns |
+|-----------|---------|---------|
+| `trace()` | Create/update trace | None (fire-and-forget) |
+| `span()` | Create/update span | None (fire-and-forget) |
+| `log_traces_feedback_scores()` | Add feedback to traces | None |
+| `log_spans_feedback_scores()` | Add feedback to spans | None |
+| Attachment uploads | Upload files to S3 | None |
+
+**Flow**: API → **Message** → **Streamer** → **Queue** → **Consumer** → REST Client → Backend
+
+**Characteristics**:
+- ⚡ Non-blocking (returns immediately)
+- 📦 Supports batching (Create messages batch together)
+- 🔁 Automatic retries
+- ⚠️ Requires `flush()` before app exit
+
+#### Synchronous Operations (via API Object Clients or Direct REST)
+
+**Resource management and query operations** that bypass message processing:
+
+| Category | Operations | Uses |
+|----------|-----------|------|
+| **Dataset** | `create_dataset()`, `get_dataset()`, `delete_dataset()` | Dataset client |
+| **Experiment** | `create_experiment()`, `get_experiment_by_id()` | Experiment client |
+| **Prompt** | `create_prompt()`, `get_prompt()`, `update_prompt()` | Prompt client |
+| **Search** | `search_traces()`, `search_spans()` | Direct REST |
+| **Retrieval** | `get_trace_content()`, `get_span_content()` | Direct REST |
+| **Delete** | `delete_traces()`, `delete_*_feedback_score()` | Direct REST |
+
+**Flow (with API Object Client)**:
+```
+client.create_dataset(name) → Dataset.__init__() → REST Client → Backend
+                              ↓
+                              Returns Dataset object with methods
+```
+
+**Flow (direct REST)**:
+```
+client.search_traces() → REST Client → Backend → Returns List[TracePublic]
+```
+
+**Characteristics**:
+- 🔒 Blocking (waits for response)
+- ✅ Returns data immediately
+- 🚫 No batching
+- ⏱️ No flush needed
+
+#### Why Different Paths?
+
+**Async path** (observability):
+- High frequency (100s-1000s per second)
+- Performance-critical (shouldn't slow down user code)
+- Can be batched (many traces/spans combined)
+- Fire-and-forget (no immediate result needed)
+
+**Sync path** (resources):
+- Low frequency (setup/teardown operations)
+- Returns objects needed for further operations
+- Can't be batched (unique operations)
+- User expects to wait for result
 
 ### Key Components
 

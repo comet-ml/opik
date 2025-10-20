@@ -115,17 +115,19 @@ Welcome to the Opik Python SDK design documentation! This directory contains com
 Most comprehensive document covering core SDK architecture:
 - High-level API (Opik client, decorators, context management)
 - 3-layer architecture with clear separation
+- **Sync vs Async operations**: Which operations use background processing
 - Complete data flow diagrams with step-by-step execution
-- Batching system deep dive (5 flush triggers explained)
+- Batching system deep dive (5 flush triggers, which messages batch)
 - Message processing internals
 - Observability and performance
 
 **Key Sections**:
 - **High-Level API**: `opik.Opik`, `@opik.track`, context management
 - **Core Architecture**: 3-layer architecture, key components
+- **Synchronous vs Asynchronous Operations**: Critical distinction - trace/span/feedback are async, dataset/experiment/search are sync
 - **Data Flow**: Trace creation, decorator execution, nested functions
 - **Message Processing Deep Dive**: Routing, queuing, consumers, handlers
-- **Batching System**: Why batching, triggers, performance comparison
+- **Batching System**: Why batching, which messages support it, flush triggers, performance
 - **Observability**: Logging, error tracking, health checks
 
 ### Integrations (~550 lines)
