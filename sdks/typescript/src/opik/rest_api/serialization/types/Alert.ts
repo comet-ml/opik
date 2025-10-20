@@ -10,7 +10,7 @@ import { AlertTrigger } from "./AlertTrigger";
 
 export const Alert: core.serialization.ObjectSchema<serializers.Alert.Raw, OpikApi.Alert> = core.serialization.object({
     id: core.serialization.string().optional(),
-    name: core.serialization.string(),
+    name: core.serialization.string().optional(),
     enabled: core.serialization.boolean().optional(),
     webhook: Webhook,
     triggers: core.serialization.list(AlertTrigger).optional(),
@@ -23,7 +23,7 @@ export const Alert: core.serialization.ObjectSchema<serializers.Alert.Raw, OpikA
 export declare namespace Alert {
     export interface Raw {
         id?: string | null;
-        name: string;
+        name?: string | null;
         enabled?: boolean | null;
         webhook: Webhook.Raw;
         triggers?: AlertTrigger.Raw[] | null;
