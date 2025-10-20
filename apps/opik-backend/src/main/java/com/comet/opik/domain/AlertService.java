@@ -355,13 +355,13 @@ class AlertServiceImpl implements AlertService {
         return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
-                .map(response -> {
-                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}', statusCode='{}'",
-                            event.getId(), event.getEventType(), event.getUrl(), response.getStatus());
+                .map(responseBody -> {
+                    log.info("Successfully sent webhook: id='{}', type='{}', url='{}', response='{}'",
+                            event.getId(), event.getEventType(), event.getUrl(), responseBody);
 
                     return WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.SUCCESS)
-                            .statusCode(response.getStatus())
+                            .statusCode(200) // Success defaults to 200
                             .requestBody(event.toBuilder().url(null).headers(null).secret(null).build())
                             .errorMessage(null)
                             .build();
@@ -370,6 +370,7 @@ class AlertServiceImpl implements AlertService {
                     log.error("Failed to send webhook: id='{}', type='{}', url='{}', error='{}'",
                             event.getId(), event.getEventType(), event.getUrl(), throwable.getMessage(), throwable);
 
+                    // Extract status code from RetryableHttpException if available
                     int statusCode = (throwable instanceof RetryUtils.RetryableHttpException rhe)
                             ? rhe.getStatusCode()
                             : 0;
