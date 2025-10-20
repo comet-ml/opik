@@ -5,15 +5,22 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.Webhook;
+import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.jdbi.v3.core.argument.AbstractArgumentFactory;
+import org.jdbi.v3.core.argument.Argument;
+import org.jdbi.v3.core.config.ConfigRegistry;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -27,6 +34,7 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -37,6 +45,9 @@ import java.util.UUID;
 
 @RegisterRowMapper(AlertDAO.AlertWithWebhookRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterArgumentFactory(MapFlatArgumentFactory.class)
+@RegisterColumnMapper(MapFlatArgumentFactory.class)
+@RegisterArgumentFactory(AlertDAO.AlertTypeArgumentFactory.class)
 interface AlertDAO {
 
     String FIND = """
@@ -45,6 +56,8 @@ interface AlertDAO {
                     a.id as id,
                     a.name as name,
                     a.enabled as enabled,
+                    a.alert_type as alert_type,
+                    a.metadata as metadata,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -122,8 +135,8 @@ interface AlertDAO {
             """;
 
     @SqlUpdate("""
-            INSERT INTO alerts (id, name, enabled, webhook_id, workspace_id, created_by, last_updated_by, created_at)
-            VALUES (:bean.id, :bean.name, :bean.enabled, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
+            INSERT INTO alerts (id, name, enabled, alert_type, metadata, webhook_id, workspace_id, created_by, last_updated_by, created_at)
+            VALUES (:bean.id, :bean.name, :bean.enabled, :bean.alertType, :bean.metadata, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
             """)
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
             @Bind("webhookId") UUID webhookId);
@@ -148,6 +161,8 @@ interface AlertDAO {
                     a.id as id,
                     a.name as name,
                     a.enabled as enabled,
+                    a.alert_type as alert_type,
+                    a.metadata as metadata,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -300,11 +315,35 @@ interface AlertDAO {
                     .map(this::mapTriggers)
                     .orElse(null);
 
+            // Parse alert_type
+            AlertType alertType = null;
+            String alertTypeStr = rs.getString("alert_type");
+            if (alertTypeStr != null) {
+                try {
+                    alertType = AlertType.fromString(alertTypeStr);
+                } catch (Exception e) {
+                    log.warn("Failed to parse alert_type: '{}'", alertTypeStr, e);
+                }
+            }
+
+            // Parse metadata JSON to Map
+            Map<String, String> metadata = null;
+            String metadataJson = rs.getString("metadata");
+            if (StringUtils.isNotBlank(metadataJson)) {
+                try {
+                    metadata = JsonUtils.readValue(metadataJson, MAP_TYPE_REF);
+                } catch (Exception e) {
+                    log.warn("Failed to parse metadata JSON: '{}'", metadataJson, e);
+                }
+            }
+
             // Build Alert object with embedded Webhook and Triggers
             return Alert.builder()
                     .id(UUID.fromString(rs.getString("id")))
                     .name(rs.getString("name"))
                     .enabled(rs.getBoolean("enabled"))
+                    .alertType(alertType)
+                    .metadata(metadata)
                     .webhook(webhook)
                     .triggers(triggers)
                     .createdAt(rs.getTimestamp("created_at").toInstant())
@@ -407,6 +446,23 @@ interface AlertDAO {
                 log.warn("Failed to parse config value: '{}'", configValueNode, e);
             }
             return Map.of();
+        }
+    }
+
+    class AlertTypeArgumentFactory extends AbstractArgumentFactory<AlertType> {
+        public AlertTypeArgumentFactory() {
+            super(Types.VARCHAR);
+        }
+
+        @Override
+        protected Argument build(AlertType value, ConfigRegistry config) {
+            return (position, statement, ctx) -> {
+                if (value == null) {
+                    statement.setNull(position, Types.VARCHAR);
+                } else {
+                    statement.setString(position, value.getValue());
+                }
+            };
         }
     }
 }

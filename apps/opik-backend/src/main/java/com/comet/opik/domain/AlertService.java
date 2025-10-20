@@ -4,6 +4,7 @@ import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
@@ -492,6 +493,7 @@ class AlertServiceImpl implements AlertService {
         return alert.toBuilder()
                 .id(id)
                 .enabled(alert.enabled() != null ? alert.enabled() : true) // Set default to true only when not explicitly provided
+                .alertType(alert.alertType() != null ? alert.alertType() : AlertType.GENERAL) // Set default to GENERAL when not provided
                 .webhook(webhook)
                 .triggers(preparedTriggers)
                 .createdBy(Optional.ofNullable(alert.createdBy()).orElse(userName))

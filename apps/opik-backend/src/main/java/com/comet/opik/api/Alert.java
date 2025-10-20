@@ -13,6 +13,7 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -27,6 +28,12 @@ public record Alert(
 
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) @JsonProperty(defaultValue = "true") Boolean enabled,
+
+        @JsonView({Alert.View.Public.class,
+                Alert.View.Write.class}) AlertType alertType,
+
+        @JsonView({Alert.View.Public.class,
+                Alert.View.Write.class}) Map<String, String> metadata,
 
         @JsonView({
                 Alert.View.Public.class, Alert.View.Write.class}) @Valid @NotNull Webhook webhook,
