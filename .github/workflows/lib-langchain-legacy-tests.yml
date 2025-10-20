@@ -2,7 +2,7 @@
 #
 # Please read inputs to provide correct values.
 #
-name: SDK Lib Langchain Tests
+name: SDK Lib Langchain Tests for langchain < 1.0.0
 run-name: "SDK Lib Langchain Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.10", "3.11", "3.12", "3.13"]
+        python_version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Check out code
@@ -57,7 +57,7 @@ jobs:
       - name: Install lib
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r library_integration/langchain/requirements.txt
+          pip install --no-cache-dir --disable-pip-version-check -r library_integration/langchain/legacy_requirements.txt
 
       - name: change aws role
         uses: aws-actions/configure-aws-credentials@v4
