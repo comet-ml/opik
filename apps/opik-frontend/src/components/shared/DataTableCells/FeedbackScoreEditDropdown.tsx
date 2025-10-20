@@ -110,7 +110,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
         sideOffset={4}
       >
         <DropdownMenuLabel className="px-2 text-xs font-medium text-secondary-foreground">
-          Personal user feedback
+          Your feedback
         </DropdownMenuLabel>
         <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white">
           {feedbackOptions.map((option) => (
