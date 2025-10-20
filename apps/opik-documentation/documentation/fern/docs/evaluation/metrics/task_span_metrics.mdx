@@ -7,6 +7,8 @@ toc_max_heading_level: 4
 
 Task span metrics are a powerful type of evaluation metric in Opik that can analyze the detailed execution information of your LLM tasks. Unlike traditional metrics that only evaluate input-output pairs, task span metrics have access to the complete execution context, including intermediate steps, metadata, timing information, and hierarchical structure.
 
+**Important:** only spans created with `@trak` decorators and native OPIK integrations are available for task span metrics.
+
 ## What are Task Span Metrics?
 
 Task span metrics receive a `task_span` parameter containing a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object that represents the complete execution context of your task. This includes:
@@ -33,7 +35,7 @@ Task span metrics are particularly valuable for:
 To create a task span metric, define a class that inherits from `BaseMetric` and implements a `score` method that accepts a `task_span` parameter:
 
 ```python
-from typing import Optional
+from typing import Any, Dict, Optional
 from opik.evaluation.metrics import BaseMetric, score_result
 from opik.message_processing.emulation.models import SpanModel
 
@@ -46,28 +48,72 @@ class TaskExecutionQualityMetric(BaseMetric):
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
-        # Access span execution details
-        execution_successful = task_span.error_info is None
-        has_output = task_span.output is not None
-        execution_time = None
+    def _check_execution_success_recursively(self, span: SpanModel) -> Dict[str, Any]:
+        """Recursively check execution success across the span tree."""
+        execution_stats = {
+            'has_errors': False,
+            'error_count': 0,
+            'failed_spans': [],
+            'total_spans_checked': 0
+        }
 
+        # Check current span for errors
+        execution_stats['total_spans_checked'] += 1
+        if span.error_info:
+            execution_stats['has_errors'] = True
+            execution_stats['error_count'] += 1
+            execution_stats['failed_spans'].append(span.name)
+
+        # Recursively check nested spans
+        for nested_span in span.spans:
+            nested_stats = self._check_execution_success_recursively(nested_span)
+            execution_stats['has_errors'] = execution_stats['has_errors'] or nested_stats['has_errors']
+            execution_stats['error_count'] += nested_stats['error_count']
+            execution_stats['failed_spans'].extend(nested_stats['failed_spans'])
+            execution_stats['total_spans_checked'] += nested_stats['total_spans_checked']
+
+        return execution_stats
+
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Check execution success across the entire span tree.
+        # Only for illustrative purposes.
+        # Please adjust for your specific use case!
+        execution_stats = self._check_execution_success_recursively(task_span)
+        execution_successful = not execution_stats['has_errors']
+
+        # Check output availability
+        has_output = task_span.output is not None
+
+        # Calculate execution time
+        execution_time = None
         if task_span.start_time and task_span.end_time:
             execution_time = (task_span.end_time - task_span.start_time).total_seconds()
 
         # Custom scoring logic based on execution characteristics
         if not execution_successful:
-            score_value = 0.0
-            reason = "Task execution failed"
+            error_count = execution_stats['error_count']
+            failed_spans_count = len(execution_stats['failed_spans'])
+            total_spans = execution_stats['total_spans_checked']
+
+            if error_count == 1 and total_spans > 5:
+                score_value = 0.4
+                reason = f"Minor execution issues: 1 error in {total_spans} spans ({execution_stats['failed_spans'][0]})"
+            elif failed_spans_count <= 2:
+                score_value = 0.2
+                reason = f"Limited execution failures: {failed_spans_count} failed spans out of {total_spans}"
+            else:
+                score_value = 0.0
+                reason = f"Major execution failures: {failed_spans_count} failed spans across {total_spans} operations"
         elif not has_output:
             score_value = 0.3
-            reason = "Task completed but produced no output"
+            reason = f"Task completed without errors across {execution_stats['total_spans_checked']} spans but produced no output"
         elif execution_time and execution_time > 30.0:
             score_value = 0.6
-            reason = f"Task took too long to execute: {execution_time:.2f}s"
+            reason = f"Task executed successfully across {execution_stats['total_spans_checked']} spans but took too long: {execution_time:.2f}s"
         else:
             score_value = 1.0
-            reason = "Task executed successfully with good performance"
+            span_count = execution_stats['total_spans_checked']
+            reason = f"Task executed successfully across all {span_count} spans with good performance"
 
         return score_result.ScoreResult(
             value=score_value,
@@ -106,32 +152,106 @@ class BasicSpanAnalysisMetric(BaseMetric):
 
 ```python
 class PerformanceMetric(BaseMetric):
+    def _find_model_and_provider_recursively(self, span: SpanModel, model_found: str = None, provider_found: str = None):
+        """Recursively search through span tree to find model and provider information."""
+        # Check current span
+        if not model_found and span.model:
+            model_found = span.model
+        if not provider_found and span.provider:
+            provider_found = span.provider
+
+        # If both found, return early
+        if model_found and provider_found:
+            return model_found, provider_found
+
+        # Recursively search nested spans
+        for nested_span in span.spans:
+            model_found, provider_found = self._find_model_and_provider_recursively(
+                nested_span, model_found, provider_found
+            )
+            # If both found, return early
+            if model_found and provider_found:
+                return model_found, provider_found
+
+        return model_found, provider_found
+
+    def _calculate_usage_recursively(self, span: SpanModel, usage_summary: dict = None):
+        """Recursively calculate usage statistics from the entire span tree."""
+        if usage_summary is None:
+            usage_summary = {
+                'total_prompt_tokens': 0,
+                'total_completion_tokens': 0,
+                'total_tokens': 0,
+                'total_spans_count': 0,
+                'llm_spans_count': 0,
+                'tool_spans_count': 0
+            }
+
+        # Count current span
+        usage_summary['total_spans_count'] += 1
+
+        # Count span types
+        if span.type == 'llm':
+            usage_summary['llm_spans_count'] += 1
+        elif span.type == 'tool':
+            usage_summary['tool_spans_count'] += 1
+
+        # Add usage from current span
+        if span.usage and isinstance(span.usage, dict):
+            usage_summary['total_prompt_tokens'] += span.usage.get('prompt_tokens', 0)
+            usage_summary['total_completion_tokens'] += span.usage.get('completion_tokens', 0)
+            usage_summary['total_tokens'] += span.usage.get('total_tokens', 0)
+
+        # Recursively process nested spans
+        for nested_span in span.spans:
+            self._calculate_usage_recursively(nested_span, usage_summary)
+
+        return usage_summary
+
     def score(self, task_span: SpanModel) -> score_result.ScoreResult:
         # Timing analysis
+        # Only for illustrative purposes.
+        # Please adjust for your specific use case!
         start_time = task_span.start_time
         end_time = task_span.end_time
-        duration = (end_time - start_time).total_seconds() if both else None
+        duration = (end_time - start_time).total_seconds() if start_time and end_time else None
 
-        # Usage information
-        usage_info = task_span.usage  # Token counts, API calls, etc.
+        # Get model and provider from anywhere in the span tree
+        model_used, provider = self._find_model_and_provider_recursively(
+            task_span, task_span.model, task_span.provider
+        )
 
-        # Model and provider information
-        model_used = task_span.model
-        provider = task_span.provider
+        # Calculate comprehensive usage statistics from entire span tree
+        usage_info = self._calculate_usage_recursively(task_span)
 
-        # Performance-based scoring
+        # Performance-based scoring with enhanced analysis
         if duration and duration < 2.0:
-            return score_result.ScoreResult(
-                value=1.0,
-                name=self.name,
-                reason=f"Excellent performance: {duration:.2f}s"
-            )
+            score_value = 1.0
+            reason = f"Excellent performance: {duration:.2f}s"
+            if model_used:
+                reason += f" using {model_used}"
+            if provider:
+                reason += f" ({provider})"
+            if usage_info['total_tokens'] > 0:
+                reason += f", {usage_info['total_tokens']} total tokens across {usage_info['llm_spans_count']} LLM calls"
+        elif duration and duration < 10.0:
+            score_value = 0.7
+            reason = f"Good performance: {duration:.2f}s"
+            if usage_info['total_spans_count'] > 1:
+                reason += f" with {usage_info['total_spans_count']} operations"
         else:
-            return score_result.ScoreResult(
-                value=0.5,
-                name=self.name,
-                reason="Performance could be improved"
-            )
+            score_value = 0.5
+            reason = "Performance could be improved"
+            if duration:
+                reason += f" (took {duration:.2f}s)"
+            if usage_info['llm_spans_count'] > 5:
+                reason += f" - consider optimizing {usage_info['llm_spans_count']} LLM calls"
+
+        return score_result.ScoreResult(
+            value=score_value,
+            name=self.name,
+            reason=reason
+        )
 ```
 
 ## Error Analysis
@@ -140,38 +260,44 @@ Task span metrics can analyze execution failures and errors:
 
 ```python
 class ErrorAnalysisMetric(BaseMetric):
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
-        error_info = task_span.error_info
+    def _collect_errors_recursively(self, span: SpanModel, errors: list = None):
+        """Recursively collect all errors from the span tree."""
+        if errors is None:
+            errors = []
 
-        if error_info is None:
+        # Check current span for errors
+        if span.error_info:
+            error_entry = {
+                'span_id': span.id,
+                'span_name': span.name,
+                'span_type': span.type,
+                'error_info': span.error_info
+            }
+            errors.append(error_entry)
+
+        # Recursively check nested spans
+        for nested_span in span.spans:
+            self._collect_errors_recursively(nested_span, errors)
+
+        return errors
+
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Collect all errors from the entire span tree
+        all_errors = self._collect_errors_recursively(task_span)
+
+        if not all_errors:
             return score_result.ScoreResult(
                 value=1.0,
                 name=self.name,
-                reason="No errors detected"
+                reason="No errors detected in any span"
             )
 
-        # Analyze error severity and type
-        error_message = error_info.get("message", "")
-        error_type = error_info.get("exception_type", "")
-
-        if "timeout" in error_message.lower():
-            return score_result.ScoreResult(
-                value=0.3,
-                name=self.name,
-                reason="Task failed due to timeout"
-            )
-        elif "rate_limit" in error_message.lower():
-            return score_result.ScoreResult(
-                value=0.1,
-                name=self.name,
-                reason="Task failed due to rate limiting"
-            )
-        else:
-            return score_result.ScoreResult(
-                value=0.0,
-                name=self.name,
-                reason=f"Task failed with error: {error_type}"
-            )
+        reason = f"Found {len(all_errors)} error(s) across multiple spans"
+        return score_result.ScoreResult(
+            value=0.0,
+            name=self.name,
+            reason=reason
+        )
 ```
 
 ## Using Task Span Metrics in Evaluation
@@ -222,15 +348,130 @@ Use task span metrics to evaluate **how** your application executes, not just th
 
 ```python
 # Good: Analyzing execution patterns
-def score(self, task_span: SpanModel) -> score_result.ScoreResult:
-    # Check for efficient execution patterns
-    nested_llm_calls = len([s for s in task_span.spans if s.type == "llm"])
-    has_caching = "cache_hit" in (task_span.metadata or {})
+def _analyze_caching_efficiency_recursively(self, span: SpanModel, cache_stats: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Recursively analyze caching efficiency across the span tree."""
+    if cache_stats is None:
+        cache_stats = {
+            'total_llm_calls': 0,
+            'llm_cache_hits': 0,
+            'llm_cache_misses': 0,
+            'other_cache_hits': 0,
+            'cached_llm_spans': [],
+            'cached_other_spans': [],
+            'llm_spans': []
+        }
 
-    if has_caching:
-        return score_result.ScoreResult(value=1.0, name=self.name, reason="Used caching efficiently")
-    elif nested_llm_calls > 3:
-        return score_result.ScoreResult(value=0.5, name=self.name, reason="Too many LLM calls")
+    # Track LLM calls and their caching status
+    if span.type == "llm":
+        cache_stats['total_llm_calls'] += 1
+        cache_stats['llm_spans'].append(span.name)
+
+        # Check for caching indicators in metadata
+        metadata = span.metadata or {}
+        tags = span.tags or []
+
+        is_cached = (
+            any(cache_key in metadata for cache_key in ["cache_hit", "cached", "from_cache"]) or
+            any(cache_tag in tags for cache_tag in ["cache_hit", "cached"]) or
+            metadata.get("cache_hit", False) or
+            metadata.get("cached", False)
+        )
+
+        if is_cached:
+            cache_stats['llm_cache_hits'] += 1
+            cache_stats['cached_llm_spans'].append(span.name)
+        else:
+            cache_stats['llm_cache_misses'] += 1
+
+    # Track non-LLM spans for caching indicators (e.g., database queries, API calls)
+    else:
+        metadata = span.metadata or {}
+        tags = span.tags or []
+
+        if (any(cache_key in metadata for cache_key in ["cache_hit", "cached", "from_cache"]) or
+            any(cache_tag in tags for cache_tag in ["cache_hit", "cached"])):
+            cache_stats['other_cache_hits'] += 1
+            cache_stats['cached_other_spans'].append(span.name)
+
+    # Recursively check nested spans
+    for nested_span in span.spans:
+        self._analyze_caching_efficiency_recursively(nested_span, cache_stats)
+
+    return cache_stats
+
+def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    # Analyze caching efficiency across an entire span tree.
+    # Only for illustrative purposes.
+    # Please adjust for your specific use case!
+    cache_stats = self._analyze_caching_efficiency_recursively(task_span)
+
+    llm_cache_hits = cache_stats['llm_cache_hits']
+    total_llm_calls = cache_stats['total_llm_calls']
+    other_cache_hits = cache_stats['other_cache_hits']
+
+    # Calculate a cache hit ratio specifically for LLM calls
+    llm_cache_hit_ratio = llm_cache_hits / max(1, total_llm_calls) if total_llm_calls > 0 else 0
+
+    # Score based on LLM caching efficiency and total call volume
+    if total_llm_calls == 0:
+        # Consider other cache hits for non-LLM operations
+        if other_cache_hits > 0:
+            return score_result.ScoreResult(
+                value=0.7,
+                name=self.name,
+                reason=f"No LLM calls, but {other_cache_hits} other operations cached"
+            )
+        else:
+            return score_result.ScoreResult(
+                value=0.5,
+                name=self.name,
+                reason="No LLM calls detected"
+            )
+    elif llm_cache_hit_ratio >= 0.8:
+        reason = f"Excellent LLM caching: {llm_cache_hits}/{total_llm_calls} LLM calls cached ({llm_cache_hit_ratio:.1%})"
+        if other_cache_hits > 0:
+            reason += f" + {other_cache_hits} other cached operations"
+        return score_result.ScoreResult(
+            value=1.0,
+            name=self.name,
+            reason=reason
+        )
+    elif llm_cache_hit_ratio >= 0.5:
+        reason = f"Good LLM caching: {llm_cache_hits}/{total_llm_calls} LLM calls cached ({llm_cache_hit_ratio:.1%})"
+        if other_cache_hits > 0:
+            reason += f" + {other_cache_hits} other cached operations"
+        return score_result.ScoreResult(
+            value=0.9,
+            name=self.name,
+            reason=reason
+        )
+    elif llm_cache_hit_ratio > 0:
+        reason = f"Some LLM caching: {llm_cache_hits}/{total_llm_calls} LLM calls cached ({llm_cache_hit_ratio:.1%})"
+        if other_cache_hits > 0:
+            reason += f" + {other_cache_hits} other cached operations"
+        return score_result.ScoreResult(
+            value=0.7,
+            name=self.name,
+            reason=reason
+        )
+    elif total_llm_calls > 5:
+        return score_result.ScoreResult(
+            value=0.2,
+            name=self.name,
+            reason=f"No caching with {total_llm_calls} LLM calls - high cost/latency risk"
+        )
+    elif total_llm_calls > 3:
+        return score_result.ScoreResult(
+            value=0.4,
+            name=self.name,
+            reason=f"No caching with {total_llm_calls} LLM calls - consider adding cache"
+        )
+    else:
+        return score_result.ScoreResult(
+            value=0.8,
+            name=self.name,
+            reason=f"Efficient execution: {total_llm_calls} LLM calls (caching not critical)"
+        )
 ```
 
 ### 3. Combine with Regular Metrics
@@ -280,38 +521,107 @@ class AgentTrajectoryMetric(BaseMetric):
         super().__init__(name=name)
         self.max_steps = max_steps
 
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
-        # Analyze agent trajectory through nested spans
-        steps = task_span.spans
-        total_steps = len(steps)
+    def _analyze_trajectory_recursively(self, span: SpanModel, trajectory_stats: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Recursively analyze agent trajectory across the span tree."""
+        if trajectory_stats is None:
+            trajectory_stats = {
+                'total_steps': 0,
+                'tool_uses': 0,
+                'llm_reasoning': 0,
+                'other_steps': 0,
+                'tool_spans': [],
+                'llm_spans': [],
+                'step_names': [],
+                'max_depth': 0,
+                'current_depth': 0
+            }
 
-        # Check for efficient path
+        # Count current span as a step
+        trajectory_stats['total_steps'] += 1
+        trajectory_stats['step_names'].append(span.name)
+        trajectory_stats['max_depth'] = max(trajectory_stats['max_depth'], trajectory_stats['current_depth'])
+
+        # Categorize span types for agent decision analysis
+        if span.type == "tool":
+            trajectory_stats['tool_uses'] += 1
+            trajectory_stats['tool_spans'].append(span.name)
+        elif span.type == "llm":
+            trajectory_stats['llm_reasoning'] += 1
+            trajectory_stats['llm_spans'].append(span.name)
+        else:
+            trajectory_stats['other_steps'] += 1
+
+        # Recursively analyze nested spans with depth tracking
+        for nested_span in span.spans:
+            trajectory_stats['current_depth'] += 1
+            self._analyze_trajectory_recursively(nested_span, trajectory_stats)
+            trajectory_stats['current_depth'] -= 1
+
+        return trajectory_stats
+
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Analyze agent trajectory across an entire span tree
+        trajectory_stats = self._analyze_trajectory_recursively(task_span)
+
+        total_steps = trajectory_stats['total_steps']
+        tool_uses = trajectory_stats['tool_uses']
+        llm_reasoning = trajectory_stats['llm_reasoning']
+        max_depth = trajectory_stats['max_depth']
+
+        # Check for an efficient path
         if total_steps == 0:
             return score_result.ScoreResult(
                 value=0.0, name=self.name,
                 reason="No decision steps found"
             )
 
-        # Analyze step quality
-        tool_uses = [s for s in steps if s.type == "tool"]
-        llm_reasoning = [s for s in steps if s.type == "llm"]
-
-        # Check for balanced approach
-        if len(tool_uses) == 0:
+        # Analyze trajectory quality with enhanced metrics.
+        # Only for illustrative purposes.
+        # Please adjust for your specific use case!
+        if tool_uses == 0 and llm_reasoning == 0:
+            score = 0.1
+            reason = f"Poor trajectory: {total_steps} steps with no tools or reasoning"
+        elif tool_uses == 0:
             score = 0.3
-            reason = "Agent didn't use any tools"
-        elif total_steps > self.max_steps:
+            reason = f"Agent used {llm_reasoning} reasoning steps but no tools across {total_steps} operations"
+        elif llm_reasoning == 0:
             score = 0.4
-            reason = f"Too many steps: {total_steps} > {self.max_steps}"
-        elif len(llm_reasoning) == 0:
-            score = 0.5
-            reason = "No reasoning steps detected"
+            reason = f"Agent used {tool_uses} tools but no reasoning across {total_steps} operations"
+        elif total_steps > self.max_steps:
+            # Penalize excessive steps but consider tool/reasoning balance
+            efficiency_penalty = max(0.1, 1.0 - (total_steps - self.max_steps) * 0.05)
+            balance_ratio = min(tool_uses, llm_reasoning) / max(tool_uses, llm_reasoning)
+            score = min(0.6, efficiency_penalty * balance_ratio)
+            reason = f"Excessive steps: {total_steps} > {self.max_steps} (depth: {max_depth}, tools: {tool_uses}, reasoning: {llm_reasoning})"
         else:
-            # Calculate efficiency score
-            efficiency = min(1.0, self.max_steps / total_steps)
-            balance = min(len(tool_uses), len(llm_reasoning)) / max(len(tool_uses), len(llm_reasoning))
-            score = (efficiency + balance) / 2
-            reason = f"Well-balanced trajectory: {total_steps} steps, {len(tool_uses)} tools, {len(llm_reasoning)} reasoning"
+            # Calculate a comprehensive score based on multiple factors.
+            # Only for illustrative purposes.
+            # Please adjust for your specific use case!
+            #
+            # 1. Step efficiency (fewer steps = better)
+            # 1. Step efficiency (fewer steps = better)
+            step_efficiency = min(1.0, self.max_steps / total_steps)
+
+            # 2. Tool-reasoning balance (closer to 1:1 ratio = better)
+            balance_ratio = min(tool_uses, llm_reasoning) / max(tool_uses, llm_reasoning) if max(tool_uses, llm_reasoning) > 0 else 0
+            balance_ratio = min(tool_uses, llm_reasoning) / max(tool_uses, llm_reasoning) if max(tool_uses, llm_reasoning) > 0 else 0
+
+            # 3. Depth complexity (moderate depth suggests good decomposition)
+            depth_score = 1.0 if max_depth <= 3 else max(0.7, 1.0 - (max_depth - 3) * 0.1)
+
+            # 4. Decision density (good ratio of reasoning to total steps)
+            decision_density = llm_reasoning / total_steps if total_steps > 0 else 0
+            density_score = 1.0 if decision_density >= 0.3 else decision_density / 0.3
+
+            # Combine all factors
+            score = (step_efficiency * 0.3 + balance_ratio * 0.3 + depth_score * 0.2 + density_score * 0.2)
+
+            if score >= 0.8:
+                reason = f"Excellent trajectory: {total_steps} steps (depth: {max_depth}), {tool_uses} tools, {llm_reasoning} reasoning - well balanced"
+            elif score >= 0.6:
+                reason = f"Good trajectory: {total_steps} steps (depth: {max_depth}), {tool_uses} tools, {llm_reasoning} reasoning"
+            else:
+                reason = f"Acceptable trajectory: {total_steps} steps (depth: {max_depth}), {tool_uses} tools, {llm_reasoning} reasoning - could be optimized"
 
         return score_result.ScoreResult(
             value=score,

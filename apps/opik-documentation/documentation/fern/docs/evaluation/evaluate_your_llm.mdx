@@ -1338,33 +1338,91 @@ You can then analyze this complete execution hierarchy using task span metrics:
 <CodeBlocks>
 ```python title="Python" language="python"
 class HierarchyAnalysisMetric(BaseMetric):
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
-        # Analyze nested operations
-        nested_span_count = len(task_span.spans)
+    def _analyze_hierarchy_recursively(self, span: SpanModel, hierarchy_stats: dict = None) -> dict:
+        """Recursively analyze span hierarchy across the entire span tree."""
+        if hierarchy_stats is None:
+            hierarchy_stats = {
+                'total_spans': 0,
+                'llm_spans': 0,
+                'tool_spans': 0,
+                'other_spans': 0,
+                'max_depth': 0,
+                'current_depth': 0,
+                'llm_span_names': [],
+                'tool_span_names': []
+            }
 
-        # Count different types of operations
-        llm_spans = [s for s in task_span.spans if s.type == "llm"]
-        tool_spans = [s for s in task_span.spans if s.type == "tool"]
+        # Count current span
+        hierarchy_stats['total_spans'] += 1
+        hierarchy_stats['max_depth'] = max(hierarchy_stats['max_depth'], hierarchy_stats['current_depth'])
 
-        # Analyze the complexity of the operation
-        total_operations = nested_span_count
-        llm_operations = len(llm_spans)
-
-        if total_operations == 0:
-            score = 0.5
-            reason = "Simple operation with no nested steps"
-        elif llm_operations > 3:
-            score = 0.7
-            reason = f"Complex operation with {llm_operations} LLM calls"
+        # Categorize span types
+        if span.type == "llm":
+            hierarchy_stats['llm_spans'] += 1
+            hierarchy_stats['llm_span_names'].append(span.name)
+        elif span.type == "tool":
+            hierarchy_stats['tool_spans'] += 1
+            hierarchy_stats['tool_span_names'].append(span.name)
         else:
-            score = 1.0
-            reason = f"Well-structured operation with {total_operations} steps"
+            hierarchy_stats['other_spans'] += 1
+
+        # Recursively analyze nested spans with depth tracking
+        for nested_span in span.spans:
+            hierarchy_stats['current_depth'] += 1
+            self._analyze_hierarchy_recursively(nested_span, hierarchy_stats)
+            hierarchy_stats['current_depth'] -= 1
+
+        return hierarchy_stats
+
+    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+        # Analyze hierarchy across the entire span tree
+        # Only for illustrative purposes.
+        # Please adjust for your specific use case!
+        hierarchy_stats = self._analyze_hierarchy_recursively(task_span)
+
+        total_operations = hierarchy_stats['total_spans']
+        llm_operations = hierarchy_stats['llm_spans']
+        tool_operations = hierarchy_stats['tool_spans']
+        max_depth = hierarchy_stats['max_depth']
+
+        # Analyze the complexity and structure of the operation
+        if llm_operations > 5:
+            # Many LLM calls might indicate inefficient processing
+            if tool_operations == 0:
+                score = 0.4
+                reason = f"Over-complex operation: {llm_operations} LLM calls with no tool usage (depth: {max_depth})"
+            else:
+                score = 0.6
+                reason = f"Complex operation: {llm_operations} LLM calls, {tool_operations} tool calls (depth: {max_depth})"
+        elif llm_operations == 0:
+            # No reasoning might indicate a purely mechanical process
+            score = 0.3 if tool_operations > 0 else 0.1
+            reason = f"No reasoning detected: {tool_operations} tool calls only" if tool_operations > 0 else "No LLM or tool operations detected"
+        else:
+            # Balanced approach with reasonable LLM usage
+            balance_ratio = min(llm_operations, tool_operations) / max(llm_operations, tool_operations) if tool_operations > 0 else 0.8
+            depth_bonus = 1.0 if max_depth <= 3 else max(0.8, 1.0 - (max_depth - 3) * 0.05)
+
+            score = min(1.0, 0.7 + balance_ratio * 0.2 + depth_bonus * 0.1)
+
+            if tool_operations > 0:
+                reason = f"Well-structured operation: {llm_operations} LLM calls, {tool_operations} tool calls across {total_operations} spans (depth: {max_depth})"
+            else:
+                reason = f"Reasoning-focused operation: {llm_operations} LLM calls across {total_operations} spans (depth: {max_depth})"
 
         return score_result.ScoreResult(
             value=score,
             name=self.name,
             reason=reason
         )
+```
+</CodeBlocks>
+
+For the `SpanModel`'s hierarchy given above the `HierarchyAnalysisMetric` metric's score will be:
+
+<CodeBlocks>
+```
+    Score: 0.96, Reason: Reasoning-focused operation: 3 LLM calls across 7 spans (depth: 2)
 ```
 </CodeBlocks>
 
