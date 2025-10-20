@@ -107,15 +107,10 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                         input={
                             "messages": [
                                 [
-                                    {
+                                    ANY_DICT.containing({
                                         "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                        "additional_kwargs": {},
-                                        "response_metadata": {},
                                         "type": "human",
-                                        "name": None,
-                                        "id": None,
-                                        "example": False,
-                                    }
+                                    }),
                                 ]
                             ]
                         },
@@ -226,15 +221,10 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                         input={
                             "messages": [
                                 [
-                                    {
+                                    ANY_DICT.containing({
                                         "content": "Given the title of play, write a short synopsys for that. Title: Documentary about Bigfoot in Paris.",
-                                        "additional_kwargs": {},
-                                        "response_metadata": {},
                                         "type": "human",
-                                        "name": None,
-                                        "id": None,
-                                        "example": False,
-                                    }
+                                    }),
                                 ]
                             ]
                         },

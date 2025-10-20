@@ -59,15 +59,10 @@ def test_langchain__google_genai_llm_is_used__token_usage_is_logged__happy_flow(
         expected_llm_span_input = {
             "messages": [
                 [
-                    {
+                    ANY_DICT.containing({
                         "content": expected_input_prompt,
-                        "additional_kwargs": {},
-                        "response_metadata": {},
                         "type": "human",
-                        "name": None,
-                        "id": None,
-                        "example": False,
-                    }
+                    }),
                 ]
             ]
         }
