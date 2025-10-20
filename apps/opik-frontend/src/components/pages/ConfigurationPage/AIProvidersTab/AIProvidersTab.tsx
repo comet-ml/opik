@@ -20,14 +20,22 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import CustomProvidersSection from "@/components/pages-shared/llm/CustomProvidersSection";
 
 export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
   {
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => PROVIDERS[row.provider]?.apiKeyName,
+    accessorFn: (row) => 
+      row.provider === PROVIDER_TYPE.CUSTOM 
+        ? row.keyName || "Custom Provider"
+        : PROVIDERS[row.provider]?.apiKeyName,
+  },
+  {
+    id: "base_url",
+    label: "URL",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.base_url || "-",
   },
   {
     id: "created_at",
@@ -66,27 +74,30 @@ const AIProvidersTab = () => {
 
   const providerKeys = useMemo(() => data?.content ?? [], [data?.content]);
 
-  // Filter out custom providers - they're shown in a separate section
-  const nonCustomProviderKeys = useMemo(() => {
-    return providerKeys.filter((pk) => pk.provider !== PROVIDER_TYPE.CUSTOM);
-  }, [providerKeys]);
-
   const filteredProviderKeys = useMemo(() => {
-    if (nonCustomProviderKeys?.length === 0 || search === "") {
-      return nonCustomProviderKeys;
+    if (providerKeys?.length === 0 || search === "") {
+      return providerKeys;
     }
 
     const searchLowerCase = search.toLowerCase();
 
-    return nonCustomProviderKeys.filter((p) => {
+    return providerKeys.filter((p) => {
       const providerDetails = PROVIDERS[p.provider];
+      
+      // Handle custom providers differently - search by keyName
+      if (p.provider === PROVIDER_TYPE.CUSTOM) {
+        return (
+          p.keyName?.toLowerCase().includes(searchLowerCase) ||
+          p.base_url?.toLowerCase().includes(searchLowerCase)
+        );
+      }
 
       return (
-        providerDetails.apiKeyName.toLowerCase().includes(searchLowerCase) ||
-        providerDetails.value.toLowerCase().includes(searchLowerCase)
+        providerDetails?.apiKeyName?.toLowerCase().includes(searchLowerCase) ||
+        providerDetails?.value?.toLowerCase().includes(searchLowerCase)
       );
     });
-  }, [nonCustomProviderKeys, search]);
+  }, [providerKeys, search]);
 
   const columns = useMemo(() => {
     return [
@@ -131,7 +142,7 @@ const AIProvidersTab = () => {
         <Button
           onClick={handleAddConfigurationClick}
           size="sm"
-          disabled={areAllProvidersConfigured(nonCustomProviderKeys)}
+          disabled={areAllProvidersConfigured(providerKeys.filter(pk => pk.provider !== PROVIDER_TYPE.CUSTOM))}
         >
           Add configuration
         </Button>
@@ -151,8 +162,6 @@ const AIProvidersTab = () => {
           </DataTableNoData>
         }
       />
-      
-      <CustomProvidersSection providerKeys={providerKeys} />
 
       <ManageAIProviderDialog
         configuredProvidersList={providerKeys}
