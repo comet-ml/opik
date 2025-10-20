@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import CSVPreview from "@/components/pages-shared/attachments/CSVPreview/CSVPreview";
 import PDFPreview from "@/components/pages-shared/attachments/PDFPreview/PDFPreview";
 import TextPreview from "@/components/pages-shared/attachments/TextPreview/TextPreview";
 import ZoomPanContainer from "@/components/shared/ZoomPanContainer/ZoomPanContainer";
@@ -35,6 +36,7 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
       case ATTACHMENT_TYPE.IMAGE:
       case ATTACHMENT_TYPE.PDF:
       case ATTACHMENT_TYPE.TEXT:
+      case ATTACHMENT_TYPE.CSV:
         return "w-[90vw]";
       case ATTACHMENT_TYPE.OTHER:
       default:
@@ -56,6 +58,8 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
         return renderPdfContent();
       case ATTACHMENT_TYPE.TEXT:
         return renderTextContent();
+      case ATTACHMENT_TYPE.CSV:
+        return renderCSVContent();
       case ATTACHMENT_TYPE.OTHER:
       default:
         return null;
@@ -105,6 +109,14 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
     return (
       <div className="h-[80vh] w-full">
         <TextPreview url={url}></TextPreview>
+      </div>
+    );
+  };
+
+  const renderCSVContent = () => {
+    return (
+      <div className="h-[80vh] w-full">
+        <CSVPreview url={url}></CSVPreview>
       </div>
     );
   };
