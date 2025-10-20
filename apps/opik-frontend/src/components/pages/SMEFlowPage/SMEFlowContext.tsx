@@ -25,7 +25,7 @@ import {
   TraceFeedbackScore,
   FEEDBACK_SCORE_TYPE,
 } from "@/types/traces";
-import { useLoggedInUserName } from "@/store/AppStore";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMutation";
 import useCreateThreadCommentMutation from "@/api/traces/useCreateThreadCommentMutation";
 import useUpdateTraceCommentMutation from "@/api/traces/useUpdateTraceCommentMutation";
@@ -272,11 +272,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   const search = useSearch({ strict: false }) as { queueId?: string };
   const { queueId } = search;
 
-  // If the user is not defined, use "admin" as the user name
-  // it happens for deployment without comet plugin, and BE automatically
-  // sets the user name to "admin", we need to mimic this behavior in FE
-  // to have correcly working feedback scores and comments
-  const currentUserName = useLoggedInUserName() ?? "admin";
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
   const { mutate: createTraceComment } = useCreateTraceCommentMutation();
   const { mutate: createThreadComment } = useCreateThreadCommentMutation();
@@ -321,6 +317,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     if (!annotationQueue?.id) return [];
     return [
       createFilter({
+        id: "annotation_queue_ids",
         field: "annotation_queue_ids",
         value: annotationQueue.id,
         operator: "contains",
