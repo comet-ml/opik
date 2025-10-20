@@ -3856,6 +3856,219 @@ class TracesResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        @DisplayName("when filtering by providers contains, then return traces with matching providers")
+        void whenFilterProvidersContains__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create traces
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .threadId(null)
+                            .guardrailsValidations(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toList());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create spans with different providers for each trace
+            // Trace 0: openai and anthropic
+            var trace0Spans = List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(0).id())
+                            .provider("openai")
+                            .usage(Map.of("completion_tokens", 10))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(0).id())
+                            .provider("anthropic")
+                            .usage(Map.of("completion_tokens", 20))
+                            .totalEstimatedCost(null)
+                            .build());
+
+            // Trace 1: only google
+            var trace1Spans = List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(1).id())
+                            .provider("google")
+                            .usage(Map.of("completion_tokens", 15))
+                            .totalEstimatedCost(null)
+                            .build());
+
+            // Trace 2: openai and google
+            var trace2Spans = List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(2).id())
+                            .provider("openai")
+                            .usage(Map.of("completion_tokens", 25))
+                            .totalEstimatedCost(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(2).id())
+                            .provider("google")
+                            .usage(Map.of("completion_tokens", 30))
+                            .totalEstimatedCost(null)
+                            .build());
+
+            batchCreateSpansAndAssert(
+                    Stream.of(trace0Spans, trace1Spans, trace2Spans)
+                            .flatMap(List::stream)
+                            .toList(),
+                    apiKey, workspaceName);
+
+            // Filter by "openai" provider - should return trace 0 and trace 2
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.PROVIDERS)
+                    .operator(Operator.CONTAINS)
+                    .value("openai")
+                    .build());
+
+            var expectedTraces = List.of(traces.get(0), traces.get(2));
+            var unexpectedTraces = List.of(traces.get(1));
+
+            // Update expected traces with providers arrays
+            expectedTraces = expectedTraces.stream()
+                    .map(trace -> {
+                        if (trace.id().equals(traces.get(0).id())) {
+                            return trace.toBuilder()
+                                    .providers(new String[]{"anthropic", "openai"})
+                                    .spanCount(2)
+                                    .build();
+                        } else {
+                            return trace.toBuilder()
+                                    .providers(new String[]{"google", "openai"})
+                                    .spanCount(2)
+                                    .build();
+                        }
+                    })
+                    .toList();
+
+            unexpectedTraces = List.of(traces.get(1).toBuilder()
+                    .providers(new String[]{"google"})
+                    .spanCount(1)
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        @DisplayName("when filtering by providers not contains, then return traces without matching providers")
+        void whenFilterProvidersNotContains__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Create traces
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .threadId(null)
+                            .guardrailsValidations(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toList());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create spans with different providers
+            var trace0Spans = List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(0).id())
+                            .provider("openai")
+                            .usage(Map.of("completion_tokens", 10))
+                            .totalEstimatedCost(null)
+                            .build());
+
+            var trace1Spans = List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(1).id())
+                            .provider("anthropic")
+                            .usage(Map.of("completion_tokens", 15))
+                            .totalEstimatedCost(null)
+                            .build());
+
+            var trace2Spans = List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traces.get(2).id())
+                            .provider("google")
+                            .usage(Map.of("completion_tokens", 20))
+                            .totalEstimatedCost(null)
+                            .build());
+
+            batchCreateSpansAndAssert(
+                    Stream.of(trace0Spans, trace1Spans, trace2Spans)
+                            .flatMap(List::stream)
+                            .toList(),
+                    apiKey, workspaceName);
+
+            // Filter by NOT contains "openai" - should return trace 1 and trace 2
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.PROVIDERS)
+                    .operator(Operator.NOT_CONTAINS)
+                    .value("openai")
+                    .build());
+
+            var expectedTraces = List.of(
+                    traces.get(1).toBuilder()
+                            .providers(new String[]{"anthropic"})
+                            .spanCount(1)
+                            .build(),
+                    traces.get(2).toBuilder()
+                            .providers(new String[]{"google"})
+                            .spanCount(1)
+                            .build());
+
+            var unexpectedTraces = List.of(traces.get(0).toBuilder()
+                    .providers(new String[]{"openai"})
+                    .spanCount(1)
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
         @MethodSource("getUsageKeyArgs")
         void whenFilterUsageEqual__thenReturnTracesFiltered(String endpoint,
                 TracePageTestAssertion testAssertion,
