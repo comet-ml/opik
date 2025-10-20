@@ -620,6 +620,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       onCommentsReply: (row?: Trace | Span) => {
         handleRowClick(row, DetailsActionSection.Comments);
       },
+      enableUserFeedbackEditing: true,
     }),
     [handleRowClick],
   );

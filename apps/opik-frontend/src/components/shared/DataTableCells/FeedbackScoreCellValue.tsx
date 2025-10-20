@@ -3,18 +3,42 @@ import MultiValueFeedbackScoreHoverCard from "../FeedbackScoreTag/MultiValueFeed
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { TraceFeedbackScore } from "@/types/traces";
 import { useState } from "react";
+import FeedbackScoreEditDropdown from "./FeedbackScoreEditDropdown";
 
 const FeedbackScoreCellValue = ({
+  isUserFeedbackColumn = false,
   feedbackScore,
   color: customColor,
+  onValueChange,
 }: {
+  isUserFeedbackColumn?: boolean;
   feedbackScore?: TraceFeedbackScore;
   color?: string;
+  onValueChange?: (name: string, value: number) => void;
 }) => {
   const [openHoverCard, setOpenHoverCard] = useState(false);
 
-  if (!feedbackScore) return "-";
+  // If no feedback score and not editable, show dash
+  if (!feedbackScore && !isUserFeedbackColumn) return "-";
 
+  const shouldShowEditDropdown = isUserFeedbackColumn && onValueChange;
+
+  // If no feedback score, show only dash with optional edit button
+  if (!feedbackScore) {
+    return (
+      <div className="flex items-center gap-1">
+        {shouldShowEditDropdown && (
+          <FeedbackScoreEditDropdown
+            feedbackScore={feedbackScore}
+            onValueChange={onValueChange}
+          />
+        )}
+        <span>-</span>
+      </div>
+    );
+  }
+
+  // Feedback score exists, show it with optional edit button
   const label = feedbackScore.name;
   const color =
     customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!];
@@ -23,17 +47,25 @@ const FeedbackScoreCellValue = ({
   const category = feedbackScore.category_name;
 
   return (
-    <MultiValueFeedbackScoreHoverCard
-      color={color}
-      valueByAuthor={valueByAuthor}
-      label={label}
-      value={value}
-      category={category}
-      open={openHoverCard}
-      onOpenChange={setOpenHoverCard}
-    >
-      <div className="truncate">{feedbackScore.value}</div>
-    </MultiValueFeedbackScoreHoverCard>
+    <div className="flex items-center gap-1">
+      {shouldShowEditDropdown && (
+        <FeedbackScoreEditDropdown
+          feedbackScore={feedbackScore}
+          onValueChange={onValueChange}
+        />
+      )}
+      <MultiValueFeedbackScoreHoverCard
+        color={color}
+        valueByAuthor={valueByAuthor}
+        label={label}
+        value={value}
+        category={category}
+        open={openHoverCard}
+        onOpenChange={setOpenHoverCard}
+      >
+        <div className="truncate">{value}</div>
+      </MultiValueFeedbackScoreHoverCard>
+    </div>
   );
 };
 

@@ -32,7 +32,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import copy from "clipboard-copy";
 import { useToast } from "@/components/ui/use-toast";
 import { UpdateFeedbackScoreData } from "./types";
-import { useLoggedInUserName } from "@/store/AppStore";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -53,7 +53,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 }) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const { toast } = useToast();
-  const userName = useLoggedInUserName();
+  const userName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
   const feedbackScoreData = useMemo(() => {
     if (!feedbackScore) {
