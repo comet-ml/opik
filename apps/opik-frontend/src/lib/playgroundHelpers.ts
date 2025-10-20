@@ -3,6 +3,17 @@ import { Span } from "@/types/traces";
 import { generateRandomString } from "@/lib/utils";
 
 /**
+ * Valid Anthropic message roles including standard ones plus Anthropic-specific role names
+ */
+const VALID_ANTHROPIC_ROLES = [
+  "system",
+  "user", 
+  "assistant",
+  "human", // Anthropic sometimes uses 'human' instead of 'user'
+  "ai", // Anthropic sometimes uses 'ai' instead of 'assistant'
+];
+
+/**
  * Checks if a span's input contains a messages array in the OpenAI format
  * (array of objects with role and content properties)
  */
@@ -94,15 +105,6 @@ export const hasValidAnthropicMessagesFormat = (span: Span): boolean => {
     return false;
   }
 
-  // Anthropic valid roles include the standard ones plus some specific to Anthropic
-  const validAnthropicRoles = [
-    "system",
-    "user", 
-    "assistant",
-    "human", // Anthropic sometimes uses 'human' instead of 'user'
-    "ai", // Anthropic sometimes uses 'ai' instead of 'assistant'
-  ];
-
   // Check if all messages have the required structure
   return messages.every((message: unknown) => {
     if (!message || typeof message !== "object") {
@@ -117,7 +119,7 @@ export const hasValidAnthropicMessagesFormat = (span: Span): boolean => {
     }
 
     // Check if role is a valid Anthropic message role
-    if (!validAnthropicRoles.includes(msg.role.toLowerCase())) {
+    if (!VALID_ANTHROPIC_ROLES.includes(msg.role.toLowerCase())) {
       return false;
     }
 
@@ -230,7 +232,11 @@ const normalizeAnthropicRole = (role: string): LLM_MESSAGE_ROLE => {
  * Works for both OpenAI and Anthropic message formats
  */
 export const convertSpanMessagesToLLMMessages = (span: Span): LLMMessage[] => {
-  if (!hasValidMessagesFormat(span)) {
+  // Check format once and cache the results
+  const isOpenAIFormat = hasValidOpenAIMessagesFormat(span);
+  const isAnthropicFormat = !isOpenAIFormat && hasValidAnthropicMessagesFormat(span);
+  
+  if (!isOpenAIFormat && !isAnthropicFormat) {
     return [];
   }
 
@@ -239,8 +245,6 @@ export const convertSpanMessagesToLLMMessages = (span: Span): LLMMessage[] => {
     role: string;
     content: string | unknown[] | null | undefined;
   }>;
-
-  const isAnthropicFormat = hasValidAnthropicMessagesFormat(span);
 
   return messages.map((message) => ({
     id: generateRandomString(),
