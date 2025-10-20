@@ -107,7 +107,7 @@ const RequestIntegrationDialog: React.FunctionComponent<
               )}
             />
 
-            <DialogFooter>
+            <DialogFooter className="gap-3 md:gap-0">
               <Button type="button" variant="outline" onClick={handleCancel}>
                 Cancel
               </Button>
