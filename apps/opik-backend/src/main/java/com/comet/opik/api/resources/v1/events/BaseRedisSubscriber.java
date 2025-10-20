@@ -8,6 +8,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
 import org.redisson.api.RStreamReactive;
@@ -55,6 +56,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private final String payloadField;
 
+    @Getter
     private final String consumerId;
 
     protected final Meter meter;
@@ -191,7 +193,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         if (workersScheduler != null && !workersScheduler.isDisposed()) {
             workersScheduler.dispose();
         }
-        if (stream != null && consumerScheduler != null && consumerScheduler.isDisposed()) {
+        if (stream != null && consumerScheduler != null && !consumerScheduler.isDisposed()) {
             removeConsumer();
             log.info("Consumer stopped successfully");
         }

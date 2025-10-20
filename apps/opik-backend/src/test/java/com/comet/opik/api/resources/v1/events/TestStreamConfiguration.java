@@ -42,10 +42,6 @@ public class TestStreamConfiguration implements StreamConfiguration {
         return codec;
     }
 
-    public static TestStreamConfiguration createDefault() {
-        return TestStreamConfiguration.builder().build();
-    }
-
     public static TestStreamConfiguration createWithFastPolling() {
         return TestStreamConfiguration.builder()
                 .poolingInterval(Duration.milliseconds(100))
