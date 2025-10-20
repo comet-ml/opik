@@ -2,7 +2,7 @@ import asyncio
 import importlib.metadata
 import langchain_openai
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain import OpikTracer
 from opik import semantic_version

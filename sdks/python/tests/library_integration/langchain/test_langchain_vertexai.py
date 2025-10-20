@@ -1,6 +1,6 @@
 import langchain_google_vertexai
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from . import google_helpers

@@ -1,6 +1,6 @@
 import langchain_anthropic
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from typing import Dict, Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
