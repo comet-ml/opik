@@ -70,36 +70,20 @@ const CompareExperimentsOutputCell: React.FC<
     return (
       <>
         {isTraceVisible && (
-          <div className="absolute right-1 top-1 hidden group-hover:flex gap-1">
-            <TooltipWrapper content="Click to edit your score">
-              <Button
-                size="icon-xs"
-                variant="outline"
-                onClick={(event) => {
-                  if (isFunction(openTrace) && item?.trace_id) {
-                    openTrace(item.trace_id);
-                  }
-                  event.stopPropagation();
-                }}
-              >
-                <Pencil className="size-3" />
-              </Button>
-            </TooltipWrapper>
-            <TooltipWrapper content="Click to open original trace">
-              <Button
-                size="icon-xs"
-                variant="outline"
-                onClick={(event) => {
-                  if (isFunction(openTrace) && item?.trace_id) {
-                    openTrace(item.trace_id);
-                  }
-                  event.stopPropagation();
-                }}
-              >
-                <ListTree />
-              </Button>
-            </TooltipWrapper>
-          </div>
+          <TooltipWrapper content="Click to open original trace">
+            <Button
+              size="icon-xs"
+              variant="outline"
+              onClick={(event) => {
+                if (isFunction(openTrace) && item?.trace_id) {
+                  openTrace(item.trace_id);
+                }
+                event.stopPropagation();
+              }}
+            >
+              <ListTree />
+            </Button>
+          </TooltipWrapper>
         )}
         {isObject(data)
           ? renderCodeContent(data)
