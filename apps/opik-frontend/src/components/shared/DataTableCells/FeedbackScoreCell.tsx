@@ -51,11 +51,12 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   ]);
 
   const handleValueChange = useCallback(
-    (value: number) => {
+    (categoryName: string, value: number) => {
       if (feedbackScore?.value_by_author?.[currentUserName]?.value !== value) {
         setTraceFeedbackScore({
           traceId: row.id,
           name: USER_FEEDBACK_NAME,
+          categoryName,
           value,
         });
       } else {

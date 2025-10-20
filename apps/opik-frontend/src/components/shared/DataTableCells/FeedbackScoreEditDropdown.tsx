@@ -22,7 +22,7 @@ import {
 
 interface FeedbackScoreEditDropdownProps {
   feedbackScore?: TraceFeedbackScore;
-  onValueChange: (value: number) => void;
+  onValueChange: (name: string, value: number) => void;
 }
 
 const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
@@ -70,8 +70,8 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
     }));
   }, [userFeedbackDefinition]);
 
-  const handleValueSelect = (value: number) => {
-    onValueChange(value);
+  const handleValueSelect = (name: string, value: number) => {
+    onValueChange(name, value);
     setOpen(false);
   };
 
@@ -112,7 +112,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
           {feedbackOptions.map((option) => (
             <DropdownMenuItem
               key={option.name}
-              onClick={() => handleValueSelect(option.value)}
+              onClick={() => handleValueSelect(option.name, option.value)}
               className={cn(
                 "flex items-center justify-center px-1 py-2 cursor-pointer rounded-sm text-sm flex-1",
                 "hover:bg-accent hover:text-accent-foreground",

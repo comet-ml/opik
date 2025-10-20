@@ -14,7 +14,7 @@ const FeedbackScoreCellValue = ({
   isUserFeedbackColumn?: boolean;
   feedbackScore?: TraceFeedbackScore;
   color?: string;
-  onValueChange?: (value: number) => void;
+  onValueChange?: (name: string, value: number) => void;
 }) => {
   const [openHoverCard, setOpenHoverCard] = useState(false);
 
