@@ -128,7 +128,7 @@ navigation:
           - page: Cost tracking
             path: docs/tracing/cost_tracking.mdx
             slug: cost_tracking
-          - section: Import/Export data
+          - section: Manage data
             skip-slug: true
             collapsed: true
             contents:
