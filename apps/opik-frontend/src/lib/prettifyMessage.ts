@@ -5,6 +5,8 @@ import { extractTextFromArray } from "./arrayExtraction";
 import {
   convertConversationToMarkdown,
   ConversationData,
+  convertLLMMessagesToMarkdown,
+  LLMMessage,
 } from "./conversationMarkdown";
 import { PrettifyMessageResponse, ExtractTextResult } from "./types";
 
@@ -20,6 +22,19 @@ export const prettifyMessage = (
       prettified: true,
       renderType: "text",
     } as PrettifyMessageResponse;
+  }
+
+  // Check if this is an object containing an array of LLM messages
+  if (isObject(message) && isLLMMessagesObject(message)) {
+    const messagesArray = extractLLMMessagesArray(message);
+    if (messagesArray && messagesArray.length > 0) {
+      const markdown = convertLLMMessagesToMarkdown(messagesArray);
+      return {
+        message: markdown,
+        prettified: true,
+        renderType: "text",
+      } as PrettifyMessageResponse;
+    }
   }
 
   // If config is provided, use it for type-specific prettification
@@ -163,6 +178,8 @@ const isConversationObject = (obj: object): boolean => {
   const objRecord = obj as Record<string, unknown>;
 
   // Check for OpenAI conversation format (with or without model field)
+  // This should only match full conversation objects with model, tools, or kwargs
+  // to distinguish from simple message arrays
   return (
     "messages" in objRecord &&
     Array.isArray(objRecord.messages) &&
@@ -173,6 +190,106 @@ const isConversationObject = (obj: object): boolean => {
         typeof msg === "object" &&
         msg !== null &&
         "role" in (msg as Record<string, unknown>),
-    )
+    ) &&
+    // Must have additional conversation-specific fields to distinguish from simple message arrays
+    ("model" in objRecord || "tools" in objRecord || "kwargs" in objRecord)
   );
+};
+
+/**
+ * Checks if an object contains an array of LLM messages that should be displayed in pretty mode
+ * @param obj - The object to check
+ * @returns True if it contains LLM messages array
+ */
+const isLLMMessagesObject = (obj: object): boolean => {
+  if (!isObject(obj)) return false;
+
+  const objRecord = obj as Record<string, unknown>;
+
+  // Check for messages array with LLM format
+  if ("messages" in objRecord && Array.isArray(objRecord.messages)) {
+    return objRecord.messages.length > 1 && // Only use pretty mode for multiple messages
+      objRecord.messages.every((msg: unknown) =>
+        typeof msg === "object" &&
+        msg !== null &&
+        (("role" in (msg as Record<string, unknown>)) || 
+         ("type" in (msg as Record<string, unknown>))) &&
+        "content" in (msg as Record<string, unknown>)
+      );
+  }
+
+  // Check for input array (OpenAI Agents format)
+  if ("input" in objRecord && Array.isArray(objRecord.input)) {
+    return objRecord.input.length > 1 && // Only use pretty mode for multiple messages
+      objRecord.input.every((msg: unknown) =>
+        typeof msg === "object" &&
+        msg !== null &&
+        "role" in (msg as Record<string, unknown>) &&
+        "content" in (msg as Record<string, unknown>)
+      );
+  }
+
+  // Check for output array (OpenAI Agents format)
+  if ("output" in objRecord && Array.isArray(objRecord.output)) {
+    return objRecord.output.length > 1 && // Only use pretty mode for multiple messages
+      objRecord.output.every((msg: unknown) =>
+        typeof msg === "object" &&
+        msg !== null &&
+        "role" in (msg as Record<string, unknown>) &&
+        ("content" in (msg as Record<string, unknown>) || 
+         "type" in (msg as Record<string, unknown>))
+      );
+  }
+
+  return false;
+};
+
+/**
+ * Extracts LLM messages array from various object formats
+ * @param obj - The object containing messages
+ * @returns Array of LLM messages or null if not found
+ */
+const extractLLMMessagesArray = (obj: object): LLMMessage[] | null => {
+  if (!isObject(obj)) return null;
+
+  const objRecord = obj as Record<string, unknown>;
+
+  // Check for messages array
+  if ("messages" in objRecord && Array.isArray(objRecord.messages)) {
+    return objRecord.messages.map((msg: unknown) => {
+      const msgRecord = msg as Record<string, unknown>;
+      return {
+        role: msgRecord.role as string,
+        type: msgRecord.type as string,
+        content: msgRecord.content as string | unknown[],
+        tool_calls: msgRecord.tool_calls as any,
+        tool_call_id: msgRecord.tool_call_id as string,
+      } as LLMMessage;
+    });
+  }
+
+  // Check for input array (OpenAI Agents format)
+  if ("input" in objRecord && Array.isArray(objRecord.input)) {
+    return objRecord.input.map((msg: unknown) => {
+      const msgRecord = msg as Record<string, unknown>;
+      return {
+        role: msgRecord.role as string,
+        content: msgRecord.content as string | unknown[],
+      } as LLMMessage;
+    });
+  }
+
+  // Check for output array (OpenAI Agents format)
+  if ("output" in objRecord && Array.isArray(objRecord.output)) {
+    return objRecord.output.map((msg: unknown) => {
+      const msgRecord = msg as Record<string, unknown>;
+      return {
+        role: msgRecord.role as string,
+        type: msgRecord.type as string,
+        content: msgRecord.content as string | unknown[],
+      } as LLMMessage;
+    });
+  }
+
+  return null;
 };

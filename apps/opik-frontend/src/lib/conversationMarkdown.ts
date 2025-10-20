@@ -218,3 +218,133 @@ export const formatTools = (tools: Tool[]): string => {
 
   return lines.join("\n");
 };
+
+/**
+ * Interface for LLM messages that can be found in various formats
+ */
+export interface LLMMessage {
+  role?: string;
+  type?: string;
+  content: string | unknown[];
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+}
+
+/**
+ * Converts an array of LLM messages to markdown with collapsible sections
+ * @param messages - Array of LLM messages in various formats
+ * @returns Formatted markdown string with collapsible sections
+ */
+export const convertLLMMessagesToMarkdown = (
+  messages: LLMMessage[],
+): string => {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return "No messages to display.";
+  }
+
+  const lines: string[] = [];
+
+  for (const message of messages) {
+    if (!isObject(message)) {
+      continue;
+    }
+
+    // Determine the role/type for display
+    const displayRole = message.role || message.type || "message";
+    
+    // Extract content as string
+    let contentStr = "";
+    if (isString(message.content)) {
+      contentStr = message.content;
+    } else if (Array.isArray(message.content)) {
+      // Handle array content (like OpenAI format with text/image objects)
+      const textItems = message.content.filter(
+        (item: unknown) =>
+          typeof item === "object" &&
+          item !== null &&
+          "type" in (item as Record<string, unknown>) &&
+          ((item as Record<string, unknown>).type === "text" ||
+           (item as Record<string, unknown>).type === "output_text") &&
+          ((item as Record<string, unknown>).type === "text" ? 
+            "text" in (item as Record<string, unknown>) :
+            "text" in (item as Record<string, unknown>)) &&
+          typeof ((item as Record<string, unknown>).text) === "string"
+      );
+      
+      if (textItems.length > 0) {
+        contentStr = textItems
+          .map((item: unknown) => (item as Record<string, unknown>).text as string)
+          .join(" ");
+      } else {
+        // Check for other array content patterns
+        // Look for any objects with a 'content' field
+        const contentItems = message.content.filter(
+          (item: unknown) =>
+            typeof item === "object" &&
+            item !== null &&
+            "content" in (item as Record<string, unknown>) &&
+            typeof (item as Record<string, unknown>).content === "string"
+        );
+        
+        if (contentItems.length > 0) {
+          contentStr = contentItems
+            .map((item: unknown) => (item as Record<string, unknown>).content as string)
+            .join(" ");
+        } else {
+          // If no text items found, try to stringify the array
+          contentStr = JSON.stringify(message.content);
+        }
+      }
+    } else if (typeof message.content === "object") {
+      contentStr = JSON.stringify(message.content);
+    }
+
+    // Determine if this section should be collapsed by default
+    const isToolCall = displayRole === "tool" || displayRole === "tool_execution_result";
+    const shouldCollapse = isToolCall;
+    
+    // Add collapsible section
+    const expandedAttribute = shouldCollapse ? "" : " open";
+    lines.push(`<details${expandedAttribute}>`);
+    lines.push(`<summary><strong>${capitalizeFirst(displayRole)}</strong></summary>`);
+    lines.push(``);
+
+    // Handle tool calls for assistant messages
+    if (
+      (displayRole === "assistant" || displayRole === "ai") &&
+      message.tool_calls &&
+      message.tool_calls.length > 0
+    ) {
+      for (const toolCall of message.tool_calls) {
+        lines.push(`<details style="margin-left: 20px;">`);
+        lines.push(
+          `<summary><strong>Tool call: ${toolCall.function.name}</strong></summary>`,
+        );
+        lines.push(``);
+        lines.push(
+          `&nbsp;&nbsp;&nbsp;&nbsp;**Function:** ${toolCall.function.name}`,
+        );
+        lines.push(
+          `&nbsp;&nbsp;&nbsp;&nbsp;**Arguments:** ${toolCall.function.arguments}`,
+        );
+        lines.push(`</details>`);
+      }
+
+      // Add spacing after tool calls
+      lines.push(`<div style="height: 1px; margin: 4px 0;"></div>`);
+    }
+
+    // Add content if present
+    if (contentStr.trim()) {
+      // Strip image tags, keeping only URLs (images are shown in attachments)
+      contentStr = stripImageTags(contentStr);
+      lines.push(contentStr.trim());
+    }
+
+    // Close the section
+    lines.push(`</details>`);
+    lines.push(`<div style="height: 1px; margin: 4px 0;"></div>`);
+  }
+
+  return lines.join("\n");
+};
