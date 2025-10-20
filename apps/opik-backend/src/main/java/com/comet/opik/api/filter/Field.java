@@ -17,6 +17,7 @@ public interface Field {
     String METADATA_QUERY_PARAM = "metadata";
     String MODEL_QUERY_PARAM = "model";
     String PROVIDER_QUERY_PARAM = "provider";
+    String PROVIDERS_QUERY_PARAM = "providers";
     String TOTAL_ESTIMATED_COST_QUERY_PARAM = "total_estimated_cost";
     String TAGS_QUERY_PARAM = "tags";
     String USAGE_COMPLETION_TOKENS_QUERY_PARAM = "usage.completion_tokens";

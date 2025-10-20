@@ -51,6 +51,7 @@ public class FilterQueryBuilder {
     private static final String METADATA_ANALYTICS_DB = "metadata";
     private static final String MODEL_ANALYTICS_DB = "model";
     private static final String PROVIDER_ANALYTICS_DB = "provider";
+    private static final String PROVIDERS_ANALYTICS_DB = "providers";
     private static final String TOTAL_ESTIMATED_COST_ANALYTICS_DB = "total_estimated_cost";
     private static final String LLM_SPAN_COUNT_ANALYTICS_DB = "llm_span_count";
     private static final String TYPE_ANALYTICS_DB = "type";
@@ -199,6 +200,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
                     .put(TraceField.LLM_SPAN_COUNT, LLM_SPAN_COUNT_ANALYTICS_DB)
                     .put(TraceField.TAGS, TAGS_DB)
+                    .put(TraceField.PROVIDERS, PROVIDERS_ANALYTICS_DB)
                     .put(TraceField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
@@ -382,7 +384,8 @@ public class FilterQueryBuilder {
                 TraceField.USAGE_PROMPT_TOKENS,
                 TraceField.USAGE_TOTAL_TOKENS,
                 TraceField.TOTAL_ESTIMATED_COST,
-                TraceField.LLM_SPAN_COUNT));
+                TraceField.LLM_SPAN_COUNT,
+                TraceField.PROVIDERS));
 
         map.put(FilterStrategy.ANNOTATION_AGGREGATION, Set.of(
                 TraceField.ANNOTATION_QUEUE_IDS,
