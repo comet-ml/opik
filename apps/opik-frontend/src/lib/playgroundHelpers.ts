@@ -126,9 +126,11 @@ export const convertSpanMessagesToLLMMessages = (span: Span): LLMMessage[] => {
     content: string | unknown[] | null | undefined;
   }>;
 
-  return messages.map((message) => ({
-    id: generateRandomString(),
-    role: message.role as LLM_MESSAGE_ROLE,
-    content: extractTextContent(message.content),
-  }));
+  return messages
+    .map((message) => ({
+      id: generateRandomString(),
+      role: message.role as LLM_MESSAGE_ROLE,
+      content: extractTextContent(message.content),
+    }))
+    .filter((m) => m.content.trim().length > 0);
 };
