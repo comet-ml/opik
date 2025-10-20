@@ -1,6 +1,6 @@
 import pytest
-from langchain.llms import fake
-from langchain.prompts import PromptTemplate
+from langchain_core.language_models import fake
+from langchain_core.prompts import PromptTemplate
 
 import opik
 from opik import context_storage

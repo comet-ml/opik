@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from langchain.load import serializable
+from langchain_core.load import serializable
 import opik.jsonable_encoder as jsonable_encoder
 
 

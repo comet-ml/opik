@@ -7,7 +7,7 @@ from ...models import base_model
 
 if TYPE_CHECKING:
     import langchain_core.language_models
-    from langchain import schema
+    import langchain_core.messages
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
         self,
         messages: List[Dict[str, Any]],
         **kwargs: Any,
-    ) -> "schema.AIMessage":
+    ) -> "langchain_core.messages.AIMessage":
         """
         Do not use this method directly. It is intended to be used within `base_model.get_provider_response()` method.
 
@@ -123,7 +123,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any
-    ) -> "schema.AIMessage":
+    ) -> "langchain_core.messages.AIMessage":
         """
         Do not use this method directly. It is intended to be used within `base_model.aget_provider_response()` method.
 
