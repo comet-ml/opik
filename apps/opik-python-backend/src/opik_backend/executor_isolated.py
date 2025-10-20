@@ -137,7 +137,7 @@ class IsolatedSubprocessExecutor:
             creation_latency = _calculate_latency_ms(creation_start)
             isolated_creation_histogram.record(creation_latency)
             self.logger.debug(
-                f"Created isolated subprocess (PID: {process.pid}) in {creation_latency:.3f}ms"
+                f"Created isolated subprocess. pid: {process.pid}, creation_latency: {creation_latency:.3f}ms"
             )
 
             # Execute code in subprocess
