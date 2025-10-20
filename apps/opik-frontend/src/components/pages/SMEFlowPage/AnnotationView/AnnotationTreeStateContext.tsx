@@ -8,7 +8,7 @@ import React, {
 import { ExpandedState } from "@tanstack/react-table";
 
 /**
- * State for a single section (input/output/metadata) in the annotation viewer
+ * State for a single section (input/output) in the annotation viewer
  * Note: expanded state uses index-based paths but JsonKeyValueTable will map these
  * to key-based paths internally for robustness across different tree structures
  */
@@ -19,11 +19,12 @@ interface SectionState {
 
 /**
  * Complete tree state for all sections in the annotation viewer
+ * Note: metadata is excluded because it doesn't have prettifyConfig and only displays
+ * as flat text (YAML/JSON) via CodeMirrorHighlighter, never as an expandable tree
  */
 interface AnnotationTreeState {
   input: SectionState;
   output: SectionState;
-  metadata: SectionState;
 }
 
 interface AnnotationTreeStateContextValue {
@@ -51,7 +52,6 @@ const createDefaultSectionState = (): SectionState => ({
 const createDefaultState = (): AnnotationTreeState => ({
   input: createDefaultSectionState(),
   output: createDefaultSectionState(),
-  metadata: createDefaultSectionState(),
 });
 
 interface AnnotationTreeStateProviderProps {

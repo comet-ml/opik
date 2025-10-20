@@ -21,11 +21,10 @@ const TraceDataViewer: React.FC = () => {
   // Refs for scroll containers
   const inputScrollRef = useRef<HTMLDivElement>(null);
   const outputScrollRef = useRef<HTMLDivElement>(null);
-  const metadataScrollRef = useRef<HTMLDivElement>(null);
 
   // Save scroll position when user scrolls
   const createScrollHandler = useCallback(
-    (section: "input" | "output" | "metadata") => {
+    (section: "input" | "output") => {
       return (e: React.UIEvent<HTMLDivElement>) => {
         const scrollTop = e.currentTarget.scrollTop;
         updateScrollTop(section, scrollTop);
@@ -41,9 +40,6 @@ const TraceDataViewer: React.FC = () => {
     }
     if (outputScrollRef.current) {
       outputScrollRef.current.scrollTop = getScrollTop("output");
-    }
-    if (metadataScrollRef.current) {
-      metadataScrollRef.current.scrollTop = getScrollTop("metadata");
     }
   }, [trace, getScrollTop]);
 
@@ -62,15 +58,6 @@ const TraceDataViewer: React.FC = () => {
       updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
     ) => {
       updateExpanded("output", updaterOrValue);
-    },
-    [updateExpanded],
-  );
-
-  const handleMetadataExpandedChange = useCallback(
-    (
-      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-    ) => {
-      updateExpanded("metadata", updaterOrValue);
     },
     [updateExpanded],
   );
@@ -138,17 +125,11 @@ const TraceDataViewer: React.FC = () => {
             forceMount
             className="group-data-[state=closed]:hidden"
           >
-            <div
-              ref={metadataScrollRef}
-              onScroll={createScrollHandler("metadata")}
-              className="max-h-[400px] overflow-y-auto"
-            >
+            <div className="max-h-[400px] overflow-y-auto">
               <SyntaxHighlighter
                 data={trace?.metadata || {}}
                 preserveKey="syntax-highlighter-annotation-metadata"
                 withSearch
-                controlledExpanded={state.metadata.expanded}
-                onExpandedChange={handleMetadataExpandedChange}
               />
             </div>
           </AccordionContent>
