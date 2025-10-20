@@ -73,7 +73,7 @@ jobs:
   
   langchain_legacy_tests:
     needs: [init_environment]
-    if: contains(fromJSON('["langchain", "all"]'), needs.init_environment.outputs.LIBS)
+    if: contains(fromJSON('["langchain_legacy", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-langchain-legacy-tests.yml
     secrets: inherit
   
