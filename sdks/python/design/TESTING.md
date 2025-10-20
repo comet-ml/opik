@@ -130,15 +130,15 @@ def test_track__one_nested_function__happyflow(fake_backend):
     @opik.track
     def f_inner(x):
         return "inner-output"
-    
+
     @opik.track
     def f_outer(x):
         f_inner("inner-input")
         return "outer-output"
-    
+
     f_outer("outer-input")
     opik.flush_tracker()
-    
+
     # Verify against expected tree structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -149,7 +149,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
             ])
         ]
     )
-    
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 ```
 
@@ -190,15 +190,15 @@ library_integration/
 def test_openai_client_responses_create__happyflow(fake_backend):
     client = openai.OpenAI()
     wrapped_client = track_openai(client, project_name="test")
-    
+
     # Real OpenAI API call
     response = wrapped_client.responses.create(
         model=MODEL_FOR_TESTS,
         input=[{"role": "user", "content": "Hello"}]
     )
-    
+
     opik.flush_tracker()
-    
+
     # Verify trace structure with fake backend
     assert len(fake_backend.trace_trees) == 1
     trace = fake_backend.trace_trees[0]
@@ -263,7 +263,7 @@ def test_trace_creation_and_retrieval(opik_client, temporary_project_name):
         project_name=temporary_project_name
     )
     opik_client.flush()
-    
+
     # Verify against real backend
     verify_trace(
         opik_client,
@@ -293,7 +293,7 @@ def verify_trace(opik_client, trace_id, name, input, output, ...):
         allow_errors=True
     ):
         raise AssertionError(f"Failed to get trace {trace_id}")
-    
+
     trace = opik_client.get_trace_content(id=trace_id)
     assert trace.name == name
     assert trace.input == input
@@ -322,17 +322,17 @@ def test_litellm_chat_model_e2e(opik_client_unique_project_name):
     """Test LiteLLM integration with real backend"""
     from litellm import completion
     from opik.integrations.litellm import track_litellm
-    
+
     track_litellm()
-    
+
     # Real LiteLLM call (which calls real LLM provider)
     response = completion(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": "Hello"}]
     )
-    
+
     opik.flush_tracker()
-    
+
     # Verify in real backend
     traces = opik_client_unique_project_name.search_traces()
     assert len(traces) > 0
@@ -413,15 +413,15 @@ class BackendEmulatorMessageProcessor(BaseMessageProcessor):
         self._trace_trees: List[TraceModel] = []
         self._span_trees: List[SpanModel] = []
         # ... internal state
-    
+
     @property
     def trace_trees(self) -> List[TraceModel]:
         """Build and return trace trees from processed messages"""
-    
+
     @property
     def span_trees(self) -> List[SpanModel]:
         """Build and return span trees from processed messages"""
-    
+
     def process(self, message: messages.BaseMessage) -> None:
         """Process message and update internal state"""
 ```
@@ -433,10 +433,10 @@ def test_example(fake_backend):
     @opik.track
     def my_function():
         return "result"
-    
+
     my_function()
     opik.flush_tracker()
-    
+
     # Access built trees
     assert len(fake_backend.trace_trees) == 1
     assert fake_backend.trace_trees[0].name == "my_function"
@@ -588,15 +588,15 @@ def test_track__one_nested_function__happyflow(fake_backend):
     @opik.track
     def f_inner(x):
         return "inner-output"
-    
+
     @opik.track
     def f_outer(x):
         f_inner("inner-input")
         return "outer-output"
-    
+
     f_outer("outer-input")
     opik.flush_tracker()  # Wait for async processing
-    
+
     # Build expected tree structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -621,7 +621,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
             )
         ]
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 ```
@@ -644,16 +644,16 @@ def test_openai_client_responses_create__happyflow(
     # Setup integration
     client = openai.OpenAI()
     wrapped_client = track_openai(client, project_name=project_name)
-    
+
     # Real API call
     response = wrapped_client.responses.create(
         model=MODEL_FOR_TESTS,
         input=[{"role": "user", "content": "Tell a fact"}],
         max_output_tokens=50
     )
-    
+
     opik.flush_tracker()
-    
+
     # Build expected structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -681,10 +681,10 @@ def test_openai_client_responses_create__happyflow(
             )
         ]
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-    
+
     # Optional: Verify specific metadata keys if needed
     assert_dict_has_keys(
         fake_backend.trace_trees[0].spans[0].metadata,
@@ -704,23 +704,23 @@ def test_trace_creation_with_spans(opik_client, temporary_project_name):
         input={"query": "test"},
         project_name=temporary_project_name
     )
-    
+
     # Create spans
     span_id_1 = opik_client.span(
         name="span_1",
         trace_id=trace_id,
         input={"step": 1}
     )
-    
+
     span_id_2 = opik_client.span(
         name="span_2",
         trace_id=trace_id,
         parent_span_id=span_id_1,
         input={"step": 2}
     )
-    
+
     opik_client.flush()
-    
+
     # Verify in backend
     verify_trace(
         opik_client,
@@ -729,7 +729,7 @@ def test_trace_creation_with_spans(opik_client, temporary_project_name):
         input={"query": "test"},
         project_name=temporary_project_name
     )
-    
+
     verify_span(
         opik_client,
         span_id=span_id_1,
@@ -737,7 +737,7 @@ def test_trace_creation_with_spans(opik_client, temporary_project_name):
         trace_id=trace_id,
         parent_span_id=None
     )
-    
+
     verify_span(
         opik_client,
         span_id=span_id_2,
@@ -754,12 +754,12 @@ def test_track__function_raises_exception__error_info_captured(fake_backend):
     @opik.track
     def failing_function():
         raise ValueError("Test error")
-    
+
     with pytest.raises(ValueError, match="Test error"):
         failing_function()
-    
+
     opik.flush_tracker()
-    
+
     # Build expected structure with error_info
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -781,7 +781,7 @@ def test_track__function_raises_exception__error_info_captured(fake_backend):
             )
         ]
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 ```
@@ -792,20 +792,20 @@ def test_track__function_raises_exception__error_info_captured(fake_backend):
 def test_openai_streaming_response(fake_backend):
     client = openai.OpenAI()
     wrapped_client = track_openai(client)
-    
+
     # Stream response
     stream = wrapped_client.chat.completions.create(
         model=MODEL_FOR_TESTS,
         messages=[{"role": "user", "content": "Count to 5"}],
         stream=True
     )
-    
+
     # Consume stream
     for chunk in stream:
         pass  # Consume all chunks
-    
+
     opik.flush_tracker()
-    
+
     # Verify accumulated data using models
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -827,7 +827,7 @@ def test_openai_streaming_response(fake_backend):
             )
         ]
     )
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 ```
@@ -837,13 +837,13 @@ def test_openai_streaming_response(fake_backend):
 ```python
 def test_hallucination_metric__happyflow():
     metric = Hallucination()
-    
+
     result = metric.score(
         input="What is the capital of France?",
         output="Paris is the capital of France.",
         context=["Paris is the capital and largest city of France."]
     )
-    
+
     assert isinstance(result, ScoreResult)
     assert 0 <= result.value <= 1
     assert result.name == "hallucination_metric"
@@ -876,10 +876,10 @@ def test_my_feature(fake_backend):
     @opik.track
     def my_function(x):
         return x * 2
-    
+
     result = my_function(5)
     opik.flush_tracker()  # Always flush!
-    
+
     # 2. Build expected structure
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -900,7 +900,7 @@ def test_my_feature(fake_backend):
             )
         ]
     )
-    
+
     # 3. Assert
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
@@ -916,7 +916,7 @@ def test_my_e2e_feature(opik_client, temporary_project_name):
         project_name=temporary_project_name
     )
     opik_client.flush()
-    
+
     # 2. Verify using verifiers
     verify_trace(
         opik_client,
@@ -943,10 +943,10 @@ def test_double_function__various_inputs__correct_outputs(
     @opik.track
     def double(x):
         return x * 2
-    
+
     result = double(input_value)
     opik.flush_tracker()
-    
+
     assert len(fake_backend.trace_trees) == 1
     assert fake_backend.trace_trees[0].spans[0].output == {"output": expected_output}
 ```
@@ -1032,4 +1032,3 @@ For more information, see:
 - [Evaluation](EVALUATION.md) - Evaluation framework architecture
 - [Test Organization Rules](../.cursor/rules/test-organization.mdc)
 - [Test Implementation Rules](../.cursor/rules/test-implementation.mdc)
-

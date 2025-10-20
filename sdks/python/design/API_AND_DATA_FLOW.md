@@ -278,7 +278,7 @@ The SDK is organized into 3 layers:
 2. **Resource management operations** (dataset/experiment/prompt):
    - `opik.Opik` → **API Object Clients** → REST API Client → Backend
    - Blocking, returns objects
-   
+
 **API Object Clients** (`opik/api_objects/`):
 
 For complex resource types, intermediate client classes provide:
@@ -377,16 +377,16 @@ class OpikContextStorage:
         # Context variables for isolation
         self._current_trace_data_context: ContextVar[Optional[TraceData]]
         self._spans_data_stack_context: ContextVar[Tuple[SpanData, ...]]
-    
+
     def set_trace_data(self, trace_data: TraceData) -> None:
         """Set current trace in context"""
-    
+
     def add_span_data(self, span_data: SpanData) -> None:
         """Push span onto stack"""
-    
+
     def pop_span_data(self) -> Optional[SpanData]:
         """Pop span from stack"""
-    
+
     def top_span_data(self) -> Optional[SpanData]:
         """Get current span without removing"""
 ```
@@ -414,7 +414,7 @@ class Streamer:
         self._queue_consumers = queue_consumers
         self._batch_manager = batch_manager
         self._file_upload_manager = file_upload_manager
-    
+
     def put(self, message: BaseMessage) -> None:
         """Route message based on type"""
         if self._batch_manager and message.supports_batching:
@@ -423,10 +423,10 @@ class Streamer:
             self._file_upload_manager.upload(message)
         else:
             self._message_queue.put(message)
-    
+
     def flush(self, timeout: Optional[float]) -> bool:
         """Wait for all messages to be processed"""
-    
+
     def close(self, timeout: Optional[int]) -> bool:
         """Stop processing and cleanup"""
 ```
@@ -440,7 +440,7 @@ class MessageQueue(Generic[T]):
     def __init__(self, max_length: Optional[int] = None):
         self._queue: queue.Queue[T] = queue.Queue()
         self._max_length = max_length
-    
+
     def put(self, item: T) -> None:
         """Add message, discard oldest if full"""
         if self._max_length and self._queue.qsize() >= self._max_length:
@@ -450,11 +450,11 @@ class MessageQueue(Generic[T]):
             except queue.Empty:
                 pass
         self._queue.put(item)
-    
+
     def get(self, timeout: float) -> Optional[T]:
         """Get next message"""
         return self._queue.get(timeout=timeout)
-    
+
     def empty(self) -> bool:
         """Check if queue is empty"""
         return self._queue.empty()
@@ -476,19 +476,19 @@ class QueueConsumer(threading.Thread):
         self._message_queue = queue
         self._message_processor = message_processor
         self.next_message_time = 0.0  # For rate limiting
-    
+
     def run(self) -> None:
         """Main worker loop"""
         while not self._processing_stopped:
             self._loop()
-    
+
     def _loop(self) -> None:
         """Process one message"""
         # Check rate limiting
         if time.monotonic() < self.next_message_time:
             time.sleep(SLEEP_INTERVAL)
             return
-        
+
         # Get and process message
         try:
             message = self._message_queue.get(timeout=SLEEP_INTERVAL)
@@ -508,7 +508,7 @@ Maps message types to REST API handlers.
 class OpikMessageProcessor(BaseMessageProcessor):
     def __init__(self, rest_client: OpikApi):
         self._rest_client = rest_client
-        
+
         # Map message types to handlers
         self._handlers: Dict[Type, MessageHandler] = {
             CreateTraceMessage: self._process_create_trace_message,
@@ -520,7 +520,7 @@ class OpikMessageProcessor(BaseMessageProcessor):
             CreateTraceBatchMessage: self._process_create_traces_batch,
             # ... more handlers
         }
-    
+
     def process(self, message: BaseMessage) -> None:
         """Process message by calling appropriate handler"""
         handler = self._handlers.get(type(message))
@@ -564,10 +564,10 @@ trace_id = client.trace(
 def trace(self, name: str, input: dict, metadata: dict, **kwargs):
     # 1. Generate ID if not provided
     trace_id = kwargs.get("id") or id_helpers.generate_id()
-    
+
     # 2. Validate inputs
     validation.validate_trace_parameters(name, input, metadata)
-    
+
     # 3. Create TraceData
     trace_data = TraceData(
         id=trace_id,
@@ -577,7 +577,7 @@ def trace(self, name: str, input: dict, metadata: dict, **kwargs):
         project_name=self._project_name,
         start_time=datetime_helpers.now()
     )
-    
+
     # 4. Create message
     message = CreateTraceMessage(
         trace_id=trace_data.id,
@@ -588,10 +588,10 @@ def trace(self, name: str, input: dict, metadata: dict, **kwargs):
         start_time=trace_data.start_time,
         # ... other fields
     )
-    
+
     # 5. Send to streamer (non-blocking!)
     self._streamer.put(message)
-    
+
     # 6. Return immediately
     return trace_id
 ```
@@ -608,7 +608,7 @@ def put(self, message: BaseMessage) -> None:
         # Check if draining
         if self._drain:
             return
-        
+
         # Route based on message type and capabilities
         if (
             self._batch_manager is not None
@@ -616,11 +616,11 @@ def put(self, message: BaseMessage) -> None:
         ):
             # Route to batching
             self._batch_manager.process_message(message)
-            
+
         elif base_upload_manager.message_supports_upload(message):
             # Route to file upload
             self._file_upload_manager.upload(message)
-            
+
         else:
             # Route to queue
             if not self._message_queue.accept_put_without_discarding():
@@ -659,21 +659,21 @@ class BatchManager:
     def process_message(self, message: BaseMessage) -> None:
         # Find or create batcher for this message type
         batcher = self._get_or_create_batcher(type(message))
-        
+
         # Add to batch
         batcher.add(message)
-        
+
         # Check if should flush
         if batcher.should_flush():
             self._flush_batcher(batcher)
-    
+
     def _flush_batcher(self, batcher: BaseBatcher) -> None:
         # Create batch message
         batch_message = batcher.create_batch_message()
-        
+
         # Send to queue
         self._message_queue.put(batch_message)
-        
+
         # Clear batcher
         batcher.clear()
 ```
@@ -719,7 +719,7 @@ def _process_create_trace_message(
         start_time=message.start_time.isoformat(),
         # ... more fields
     )
-    
+
     # Make REST API call
     self._rest_client.traces.create_trace(
         request=trace_write
@@ -734,14 +734,14 @@ def _process_create_trace_message(
 def create_trace(self, request: TraceWrite) -> TracePublic:
     # Serialize request
     json_data = request.dict(exclude_none=True)
-    
+
     # Make HTTP request
     response = self._client.post(
         "/v1/traces",
         json=json_data,
         headers={"Authorization": f"Bearer {self._api_key}"}
     )
-    
+
     # Handle response
     if response.status_code == 201:
         return TracePublic.parse_obj(response.json())
@@ -846,7 +846,7 @@ result = my_function(5)
    ↓
 10. Pop span from context
     span_data = context_storage.pop_span_data()
-    
+
     Context state: span_stack = [...]
     ↓
 11. Send span to backend
@@ -931,7 +931,7 @@ All messages inherit from `BaseMessage`:
 ```python
 class BaseMessage:
     delivery_time: float = 0.0  # For rate limiting
-    
+
     def dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
 
@@ -988,11 +988,11 @@ class AddSpanFeedbackScoresBatchMessage(BaseMessage):
 ```python
 def put(self, message: BaseMessage) -> None:
     """Route message to appropriate handler"""
-    
+
     # 1. Check if draining
     if self._drain:
         return  # Drop message (shutdown in progress)
-    
+
     # 2. Check batching support
     if (
         self._batch_manager is not None
@@ -1000,11 +1000,11 @@ def put(self, message: BaseMessage) -> None:
     ):
         # Messages that support batching:
         # - CreateSpanMessage
-        # - CreateTraceMessage  
+        # - CreateTraceMessage
         # - Feedback score messages (always batched)
         self._batch_manager.process_message(message)
         return
-    
+
     # 3. Check file upload support
     if base_upload_manager.message_supports_upload(message):
         # Messages with attachments
@@ -1012,12 +1012,12 @@ def put(self, message: BaseMessage) -> None:
         # - Then regular message sent with S3 URLs
         self._file_upload_manager.upload(message)
         return
-    
+
     # 4. Default: Add to queue
     if not self._message_queue.accept_put_without_discarding():
         # Queue is full
         LOGGER.warning("Queue full, discarding oldest message")
-    
+
     self._message_queue.put(message)
 ```
 
@@ -1029,17 +1029,17 @@ class QueueConsumer(threading.Thread):
         """Main worker loop"""
         while not self._processing_stopped:
             self._loop()
-    
+
     def _loop(self) -> None:
         """Process one message"""
-        
+
         # 1. Check rate limiting
         now = time.monotonic()
         if now < self.next_message_time:
             self.idling = False
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
             return
-        
+
         # 2. Get message from queue
         try:
             self.idling = True
@@ -1047,10 +1047,10 @@ class QueueConsumer(threading.Thread):
                 timeout=SLEEP_BETWEEN_LOOP_ITERATIONS
             )
             self.idling = False
-            
+
             if message is None:
                 return
-            
+
             # 3. Check delivery time
             if message.delivery_time <= now:
                 # Ready to process
@@ -1058,25 +1058,25 @@ class QueueConsumer(threading.Thread):
             else:
                 # Not ready yet, re-queue
                 self._push_message_back(message)
-                
+
         except Empty:
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
-            
+
         except OpikCloudRequestsRateLimited as e:
             # 4. Handle rate limiting
             LOGGER.info(
                 "Rate limited, retrying in %s seconds",
                 e.retry_after
             )
-            
+
             # Update next processing time
             self.next_message_time = now + e.retry_after
-            
+
             # Re-queue message with delay
             if message is not None:
                 message.delivery_time = self.next_message_time
                 self._push_message_back(message)
-        
+
         except Exception as ex:
             LOGGER.error("Unexpected error: %s", ex, exc_info=ex)
 ```
@@ -1086,24 +1086,24 @@ class QueueConsumer(threading.Thread):
 ```python
 def process(self, message: BaseMessage) -> None:
     """Process message with comprehensive error handling"""
-    
+
     message_type = type(message)
     handler = self._handlers.get(message_type)
-    
+
     if handler is None:
         LOGGER.debug("Unknown message type: %s", message_type.__name__)
         return
-    
+
     try:
         # Execute handler
         handler(message)
-        
+
     except ApiError as exception:
         # 1. Handle duplicate requests
         if exception.status_code == 409:
             # Retry mechanism sent duplicate, ignore
             return
-        
+
         # 2. Handle rate limiting
         elif exception.status_code == 429:
             # Extract retry-after from headers
@@ -1114,7 +1114,7 @@ def process(self, message: BaseMessage) -> None:
                         headers=exception.headers,
                         retry_after=rate_limiter.retry_after()
                     )
-        
+
         # 3. Other API errors
         LOGGER.error(
             "Failed to process %s: %s",
@@ -1122,7 +1122,7 @@ def process(self, message: BaseMessage) -> None:
             str(exception),
             extra={"error_tracking_extra": error_info}
         )
-    
+
     except RetryError as retry_error:
         # 4. Retry exhausted
         cause = retry_error.last_attempt.exception()
@@ -1132,7 +1132,7 @@ def process(self, message: BaseMessage) -> None:
             cause
         )
         LOGGER.warning("Check Opik configuration")
-    
+
     except ValidationError as validation_error:
         # 5. Data validation failed
         LOGGER.error(
@@ -1160,15 +1160,15 @@ class BatchManager:
         self._message_queue = message_queue
         self._batchers: Dict[Type, BaseBatcher] = {}
         self._lock = threading.RLock()
-        
+
         # Timer for periodic flushing
         self._timer: Optional[threading.Timer] = None
         self._flush_interval = 1.0  # seconds
-    
+
     def start(self) -> None:
         """Start periodic flushing"""
         self._schedule_flush()
-    
+
     def _schedule_flush(self) -> None:
         """Schedule next flush"""
         self._timer = threading.Timer(
@@ -1177,7 +1177,7 @@ class BatchManager:
         )
         self._timer.daemon = True
         self._timer.start()
-    
+
     def _periodic_flush(self) -> None:
         """Flush all batchers periodically"""
         self.flush()
@@ -1196,30 +1196,30 @@ class SpansBatcher(BaseBatcher):
         self._max_batch_size = max_batch_size
         self._max_memory_bytes = max_memory_mb * 1024 * 1024
         self._current_memory = 0
-    
+
     def add(self, message: CreateSpanMessage) -> None:
         """Add span to batch"""
         self._messages.append(message)
         self._current_memory += self._estimate_size(message)
-    
+
     def should_flush(self) -> bool:
         """Check if batch should be flushed"""
         return (
             len(self._messages) >= self._max_batch_size
             or self._current_memory >= self._max_memory_bytes
         )
-    
+
     def create_batch_message(self) -> CreateSpansBatchMessage:
         """Create batch message from accumulated spans"""
         return CreateSpansBatchMessage(
             spans=self._messages.copy()
         )
-    
+
     def clear(self) -> None:
         """Clear batch"""
         self._messages.clear()
         self._current_memory = 0
-    
+
     def _estimate_size(self, message: CreateSpanMessage) -> int:
         """Estimate message size in bytes"""
         # Rough estimation based on serialized size
@@ -1291,7 +1291,7 @@ def process_message(self, message: BaseMessage) -> None:
     """Add message to batch, flush if size limit reached"""
     batcher = self._get_or_create_batcher(type(message))
     batcher.add(message)
-    
+
     if batcher.should_flush():
         batch_message = batcher.create_batch_message()
         self._message_queue.put(batch_message)
@@ -1319,11 +1319,11 @@ def should_flush(self) -> bool:
 def flush(self) -> None:
     """User-triggered flush"""
     client.flush(timeout=30)
-    
+
     # Internally:
     # 1. Flush all batchers
     batch_manager.flush()
-    
+
     # 2. Wait for queue to empty
     while not message_queue.empty() and not timeout:
         time.sleep(0.1)
@@ -1335,11 +1335,11 @@ def flush(self) -> None:
 def stop(self) -> None:
     """Flush on shutdown"""
     self._stopped = True
-    
+
     # Cancel timer
     if self._timer:
         self._timer.cancel()
-    
+
     # Flush all remaining messages
     self.flush()
 ```
@@ -1351,20 +1351,20 @@ def _process_create_spans_batch_message(
     self, message: CreateSpansBatchMessage
 ) -> None:
     """Process batch of spans"""
-    
+
     # Split into chunks if too large
     chunks = sequence_splitter.split_into_chunks(
         message.spans,
         max_chunk_size=self._batch_memory_limit_mb
     )
-    
+
     for chunk in chunks:
         # Convert to REST request format
         span_writes = [
             span_write.SpanWrite.from_message(span_msg)
             for span_msg in chunk
         ]
-        
+
         # Make single API call for all spans
         self._rest_client.spans.create_spans_batch(
             request=span_writes
@@ -1667,4 +1667,3 @@ For more information, see:
 - [Integrations](INTEGRATIONS.md) - LLM framework integrations
 - [Evaluation](EVALUATION.md) - Evaluation framework
 - [Testing](TESTING.md) - Testing guide
-

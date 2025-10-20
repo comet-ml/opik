@@ -113,25 +113,25 @@ def execute(
 ) -> List[T]:
     """
     Execute evaluation tasks with optional parallelism.
-    
+
     Args:
         evaluation_tasks: List of callable tasks
         workers: Number of parallel workers
         verbose: Show progress bar
         desc: Progress bar description
     """
-    
+
     if workers == 1:
         # Sequential execution (no thread pool overhead)
         return [task() for task in tqdm(evaluation_tasks)]
-    
+
     # Parallel execution
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(task) for task in evaluation_tasks]
-        
+
         # Collect as they complete (with progress bar)
         return [
-            future.result() 
+            future.result()
             for future in tqdm(as_completed(futures))
         ]
 ```
@@ -243,10 +243,10 @@ def _prompt_evaluation_task(dataset_item):
         messages,
         **dataset_item
     )
-    
+
     # Call model
     response = model.generate(input=formatted_messages)
-    
+
     # Return for scoring
     return {
         "input": formatted_messages,
@@ -394,12 +394,12 @@ All metrics extend `BaseMetric`:
 ```python
 class BaseMetric(abc.ABC):
     name: str
-    
+
     @abc.abstractmethod
     def score(self, **kwargs) -> ScoreResult:
         """
         Compute metric score.
-        
+
         Must raise MetricComputationError on failure.
         Must not hide or mask missing data.
         """
@@ -424,7 +424,7 @@ class LevenshteinRatio(BaseMetric):
         # Compute edit distance
         distance = compute_levenshtein(output, reference)
         ratio = 1 - (distance / max(len(output), len(reference)))
-        
+
         return ScoreResult(
             value=ratio,
             name="levenshtien_ratio_metric"
@@ -448,7 +448,7 @@ class Hallucination(BaseMetric):
     def __init__(self, model: Optional[OpikBaseModel] = None):
         self.name = "hallucination_metric"
         self.model = model or OpikOpenAIModel()
-    
+
     def score(
         self,
         input: str,
@@ -463,15 +463,15 @@ class Hallucination(BaseMetric):
             output=output,
             context=context
         )
-        
+
         # 2. Call LLM judge
         response = self.model.generate(
             input=[{"role": "user", "content": prompt}]
         )
-        
+
         # 3. Parse response
         parsed = parse_llm_response(response)
-        
+
         return ScoreResult(
             value=parsed["score"],
             name=self.name,
@@ -499,7 +499,7 @@ class Hallucination(BaseMetric):
 ```python
 class ConversationThreadMetric(BaseMetric):
     """Base class for conversation metrics"""
-    
+
     @abc.abstractmethod
     def score_conversation(
         self,
@@ -518,10 +518,10 @@ class ConversationalCoherence(ConversationThreadMetric):
         #   {"role": "assistant", "content": "Hello"},
         #   ...
         # ]
-        
+
         # Call LLM judge with full conversation
         score = self._evaluate_coherence(conversation)
-        
+
         return ScoreResult(
             value=score,
             name="conversational_coherence_metric"
@@ -554,8 +554,8 @@ class AnswerRelevance(BaseMetric):
 
 **Error Example**:
 ```
-MetricComputationError: 
-Metric 'answer_relevance_metric' requires argument 'input' 
+MetricComputationError:
+Metric 'answer_relevance_metric' requires argument 'input'
 but it was not found in task output: {'output': '...', 'context': [...]}
 ```
 
@@ -624,7 +624,7 @@ def evaluate_llm_task_context(
     """
     Creates trace context for task execution.
     Ensures traces are properly linked to experiment.
-    
+
     This context manager guarantees:
     1. Trace context is set before task runs
     2. Trace is sent to backend after task completes
@@ -635,35 +635,35 @@ def evaluate_llm_task_context(
         # Set trace context
         # [opik/context_storage.py]
         context_storage.set_trace_data(trace_data)
-        
+
         # Yield to task execution
         # User's task function runs here with trace context active
         yield
-        
+
     except Exception as e:
         # Capture error in trace
         # [decorator/error_info_collector.py]
         error_info = error_info_collector.collect(e)
         trace_data.error_info = error_info
         raise  # Re-raise to caller
-        
+
     finally:
         # Cleanup context (always runs)
         # [opik/context_storage.py]
         trace_data = context_storage.pop_trace_data()
         trace_data.init_end_time()
-        
+
         # Send trace to backend
         # [api_objects/opik_client.py]
         client.trace(**trace_data.as_parameters)
-        
+
         # Link trace to experiment
         # [api_objects/experiment/experiment_item.py]
         experiment_item = ExperimentItemReferences(
             dataset_item_id=dataset_item_id,
             trace_id=trace_data.id
         )
-        
+
         # [api_objects/experiment/experiment.py]
         experiment.insert([experiment_item])
 ```
@@ -916,11 +916,11 @@ def _evaluate_llm_task(
 ) -> TestResult:                     # From evaluation/test_result.py
     """
     Evaluate a single dataset item.
-    
+
     Wrapped with @opik.track so all metrics computation
     is captured in a span for observability.
     """
-    
+
     # 1. Create trace for this evaluation
     # [api_objects/trace/trace_client.py]
     trace_data = TraceData(
@@ -933,7 +933,7 @@ def _evaluate_llm_task(
         },
         project_name=self._project_name
     )
-    
+
     # 2. Execute task in trace context
     # [evaluation/engine/helpers.py: evaluate_llm_task_context]
     with evaluate_llm_task_context(
@@ -945,7 +945,7 @@ def _evaluate_llm_task(
         # User's task function runs here
         # Any @track decorated functions create nested spans
         task_output = task(item.content)
-    
+
     # 3. Apply metrics
     # [evaluation/metrics/]
     scores = []
@@ -957,11 +957,11 @@ def _evaluate_llm_task(
             item.content,
             self._scoring_key_mapping
         )
-        
+
         # Validate metric has required arguments
         # [evaluation/metrics/arguments_validator.py]
         validate_arguments(metric, scoring_input)
-        
+
         # Compute score
         # [evaluation/metrics/base_metric.py: BaseMetric.score()]
         try:
@@ -970,7 +970,7 @@ def _evaluate_llm_task(
         except MetricComputationError as e:
             LOGGER.error(f"Metric {metric.name} failed: {e}")
             # Continue with other metrics
-    
+
     # 4. Create experiment item with scores
     # [api_objects/experiment/experiment_item.py]
     experiment_item = ExperimentItem(
@@ -983,10 +983,10 @@ def _evaluate_llm_task(
             for score in scores
         ]
     )
-    
+
     # Note: experiment.insert() called in context manager cleanup
     # [api_objects/experiment/experiment.py]
-    
+
     # 5. Return test result
     # [evaluation/test_result.py]
     return TestResult(
@@ -1015,28 +1015,28 @@ def prepare_scoring_input(
 ) -> Dict[str, Any]:
     """
     Combine task output and dataset item, apply key mapping.
-    
+
     Priority (later overwrites earlier):
     1. Dataset item fields
     2. Task output fields (override)
     3. Scoring key mapping (remap)
-    
+
     Used by: evaluation/engine/engine.py: _evaluate_llm_task()
     """
-    
+
     # Start with dataset item
     scoring_input = dataset_item.copy()
-    
+
     # Override with task output (task output takes precedence)
     scoring_input.update(task_output)
-    
+
     # Apply key mapping (rename keys for metric compatibility)
     # [evaluation/metrics/arguments_helpers.py]
     if scoring_key_mapping:
         for target_key, source_key in scoring_key_mapping.items():
             if source_key in scoring_input:
                 scoring_input[target_key] = scoring_input[source_key]
-    
+
     return scoring_input
 ```
 
@@ -1092,10 +1092,10 @@ except Exception as e:
     # Capture error details
     # [decorator/error_info_collector.py]
     error_info = error_info_collector.collect(e)
-    
+
     # Store in trace (visible in UI)
     trace_data.error_info = error_info
-    
+
     # Re-raise exception (task fails, but other items continue)
     raise
 ```
@@ -1155,7 +1155,7 @@ except MetricComputationError as e:
 def is_llm_provider_rate_limit_error(exception: Exception) -> bool:
     """
     Detect rate limit errors from LLM providers.
-    
+
     Checks for:
     - OpenAI RateLimitError
     - Anthropic RateLimitError

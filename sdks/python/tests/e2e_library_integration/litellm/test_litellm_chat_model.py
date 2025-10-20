@@ -153,6 +153,7 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_in_d
 
     f("Why is tracking and evaluation of LLMs important?")
     opik.flush_tracker()
+
     def wait_condition_checker():
         spans = opik_client.search_spans(
             project_name=PROJECT_NAME,

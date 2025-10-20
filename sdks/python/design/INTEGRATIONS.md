@@ -509,7 +509,7 @@ Supported providers for cost tracking:
 
 **Integration Patterns**:
 - **Method Patching**: OpenAI, Anthropic, Bedrock, GenAI, AISuite
-- **Callback**: LangChain, LlamaIndex, DSPy, Haystack  
+- **Callback**: LangChain, LlamaIndex, DSPy, Haystack
 - **Hybrid**: ADK (callbacks + OTel), CrewAI (methods + LiteLLM)
 
 **Streaming Strategies**:
