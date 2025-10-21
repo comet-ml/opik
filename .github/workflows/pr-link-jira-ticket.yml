@@ -3,6 +3,9 @@ on:
   workflow_dispatch:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   add-jira-description:
     runs-on: ubuntu-latest
@@ -12,7 +15,7 @@ jobs:
         name: jira-description-action
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          jira-token: ${{ secrets.JIRA_TOKEN }}
+          jira-token: ${{ secrets.JIRA_AUTH }}
           jira-base-url: https://comet-ml.atlassian.net
           custom-issue-number-regexp: '[A-Z]{2,4}-[0-9]{1,10}' 
           # jira-project-key: 'OPIK' #optional
