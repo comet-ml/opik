@@ -123,8 +123,9 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
                     return true;
                 })
                 .findFirst()
-                .orElseThrow(() -> new BadRequestException("API key not configured for LLM provider '%s'".formatted(
-                        llmProvider.getValue())));
+                .orElseThrow(() -> new BadRequestException(
+                        "API key not configured for LLM. provider='%s', providerName='%s'".formatted(
+                                llmProvider.getValue(), providerName)));
     }
 
     private static <E extends Enum<E>> boolean isModelBelongToProvider(
