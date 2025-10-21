@@ -9,6 +9,7 @@ import { containsHTML } from "@/lib/utils";
 import { stripImageTags } from "@/lib/llm";
 import useLocalStorageState from "use-local-storage-state";
 import sanitizeHtml from "sanitize-html";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
@@ -41,6 +42,7 @@ const stripHtmlTags = (text: string): string => {
 };
 
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
+  const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
     defaultValue: MAX_DATA_LENGTH,
   });
@@ -58,8 +60,8 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   }, [value]);
 
   const hasExceededLimit = useMemo(
-    () => rawValue.length > maxDataLength,
-    [rawValue, maxDataLength],
+    () => truncationEnabled && rawValue.length > maxDataLength,
+    [rawValue, maxDataLength, truncationEnabled],
   );
 
   const response = useMemo(() => {
