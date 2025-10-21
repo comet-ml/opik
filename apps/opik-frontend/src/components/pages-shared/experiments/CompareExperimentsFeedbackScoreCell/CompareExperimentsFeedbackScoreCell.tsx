@@ -38,7 +38,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
   });
 
   const enableUserFeedbackEditing =
-    experimentCompare.experiment_items.length == 1 &&
+    experimentCompare.experiment_items.length === 1 &&
     (context.table.options.meta?.enableUserFeedbackEditing ?? false);
   const isUserFeedbackColumn =
     enableUserFeedbackEditing &&
