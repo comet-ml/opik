@@ -941,38 +941,68 @@ class AlertResourceTest {
                     .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON)));
         }
 
-        private void assertWebhookTestResultRequest(Alert alert, WebhookEvent<?> actualEvent) {
+        private void assertWebhookTestResultRequest(Alert alert, String requestBodyJson) {
+            try {
+                // Deserialize the JSON string based on alert type
+                if (alert.alertType() == AlertType.GENERAL || alert.alertType() == AlertType.PAGERDUTY) {
+                    // For GENERAL alerts, verify the full webhook event structure
+                    WebhookEvent<Map<String, Object>> actualEvent = (WebhookEvent<Map<String, Object>>) JsonUtils
+                            .readValue(requestBodyJson, WebhookEvent.class);
 
-            // Verify the webhook event is not null
-            assertThat(actualEvent).isNotNull();
+                    // Verify the webhook event is not null
+                    assertThat(actualEvent).isNotNull();
 
-            // Verify event metadata
-            assertThat(actualEvent.getId()).isNotNull();
-            assertThat(actualEvent.getAlertId()).isEqualTo(alert.id());
-            assertThat(actualEvent.getCreatedAt()).isNotNull();
-            assertThat(actualEvent.getMaxRetries()).isEqualTo(1);
+                    // Verify event metadata
+                    assertThat(actualEvent.getId()).isNotNull();
+                    assertThat(actualEvent.getAlertId()).isEqualTo(alert.id());
+                    assertThat(actualEvent.getCreatedAt()).isNotNull();
+                    assertThat(actualEvent.getMaxRetries()).isEqualTo(1);
 
-            assertThat(actualEvent.getEventType()).isEqualTo(alert.triggers().getFirst().eventType());
+                    assertThat(actualEvent.getEventType()).isEqualTo(alert.triggers().getFirst().eventType());
 
-            // Verify payload
-            Map<String, Object> payload = (Map<String, Object>) actualEvent.getPayload();
+                    // Verify payload
+                    Map<String, Object> payload = actualEvent.getPayload();
 
-            // Verify payload fields
-            assertThat(payload.get("alertId")).isEqualTo(alert.id().toString());
-            assertThat(payload.get("alertName")).isEqualTo(alert.name());
-            assertThat(payload.get("eventType")).isEqualTo(alert.triggers().getFirst().eventType().getValue());
-            assertThat(payload.get("aggregationType")).isEqualTo("consolidated");
+                    // Verify payload fields
+                    assertThat(payload.get("alertId")).isEqualTo(alert.id().toString());
+                    assertThat(payload.get("alertName")).isEqualTo(alert.name());
+                    assertThat(payload.get("eventType")).isEqualTo(alert.triggers().getFirst().eventType().getValue());
+                    assertThat(payload.get("aggregationType")).isEqualTo("consolidated");
 
-            // Verify eventIds
-            var eventIds = (Collection<String>) payload.get("eventIds");
-            assertThat(eventIds).hasSize(1);
+                    // Verify eventIds
+                    @SuppressWarnings("unchecked")
+                    var eventIds = (Collection<String>) payload.get("eventIds");
+                    assertThat(eventIds).hasSize(1);
 
-            // Verify eventCount
-            assertThat(payload.get("eventCount")).isEqualTo(1);
+                    // Verify eventCount
+                    assertThat(payload.get("eventCount")).isEqualTo(1);
 
-            // Verify message format
-            assertThat(payload.get("message").toString()).isEqualTo(String.format("Alert '%s': %d %s events aggregated",
-                    alert.name(), eventIds.size(), alert.triggers().getFirst().eventType().getValue()));
+                    // Verify userNames
+                    @SuppressWarnings("unchecked")
+                    var userNames = (Collection<String>) payload.get("userNames");
+                    assertThat(userNames).isNotNull();
+                    assertThat(userNames).hasSize(1);
+                    assertThat(userNames).contains("test-user");
+
+                    // Verify metadata
+                    var metadata = (Collection<?>) payload.get("metadata");
+                    assertThat(metadata).isNotNull();
+                    assertThat(metadata).hasSize(1);
+
+                    // Verify message format
+                    assertThat(payload.get("message").toString())
+                            .isEqualTo(String.format("Alert '%s': %d %s events aggregated",
+                                    alert.name(), eventIds.size(), alert.triggers().getFirst().eventType().getValue()));
+                } else if (alert.alertType() == AlertType.SLACK) {
+                    // For SLACK just verify it's valid JSON
+                    // The payload structure is transformed by AlertPayloadAdapter
+                    var slackPayload = JsonUtils.readValue(requestBodyJson, SlackWebhookPayload.class);
+                    assertThat(slackPayload).isNotNull();
+                }
+
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to deserialize webhook request body", e);
+            }
         }
     }
 

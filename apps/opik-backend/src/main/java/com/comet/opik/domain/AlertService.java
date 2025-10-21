@@ -30,6 +30,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Handle;
 import reactor.core.publisher.Mono;
@@ -365,7 +366,7 @@ class AlertServiceImpl implements AlertService {
                     return WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.SUCCESS)
                             .statusCode(200) // Success defaults to 200
-                            .requestBody(event.toBuilder().url(null).headers(null).secret(null).build())
+                            .requestBody(event.getJsonPayload())
                             .errorMessage(null)
                             .build();
                 })
@@ -381,7 +382,7 @@ class AlertServiceImpl implements AlertService {
                     return Mono.just(WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.FAILURE)
                             .statusCode(statusCode)
-                            .requestBody(event.toBuilder().url(null).headers(null).secret(null).build())
+                            .requestBody(event.getJsonPayload())
                             .errorMessage(throwable.getMessage())
                             .build());
                 })
@@ -419,7 +420,7 @@ class AlertServiceImpl implements AlertService {
                 .eventType(eventType)
                 .alertType(Optional.ofNullable(alert.alertType()).orElse(AlertType.GENERAL))
                 .alertId(alertId)
-                .alertName(Optional.ofNullable(alert.name()).orElse("Test Alert"))
+                .alertName(StringUtils.isBlank(alert.name()) ? "Test Alert" : alert.name())
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
                 .secret(alert.webhook().secretToken())

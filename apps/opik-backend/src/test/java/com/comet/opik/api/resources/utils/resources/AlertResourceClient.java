@@ -184,7 +184,7 @@ public class AlertResourceClient {
                 .path("examples");
 
         if (alertType != null) {
-            target = target.queryParam("alertType", alertType.getValue());
+            target = target.queryParam("alert_type", alertType.getValue());
         }
 
         try (var response = target

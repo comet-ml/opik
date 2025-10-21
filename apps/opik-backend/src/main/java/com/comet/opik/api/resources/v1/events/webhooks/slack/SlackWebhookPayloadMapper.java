@@ -22,6 +22,8 @@ import java.util.Map;
 @UtilityClass
 public class SlackWebhookPayloadMapper {
 
+    private static final int SLACK_HEADER_BLOCK_LIMIT = 150;
+
     /**
      * Converts a webhook event to Slack webhook payload.
      *
@@ -48,7 +50,8 @@ public class SlackWebhookPayloadMapper {
     }
 
     private static SlackBlock createHeaderBlock(@NonNull WebhookEvent<Map<String, Object>> event) {
-        return SlackBlock.header(event.getAlertName());
+        return SlackBlock.header(
+                event.getAlertName().substring(0, Math.min(event.getAlertName().length(), SLACK_HEADER_BLOCK_LIMIT)));
     }
 
     private static SlackBlock createSummaryBlock(@NonNull WebhookEvent<Map<String, Object>> event) {

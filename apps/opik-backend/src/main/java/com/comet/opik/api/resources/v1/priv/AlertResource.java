@@ -227,7 +227,7 @@ public class AlertResource {
     @Operation(operationId = "getWebhookExamples", summary = "Get webhook payload examples", description = "Get webhook payload examples for all alert event types, optionally filtered by alert type", responses = {
             @ApiResponse(responseCode = "200", description = "Webhook examples", content = @Content(schema = @Schema(implementation = WebhookExamples.class)))
     })
-    public Response getWebhookExamples(@QueryParam("alertType") AlertType alertType) {
+    public Response getWebhookExamples(@QueryParam("alert_type") AlertType alertType) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
