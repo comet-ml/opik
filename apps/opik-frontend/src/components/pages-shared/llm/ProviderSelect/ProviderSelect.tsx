@@ -1,11 +1,8 @@
 import React, { useCallback, useMemo } from "react";
 import { Plus } from "lucide-react";
 
-import get from "lodash/get";
-
 import { cn } from "@/lib/utils";
-import { PROVIDER_TYPE } from "@/types/providers";
-import { DropdownOption } from "@/types/shared";
+import { PROVIDER_TYPE, ProviderKey } from "@/types/providers";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
 import { SelectItem, SelectValue, SelectSeparator } from "@/components/ui/select";
@@ -14,12 +11,18 @@ import { Tag } from "@/components/ui/tag";
 const ADD_CUSTOM_PROVIDER_VALUE = "__add_custom_provider__" as const;
 
 type ProviderSelectProps = {
-  value: PROVIDER_TYPE | "";
-  onChange: (provider: PROVIDER_TYPE) => void;
+  value: PROVIDER_TYPE | string | "";
+  onChange: (provider: PROVIDER_TYPE | string) => void;
   disabled?: boolean;
-  configuredProviderKeys?: PROVIDER_TYPE[];
+  configuredProviderKeys?: PROVIDER_TYPE[]; // Deprecated: Use configuredProvidersList instead
+  configuredProvidersList?: ProviderKey[];
   hasError?: boolean;
   onAddCustomProvider?: () => void;
+};
+
+// Helper function to get display name for custom providers
+const getCustomProviderDisplayName = (provider: ProviderKey): string => {
+  return provider.provider_name || provider.keyName || "Custom Provider";
 };
 
 const ProviderSelect: React.FC<ProviderSelectProps> = ({
@@ -27,39 +30,74 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   onChange,
   disabled,
   configuredProviderKeys,
+  configuredProvidersList,
   hasError,
   onAddCustomProvider,
 }) => {
   const options = useMemo(() => {
-    const providerOptions = PROVIDERS_OPTIONS.map((option) => ({
-      ...option,
-      configured: configuredProviderKeys?.includes(
-        option.value as PROVIDER_TYPE,
-      ),
-    }));
+    const providerOptions: any[] = [];
+
+    // Add standard providers (non-custom)
+    const standardProviders = PROVIDERS_OPTIONS.filter(
+      (option) => option.value !== PROVIDER_TYPE.CUSTOM
+    );
+
+    standardProviders.forEach((option) => {
+      const isConfigured =
+        configuredProviderKeys?.includes(option.value as PROVIDER_TYPE) ||
+        configuredProvidersList?.some((key) => key.provider === option.value) ||
+        false;
+      
+      providerOptions.push({
+        ...option,
+        configured: isConfigured,
+      });
+    });
+
+    // Add each configured custom provider as a separate option
+    const customProviders = configuredProvidersList?.filter(
+      (key) => key.provider === PROVIDER_TYPE.CUSTOM
+    ) || [];
+
+    if (customProviders.length > 0) {
+      providerOptions.push({ isSeparator: true, value: "__separator_1__" });
+      
+      customProviders.forEach((customProvider) => {
+        providerOptions.push({
+          value: customProvider.id,
+          label: getCustomProviderDisplayName(customProvider),
+          icon: PROVIDERS[PROVIDER_TYPE.CUSTOM].icon,
+          configured: true,
+          isCustomProvider: true,
+          description: customProvider.base_url,
+        });
+      });
+    }
 
     // Add the "Add Custom Provider" option at the end
     if (onAddCustomProvider) {
+      if (customProviders.length === 0) {
+        providerOptions.push({ isSeparator: true, value: "__separator_2__" });
+      }
+      
       providerOptions.push({
-        value: ADD_CUSTOM_PROVIDER_VALUE as any,
+        value: ADD_CUSTOM_PROVIDER_VALUE,
         label: "Add Custom Provider",
-        icon: Plus as any,
-        apiKeyName: "",
-        defaultModel: "" as any,
+        icon: Plus,
         isAddCustom: true,
-      } as any);
+      });
     }
 
     return providerOptions;
-  }, [configuredProviderKeys, onAddCustomProvider]);
+  }, [configuredProviderKeys, configuredProvidersList, onAddCustomProvider]);
 
-  const renderTrigger = useCallback((value: string) => {
-    if (!value) {
-      return <SelectValue placeholder="Select a provider" />;
-    }
-    const Icon = PROVIDERS[value as PROVIDER_TYPE]?.icon;
-    const label = PROVIDERS[value as PROVIDER_TYPE]?.label;
+  const renderTrigger = useCallback(
+    (value: string) => {
+      if (!value) {
+        return <SelectValue placeholder="Select a provider" />;
+      }
 
+<<<<<<< HEAD
     return (
       <div className="flex w-full items-center justify-between">
         <div className="flex items-center gap-2">
@@ -69,55 +107,107 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       </div>
     );
   }, []);
+=======
+      // Check if it's a custom provider ID
+      const customProvider = configuredProvidersList?.find(
+        (key) => key.id === value
+      );
+>>>>>>> 125aaabb5 (issue-3040 fix provider edit)
 
-  const renderOption = useCallback((option: DropdownOption<PROVIDER_TYPE>, index: number, array: DropdownOption<PROVIDER_TYPE>[]) => {
-    const isAddCustom = get(option, "isAddCustom", false);
-    const Icon = isAddCustom ? Plus : PROVIDERS[option.value]?.icon;
-    const isConfigured = get(option, "configured", false);
-    const isLastBeforeCustom = !isAddCustom && index === array.length - 2 && get(array[array.length - 1], "isAddCustom", false);
-
-    return (
-      <React.Fragment key={option.value}>
-        {isLastBeforeCustom && <SelectSeparator key={`sep-${option.value}`} />}
-        <SelectItem
-          key={option.value}
-          value={option.value}
-          description={!isAddCustom && <div className="pl-6">{option.description}</div>}
-          withoutCheck
-          wrapperAsChild={true}
-          className={cn(isAddCustom && "text-primary font-medium")}
-        >
+      if (customProvider) {
+        const Icon = PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
+        return (
           <div className="flex w-full items-center justify-between">
             <div className="flex items-center gap-2">
-              {Icon && <Icon className={cn(isAddCustom && "size-4")} />}
-              {option.label}
+              <Icon />
+              {getCustomProviderDisplayName(customProvider)}
             </div>
-            {isConfigured && <Tag variant="green">Configured</Tag>}
           </div>
-        </SelectItem>
-      </React.Fragment>
+        );
+      }
+
+      // Standard provider
+      const Icon = PROVIDERS[value as PROVIDER_TYPE]?.icon;
+      const label = PROVIDERS[value as PROVIDER_TYPE]?.label;
+
+      return (
+        <div className="flex w-full items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon />
+            {label}
+          </div>
+        </div>
+      );
+    },
+    [configuredProvidersList]
+  );
+
+  const renderOption = useCallback((option: any) => {
+    // Handle separator
+    if (option.isSeparator) {
+      return <SelectSeparator key={option.value} />;
+    }
+
+    const isAddCustom = option.isAddCustom || false;
+    const isCustomProvider = option.isCustomProvider || false;
+    const Icon = isAddCustom
+      ? Plus
+      : isCustomProvider
+      ? PROVIDERS[PROVIDER_TYPE.CUSTOM].icon
+      : PROVIDERS[option.value as PROVIDER_TYPE]?.icon;
+    const isConfigured = option.configured || false;
+
+    return (
+      <SelectItem
+        key={option.value}
+        value={option.value}
+        description={
+          !isAddCustom && option.description ? (
+            <div className="pl-6 text-xs text-muted-foreground">
+              {option.description}
+            </div>
+          ) : undefined
+        }
+        withoutCheck
+        wrapperAsChild={true}
+        className={cn(isAddCustom && "text-primary font-medium")}
+      >
+        <div className="flex w-full items-center justify-between">
+          <div className="flex items-center gap-2">
+            {Icon && <Icon className={cn(isAddCustom && "size-4")} />}
+            {option.label}
+          </div>
+          {isConfigured && <Tag variant="green">Configured</Tag>}
+        </div>
+      </SelectItem>
     );
   }, []);
 
   const handleChange = useCallback(
-    (newValue: PROVIDER_TYPE) => {
+    (newValue: string) => {
       if (newValue === ADD_CUSTOM_PROVIDER_VALUE) {
         onAddCustomProvider?.();
         return;
       }
       onChange(newValue);
     },
-    [onChange, onAddCustomProvider],
+    [onChange, onAddCustomProvider]
+  );
+
+  // Filter out separators for SelectBox options
+  const selectBoxOptions = useMemo(
+    () => options.filter((opt) => !opt.isSeparator),
+    [options]
   );
 
   return (
     <SelectBox
       disabled={disabled}
       renderTrigger={renderTrigger}
-      renderOption={(option, index) => renderOption(option, index, options)}
+      renderOption={renderOption}
       value={value}
       onChange={handleChange}
-      options={options}
+      options={selectBoxOptions}
       className={cn({
         "border-destructive": hasError,
       })}
