@@ -54,7 +54,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
+import static org.awaitility.Awaitility.await;
 
 @DisplayName("Usage Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
