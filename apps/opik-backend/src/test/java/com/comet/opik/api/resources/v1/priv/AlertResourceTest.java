@@ -26,6 +26,7 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -53,6 +54,7 @@ import org.apache.commons.lang3.function.TriConsumer;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.eclipse.jetty.http.HttpHeader;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -64,23 +66,23 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -94,6 +96,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
+import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
@@ -282,17 +285,17 @@ class AlertResourceTest {
                     arguments(
                             generateAlert().toBuilder().name(null).build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("").build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("   ").build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("a".repeat(256)).build(),
@@ -831,9 +834,10 @@ class AlertResourceTest {
             externalWebhookServer.resetAll();
         }
 
-        @Test
+        @ParameterizedTest
+        @EnumSource(AlertEventType.class)
         @DisplayName("Success: should test webhook successfully when webhook server responds with 2xx")
-        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult() {
+        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult(AlertEventType eventType) {
             // Given
             var mock = prepareMockWorkspace();
             var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
@@ -852,6 +856,9 @@ class AlertResourceTest {
                     .build();
             alert = alert.toBuilder()
                     .webhook(webhook)
+                    .triggers(List.of(alert.triggers().getFirst().toBuilder()
+                            .eventType(eventType)
+                            .build()))
                     .build();
 
             // When
@@ -902,22 +909,17 @@ class AlertResourceTest {
                     .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON)));
         }
 
-        private void assertWebhookTestResultRequest(Alert alert, String testResultRequestBody) {
-            WebhookEvent<?> actualEvent = JsonUtils.readValue(testResultRequestBody, WebhookEvent.class);
+        private void assertWebhookTestResultRequest(Alert alert, WebhookEvent<?> actualEvent) {
 
             // Verify the webhook event is not null
             assertThat(actualEvent).isNotNull();
 
             // Verify event metadata
             assertThat(actualEvent.getId()).isNotNull();
-            assertThat(actualEvent.getUrl()).isEqualTo(alert.webhook().url());
             assertThat(actualEvent.getAlertId()).isEqualTo(alert.id());
             assertThat(actualEvent.getCreatedAt()).isNotNull();
             assertThat(actualEvent.getMaxRetries()).isEqualTo(1);
 
-            // Verify headers
-            var expectedHeaders = Optional.ofNullable(alert.webhook().headers()).orElse(Map.of());
-            assertThat(actualEvent.getHeaders()).isEqualTo(expectedHeaders);
             assertThat(actualEvent.getEventType()).isEqualTo(alert.triggers().getFirst().eventType());
 
             // Verify payload
@@ -1037,21 +1039,31 @@ class AlertResourceTest {
                     HttpStatus.SC_CREATED);
 
             // Create a prompt to trigger the event
-            var expectedPrompt = factory.manufacturePojo(Prompt.class)
+            var prompt = factory.manufacturePojo(Prompt.class)
                     .toBuilder()
                     .versionCount(0L)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
                     .build();
-            var promptId = promptResourceClient.createPrompt(expectedPrompt, mock.getLeft(), mock.getRight());
+            var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
+            var actualPrompt = promptResourceClient.getPrompt(promptId, mock.getLeft(), mock.getRight());
+
             // Now delete the prompt to trigger the deletion event
             deleteAction.accept(promptId, mock.getRight(), mock.getLeft());
 
             var payload = verifyWebhookCalledAndGetPayload(alert);
-            Set<UUID> ids = JsonUtils.readCollectionValue(payload, Set.class, UUID.class);
+            List<Prompt> prompts = JsonUtils.readCollectionValue(payload, List.class, Prompt.class);
 
-            assertThat(ids).hasSize(1);
-            assertThat(ids).contains(promptId);
+            assertThat(prompts).hasSize(1);
+            assertThat(prompts.getFirst())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(actualPrompt);
         }
 
         Stream<Arguments> testDeletePromptEvent__whenWebhookServerReceivesAlert() {
@@ -1150,6 +1162,7 @@ class AlertResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(Comparator.naturalOrder(), Instant.class)
+                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                     .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
                                     .build())
                     .isEqualTo(feedbackScore);
@@ -1221,6 +1234,7 @@ class AlertResourceTest {
             // Assert feedback score details using recursive comparison
             assertThat(actualFeedbackScores)
                     .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .ignoringFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
                     .ignoringCollectionOrder()
                     .isEqualTo(feedbackScores);
@@ -1299,6 +1313,7 @@ class AlertResourceTest {
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(Comparator.naturalOrder(), Instant.class)
+                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                                     .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
                                     .build())
                     .isEqualTo(feedbackScoreBatchItem);
@@ -1510,14 +1525,51 @@ class AlertResourceTest {
             String actualRequestBody = actualRequest.getBodyAsString();
 
             assertThat(actualRequest.header(HttpHeaders.AUTHORIZATION).firstValue())
-                    .isEqualTo(alert.webhook().secretToken());
+                    .isEqualTo(BEARER_PREFIX + alert.webhook().secretToken());
 
             // Get sent event and verify it's payload
             WebhookEvent<Map<String, Object>> actualEvent = JsonUtils.readValue(actualRequestBody, WebhookEvent.class);
-            List<String> payloads = (List<String>) actualEvent.getPayload().get("metadata");
+            List<Object> payloads = (List<Object>) actualEvent.getPayload().get("metadata");
             assertThat(payloads).hasSize(1);
 
-            return payloads.getFirst();
+            return JsonUtils.writeValueAsString(payloads.getFirst());
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Webhook Examples:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetWebhookExamples {
+
+        @Test
+        @DisplayName("Success: should return webhook examples for all event types")
+        void getWebhookExamples__whenCalled__thenReturnExamplesForAllEventTypes() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // When
+            var webhookExamples = alertResourceClient.getWebhookExamples(mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            // Then
+            assertThat(webhookExamples).isNotNull();
+            assertThat(webhookExamples.responseExamples()).isNotNull();
+            assertThat(webhookExamples.responseExamples()).isNotEmpty();
+
+            // Verify that all alert event types have examples
+            assertThat(webhookExamples.responseExamples().keySet()).containsExactlyInAnyOrder(
+                    AlertEventType.TRACE_ERRORS,
+                    AlertEventType.TRACE_FEEDBACK_SCORE,
+                    AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+                    AlertEventType.PROMPT_CREATED,
+                    AlertEventType.PROMPT_COMMITTED,
+                    AlertEventType.TRACE_GUARDRAILS_TRIGGERED,
+                    AlertEventType.PROMPT_DELETED);
+
+            // Verify that each example is a non-empty string
+            webhookExamples.responseExamples().values().forEach(example -> {
+                assertThat(example).isNotNull();
+            });
         }
     }
 

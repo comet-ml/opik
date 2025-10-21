@@ -43,6 +43,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
+  CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
   CLAUDE_HAIKU_3_5 = "claude-3-5-haiku-20241022",
   CLAUDE_HAIKU_3 = "claude-3-haiku-20240307",
   CLAUDE_3_5_SONNET_20241022 = "claude-3-5-sonnet-20241022",
@@ -71,6 +72,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_3_OPUS = "anthropic/claude-3-opus",
   ANTHROPIC_CLAUDE_3_5_HAIKU = "anthropic/claude-3.5-haiku",
   ANTHROPIC_CLAUDE_3_5_HAIKU_20241022 = "anthropic/claude-3.5-haiku-20241022",
+  ANTHROPIC_CLAUDE_HAIKU_4_5 = "anthropic/claude-haiku-4.5",
   ANTHROPIC_CLAUDE_3_5_SONNET = "anthropic/claude-3.5-sonnet",
   ANTHROPIC_CLAUDE_3_5_SONNET_20240620 = "anthropic/claude-3.5-sonnet-20240620",
   ANTHROPIC_CLAUDE_3_7_SONNET = "anthropic/claude-3.7-sonnet",
@@ -444,7 +446,7 @@ export interface LLMOpenAIConfigsType {
 export interface LLMAnthropicConfigsType {
   temperature: number;
   maxCompletionTokens: number;
-  topP: number;
+  topP?: number;
   seed?: number | null;
 }
 

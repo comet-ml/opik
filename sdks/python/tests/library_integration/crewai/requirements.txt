@@ -1,2 +1,2 @@
-crewai!=0.114.0 # Crewai broke supports for Python 3.10
+crewai<1.0.0 # Crewai changed LLM infrastructure handling since 1.0.0
 crewai-tools
