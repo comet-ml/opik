@@ -23,7 +23,6 @@ isolated_creation_histogram = meter.create_histogram(
     description="Latency of isolated subprocess creation in milliseconds",
     unit="ms",
 )
-
 isolated_execution_histogram = meter.create_histogram(
     name="isolated_subprocess_execution_latency",
     description="Latency of isolated code execution in milliseconds",
@@ -88,7 +87,7 @@ class IsolatedSubprocessExecutor:
 
     def execute(
         self,
-        code: str,
+        file_path: str,
         data: dict,
         env_vars: Optional[dict] = None,
         timeout_secs: Optional[int] = None,
@@ -97,15 +96,15 @@ class IsolatedSubprocessExecutor:
         job_id: Optional[str] = None,
     ) -> dict:
         """
-        Execute Python code in an isolated subprocess with scoped environment variables.
+        Execute Python file in an isolated subprocess with scoped environment variables.
 
         Each call creates a fresh subprocess with its own isolated environment.
         Environment variables passed in env_vars are scoped to the subprocess
         and don't affect other concurrent executions.
 
         Args:
-            code: Python code to execute or path to Python file
-            data: Data dictionary to pass to the code
+            file_path: Path to Python file to execute (e.g., '/path/to/metric.py')
+            data: Data dictionary to pass to the file via stdin
             env_vars: Environment variables to scope to this subprocess (optional).
                      These override/augment the parent environment for this execution only.
             timeout_secs: Execution timeout in seconds (uses default if not provided)
@@ -121,24 +120,17 @@ class IsolatedSubprocessExecutor:
         timeout_secs = timeout_secs or self.timeout_secs
         creation_start = time.time()
         process = None  # Initialize to None for exception handling
+        result = None
 
         try:
-            # Ensure env_vars is always a dict
             if env_vars is None:
                 env_vars = {}
-            
             # Prepare environment for subprocess
             subprocess_env = self._prepare_environment(env_vars)
 
-            # Load code from file if needed
-            loaded_code = self._load_code_from_file(code)
-
-            # Create wrapper code that reads input from stdin and executes user code
-            wrapper_code = self._create_wrapper_script(loaded_code)
-
-            # Create subprocess with python -c to execute wrapper code
+            # Create subprocess with python to execute the file directly
             process = subprocess.Popen(
-                [sys.executable, "-u", "-c", wrapper_code],
+                [sys.executable, "-u", file_path],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -148,65 +140,53 @@ class IsolatedSubprocessExecutor:
                 preexec_fn=_set_memory_limit,  # Apply memory limit to subprocess
             )
 
-            # Track active process with lock
-            with self._process_lock:
-                self._active_processes.append(process)
-            active_process_counter.add(1)
+            # Track active process
+            self._active_processes.append(process)
 
-            creation_latency = _calculate_latency_ms(creation_start)
+            creation_latency = _calculate_latency_ms(start_time)
             isolated_creation_histogram.record(creation_latency)
             self.logger.debug(
-                f"Created isolated subprocess (PID: {process.pid}) in {creation_latency:.3f}ms"
+                f"Created isolated subprocess. pid={process.pid}, creation_latency_ms={creation_latency:.3f}"
             )
 
             # Execute code in subprocess
-            execution_start = time.time()
             result = self._execute_in_subprocess(
-                process, 
-                data, 
-                payload_type, 
-                timeout_secs,
-                optimization_id, 
-                job_id, 
-                env_vars
+                process, data, payload_type, timeout_secs
             )
 
-            execution_latency = _calculate_latency_ms(execution_start)
+            execution_latency = _calculate_latency_ms(start_time)
             isolated_execution_histogram.record(execution_latency)
             self.logger.debug(
-                f"Isolated subprocess execution completed in {execution_latency:.3f}ms"
+                f"Isolated subprocess execution completed. total_latency_ms={execution_latency:.3f}"
             )
-
-            # Remove from active processes
-            with self._process_lock:
-                if process in self._active_processes:
-                    self._active_processes.remove(process)
-            active_process_counter.add(-1)
 
             return result
 
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
             self.logger.error(
-                f"Isolated subprocess execution timed out after {timeout_secs}s"
+                f"Subprocess execution timed out. timeout_secs={timeout_secs}"
             )
-            self._remove_active_process(process)
             return {
                 "code": 500,
                 "error": f"Execution timed out after {timeout_secs} seconds",
             }
         except Exception as e:
             self.logger.error(
-                f"Error during isolated subprocess execution: {e}", exc_info=True
+                f"Error during subprocess execution. error={str(e)}", exc_info=True
             )
+            return {"code": 500, "error": f"Failed to execute file: {str(e)}"}
+        finally:
+            # Always remove process from active list and measure total latency
             self._remove_active_process(process)
-            return {"code": 500, "error": f"Failed to execute code: {str(e)}"}
+            total_latency = _calculate_latency_ms(start_time)
+            self.logger.debug(
+                f"Subprocess execution finished. total_latency_ms={total_latency:.3f}"
+            )
 
     def _remove_active_process(self, process: Optional[subprocess.Popen]) -> None:
         """Remove process from active processes list if it exists."""
-        if process:
-            with self._process_lock:
-                if process in self._active_processes:
-                    self._active_processes.remove(process)
+        if process in self._active_processes:
+            self._active_processes.remove(process)
 
     def _prepare_environment(self, env_vars: Optional[dict] = None) -> dict:
         """
@@ -229,84 +209,6 @@ class IsolatedSubprocessExecutor:
         env["PYTHONUNBUFFERED"] = '1'
         env["LOG_FORMAT"] = 'json'
         return env
-
-    def _load_code_from_file(self, code: str) -> str:
-        """
-        Load Python code from file path if code is a file path.
-
-        Check if code is a valid file path before trying to open it.
-        Only treats strings as file paths if:
-        1. They end with .py
-        2. They look like absolute or relative paths
-        3. The file actually exists
-
-        Args:
-            code: Either a file path or Python code string
-
-        Returns:
-            str: Python code to execute
-        """
-        # First, check if this could be a file path
-        if not code.endswith('.py'):
-            # If it doesn't end with .py, it's probably code, not a path
-            return code
-        
-        # If it ends with .py, try to load it as a file
-        try:
-            if os.path.isfile(code):
-                with open(code, 'r') as f:
-                    loaded_code = f.read()
-                self.logger.debug(f"Loaded Python file from: {code}")
-                return loaded_code
-            else:
-                # File doesn't exist, treat as code
-                return code
-        except (FileNotFoundError, IOError, OSError):
-            # Error opening file, treat as code
-            return code
-
-    def _create_wrapper_script(self, code: str) -> str:
-        """
-        Create a wrapper script that reads input JSON from stdin and executes code.
-
-        The wrapper:
-        1. Reads JSON from stdin containing data and payload_type
-        2. Makes data and payload_type available to user code
-        3. Executes the user code
-        4. Outputs result as JSON to stdout
-
-        Args:
-            code: User's Python code to execute
-
-        Returns:
-            str: Python code that can be passed to python -c
-        """
-        # The wrapper reads input, makes variables available, and executes user code
-        # Note: Can't use '\n' directly in f-string, so we use a variable
-        newline = '\n'
-        indented_code = newline.join('    ' + line for line in code.split(newline))
-        wrapper = f"""
-import json
-import sys
-import traceback
-
-try:
-    # Read input from stdin (wrapper responsibility)
-    input_data = json.loads(sys.stdin.read())
-    data = input_data.get("data", {{}})
-    payload_type = input_data.get("payload_type")
-
-    # Execute user code in this namespace
-    # User code has access to: data, payload_type, json, sys, traceback
-{indented_code}
-
-    # Expected: User code should print JSON result to stdout
-except Exception as e:
-    error_result = {{"code": 500, "error": str(e), "traceback": traceback.format_exc()}}
-    print(json.dumps(error_result))
-    sys.exit(1)
-"""
-        return wrapper
 
     def _execute_in_subprocess(
         self,

@@ -88,9 +88,9 @@ class RawAlertsClient:
     def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -100,11 +100,11 @@ class RawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -279,9 +279,9 @@ class RawAlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -293,11 +293,11 @@ class RawAlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -410,9 +410,9 @@ class RawAlertsClient:
     def test_webhook(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -422,11 +422,11 @@ class RawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -550,9 +550,9 @@ class AsyncRawAlertsClient:
     async def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -562,11 +562,11 @@ class AsyncRawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -741,9 +741,9 @@ class AsyncRawAlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -755,11 +755,11 @@ class AsyncRawAlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -872,9 +872,9 @@ class AsyncRawAlertsClient:
     async def test_webhook(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -884,11 +884,11 @@ class AsyncRawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 

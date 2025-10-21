@@ -1,6 +1,6 @@
 from opik.evaluation.models.langchain import langchain_chat_model
 import langchain_openai
-from langchain import schema
+import langchain_core.messages
 import json
 import pydantic
 import opik
@@ -31,7 +31,7 @@ def test__langchain_chat_model__happyflow():
             }
         ]
     )
-    assert isinstance(provider_response, schema.AIMessage)
+    assert isinstance(provider_response, langchain_core.messages.AIMessage)
     assert isinstance(provider_response.content, str)
 
 

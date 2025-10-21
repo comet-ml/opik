@@ -54,6 +54,7 @@ import org.apache.commons.lang3.function.TriConsumer;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.eclipse.jetty.http.HttpHeader;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -71,7 +72,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -285,17 +285,17 @@ class AlertResourceTest {
                     arguments(
                             generateAlert().toBuilder().name(null).build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("").build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("   ").build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("a".repeat(256)).build(),
