@@ -16,6 +16,7 @@ import socket
 import sys
 import threading
 import time
+import tempfile
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import List, Dict, Any, Optional
 from unittest.mock import patch, MagicMock
@@ -158,13 +159,22 @@ print(json.dumps(result))
             executor = IsolatedSubprocessExecutor()
             
             before_time = int(time.time() * 1000)
-            result = executor.execute(
-                code=code,
-                data={},
-                env_vars={"OPIK_API_KEY": "test_key", "OPIK_WORKSPACE": "test_ws"},
-                optimization_id='opt_stderr',
-                job_id='job_stderr',
-            )
+            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False)
+            try:
+                tmp.write(code)
+                tmp.flush()
+                result = executor.execute(
+                    file_path=tmp.name,
+                    data={},
+                    env_vars={"OPIK_API_KEY": "test_key", "OPIK_WORKSPACE": "test_ws"},
+                    optimization_id='opt_stderr',
+                    job_id='job_stderr',
+                )
+            finally:
+                try:
+                    os.unlink(tmp.name)
+                except Exception:
+                    pass
             after_time = int(time.time() * 1000)
             
             assert result['status'] == 'ok'
@@ -236,13 +246,22 @@ print(json.dumps(result))
             executor = IsolatedSubprocessExecutor()
             
             before_time = int(time.time() * 1000)
-            result = executor.execute(
-                code=code,
-                data={},
-                env_vars={"OPIK_API_KEY": "stdout_key", "OPIK_WORKSPACE": "stdout_ws"},
-                optimization_id='opt_stdout',
-                job_id='job_stdout',
-            )
+            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False)
+            try:
+                tmp.write(code)
+                tmp.flush()
+                result = executor.execute(
+                    file_path=tmp.name,
+                    data={},
+                    env_vars={"OPIK_API_KEY": "stdout_key", "OPIK_WORKSPACE": "stdout_ws"},
+                    optimization_id='opt_stdout',
+                    job_id='job_stdout',
+                )
+            finally:
+                try:
+                    os.unlink(tmp.name)
+                except Exception:
+                    pass
             after_time = int(time.time() * 1000)
             
             assert result['status'] == 'ok'
@@ -333,13 +352,22 @@ print(json.dumps(result))
             executor = IsolatedSubprocessExecutor()
             
             before_time = int(time.time() * 1000)
-            result = executor.execute(
-                code=code,
-                data={},
-                env_vars={"OPIK_API_KEY": "log_key", "OPIK_WORKSPACE": "log_ws"},
-                optimization_id='opt_logging',
-                job_id='job_logging',
-            )
+            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False)
+            try:
+                tmp.write(code)
+                tmp.flush()
+                result = executor.execute(
+                    file_path=tmp.name,
+                    data={},
+                    env_vars={"OPIK_API_KEY": "log_key", "OPIK_WORKSPACE": "log_ws"},
+                    optimization_id='opt_logging',
+                    job_id='job_logging',
+                )
+            finally:
+                try:
+                    os.unlink(tmp.name)
+                except Exception:
+                    pass
             after_time = int(time.time() * 1000)
             
             assert result['task_id'] == 42
@@ -414,13 +442,22 @@ print(json.dumps(result))
             executor = IsolatedSubprocessExecutor()
             
             before_time = int(time.time() * 1000)
-            result = executor.execute(
-                code=code,
-                data={},
-                env_vars={"OPIK_API_KEY": "json_key", "OPIK_WORKSPACE": "json_ws"},
-                optimization_id='opt_json',
-                job_id='job_json',
-            )
+            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False)
+            try:
+                tmp.write(code)
+                tmp.flush()
+                result = executor.execute(
+                    file_path=tmp.name,
+                    data={},
+                    env_vars={"OPIK_API_KEY": "json_key", "OPIK_WORKSPACE": "json_ws"},
+                    optimization_id='opt_json',
+                    job_id='job_json',
+                )
+            finally:
+                try:
+                    os.unlink(tmp.name)
+                except Exception:
+                    pass
             after_time = int(time.time() * 1000)
             
             assert result['processed'] == 3
