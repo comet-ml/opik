@@ -87,13 +87,14 @@ class IsolatedSubprocessExecutor:
 
     def execute(
         self,
-        file_path: str,
-        data: dict,
+        file_path: Optional[str] = None,
+        data: dict = None,
         env_vars: Optional[dict] = None,
         timeout_secs: Optional[int] = None,
         payload_type: Optional[str] = None,
         optimization_id: Optional[str] = None,
         job_id: Optional[str] = None,
+        code: Optional[str] = None,
     ) -> dict:
         """
         Execute Python file in an isolated subprocess with scoped environment variables.
@@ -104,6 +105,7 @@ class IsolatedSubprocessExecutor:
 
         Args:
             file_path: Path to Python file to execute (e.g., '/path/to/metric.py')
+            code: Inline Python code to execute (alternative to file_path)
             data: Data dictionary to pass to the file via stdin
             env_vars: Environment variables to scope to this subprocess (optional).
                      These override/augment the parent environment for this execution only.
@@ -118,6 +120,8 @@ class IsolatedSubprocessExecutor:
                 - {"code": error_code, "error": message} on failure
         """
         timeout_secs = timeout_secs or self.timeout_secs
+        if data is None:
+            data = {}
         creation_start = time.time()
         process = None  # Initialize to None for exception handling
         result = None
@@ -128,9 +132,18 @@ class IsolatedSubprocessExecutor:
             # Prepare environment for subprocess
             subprocess_env = self._prepare_environment(env_vars)
 
-            # Create subprocess with python to execute the file directly
+            # Build command: either execute inline code or a file path
+            cmd = [sys.executable, "-u"]
+            if code is not None:
+                cmd += ["-c", code]
+            else:
+                if not file_path:
+                    raise ValueError("Either 'code' or 'file_path' must be provided")
+                cmd.append(file_path)
+
+            # Create subprocess with python to execute the code
             process = subprocess.Popen(
-                [sys.executable, "-u", file_path],
+                cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -151,7 +164,13 @@ class IsolatedSubprocessExecutor:
 
             # Execute code in subprocess
             result = self._execute_in_subprocess(
-                process, data, payload_type, timeout_secs
+                process,
+                data,
+                payload_type,
+                timeout_secs,
+                optimization_id=optimization_id,
+                job_id=job_id,
+                env_vars=env_vars or {},
             )
 
             execution_latency = _calculate_latency_ms(creation_start)
