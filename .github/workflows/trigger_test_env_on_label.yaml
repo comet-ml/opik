@@ -93,7 +93,7 @@ jobs:
           sleep $INITIAL_DELAY
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+            HTTP_CODE=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
             
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Deployment is available! Health check returned 200"
