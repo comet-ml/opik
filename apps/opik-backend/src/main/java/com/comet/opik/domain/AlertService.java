@@ -46,7 +46,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.comet.opik.api.resources.v1.events.WebhookSubscriber.deserializeEventPayload;
+import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.deserializeEventPayload;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;

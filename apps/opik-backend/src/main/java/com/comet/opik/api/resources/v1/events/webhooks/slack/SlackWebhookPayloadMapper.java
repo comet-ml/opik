@@ -7,8 +7,8 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
-import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -19,7 +19,7 @@ import java.util.Map;
  * Maps webhook events to Slack-specific payload format with block structure.
  */
 @Slf4j
-@Singleton
+@UtilityClass
 public class SlackWebhookPayloadMapper {
 
     /**

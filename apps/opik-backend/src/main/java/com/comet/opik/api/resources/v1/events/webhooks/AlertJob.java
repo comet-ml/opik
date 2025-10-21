@@ -20,7 +20,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -192,14 +191,9 @@ public class AlertJob extends Job {
         // Send via WebhookPublisher with data from alert configuration
         return webhookPublisher.publishWebhookEvent(
                 eventType,
-                alert.id(),
-                alert.name(),
-                alert.alertType(),
+                alert,
                 workspaceId,
-                alert.webhook().url(),
                 payload,
-                Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()),
-                alert.webhook().secretToken(),
                 webhookConfig.getMaxRetries()) // maxRetries
                 .doOnSuccess(webhookId -> log.info(
                         "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",
