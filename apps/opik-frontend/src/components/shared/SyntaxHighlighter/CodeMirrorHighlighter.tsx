@@ -53,7 +53,12 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
     codeOutput,
   });
 
-  // Handle editor creation - keep it simple
+  // Keep latest onScroll callback in ref to avoid stale closures
+  const onScrollRef = useRef(onScroll);
+  useEffect(() => {
+    onScrollRef.current = onScroll;
+  }, [onScroll]);
+
   const handleCreateEditor = useCallback(
     (view: EditorView) => {
       viewRef.current = view;
@@ -64,27 +69,23 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
         (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current =
           view.scrollDOM as HTMLDivElement;
       }
+
+      // Attach scroll listener - uses ref to always get latest callback
+      const handleScroll = () => {
+        if (onScrollRef.current) {
+          onScrollRef.current({
+            currentTarget: view.scrollDOM,
+          } as React.UIEvent<HTMLDivElement>);
+        }
+      };
+
+      view.scrollDOM.addEventListener("scroll", handleScroll, {
+        passive: true,
+      });
     },
-    [localSearchValue, searchValue, initSearch], // scrollRef is a ref, doesn't need to be in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [localSearchValue, searchValue, initSearch],
   );
-
-  // Set up scroll listener in a separate useEffect
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view || !onScroll) return;
-
-    const handleScroll = () => {
-      onScroll({
-        currentTarget: view.scrollDOM,
-      } as React.UIEvent<HTMLDivElement>);
-    };
-
-    view.scrollDOM.addEventListener("scroll", handleScroll, { passive: true });
-
-    return () => {
-      view.scrollDOM.removeEventListener("scroll", handleScroll);
-    };
-  }, [onScroll]); // Don't include viewRef.current to avoid re-subscribing
 
   return (
     <SyntaxHighlighterLayout
