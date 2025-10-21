@@ -95,8 +95,10 @@ class TestGepaOptimizerValidation:
     def test_model_kwargs_passthrough(self) -> None:
         """Test that model_kwargs are passed through correctly."""
         optimizer = GepaOptimizer(
-            model="openai/gpt-4", temperature=0.7, max_tokens=100, num_threads=8
+            model="openai/gpt-4",
+            model_parameters={"temperature": 0.7, "max_tokens": 100},
+            n_threads=8,
         )
-        assert optimizer.model_kwargs.get("temperature") == 0.7
-        assert optimizer.model_kwargs.get("max_tokens") == 100
-        assert optimizer.n_threads == 8  # num_threads is extracted to instance variable
+        assert optimizer.model_parameters.get("temperature") == 0.7
+        assert optimizer.model_parameters.get("max_tokens") == 100
+        assert optimizer.n_threads == 8

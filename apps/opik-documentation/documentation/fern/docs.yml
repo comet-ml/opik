@@ -570,37 +570,29 @@ navigation:
             slug: opentelemetry
   - tab: agent-optimization
     layout:
-      - page: Opik Agent Optimizer
-        icon: fa-regular fa-house
-        path: docs/agent_optimization/overview.mdx
-        slug: overview
-      - section: Opik Agent Optimizer Guide
+      - section: Overview
         slug: /opik_optimizer
         contents:
-          - page: Optimizer Quickstart
-            icon: fa-regular fa-bolt
-            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
-            slug: quickstart
+          - page: Opik Agent Optimizer
+            icon: fa-regular fa-house
+            path: docs/agent_optimization/overview.mdx
+            slug: overview
           - page: Optimizer Concepts
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
-          - page: Datasets for Optimization
-            icon: fa-regular fa-database
-            path: docs/agent_optimization/opik_optimizer/datasets.mdx
-            slug: datasets
-          - page: Models for Optimization
-            icon: fa-regular fa-rocket
-            path: docs/agent_optimization/opik_optimizer/models.mdx
-            slug: models
+          - page: Multi-Metric Optimization
+            icon: fa-regular fa-chart-line
+            path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx
+            slug: multi_metric_optimization
+          - page: FAQ
+            icon: fa-regular fa-question
+            path: docs/agent_optimization/opik_optimizer/faq.mdx
+            slug: faq
           - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
             slug: reference
-          - page: Optimizer & SDK FAQ
-            icon: fa-regular fa-question
-            path: docs/agent_optimization/opik_optimizer/faq.mdx
-            slug: faq
       - section: Optimization Algorithms
         slug: /algorithms
         contents:
@@ -628,17 +620,6 @@ navigation:
             icon: fa-regular fa-tools
             path: docs/agent_optimization/algorithms/tool_optimization.mdx
             slug: tool_optimization
-      - section: Optimization Best Practices
-        slug: /best_practices
-        contents:
-          - page: Prompt Engineering
-            icon: fa-regular fa-book
-            path: docs/agent_optimization/best_practices/prompt_engineering.mdx
-            slug: prompt_engineering
-          - page: Multi-Metric Optimization
-            icon: fa-regular fa-chart-line
-            path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx
-            slug: multi_metric_optimization
       - section: Example Projects and Cookbooks
         slug: /optimizer-cookbooks
         contents:

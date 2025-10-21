@@ -57,7 +57,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         max_parallel_batches: Maximum number of batches to process concurrently during
             hierarchical root cause analysis (default: 5)
         batch_size: Number of test cases per batch for root cause analysis (default: 25)
-        max_iterations: Maximum number of optimization iterations (default: 5)
         convergence_threshold: Stop if relative improvement is below this threshold (default: 0.01)
         **model_kwargs: Additional arguments passed to the LLM model
     """
@@ -74,15 +73,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         seed: int = 42,
         max_parallel_batches: int = 5,
         batch_size: int = 25,
-        max_iterations: int = DEFAULT_MAX_ITERATIONS,
         convergence_threshold: float = DEFAULT_CONVERGENCE_THRESHOLD,
-        **model_kwargs: Any,
+        model_parameters: dict[str, Any] | None = None,
     ):
-        super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
+        super().__init__(
+            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+        )
         self.n_threads = n_threads
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
-        self.max_iterations = max_iterations
         self.convergence_threshold = convergence_threshold
 
         # Initialize hierarchical analyzer
@@ -145,7 +144,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "model": self.model,
             "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
-            "max_iterations": self.max_iterations,
             "convergence_threshold": self.convergence_threshold,
             "seed": self.seed,
             "verbose": self.verbose,
@@ -395,6 +393,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        *args: Any,
+        max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -424,7 +424,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
                 "max_retries": max_retries,
-                "max_iterations": self.max_iterations,
+                "max_trials": max_trials,
                 "convergence_threshold": self.convergence_threshold,
             },
             verbose=self.verbose,
@@ -459,8 +459,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         iteration = 0
         previous_iteration_score = initial_score
 
-        for iteration in range(1, self.max_iterations + 1):
-            logger.info(f"Starting iteration {iteration}/{self.max_iterations}")
+        for iteration in range(1, max_trials + 1):
+            logger.info(f"Starting iteration {iteration}/{max_trials}")
 
             with reporting.display_optimization_iteration(
                 iteration=iteration, verbose=self.verbose
@@ -622,13 +622,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         details = {
             "model": self.model,
             "temperature": (best_prompt.model_kwargs or {}).get("temperature")
-            or self.model_kwargs.get("temperature"),
+            or self.model_parameters.get("temperature"),
             "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
             "max_retries": max_retries,
             "n_samples": n_samples,
             "auto_continue": auto_continue,
-            "max_iterations": self.max_iterations,
+            "max_trials": max_trials,
             "convergence_threshold": self.convergence_threshold,
             "iterations_completed": iteration,
         }

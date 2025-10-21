@@ -42,7 +42,7 @@ optimization_result = optimizer.optimize_prompt(
     agent_class=PydanticAIAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_trials=10,
+    max_trials=10,
     n_samples=50,
 )
 optimization_result.display()

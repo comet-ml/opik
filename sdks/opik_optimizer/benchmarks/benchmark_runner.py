@@ -66,7 +66,10 @@ def run_optimization(
 
             # Run optimization
             optimization_results = optimizer.optimize_prompt(
-                prompt=initial_prompt, dataset=dataset, metric=dataset_config.metrics[0]
+                prompt=initial_prompt,
+                dataset=dataset,
+                metric=dataset_config.metrics[0],
+                **optimizer_config.optimize_params,
             )
             optimized_prompt = chat_prompt.ChatPrompt(
                 messages=optimization_results.prompt

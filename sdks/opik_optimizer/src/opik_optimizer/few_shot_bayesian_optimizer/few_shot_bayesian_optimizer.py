@@ -1,6 +1,5 @@
 from typing import Any
 from collections.abc import Callable
-import warnings
 
 import copy
 import json
@@ -81,7 +80,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         seed: int = 42,
         n_threads: int = 8,
         verbose: int = 1,
-        **model_kwargs: Any,
+        model_parameters: dict[str, Any] | None = None,
     ) -> None:
         """
         Args:
@@ -91,18 +90,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             seed: Random seed for reproducibility
             n_threads: Number of threads for parallel evaluation
             verbose: Controls internal logging/progress bars (0=off, 1=on).
-            **model_kwargs: Additional model parameters
+            model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+                Common params: temperature, max_tokens, max_completion_tokens, top_p.
+                See: https://docs.litellm.ai/docs/completion/input
         """
-        if "project_name" in model_kwargs:
-            warnings.warn(
-                "The 'project_name' parameter in optimizer constructor is deprecated. "
-                "Set project_name in the ChatPrompt instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            del model_kwargs["project_name"]
-
-        super().__init__(model, verbose, **model_kwargs)
+        super().__init__(model, verbose, seed=seed, model_parameters=model_parameters)
         self.min_examples = min_examples
         self.max_examples = max_examples
         self.seed = seed
@@ -441,7 +433,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "stopped_early": False,
                 "metric_name": metric.__name__,
                 "model": self.model,
-                "temperature": self.model_kwargs.get("temperature"),
+                "temperature": self.model_parameters.get("temperature"),
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
@@ -459,6 +451,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        *args: Any,
+        max_trials: int = 10,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -467,12 +461,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
             experiment_config: Optional configuration for the experiment, useful to log additional metadata
+            max_trials: Number of trials for Bayesian Optimization (default: 10)
             n_samples: Optional number of items to test in the dataset
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
-            **kwargs: Additional parameters including:
-                n_trials (int): Number of trials for Bayesian Optimization (default: 10)
-                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
 
         Returns:
             OptimizationResult: Result of the optimization
@@ -480,9 +472,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
-
-        # Extract n_trials from kwargs for backward compatibility
-        n_trials = kwargs.get("n_trials", 10)
 
         optimization = None
         try:
@@ -511,7 +500,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "metric": metric.__name__,
-                "n_trials": n_trials,
+                "max_trials": max_trials,
                 "n_samples": n_samples,
             },
             verbose=self.verbose,
@@ -559,7 +548,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             baseline_score=baseline_score,
             optimization_id=optimization.id if optimization is not None else None,
             experiment_config=experiment_config,
-            n_trials=n_trials,
+            n_trials=max_trials,
             n_samples=n_samples,
         )
         if optimization:

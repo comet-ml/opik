@@ -135,8 +135,6 @@ prompt = ChatPrompt(
 
 evo_optimizer = EvolutionaryOptimizer(
     model="openai/gpt-4o-mini",
-    population_size=4,
-    num_generations=2,
     mutation_rate=0.25,
     crossover_rate=0.6,
     elitism_size=1,
@@ -152,6 +150,8 @@ result = evo_optimizer.optimize_mcp(
     metric=context7_metric,
     tool_name=TOOL_NAME,
     second_pass=second_pass,
+    population_size=4,
+    num_generations=2,
     fallback_invoker=lambda args: tool_invocation.invoke(args),
     n_samples=min(5, len(dataset.get_items())),
     tool_panel_style="bright_cyan",

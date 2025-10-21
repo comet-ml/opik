@@ -65,6 +65,6 @@ optimization_result = optimizer.optimize_prompt(
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=50,
-    n_trials=10,
+    max_trials=10,
 )
 optimization_result.display()

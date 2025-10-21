@@ -32,13 +32,13 @@ prompt = ChatPrompt(
 # Optimize it:
 optimizer = EvolutionaryOptimizer(
     model="openai/gpt-4o-mini",  # Using gpt-4o-mini for evaluation for speed
-    population_size=10,
-    num_generations=3,
     enable_moo=False,
     enable_llm_crossover=True,
     infer_output_style=True,
     verbose=1,
     n_threads=4,
+    population_size=10,
+    num_generations=3,
 )
 
 optimization_result = optimizer.optimize_prompt(

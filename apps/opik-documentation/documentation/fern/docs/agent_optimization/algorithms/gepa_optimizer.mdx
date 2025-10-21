@@ -70,10 +70,11 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_metric_calls=12,
+    max_trials=12,
     reflection_minibatch_size=2,
     n_samples=5,
 )
+# Cost = 12 trials × 5 samples = 60 metric calls
 
 result.display()
 ```
@@ -139,11 +140,12 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_metric_calls=60,
+    max_trials=60,
     reflection_minibatch_size=5,
     candidate_selection_strategy="best",
     n_samples=12,
 )
+# Cost = 60 trials × 12 samples = 720 metric calls
 
 result.display()
 ```
@@ -156,7 +158,7 @@ result.display()
 - Dataset mapping: The optimizer heuristically infers input/output keys when not provided. Ensure your dataset items
   contain a clear input field (e.g., `text`, `question`) and a reference label/answer field.
 - Metrics: Any metric that returns an Opik `ScoreResult` can be used (e.g., `LevenshteinRatio`).
-- Budget: `max_metric_calls` determines the optimization budget; higher budgets can find better prompts at more cost.
+- Budget: `max_trials` determines how many different prompts to test. The total metric calls = `max_trials × n_samples`.
 - Reflection batching: `reflection_minibatch_size` controls how many items are considered per reflection step.
 
 ## API Summary
@@ -183,7 +185,7 @@ opt_result = optimizer.optimize_prompt(
     prompt: ChatPrompt,
     dataset: opik.Dataset,
     metric: Callable[[dict, str], ScoreResult],
-    max_metric_calls: int,
+    max_trials: int = 10,  # Number of different prompts to test
     reflection_minibatch_size: int = 3,
     candidate_selection_strategy: str = "pareto",  # e.g., "pareto" or "best"
     n_samples: int | None = None,
@@ -205,5 +207,5 @@ GEPA’s best candidate, validation scores, and the evolution history.
 
 - Install error: Ensure `pip install gepa` completes successfully in the same environment as `opik-optimizer`.
 - API keys: Set provider keys (e.g., `OPENAI_API_KEY`) for LiteLLM to load your chosen models.
-- Low improvements: Increase `max_metric_calls`, try a stronger `reflection_model`, or adjust the starting system prompt.
-- Mismatch fields: Confirm your dataset’s input/output field names align with your prompt’s placeholders and metric’s reference.
+- Low improvements: Increase `max_trials` and/or `n_samples`, try a stronger `reflection_model`, or adjust the starting system prompt.
+- Mismatch fields: Confirm your dataset's input/output field names align with your prompt's placeholders and metric's reference.

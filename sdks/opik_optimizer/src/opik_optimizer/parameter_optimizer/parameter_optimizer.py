@@ -37,9 +37,11 @@ class ParameterOptimizer(BaseOptimizer):
         verbose: int = 1,
         local_search_ratio: float = 0.3,
         local_search_scale: float = 0.2,
-        **model_kwargs: Any,
+        model_parameters: dict[str, Any] | None = None,
     ) -> None:
-        super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
+        super().__init__(
+            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+        )
         self.default_n_trials = default_n_trials
         self.n_threads = n_threads
         self.local_search_ratio = max(0.0, min(local_search_ratio, 1.0))
@@ -76,25 +78,45 @@ class ParameterOptimizer(BaseOptimizer):
         metric: Callable[[Any, Any], float],
         parameter_space: ParameterSearchSpace | Mapping[str, Any],
         experiment_config: dict | None = None,
-        n_trials: int | None = None,
+        max_trials: int | None = None,
         n_samples: int | None = None,
         agent_class: type[OptimizableAgent] | None = None,
-        **kwargs: Any,
+        sampler: optuna.samplers.BaseSampler | None = None,
+        callbacks: list[Callable[[optuna.study.Study, optuna.trial.FrozenTrial], None]]
+        | None = None,
+        timeout: float | None = None,
+        local_trials: int | None = None,
+        local_search_scale: float | None = None,
     ) -> OptimizationResult:
+        """
+        Optimize model parameters using Bayesian optimization.
+
+        Args:
+            prompt: The prompt to evaluate with tuned parameters
+            dataset: Dataset providing evaluation examples
+            metric: Objective function to maximize
+            parameter_space: Definition of the search space for tunable parameters
+            experiment_config: Optional experiment metadata
+            max_trials: Total number of trials (if None, uses default_n_trials)
+            n_samples: Number of dataset samples to evaluate per trial (None for all)
+            agent_class: Optional custom agent class to execute evaluations
+            sampler: Optuna sampler to use (default: TPESampler with seed)
+            callbacks: List of callback functions for Optuna study
+            timeout: Maximum time in seconds for optimization
+            local_trials: Number of trials for local search (overrides local_search_ratio)
+            local_search_scale: Scale factor for local search narrowing (0.0-1.0)
+
+        Returns:
+            OptimizationResult: Structured result describing the best parameters found
+        """
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
 
         # After validation, parameter_space is guaranteed to be ParameterSearchSpace
         assert isinstance(parameter_space, ParameterSearchSpace)  # for mypy
 
-        sampler = kwargs.pop("sampler", None)
-        callbacks = kwargs.pop("callbacks", None)
-        timeout = kwargs.pop("timeout", None)
-        local_trials_override = kwargs.pop("local_trials", None)
-        local_search_scale_override = kwargs.pop("local_search_scale", None)
-        if kwargs:
-            extra_keys = ", ".join(sorted(kwargs.keys()))
-            raise TypeError(f"Unsupported keyword arguments: {extra_keys}")
+        local_trials_override = local_trials
+        local_search_scale_override = local_search_scale
 
         self._validate_optimization_inputs(prompt, dataset, metric)
 
@@ -140,7 +162,7 @@ class ParameterOptimizer(BaseOptimizer):
         sampler = sampler or optuna.samplers.TPESampler(seed=self.seed)
         study = optuna.create_study(direction="maximize", sampler=sampler)
 
-        total_trials = self.default_n_trials if n_trials is None else n_trials
+        total_trials = self.default_n_trials if max_trials is None else max_trials
         if total_trials < 0:
             total_trials = 0
 

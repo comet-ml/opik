@@ -61,7 +61,7 @@ optimization_result = optimizer.optimize_prompt(
     agent_class=LangGraphAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_trials=10,
+    max_trials=10,
     n_samples=50,
 )
 

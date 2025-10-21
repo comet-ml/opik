@@ -33,7 +33,7 @@ class GepaOptimizer(BaseOptimizer):
         n_threads: int = 6,
         verbose: int = 1,
         seed: int = 42,
-        **model_kwargs: Any,
+        model_parameters: dict[str, Any] | None = None,
     ) -> None:
         # Validate required parameters
         if model is None:
@@ -54,7 +54,9 @@ class GepaOptimizer(BaseOptimizer):
         if not isinstance(seed, int):
             raise ValueError(f"seed must be an integer, got {type(seed).__name__}")
 
-        super().__init__(model=model, verbose=verbose, seed=seed, **model_kwargs)
+        super().__init__(
+            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+        )
         self.n_threads = n_threads
         self._gepa_live_metric_calls = 0
         self._adapter = None  # Will be set during optimization
@@ -135,6 +137,20 @@ class GepaOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        *args: Any,
+        max_trials: int = 10,
+        reflection_minibatch_size: int = 3,
+        candidate_selection_strategy: str = "pareto",
+        skip_perfect_score: bool = True,
+        perfect_score: float = 1.0,
+        use_merge: bool = False,
+        max_merge_invocations: int = 5,
+        run_dir: str | None = None,
+        track_best_outputs: bool = False,
+        display_progress_bar: bool = False,
+        seed: int = 42,
+        raise_on_exception: bool = True,
+        mcp_config: Any = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -145,23 +161,22 @@ class GepaOptimizer(BaseOptimizer):
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
             experiment_config: Optional configuration for the experiment
+            max_trials: Maximum number of different prompts to test (default: 10)
             n_samples: Optional number of items to test in the dataset
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
-            **kwargs: GEPA-specific parameters:
-                max_metric_calls (int | None): Maximum number of metric evaluations (default: 30)
-                reflection_minibatch_size (int): Size of reflection minibatches (default: 3)
-                candidate_selection_strategy (str): Strategy for candidate selection (default: "pareto")
-                skip_perfect_score (bool): Skip candidates with perfect scores (default: True)
-                perfect_score (float): Score considered perfect (default: 1.0)
-                use_merge (bool): Enable merge operations (default: False)
-                max_merge_invocations (int): Maximum merge invocations (default: 5)
-                run_dir (str | None): Directory for run outputs (default: None)
-                track_best_outputs (bool): Track best outputs during optimization (default: False)
-                display_progress_bar (bool): Display progress bar (default: False)
-                seed (int): Random seed for reproducibility (default: 42)
-                raise_on_exception (bool): Raise exceptions instead of continuing (default: True)
-                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
+            reflection_minibatch_size: Size of reflection minibatches (default: 3)
+            candidate_selection_strategy: Strategy for candidate selection (default: "pareto")
+            skip_perfect_score: Skip candidates with perfect scores (default: True)
+            perfect_score: Score considered perfect (default: 1.0)
+            use_merge: Enable merge operations (default: False)
+            max_merge_invocations: Maximum merge invocations (default: 5)
+            run_dir: Directory for run outputs (default: None)
+            track_best_outputs: Track best outputs during optimization (default: False)
+            display_progress_bar: Display progress bar (default: False)
+            seed: Random seed for reproducibility (default: 42)
+            raise_on_exception: Raise exceptions instead of continuing (default: True)
+            mcp_config: MCP tool calling configuration (default: None)
 
         Returns:
             OptimizationResult: Result of the optimization
@@ -169,28 +184,11 @@ class GepaOptimizer(BaseOptimizer):
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
 
-        # Extract GEPA-specific parameters from kwargs
-        max_metric_calls: int | None = kwargs.get("max_metric_calls", 30)
-        reflection_minibatch_size: int = int(kwargs.get("reflection_minibatch_size", 3))
-        candidate_selection_strategy: str = str(
-            kwargs.get("candidate_selection_strategy", "pareto")
-        )
-        skip_perfect_score: bool = kwargs.get("skip_perfect_score", True)
-        perfect_score: float = float(kwargs.get("perfect_score", 1.0))
-        use_merge: bool = kwargs.get("use_merge", False)
-        max_merge_invocations: int = int(kwargs.get("max_merge_invocations", 5))
-        run_dir: str | None = kwargs.get("run_dir", None)
-        track_best_outputs: bool = kwargs.get("track_best_outputs", False)
-        display_progress_bar: bool = kwargs.get("display_progress_bar", False)
-        seed: int = int(kwargs.get("seed", 42))
-        raise_on_exception: bool = kwargs.get("raise_on_exception", True)
-        kwargs.pop("mcp_config", None)  # Added for MCP support (for future use)
-
         prompt = prompt.copy()
         if prompt.model is None:
             prompt.model = self.model
         if not prompt.model_kwargs:
-            prompt.model_kwargs = dict(self.model_kwargs)
+            prompt.model_kwargs = dict(self.model_parameters)
 
         seed_prompt_text = self._extract_system_text(prompt)
         input_key, output_key = self._infer_dataset_keys(dataset)
@@ -198,6 +196,10 @@ class GepaOptimizer(BaseOptimizer):
         items = dataset.get_items()
         if n_samples and 0 < n_samples < len(items):
             items = items[:n_samples]
+
+        # Calculate max_metric_calls from max_trials and effective samples
+        effective_n_samples = len(items)
+        max_metric_calls = max_trials * effective_n_samples
 
         data_insts = self._build_data_insts(items, input_key, output_key)
 
@@ -238,10 +240,11 @@ class GepaOptimizer(BaseOptimizer):
                 optimizer_config={
                     "optimizer": self.__class__.__name__,
                     "model": self.model,
+                    "max_trials": max_trials,
+                    "n_samples": n_samples or "all",
                     "max_metric_calls": max_metric_calls,
                     "reflection_minibatch_size": reflection_minibatch_size,
                     "candidate_selection_strategy": candidate_selection_strategy,
-                    "n_samples": n_samples or "all",
                 },
                 verbose=self.verbose,
             )
@@ -283,7 +286,7 @@ class GepaOptimizer(BaseOptimizer):
             # Filter out GEPA-specific parameters that shouldn't be passed to LLM
             filtered_model_kwargs = {
                 k: v
-                for k, v in self.model_kwargs.items()
+                for k, v in self.model_parameters.items()
                 if k not in ["num_prompts_per_round", "rounds"]
             }
             adapter_prompt.model_kwargs = filtered_model_kwargs
@@ -366,7 +369,7 @@ class GepaOptimizer(BaseOptimizer):
             # Filter out GEPA-specific parameters that shouldn't be passed to LLM
             filtered_model_kwargs = {
                 k: v
-                for k, v in self.model_kwargs.items()
+                for k, v in self.model_parameters.items()
                 if k not in ["num_prompts_per_round", "rounds"]
             }
             prompt_variant.model_kwargs = filtered_model_kwargs
@@ -431,7 +434,7 @@ class GepaOptimizer(BaseOptimizer):
         # Filter out GEPA-specific parameters that shouldn't be passed to LLM
         filtered_model_kwargs = {
             k: v
-            for k, v in self.model_kwargs.items()
+            for k, v in self.model_parameters.items()
             if k not in ["num_prompts_per_round", "rounds"]
         }
         final_prompt.model_kwargs = filtered_model_kwargs
@@ -487,7 +490,7 @@ class GepaOptimizer(BaseOptimizer):
 
         details: dict[str, Any] = {
             "model": self.model,
-            "temperature": self.model_kwargs.get("temperature"),
+            "temperature": self.model_parameters.get("temperature"),
             "optimizer": self.__class__.__name__,
             "num_candidates": getattr(gepa_result, "num_candidates", None),
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
@@ -589,7 +592,7 @@ class GepaOptimizer(BaseOptimizer):
         if prompt.model is None:
             prompt.model = self.model
         if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_kwargs
+            prompt.model_kwargs = self.model_parameters
 
         agent_class = create_litellm_agent_class(prompt, optimizer_ref=self)
         self.agent_class = agent_class

@@ -11,10 +11,10 @@ class TestHierarchicalReflectiveOptimizer:
     def test_optimizer_initialization(self) -> None:
         """Test that optimizer initializes with correct defaults."""
         optimizer = HierarchicalReflectiveOptimizer(
-            reasoning_model="openai/gpt-4o",
+            model="openai/gpt-4o",
         )
 
-        assert optimizer.reasoning_model == "openai/gpt-4o"
+        assert optimizer.model == "openai/gpt-4o"
         assert optimizer.n_threads == 12
         assert optimizer.max_parallel_batches == 5
         assert optimizer.batch_size == 25
@@ -24,15 +24,15 @@ class TestHierarchicalReflectiveOptimizer:
     def test_optimizer_custom_parameters(self) -> None:
         """Test optimizer with custom parameters."""
         optimizer = HierarchicalReflectiveOptimizer(
-            reasoning_model="openai/gpt-4o-mini",
-            num_threads=8,
+            model="openai/gpt-4o-mini",
+            n_threads=8,
             max_parallel_batches=3,
             batch_size=10,
             verbose=0,
             seed=123,
         )
 
-        assert optimizer.reasoning_model == "openai/gpt-4o-mini"
+        assert optimizer.model == "openai/gpt-4o-mini"
         assert optimizer.n_threads == 8
         assert optimizer.max_parallel_batches == 3
         assert optimizer.batch_size == 10
@@ -42,15 +42,15 @@ class TestHierarchicalReflectiveOptimizer:
     def test_get_optimizer_metadata(self) -> None:
         """Test get_optimizer_metadata returns correct configuration."""
         optimizer = HierarchicalReflectiveOptimizer(
-            reasoning_model="openai/gpt-4o",
-            num_threads=10,
+            model="openai/gpt-4o",
+            n_threads=10,
             max_parallel_batches=4,
         )
 
         metadata = optimizer.get_optimizer_metadata()
 
-        assert metadata["reasoning_model"] == "openai/gpt-4o"
-        assert metadata["num_threads"] == 10
+        assert metadata["model"] == "openai/gpt-4o"
+        assert metadata["n_threads"] == 10
         assert metadata["max_parallel_batches"] == 4
         assert metadata["seed"] == 42
         assert metadata["verbose"] == 1

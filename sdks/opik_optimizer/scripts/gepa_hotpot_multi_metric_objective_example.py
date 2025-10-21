@@ -50,11 +50,8 @@ prompt = ChatPrompt(
 )
 
 optimizer = GepaOptimizer(
-    model="openai/gpt-4o-mini",  # task model
-    reflection_model="openai/gpt-4o",  # reflection model
-    project_name="GEPA-Hotpot",
-    temperature=0.7,
-    max_tokens=400,
+    model="openai/gpt-4o",  # model for GEPA reflection/reasoning
+    model_parameters={"temperature": 0.7, "max_tokens": 400},
 )
 
 multi_metric_objective = opik_optimizer.MultiMetricObjective(
@@ -67,7 +64,7 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=multi_metric_objective,
-    max_metric_calls=60,
+    max_trials=60,
     reflection_minibatch_size=5,
     candidate_selection_strategy="best",
     n_samples=12,

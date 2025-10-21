@@ -109,21 +109,21 @@ ParameterOptimizer(
     verbose: int = 1,
     local_search_ratio: float = 0.3,
     local_search_scale: float = 0.2,
-    model_kwargs: Any
+    model_parameters: dict[str, typing.Any] | None = None
 )
 ```
 
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name</ParamField>
+<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
 <ParamField path="default_n_trials" type="int" optional={true} defaultValue="20" />
 <ParamField path="n_threads" type="int" optional={true} defaultValue="4" />
 <ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>
 <ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
 <ParamField path="local_search_ratio" type="float" optional={true} defaultValue="0.3" />
 <ParamField path="local_search_scale" type="float" optional={true} defaultValue="0.2" />
-<ParamField path="model_kwargs" type="Any">additional args for model (eg, temperature)</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
 
 ### Methods
 #### cleanup
@@ -218,25 +218,33 @@ optimize_parameter(
     metric: Callable,
     parameter_space: opik_optimizer.parameter_optimizer.parameter_search_space.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any],
     experiment_config: dict | None = None,
-    n_trials: int | None = None,
+    max_trials: int | None = None,
     n_samples: int | None = None,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
-    kwargs: Any
+    sampler: optuna.samplers._base.BaseSampler | None = None,
+    callbacks: list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None = None,
+    timeout: float | None = None,
+    local_trials: int | None = None,
+    local_search_scale: float | None = None
 )
 ```
 
 
 **Parameters:**
 
-<ParamField path="prompt" type="ChatPrompt">The chat prompt to evaluate with tuned parameters</ParamField>
+<ParamField path="prompt" type="ChatPrompt">The prompt to evaluate with tuned parameters</ParamField>
 <ParamField path="dataset" type="Dataset">Dataset providing evaluation examples</ParamField>
 <ParamField path="metric" type="Callable">Objective function to maximize</ParamField>
 <ParamField path="parameter_space" type="opik_optimizer.parameter_optimizer.parameter_search_space.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any]">Definition of the search space for tunable parameters</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment metadata</ParamField>
-<ParamField path="n_trials" type="int | None" optional={true}>Number of trials to run (optimizer specific default if None)</ParamField>
+<ParamField path="max_trials" type="int | None" optional={true}>Total number of trials (if None, uses default_n_trials)</ParamField>
 <ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional custom agent class to execute evaluations</ParamField>
-<ParamField path="kwargs" type="Any" />
+<ParamField path="sampler" type="optuna.samplers._base.BaseSampler | None" optional={true}>Optuna sampler to use (default: TPESampler with seed)</ParamField>
+<ParamField path="callbacks" type="list[collections.abc.Callable[[optuna.study.study.Study, optuna.trial._frozen.FrozenTrial], None]] | None" optional={true}>List of callback functions for Optuna study</ParamField>
+<ParamField path="timeout" type="float | None" optional={true}>Maximum time in seconds for optimization</ParamField>
+<ParamField path="local_trials" type="int | None" optional={true}>Number of trials for local search (overrides local_search_ratio)</ParamField>
+<ParamField path="local_search_scale" type="float | None" optional={true}>Scale factor for local search narrowing (0.0-1.0)</ParamField>
 
 ## FewShotBayesianOptimizer
 
@@ -248,7 +256,7 @@ FewShotBayesianOptimizer(
     seed: int = 42,
     n_threads: int = 8,
     verbose: int = 1,
-    model_kwargs: Any
+    model_parameters: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -261,7 +269,7 @@ FewShotBayesianOptimizer(
 <ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility</ParamField>
 <ParamField path="n_threads" type="int" optional={true} defaultValue="8">Number of threads for parallel evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
-<ParamField path="model_kwargs" type="Any" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
 
 ### Methods
 #### cleanup
@@ -359,6 +367,7 @@ optimize_parameter(
     n_trials: int | None = None,
     n_samples: int | None = None,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
     kwargs: Any
 )
 ```
@@ -374,6 +383,7 @@ optimize_parameter(
 <ParamField path="n_trials" type="int | None" optional={true}>Number of trials to run (optimizer specific default if None)</ParamField>
 <ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional custom agent class to execute evaluations</ParamField>
+<ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
@@ -386,6 +396,8 @@ optimize_prompt(
     n_samples: int | None = None,
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
+    max_trials: int = 10,
     kwargs: Any
 )
 ```
@@ -400,6 +412,8 @@ optimize_prompt(
 <ParamField path="n_samples" type="int | None" optional={true}>Optional number of items to test in the dataset</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="max_trials" type="int" optional={true} defaultValue="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
 <ParamField path="kwargs" type="Any" />
 
 ## MetaPromptOptimizer
@@ -407,13 +421,12 @@ optimize_prompt(
 ```python
 MetaPromptOptimizer(
     model: str = 'gpt-4o',
-    rounds: int = 3,
-    num_prompts_per_round: int = 4,
+    prompts_per_round: int = 4,
     verbose: int = 1,
     enable_context: bool = True,
     n_threads: int = 12,
     seed: int = 42,
-    model_kwargs: Any
+    model_parameters: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -421,13 +434,12 @@ MetaPromptOptimizer(
 **Parameters:**
 
 <ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">The model to use for the optimization algorithm (reasoning and prompt generation)</ParamField>
-<ParamField path="rounds" type="int" optional={true} defaultValue="3">Number of optimization rounds</ParamField>
-<ParamField path="num_prompts_per_round" type="int" optional={true} defaultValue="4">Number of prompts to generate per round</ParamField>
+<ParamField path="prompts_per_round" type="int" optional={true} defaultValue="4">Number of prompts to generate per round</ParamField>
 <ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
 <ParamField path="enable_context" type="bool" optional={true} defaultValue="True">Whether to include task-specific context (metrics, examples) in the reasoning prompt.</ParamField>
 <ParamField path="n_threads" type="int" optional={true} defaultValue="12">Number of threads for parallel evaluation</ParamField>
 <ParamField path="seed" type="int" optional={true} defaultValue="42" />
-<ParamField path="model_kwargs" type="Any" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
 
 ### Methods
 #### cleanup
@@ -525,6 +537,7 @@ optimize_parameter(
     n_trials: int | None = None,
     n_samples: int | None = None,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
     kwargs: Any
 )
 ```
@@ -540,6 +553,7 @@ optimize_parameter(
 <ParamField path="n_trials" type="int | None" optional={true}>Number of trials to run (optimizer specific default if None)</ParamField>
 <ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional custom agent class to execute evaluations</ParamField>
+<ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
@@ -552,6 +566,11 @@ optimize_prompt(
     n_samples: int | None = None,
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
+    max_trials: int = 12,
+    mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
+    candidate_generator: collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None = None,
+    candidate_generator_kwargs: dict[str, typing.Any] | None = None,
     kwargs: Any
 )
 ```
@@ -559,13 +578,18 @@ optimize_prompt(
 
 **Parameters:**
 
-<ParamField path="prompt" type="ChatPrompt" />
-<ParamField path="dataset" type="Dataset">Opik dataset name, or Opik dataset</ParamField>
-<ParamField path="metric" type="Callable">A metric function, this function should have two arguments:</ParamField>
-<ParamField path="experiment_config" type="dict | None" optional={true} />
-<ParamField path="n_samples" type="int | None" optional={true} />
-<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
-<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">The dataset to evaluate against</ParamField>
+<ParamField path="metric" type="Callable">The metric to use for evaluation</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>A dictionary to log with the experiments</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>The number of dataset items to use for evaluation</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">If True, the algorithm may continue if goal not met</ParamField>
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="max_trials" type="int" optional={true} defaultValue="12">Maximum number of prompts to test across all rounds (default: 12)</ParamField>
+<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool calling configuration (default: None)</ParamField>
+<ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None" optional={true}>Optional candidate generator</ParamField>
+<ParamField path="candidate_generator_kwargs" type="dict[str, typing.Any] | None" optional={true}>Optional kwargs for candidate generator</ParamField>
 <ParamField path="kwargs" type="Any" />
 
 ## EvolutionaryOptimizer
@@ -707,6 +731,7 @@ optimize_parameter(
     n_trials: int | None = None,
     n_samples: int | None = None,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
     kwargs: Any
 )
 ```
@@ -722,6 +747,7 @@ optimize_parameter(
 <ParamField path="n_trials" type="int | None" optional={true}>Number of trials to run (optimizer specific default if None)</ParamField>
 <ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional custom agent class to execute evaluations</ParamField>
+<ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
@@ -734,6 +760,8 @@ optimize_prompt(
     n_samples: int | None = None,
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
+    mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
     kwargs: Any
 )
 ```
@@ -748,6 +776,8 @@ optimize_prompt(
 <ParamField path="n_samples" type="int | None" optional={true}>Optional number of samples to use</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to automatically continue optimization</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool calling configuration (default: None)</ParamField>
 <ParamField path="kwargs" type="Any" />
 
 ## GepaOptimizer
@@ -758,18 +788,18 @@ GepaOptimizer(
     n_threads: int = 6,
     verbose: int = 1,
     seed: int = 42,
-    model_kwargs: Any
+    model_parameters: dict[str, typing.Any] | None = None
 )
 ```
 
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name</ParamField>
+<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
 <ParamField path="n_threads" type="int" optional={true} defaultValue="6" />
 <ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
 <ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>
-<ParamField path="model_kwargs" type="Any">additional args for model (eg, temperature)</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
 
 ### Methods
 #### cleanup
@@ -867,6 +897,7 @@ optimize_parameter(
     n_trials: int | None = None,
     n_samples: int | None = None,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
     kwargs: Any
 )
 ```
@@ -882,6 +913,7 @@ optimize_parameter(
 <ParamField path="n_trials" type="int | None" optional={true}>Number of trials to run (optimizer specific default if None)</ParamField>
 <ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional custom agent class to execute evaluations</ParamField>
+<ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
@@ -894,6 +926,20 @@ optimize_prompt(
     n_samples: int | None = None,
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
+    max_trials: int = 10,
+    reflection_minibatch_size: int = 3,
+    candidate_selection_strategy: str = 'pareto',
+    skip_perfect_score: bool = True,
+    perfect_score: float = 1.0,
+    use_merge: bool = False,
+    max_merge_invocations: int = 5,
+    run_dir: str | None = None,
+    track_best_outputs: bool = False,
+    display_progress_bar: bool = False,
+    seed: int = 42,
+    raise_on_exception: bool = True,
+    mcp_config: Any = None,
     kwargs: Any
 )
 ```
@@ -908,6 +954,20 @@ optimize_prompt(
 <ParamField path="n_samples" type="int | None" optional={true}>Optional number of items to test in the dataset</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} defaultValue="False">Whether to auto-continue optimization</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="max_trials" type="int" optional={true} defaultValue="10">Maximum number of different prompts to test (default: 10)</ParamField>
+<ParamField path="reflection_minibatch_size" type="int" optional={true} defaultValue="3">Size of reflection minibatches (default: 3)</ParamField>
+<ParamField path="candidate_selection_strategy" type="str" optional={true} defaultValue="pareto">Strategy for candidate selection (default: "pareto")</ParamField>
+<ParamField path="skip_perfect_score" type="bool" optional={true} defaultValue="True">Skip candidates with perfect scores (default: True)</ParamField>
+<ParamField path="perfect_score" type="float" optional={true} defaultValue="1.0">Score considered perfect (default: 1.0)</ParamField>
+<ParamField path="use_merge" type="bool" optional={true} defaultValue="False">Enable merge operations (default: False)</ParamField>
+<ParamField path="max_merge_invocations" type="int" optional={true} defaultValue="5">Maximum merge invocations (default: 5)</ParamField>
+<ParamField path="run_dir" type="str | None" optional={true}>Directory for run outputs (default: None)</ParamField>
+<ParamField path="track_best_outputs" type="bool" optional={true} defaultValue="False">Track best outputs during optimization (default: False)</ParamField>
+<ParamField path="display_progress_bar" type="bool" optional={true} defaultValue="False">Display progress bar (default: False)</ParamField>
+<ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>
+<ParamField path="raise_on_exception" type="bool" optional={true} defaultValue="True">Raise exceptions instead of continuing (default: True)</ParamField>
+<ParamField path="mcp_config" type="Any" optional={true}>MCP tool calling configuration (default: None)</ParamField>
 <ParamField path="kwargs" type="Any" />
 
 ## HierarchicalReflectiveOptimizer
@@ -920,24 +980,22 @@ HierarchicalReflectiveOptimizer(
     seed: int = 42,
     max_parallel_batches: int = 5,
     batch_size: int = 25,
-    max_iterations: int = 5,
     convergence_threshold: float = 0.01,
-    model_kwargs: Any
+    model_parameters: dict[str, typing.Any] | None = None
 )
 ```
 
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name</ParamField>
+<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
 <ParamField path="n_threads" type="int" optional={true} defaultValue="12" />
 <ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
 <ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>
 <ParamField path="max_parallel_batches" type="int" optional={true} defaultValue="5" />
 <ParamField path="batch_size" type="int" optional={true} defaultValue="25" />
-<ParamField path="max_iterations" type="int" optional={true} defaultValue="5" />
 <ParamField path="convergence_threshold" type="float" optional={true} defaultValue="0.01" />
-<ParamField path="model_kwargs" type="Any">additional args for model (eg, temperature)</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls.</ParamField>
 
 ### Methods
 #### cleanup
@@ -1035,6 +1093,7 @@ optimize_parameter(
     n_trials: int | None = None,
     n_samples: int | None = None,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
     kwargs: Any
 )
 ```
@@ -1050,6 +1109,7 @@ optimize_parameter(
 <ParamField path="n_trials" type="int | None" optional={true}>Number of trials to run (optimizer specific default if None)</ParamField>
 <ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional custom agent class to execute evaluations</ParamField>
+<ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
@@ -1062,6 +1122,8 @@ optimize_prompt(
     n_samples: int | None = None,
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
+    args: Any,
+    max_trials: int = 5,
     max_retries: int = 2,
     kwargs: Any
 )
@@ -1077,6 +1139,8 @@ optimize_prompt(
 <ParamField path="n_samples" type="int | None" optional={true} />
 <ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
+<ParamField path="args" type="Any" />
+<ParamField path="max_trials" type="int" optional={true} defaultValue="5" />
 <ParamField path="max_retries" type="int" optional={true} defaultValue="2" />
 <ParamField path="kwargs" type="Any" />
 
@@ -1093,7 +1157,7 @@ ChatPrompt(
     model: str = 'gpt-4o-mini',
     invoke: collections.abc.Callable | None = None,
     project_name: str | None = 'Default Project',
-    model_kwargs: Any
+    model_parameters: dict[str, typing.Any] | None = None
 )
 ```
 
@@ -1109,7 +1173,7 @@ ChatPrompt(
 <ParamField path="model" type="str" optional={true} defaultValue="gpt-4o-mini" />
 <ParamField path="invoke" type="collections.abc.Callable | None" optional={true} />
 <ParamField path="project_name" type="str | None" optional={true} defaultValue="Default Project" />
-<ParamField path="model_kwargs" type="Any" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
 
 ### Methods
 #### copy

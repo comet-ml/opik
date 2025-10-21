@@ -184,11 +184,10 @@ prompt = ChatPrompt(
 
 # Initialize the Hierarchical Reflective Optimizer
 optimizer = HierarchicalReflectiveOptimizer(
-    reasoning_model="openai/gpt-4o",  # Stronger model for analysis and improvement
-    num_threads=4,  # Parallel evaluation threads
+    model="openai/gpt-4o",  # Model for analysis and improvement
+    n_threads=4,  # Parallel evaluation threads
     max_parallel_batches=3,  # Batches analyzed concurrently
-    temperature=0.7,  # For improvement generation
-    max_tokens=4096,
+    model_parameters={"temperature": 0.7, "max_tokens": 4096},
     seed=42,
     verbose=1,  # Show progress
 )

@@ -14,7 +14,6 @@ from opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer impo
 from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import (
     EvolutionaryOptimizer,
 )
-from opik_optimizer.mipro_optimizer.mipro_optimizer import MiproOptimizer
 from opik_optimizer.optimization_config import chat_prompt
 
 
@@ -128,20 +127,6 @@ class TestCounterFunctionality:
         # Test counter methods
         optimizer._increment_llm_counter()
         optimizer._increment_tool_counter()
-
-        assert optimizer.llm_call_counter == 1
-        assert optimizer.tool_call_counter == 1
-
-    def test_mipro_optimizer_counters(self) -> None:
-        """Test that MiproOptimizer has proper counters."""
-        optimizer = MiproOptimizer(model="gpt-4o-mini")
-
-        assert optimizer.llm_call_counter == 0
-        assert optimizer.tool_call_counter == 0
-
-        # Test counter methods
-        optimizer._increment_llm_counter()
-        optimizer.increment_tool_counter()
 
         assert optimizer.llm_call_counter == 1
         assert optimizer.tool_call_counter == 1

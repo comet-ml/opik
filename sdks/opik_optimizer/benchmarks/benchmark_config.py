@@ -30,6 +30,7 @@ class BenchmarkProjectConfig(BaseModel):
 class BenchmarkOptimizerConfig(BaseModel):
     class_name: str
     params: dict[str, Any]
+    optimize_params: dict[str, Any] = {}
 
 
 class BenchmarkExperimentConfig(BaseModel):
@@ -44,11 +45,26 @@ class BenchmarkExperimentConfig(BaseModel):
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+    result = LevenshteinRatio().score(
+        reference=dataset_item["answer"], output=llm_output
+    )
+    return ScoreResult(
+        name="levenshtein_ratio",
+        value=result.value,
+        reason=f"Compared `{dataset_item['answer']}` and `{llm_output}` and got `{result.value}`.",
+    )
 
 
 def equals(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    return Equals().score(reference=dataset_item["answer"], output=llm_output)
+    result = Equals().score(reference=dataset_item["answer"], output=llm_output)
+    if result.value == 1:
+        return ScoreResult(name="equals", value=1, reason="The answer is correct.")
+    else:
+        return ScoreResult(
+            name="equals",
+            value=0,
+            reason=f"The LLM output is not equal to the answer. Expected `{dataset_item['answer']}` but got `{llm_output}`.",
+        )
 
 
 def create_answer_relevance_metric(name_input_col: str) -> Callable:
@@ -79,9 +95,7 @@ def create_context_recall(name_input_col: str) -> Callable:
 
 
 def hallucination(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    return Hallucination(require_context=False).score(
-        input=dataset_item["question"], output=llm_output
-    )
+    return Hallucination().score(input=dataset_item["question"], output=llm_output)
 
 
 DATASET_CONFIG = {
@@ -101,7 +115,8 @@ DATASET_CONFIG = {
     "medhallu": BenchmarkDatasetConfig(
         name="MedHallu",
         display_name="MedHallu",
-        metrics=[hallucination, create_answer_relevance_metric("question")],
+        # metrics=[hallucination, create_answer_relevance_metric("question")],
+        metrics=[create_answer_relevance_metric("question")],
     ),
     "rag_hallucinations": BenchmarkDatasetConfig(
         name="rag_hallucinations",
@@ -157,18 +172,30 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
     "evolutionary_optimizer": BenchmarkOptimizerConfig(
         class_name="EvolutionaryOptimizer",
         params={
-            "population_size": 10,
-            "num_generations": 4,
             "mutation_rate": 0.2,
             "crossover_rate": 0.8,
             "tournament_size": 4,
-            "num_threads": 4,
+            "n_threads": 4,
             "elitism_size": 2,
             "adaptive_mutation": True,
             "enable_moo": False,
             "enable_llm_crossover": False,
             "seed": 42,
             "infer_output_style": True,
+        },
+        optimize_params={
+            "population_size": 10,
+            "num_generations": 4,
+        },
+    ),
+    "hierarchical_reflective": BenchmarkOptimizerConfig(
+        class_name="HierarchicalReflectiveOptimizer",
+        params={
+            "n_threads": 4,
+            "max_parallel_batches": 5,
+            "batch_size": 25,
+            "convergence_threshold": 0.01,
+            "seed": 42,
         },
     ),
 }

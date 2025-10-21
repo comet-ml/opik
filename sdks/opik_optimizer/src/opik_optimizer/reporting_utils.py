@@ -14,6 +14,24 @@ from .utils import get_optimization_run_url_by_id
 PANEL_WIDTH = 70
 
 
+def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
+    """
+    Calculate percentage change safely, handling division by zero.
+
+    Args:
+        current: Current value
+        baseline: Baseline value to compare against
+
+    Returns:
+        Tuple of (percentage_change, has_percentage) where:
+        - percentage_change: The percentage change if calculable, otherwise 0
+        - has_percentage: True if percentage was calculated, False if baseline was zero
+    """
+    if baseline == 0:
+        return 0.0, False
+    return (current - baseline) / baseline, True
+
+
 def get_console(*args: Any, **kwargs: Any) -> Console:
     console = Console(*args, **kwargs)
     console.is_jupyter = False
@@ -196,18 +214,18 @@ def display_result(
     content: Text | Panel = []
 
     if best_score > initial_score:
-        if initial_score == 0:
+        perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
+        if has_percentage:
             content += [
                 Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
                     style="bold green",
                 )
             ]
         else:
-            perc_change = (best_score - initial_score) / initial_score
             content += [
                 Text(
-                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
+                    f"Prompt was optimized and improved from {initial_score:.4f} to {best_score:.4f}",
                     style="bold green",
                 )
             ]

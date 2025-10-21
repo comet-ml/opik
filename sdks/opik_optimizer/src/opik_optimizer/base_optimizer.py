@@ -56,20 +56,24 @@ class BaseOptimizer(ABC):
         model: str,
         verbose: int = 1,
         seed: int = 42,
-        **model_kwargs: Any,
+        model_parameters: dict[str, Any] | None = None,
     ) -> None:
         """
         Base class for optimizers.
 
         Args:
-           model: LiteLLM model name
+           model: LiteLLM model name for optimizer's internal reasoning/generation calls
            verbose: Controls internal logging/progress bars (0=off, 1=on).
            seed: Random seed for reproducibility (default: 42)
-           model_kwargs: additional args for model (eg, temperature)
+           model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+               Common params: temperature, max_tokens, max_completion_tokens, top_p,
+               presence_penalty, frequency_penalty.
+               See: https://docs.litellm.ai/docs/completion/input
+               Note: These params control the optimizer's reasoning model, NOT the prompt evaluation.
         """
         self.model = model
         self.reasoning_model = model
-        self.model_kwargs = model_kwargs
+        self.model_parameters = model_parameters or {}
         self.verbose = verbose
         self.seed = seed
         self._history: list[OptimizationRound] = []
@@ -200,44 +204,41 @@ class BaseOptimizer(ABC):
 
     def _prepare_model_params(
         self,
-        model_kwargs: dict[str, Any],
+        call_time_params: dict[str, Any],
         response_model: type[BaseModel] | None = None,
+        is_reasoning: bool = False,
     ) -> dict[str, Any]:
         """
-        Prepare parameters for LiteLLM call by filtering and adding monitoring.
+        Prepare parameters for LiteLLM call by merging and adding monitoring.
 
         Args:
-            model_kwargs: Additional model parameters
+            call_time_params: Dict of LiteLLM params from call-time overrides
             response_model: Optional Pydantic model for structured output
+            is_reasoning: Flag for metadata tagging
 
         Returns:
-            Dictionary of parameters ready for litellm.completion/acompletion
+            Dictionary ready for litellm.completion/acompletion
         """
         from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
-        current_model_kwargs = self.model_kwargs.copy()
-        current_model_kwargs.update(model_kwargs)
+        # Merge optimizer's model_parameters with call-time overrides
+        merged_params = {**self.model_parameters, **call_time_params}
 
-        # Filter out optimizer-specific kwargs that shouldn't be passed to LiteLLM
-        filtered_call_kwargs = current_model_kwargs.copy()
-        filtered_call_kwargs.pop("n_trials", None)
-        filtered_call_kwargs.pop("n_samples", None)
-        filtered_call_kwargs.pop("n_iterations", None)
-        filtered_call_kwargs.pop("min_examples", None)
-        filtered_call_kwargs.pop("max_examples", None)
-        filtered_call_kwargs.pop("project_name", None)
-
-        final_params_for_litellm = (
-            opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
+        # Add Opik monitoring wrapper
+        final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
+            merged_params
         )
 
-        # Add structured output support if response_model is provided
-        # According to LiteLLM docs: https://docs.litellm.ai/docs/completion/json_mode
-        # Pass the Pydantic model directly to response_format
-        if response_model is not None:
-            final_params_for_litellm["response_format"] = response_model
+        # Add reasoning metadata if applicable
+        if is_reasoning and "metadata" in final_params:
+            if "opik_call_type" not in final_params["metadata"]:
+                final_params["metadata"]["opik_call_type"] = "reasoning"
 
-        return final_params_for_litellm
+        # Add structured output support
+        if response_model is not None:
+            final_params["response_format"] = response_model
+
+        return final_params
 
     def _parse_response(
         self,
@@ -271,7 +272,17 @@ class BaseOptimizer(ABC):
         model: str | None = None,
         seed: int | None = None,
         response_model: type[BaseModel] | None = None,
-        **model_kwargs: Any,
+        is_reasoning: bool = False,
+        # Explicit call-time overrides for LiteLLM params
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        max_completion_tokens: int | None = None,
+        top_p: float | None = None,
+        presence_penalty: float | None = None,
+        frequency_penalty: float | None = None,
+        # Optimizer-specific metadata (not passed to LiteLLM)
+        optimization_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> BaseModel | str:
         """
         Call the LLM model with optional structured output.
@@ -281,7 +292,15 @@ class BaseOptimizer(ABC):
             model: The model to use (defaults to self.model)
             seed: Random seed for reproducibility (defaults to self.seed)
             response_model: Optional Pydantic model for structured output
-            **model_kwargs: Additional model parameters
+            is_reasoning: Flag for metadata tagging (not passed to LiteLLM)
+            temperature: Sampling temperature (0-2)
+            max_tokens: Maximum tokens to generate
+            max_completion_tokens: Upper bound for generated tokens
+            top_p: Nucleus sampling probability mass
+            presence_penalty: Penalty for new tokens based on presence
+            frequency_penalty: Penalty for new tokens based on frequency
+            optimization_id: Optional ID for optimization tracking (metadata only)
+            metadata: Optional metadata dict for monitoring
 
         Returns:
             If response_model is provided, returns an instance of that model.
@@ -289,8 +308,26 @@ class BaseOptimizer(ABC):
         """
         self._increment_llm_counter()
 
+        # Build dict of call-time LiteLLM parameter overrides (non-None only)
+        call_time_params: dict[str, Any] = {}
+        if temperature is not None:
+            call_time_params["temperature"] = temperature
+        if max_tokens is not None:
+            call_time_params["max_tokens"] = max_tokens
+        if max_completion_tokens is not None:
+            call_time_params["max_completion_tokens"] = max_completion_tokens
+        if top_p is not None:
+            call_time_params["top_p"] = top_p
+        if presence_penalty is not None:
+            call_time_params["presence_penalty"] = presence_penalty
+        if frequency_penalty is not None:
+            call_time_params["frequency_penalty"] = frequency_penalty
+        if metadata is not None:
+            call_time_params["metadata"] = metadata
+        # optimization_id is NOT passed to LiteLLM - it's metadata only
+
         final_params_for_litellm = self._prepare_model_params(
-            model_kwargs, response_model
+            call_time_params, response_model, is_reasoning
         )
 
         response = litellm.completion(
@@ -409,7 +446,7 @@ class BaseOptimizer(ABC):
             "name": self.__class__.__name__,
             "version": _OPTIMIZER_VERSION,
             "model": self.model,
-            "model_kwargs": self.model_kwargs or None,
+            "model_parameters": self.model_parameters or None,
             "seed": getattr(self, "seed", None),
             "num_threads": getattr(self, "num_threads", None),
         }
@@ -493,6 +530,7 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -570,6 +608,7 @@ class BaseOptimizer(ABC):
         n_trials: int | None = None,
         n_samples: int | None = None,
         agent_class: type[OptimizableAgent] | None = None,
+        *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """

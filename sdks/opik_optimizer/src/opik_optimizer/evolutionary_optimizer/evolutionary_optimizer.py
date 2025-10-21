@@ -512,6 +512,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        *args: Any,
+        mcp_config: MCPExecutionConfig | None = None,
         **kwargs: Any,
     ) -> OptimizationResult:
         """
@@ -523,15 +525,11 @@ class EvolutionaryOptimizer(BaseOptimizer):
             n_samples: Optional number of samples to use
             auto_continue: Whether to automatically continue optimization
             agent_class: Optional agent class to use
-            **kwargs: Additional keyword arguments including:
-                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
+            mcp_config: MCP tool calling configuration (default: None)
         """
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
-
-        # Extract MCP config from kwargs (for optional MCP workflows)
-        mcp_config = kwargs.pop("mcp_config", None)
         evaluation_kwargs: dict[str, Any] = {}
         if mcp_config is not None:
             evaluation_kwargs["mcp_config"] = mcp_config
@@ -941,7 +939,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "seed": self.seed,
                 "prompt_type": "single_string_ga",
                 "initial_score_for_display": initial_score_for_display,
-                "temperature": self.model_kwargs.get("temperature"),
+                "temperature": self.model_parameters.get("temperature"),
                 "stopped_early": stopped_early_flag,
                 "rounds": self.get_history(),
                 "user_output_style_guidance": self.output_style_guidance,

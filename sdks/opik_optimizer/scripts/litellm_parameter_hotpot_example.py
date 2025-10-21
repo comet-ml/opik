@@ -41,8 +41,7 @@ def main() -> None:
         ),
         user="Question: {question}\nAnswer:",
         model="openai/gpt-4o-mini",
-        temperature=0.7,
-        top_p=0.95,
+        model_parameters={"temperature": 0.7, "top_p": 0.95},
     )
 
     optimizer = ParameterOptimizer(
@@ -69,7 +68,7 @@ def main() -> None:
         dataset=dataset,
         metric=levenshtein_ratio,
         parameter_space=parameter_space,
-        n_trials=20,
+        max_trials=20,
         n_samples=5,
     )
 

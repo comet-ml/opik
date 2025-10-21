@@ -56,13 +56,13 @@ def test_parameter_optimizer_selects_best_parameters(
     )
     monkeypatch.setattr(
         ParameterOptimizer,
-        "validate_optimization_inputs",
+        "_validate_optimization_inputs",
         lambda *args, **kwargs: None,
         raising=False,
     )
     monkeypatch.setattr(
         ParameterOptimizer,
-        "setup_agent_class",
+        "_setup_agent_class",
         lambda self, prompt, agent_class=None: types.SimpleNamespace(),
         raising=False,
     )
@@ -77,7 +77,7 @@ def test_parameter_optimizer_selects_best_parameters(
         dataset=object(),
         metric=lambda *_: 0.0,
         parameter_space=parameter_space,
-        n_trials=2,
+        max_trials=2,
     )
 
     assert pytest.approx(result.initial_score) == 0.1

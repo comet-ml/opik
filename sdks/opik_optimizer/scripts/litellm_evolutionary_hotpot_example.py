@@ -53,12 +53,12 @@ prompt = ChatPrompt(
 # Initialize the optimizer with custom parameters
 optimizer = EvolutionaryOptimizer(
     model="gpt-4o-mini",
-    population_size=10,
-    num_generations=3,
     enable_moo=False,
     enable_llm_crossover=True,
     infer_output_style=True,
     verbose=1,
+    population_size=10,
+    num_generations=3,
 )
 
 # Create the optimization configuration

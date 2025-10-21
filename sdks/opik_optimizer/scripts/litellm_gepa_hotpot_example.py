@@ -69,10 +69,11 @@ prompt = ChatPrompt(
 
 # Optimize it with GEPA
 optimizer = GepaOptimizer(
-    model="openai/gpt-4o-mini",  # smaller task model (valid LiteLLM)
-    reflection_model="openai/gpt-4o",  # larger reflection model (valid LiteLLM)
-    temperature=0.0,  # deterministic completions during optimization
-    max_tokens=400,
+    model="openai/gpt-4o",  # model for GEPA reflection/reasoning
+    model_parameters={
+        "temperature": 0.0,
+        "max_tokens": 400,
+    },  # deterministic completions
 )
 
 result = optimizer.optimize_prompt(
@@ -80,7 +81,7 @@ result = optimizer.optimize_prompt(
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=12,
-    max_metric_calls=60,
+    max_trials=60,
     reflection_minibatch_size=5,
     candidate_selection_strategy="best",
     display_progress_bar=True,

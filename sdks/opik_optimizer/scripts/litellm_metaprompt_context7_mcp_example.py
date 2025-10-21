@@ -161,12 +161,9 @@ prompt = ChatPrompt(
 # Optimize the tool invocation
 meta_optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",
-    max_rounds=2,
-    num_prompts_per_round=3,
-    improvement_threshold=0.01,
-    temperature=0.2,
+    prompts_per_round=3,
     n_threads=1,
-    subsample_size=min(5, len(dataset.get_items())),
+    model_parameters={"temperature": 0.2},
 )
 meta_result = meta_optimizer.optimize_mcp(
     prompt=prompt,
@@ -174,8 +171,9 @@ meta_result = meta_optimizer.optimize_mcp(
     metric=context7_metric,
     tool_name=TOOL_NAME,
     second_pass=second_pass,
+    max_trials=6,  # Number of total trials (max_rounds * num_prompts_per_round)
     fallback_invoker=lambda args: tool_invocation.invoke(args),
-    n_samples=len(dataset.get_items()),
+    n_samples=min(5, len(dataset.get_items())),
     tool_panel_style="bright_magenta",
 )
 

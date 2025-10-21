@@ -643,15 +643,27 @@ def display_optimized_prompt_diff(
 
     # Show score improvement
     if best_score > initial_score:
-        perc_change = (best_score - initial_score) / initial_score
-        console.print(
-            Text("│   ").append(
-                Text(
-                    f"Prompt improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
-                    style="green",
+        from ..reporting_utils import safe_percentage_change
+
+        perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
+        if has_percentage:
+            console.print(
+                Text("│   ").append(
+                    Text(
+                        f"Prompt improved from {initial_score:.4f} to {best_score:.4f} ({perc_change:.2%})",
+                        style="green",
+                    )
                 )
             )
-        )
+        else:
+            console.print(
+                Text("│   ").append(
+                    Text(
+                        f"Prompt improved from {initial_score:.4f} to {best_score:.4f}",
+                        style="green",
+                    )
+                )
+            )
     else:
         console.print(
             Text("│   ").append(
@@ -663,79 +675,130 @@ def display_optimized_prompt_diff(
     console.print(Text("│   ").append(Text("Prompt Changes:", style="cyan")))
     console.print(Text("│"))
 
-    # Compare each message
-    for idx in range(max(len(initial_messages), len(optimized_messages))):
-        initial_msg = initial_messages[idx] if idx < len(initial_messages) else None
-        optimized_msg = (
-            optimized_messages[idx] if idx < len(optimized_messages) else None
-        )
+    # Create a better diff by matching messages by role and content similarity
+    def find_best_match(
+        target_msg: dict[str, str],
+        message_list: list[dict[str, str]],
+        used_indices: set[int],
+    ) -> tuple[int | None, float]:
+        """Find the best matching message in the list that hasn't been used yet."""
+        target_role = target_msg.get("role", "message")
+        target_content = target_msg.get("content", "")
 
-        # Get role from whichever message exists
-        role = "message"
-        if initial_msg:
-            role = initial_msg.get("role", "message")
-        elif optimized_msg:
-            role = optimized_msg.get("role", "message")
+        best_match_idx: int | None = None
+        best_similarity: float = -1.0
 
-        initial_content = initial_msg.get("content", "") if initial_msg else ""
-        optimized_content = optimized_msg.get("content", "") if optimized_msg else ""
+        for idx, msg in enumerate(message_list):
+            if idx in used_indices:
+                continue
 
-        # Handle added messages
-        if not initial_msg:
-            console.print(
-                Text("│     ").append(Text(f"{role}: (added)", style="green bold"))
-            )
-            for line in optimized_content.splitlines():
-                console.print(Text("│       ").append(Text(f"+{line}", style="green")))
-            console.print(Text("│"))
+            msg_role = msg.get("role", "message")
+            msg_content = msg.get("content", "")
+
+            # Prefer exact role match
+            if msg_role == target_role:
+                # Calculate content similarity
+                similarity = difflib.SequenceMatcher(
+                    None, target_content, msg_content
+                ).ratio()
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    best_match_idx = idx
+
+        return best_match_idx, best_similarity
+
+    # Track which messages have been matched
+    initial_used: set[int] = set()
+    optimized_used: set[int] = set()
+
+    # First, process all initial messages
+    for initial_idx, initial_msg in enumerate(initial_messages):
+        if initial_idx in initial_used:
             continue
 
-        # Handle removed messages
-        if not optimized_msg:
+        initial_role = initial_msg.get("role", "message")
+        initial_content = initial_msg.get("content", "")
+
+        # Find best match in optimized messages
+        match_idx, similarity = find_best_match(
+            initial_msg, optimized_messages, optimized_used
+        )
+
+        if (
+            match_idx is not None and similarity > 0.3
+        ):  # Threshold for considering it a match
+            # Found a match - show diff
+            optimized_msg = optimized_messages[match_idx]
+            optimized_content = optimized_msg.get("content", "")
+
+            initial_used.add(initial_idx)
+            optimized_used.add(match_idx)
+
+            # Check if there are changes
+            if initial_content == optimized_content:
+                console.print(
+                    Text("│     ").append(
+                        Text(f"{initial_role}: (unchanged)", style="dim")
+                    )
+                )
+                continue
+
+            # Generate unified diff
+            diff_lines = list(
+                difflib.unified_diff(
+                    initial_content.splitlines(keepends=False),
+                    optimized_content.splitlines(keepends=False),
+                    lineterm="",
+                    n=3,  # 3 lines of context
+                )
+            )
+
+            if diff_lines:
+                # Display message header
+                console.print(
+                    Text("│     ").append(Text(f"{initial_role}:", style="bold cyan"))
+                )
+
+                # Create diff content
+                diff_content = Text()
+                for line in diff_lines[3:]:  # Skip first 3 lines (---, +++, @@)
+                    if line.startswith("+"):
+                        diff_content.append("│       " + line + "\n", style="green")
+                    elif line.startswith("-"):
+                        diff_content.append("│       " + line + "\n", style="red")
+                    elif line.startswith("@@"):
+                        diff_content.append("│       " + line + "\n", style="cyan dim")
+                    else:
+                        # Context line
+                        diff_content.append("│       " + line + "\n", style="dim")
+
+                console.print(diff_content)
+                console.print(Text("│"))
+        else:
+            # No match found - this message was removed
             console.print(
-                Text("│     ").append(Text(f"{role}: (removed)", style="red bold"))
+                Text("│     ").append(
+                    Text(f"{initial_role}: (removed)", style="red bold")
+                )
             )
             for line in initial_content.splitlines():
                 console.print(Text("│       ").append(Text(f"-{line}", style="red")))
             console.print(Text("│"))
+            initial_used.add(initial_idx)
+
+    # Now process any remaining optimized messages (added messages)
+    for optimized_idx, optimized_msg in enumerate(optimized_messages):
+        if optimized_idx in optimized_used:
             continue
 
-        # Check if there are changes
-        if initial_content == optimized_content:
-            # No changes in this message
-            console.print(
-                Text("│     ").append(Text(f"{role}: (unchanged)", style="dim"))
-            )
-            continue
+        optimized_role = optimized_msg.get("role", "message")
+        optimized_content = optimized_msg.get("content", "")
 
-        # Generate unified diff
-        diff_lines = list(
-            difflib.unified_diff(
-                initial_content.splitlines(keepends=False),
-                optimized_content.splitlines(keepends=False),
-                lineterm="",
-                n=3,  # 3 lines of context
+        console.print(
+            Text("│     ").append(
+                Text(f"{optimized_role}: (added)", style="green bold")
             )
         )
-
-        if not diff_lines:
-            continue
-
-        # Display message header
-        console.print(Text("│     ").append(Text(f"{role}:", style="bold cyan")))
-
-        # Create diff content
-        diff_content = Text()
-        for line in diff_lines[3:]:  # Skip first 3 lines (---, +++, @@)
-            if line.startswith("+"):
-                diff_content.append("│       " + line + "\n", style="green")
-            elif line.startswith("-"):
-                diff_content.append("│       " + line + "\n", style="red")
-            elif line.startswith("@@"):
-                diff_content.append("│       " + line + "\n", style="cyan dim")
-            else:
-                # Context line
-                diff_content.append("│       " + line + "\n", style="dim")
-
-        console.print(diff_content)
+        for line in optimized_content.splitlines():
+            console.print(Text("│       ").append(Text(f"+{line}", style="green")))
         console.print(Text("│"))

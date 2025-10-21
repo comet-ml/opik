@@ -42,7 +42,7 @@ class ChatPrompt:
         model: str = "gpt-4o-mini",
         invoke: Callable | None = None,
         project_name: str | None = "Default Project",
-        **model_kwargs: Any,
+        model_parameters: dict[str, Any] | None = None,
     ) -> None:
         if system is None and user is None and messages is None:
             raise ValueError(
@@ -92,7 +92,7 @@ class ChatPrompt:
             self.function_map = {}
         # These are used for the LiteLLMAgent class:
         self.model = model
-        self.model_kwargs = model_kwargs
+        self.model_kwargs = model_parameters or {}
         self.invoke = invoke
         self.project_name = project_name
 
@@ -149,8 +149,8 @@ class ChatPrompt:
 
         # TODO(opik-mcp): once we introduce a dedicated MCP prompt subclass,
         # migrate callers away from generic copies so optimizer metadata stays typed.
-        model_kwargs = (
-            copy.deepcopy(self.model_kwargs) if self.model_kwargs is not None else {}
+        model_parameters = (
+            copy.deepcopy(self.model_kwargs) if self.model_kwargs else None
         )
         return ChatPrompt(
             name=self.name,
@@ -162,7 +162,7 @@ class ChatPrompt:
             model=self.model,
             invoke=self.invoke,
             project_name=self.project_name,
-            **model_kwargs,
+            model_parameters=model_parameters,
         )
 
     def set_messages(self, messages: list[dict[str, Any]]) -> None:
@@ -192,6 +192,6 @@ class ChatPrompt:
         """Custom validation method to handle nested objects during deserialization."""
         return ChatPrompt(
             system=obj.get("system", None),
-            prompt=obj.get("prompt", None),
+            user=obj.get("user", None),
             messages=obj.get("messages", None),
         )

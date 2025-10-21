@@ -138,14 +138,12 @@ def all_optimizer_classes() -> list[type]:
         FewShotBayesianOptimizer,
         GepaOptimizer,
     )
-    from opik_optimizer.mipro_optimizer.mipro_optimizer import MiproOptimizer
 
     return [
         MetaPromptOptimizer,
         EvolutionaryOptimizer,
         FewShotBayesianOptimizer,
         GepaOptimizer,
-        MiproOptimizer,
     ]
 
 
@@ -158,11 +156,10 @@ def optimizer_instances() -> dict[str, Any]:
         FewShotBayesianOptimizer,
         GepaOptimizer,
     )
-    from opik_optimizer.mipro_optimizer.mipro_optimizer import MiproOptimizer
 
     return {
         "MetaPromptOptimizer": MetaPromptOptimizer(
-            model="openai/gpt-4", rounds=1, num_prompts_per_round=1
+            model="openai/gpt-4", prompts_per_round=1
         ),
         "EvolutionaryOptimizer": EvolutionaryOptimizer(
             model="openai/gpt-4", population_size=2, num_generations=1
@@ -170,8 +167,7 @@ def optimizer_instances() -> dict[str, Any]:
         "FewShotBayesianOptimizer": FewShotBayesianOptimizer(
             model="openai/gpt-4", min_examples=1, max_examples=2
         ),
-        "GepaOptimizer": GepaOptimizer(model="openai/gpt-4", num_threads=2),
-        "MiproOptimizer": MiproOptimizer(model="openai/gpt-4"),
+        "GepaOptimizer": GepaOptimizer(model="openai/gpt-4", n_threads=2),
     }
 
 
@@ -201,16 +197,8 @@ VALID_OPTIMIZER_PARAMS = {
     },
     "GepaOptimizer": {
         "model": "openai/gpt-4",
-        "project_name": "test-project",
-        "reflection_model": "openai/gpt-3.5-turbo",
-        "num_threads": 6,
+        "n_threads": 6,
         "seed": 42,
-        "verbose": 1,
-    },
-    "MiproOptimizer": {
-        "model": "openai/gpt-4",
-        "project_name": "test-project",
-        "num_threads": 6,
         "verbose": 1,
     },
 }
@@ -239,16 +227,9 @@ INVALID_OPTIMIZER_PARAMS: dict[str, list[dict[str, Any]]] = {
         {"model": ""},  # Invalid model - empty string
         {"model": "   "},  # Invalid model - whitespace only
         {"model": 123},  # Invalid model - not a string
-        {"project_name": 123},  # Invalid project_name - not a string
-        {"reflection_model": 123},  # Invalid reflection_model - not a string
         {"verbose": "invalid"},  # Invalid verbose - not an integer
         {"verbose": -1},  # Invalid verbose - negative
         {"seed": "invalid"},  # Invalid seed - not an integer
-    ],
-    "MiproOptimizer": [
-        {"model": None},  # Invalid model
-        {"model": "openai/gpt-4", "num_threads": 0},  # Invalid num_threads
-        {"model": "openai/gpt-4", "num_threads": -1},  # Invalid num_threads
     ],
 }
 
