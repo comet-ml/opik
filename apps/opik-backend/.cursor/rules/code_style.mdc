@@ -1,45 +1,9 @@
 ---
-description: Code Quality guidelines
+description: Code Style guidelines
 globs: apps/opik-backend/**/*
 alwaysApply: false
 ---
 # Backend Java Code Style Guidelines
-
-## Import Organization
-
-### Always Use Imports
-
-**Rule**: Use proper imports instead of fully qualified class names in code.
-
-### ❌ BAD: Fully Qualified Class Names
-
-```java
-public void method() {
-    java.util.List<String> items = java.util.Arrays.asList("a", "b");
-    java.util.stream.Stream<java.util.Map<String, Object>> stream = items.stream()
-        .map(java.util.Collections::singletonMap);
-}
-```
-
-### ✅ GOOD: Proper Imports
-
-```java
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Stream;
-
-public void method() {
-    List<String> items = Arrays.asList("a", "b");
-    Stream<Map<String, Object>> stream = items.stream()
-        .map(Collections::singletonMap);
-}
-```
-
-**When to use fully qualified names**:
-- Class name conflicts (e.g., `java.sql.Date` vs `java.util.Date`)
-- One-time usage of obscure classes (judgment call)
 
 ## Comment Hygiene
 

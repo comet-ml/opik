@@ -156,6 +156,30 @@ void createUsers() {
 }
 ```
 
+### **Leverage Random Generation**
+
+**Rule**: Use `factory.manufacturePojo()` to generate random test data instead of manually setting values, unless specific values are required for the test case.
+
+```java
+// ❌ BAD: Manually setting values that don't need to be specific
+var builder = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+    .projectId(projectId);
+
+if (field.equals("name")) {
+    builder.name("name-" + (char) ('a' + i) + "-" + RandomStringUtils.randomAlphanumeric(5));
+} else if (field.equals("sampling_rate")) {
+    builder.samplingRate((float) (i + 1) / 10);
+}
+
+// ✅ GOOD: Let factory generate random values, only override when necessary
+var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+    .projectId(projectId)
+    .build();
+
+// Factory generates sufficiently random values for testing sorting
+// If values collide, use secondary sort by id (which is time-based)
+```
+
 ## Assertion Best Practices
 
 ### **Object Equality vs Field-by-Field Assertions**
@@ -399,29 +423,7 @@ static Stream<Arguments> sortingTestCases() {
 }
 ```
 
-### **Leverage PODAM Random Generation**
-
-**Rule**: Use `factory.manufacturePojo()` to generate random test data instead of manually setting values, unless specific values are required for the test case.
-
-```java
-// ❌ BAD: Manually setting values that don't need to be specific
-var builder = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-    .projectId(projectId);
-
-if (field.equals("name")) {
-    builder.name("name-" + (char) ('a' + i) + "-" + RandomStringUtils.randomAlphanumeric(5));
-} else if (field.equals("sampling_rate")) {
-    builder.samplingRate((float) (i + 1) / 10);
-}
-
-// ✅ GOOD: Let factory generate random values, only override when necessary
-var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-    .projectId(projectId)
-    .build();
-
-// Factory generates sufficiently random values for testing sorting
-// If values collide, use secondary sort by id (which is time-based)
-```
+**Note**: For test data generation in parameterized tests, follow the [PODAM guidelines](#podam-configuration) above. Let the factory generate random values and only override when necessary for the specific test scenario.
 
 ### **Pagination Testing**
 
