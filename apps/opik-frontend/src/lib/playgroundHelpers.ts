@@ -2,15 +2,24 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { Span } from "@/types/traces";
 import { generateRandomString } from "@/lib/utils";
 
+// Extract role constants for better maintainability
+const ANTHROPIC_ROLE = {
+  SYSTEM: "system",
+  USER: "user",
+  ASSISTANT: "assistant", 
+  HUMAN: "human", // Anthropic-specific
+  AI: "ai", // Anthropic-specific
+} as const;
+
 /**
  * Valid Anthropic message roles including standard ones plus Anthropic-specific role names
  */
-const VALID_ANTHROPIC_ROLES = [
-  "system",
-  "user", 
-  "assistant",
-  "human", // Anthropic sometimes uses 'human' instead of 'user'
-  "ai", // Anthropic sometimes uses 'ai' instead of 'assistant'
+const VALID_ANTHROPIC_ROLES: string[] = [
+  ANTHROPIC_ROLE.SYSTEM,
+  ANTHROPIC_ROLE.USER, 
+  ANTHROPIC_ROLE.ASSISTANT,
+  ANTHROPIC_ROLE.HUMAN, // Anthropic sometimes uses 'human' instead of 'user'
+  ANTHROPIC_ROLE.AI, // Anthropic sometimes uses 'ai' instead of 'assistant'
 ];
 
 /**
@@ -161,11 +170,26 @@ export const hasValidAnthropicMessagesFormat = (span: Span): boolean => {
 };
 
 /**
+ * Validates span format and returns detailed format information
+ * Performs validation once and returns cached results
+ */
+export const validateSpanMessagesFormat = (span: Span) => {
+  const isOpenAIFormat = hasValidOpenAIMessagesFormat(span);
+  const isAnthropicFormat = !isOpenAIFormat && hasValidAnthropicMessagesFormat(span);
+  
+  return {
+    isValid: isOpenAIFormat || isAnthropicFormat,
+    isOpenAIFormat,
+    isAnthropicFormat,
+  };
+};
+
+/**
  * Generic function to check if a span has valid messages format
  * Checks both OpenAI and Anthropic formats
  */
 export const hasValidMessagesFormat = (span: Span): boolean => {
-  return hasValidOpenAIMessagesFormat(span) || hasValidAnthropicMessagesFormat(span);
+  return validateSpanMessagesFormat(span).isValid;
 };
 
 /**
@@ -211,15 +235,15 @@ const normalizeAnthropicRole = (role: string): LLM_MESSAGE_ROLE => {
   const normalizedRole = role.toLowerCase();
   
   switch (normalizedRole) {
-    case "human":
+    case ANTHROPIC_ROLE.HUMAN:
       return LLM_MESSAGE_ROLE.user;
-    case "ai":
+    case ANTHROPIC_ROLE.AI:
       return LLM_MESSAGE_ROLE.assistant;
-    case "system":
+    case ANTHROPIC_ROLE.SYSTEM:
       return LLM_MESSAGE_ROLE.system;
-    case "user":
+    case ANTHROPIC_ROLE.USER:
       return LLM_MESSAGE_ROLE.user;
-    case "assistant":
+    case ANTHROPIC_ROLE.ASSISTANT:
       return LLM_MESSAGE_ROLE.assistant;
     default:
       // Fallback to user for unknown roles
@@ -232,11 +256,10 @@ const normalizeAnthropicRole = (role: string): LLM_MESSAGE_ROLE => {
  * Works for both OpenAI and Anthropic message formats
  */
 export const convertSpanMessagesToLLMMessages = (span: Span): LLMMessage[] => {
-  // Check format once and cache the results
-  const isOpenAIFormat = hasValidOpenAIMessagesFormat(span);
-  const isAnthropicFormat = !isOpenAIFormat && hasValidAnthropicMessagesFormat(span);
+  // Validate format once and cache the results to avoid duplicate validation
+  const { isValid, isOpenAIFormat, isAnthropicFormat } = validateSpanMessagesFormat(span);
   
-  if (!isOpenAIFormat && !isAnthropicFormat) {
+  if (!isValid) {
     return [];
   }
 
