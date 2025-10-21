@@ -2,6 +2,8 @@
 import concurrent.futures
 import json
 import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -225,6 +227,40 @@ class TestIsolatedSubprocessExecutor:
                 "reason": "Scored for tenant unknown"
             }]
         }
+
+    def test_execute_with_python_file_contents(self, executor):
+        """Test executing Python file contents (user reads file manually)
+        
+        This demonstrates that users can still execute Python files by reading
+        the file contents themselves and passing as code. The executor does NOT
+        automatically load files from the filesystem (security improvement).
+        """
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(METRIC_CODE)
+            f.flush()
+            temp_file = f.name
+        
+        try:
+            # User manually reads the file
+            with open(temp_file, 'r') as f:
+                file_contents = f.read()
+            
+            # Then passes the contents as code (not the file path)
+            result = executor.execute(
+                code=file_contents,
+                data={"input_text": "test data"},
+            )
+            
+            assert result == {
+                "scores": [{
+                    "value": 0.09,
+                    "name": "test_metric",
+                    "reason": "Scored for tenant unknown"
+                }]
+            }
+        finally:
+            Path(temp_file).unlink()
 
     def test_execute_with_env_vars(self, executor):
         """Test executing with scoped environment variables"""
