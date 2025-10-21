@@ -2,8 +2,6 @@
 import concurrent.futures
 import json
 import os
-import tempfile
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -228,29 +226,6 @@ class TestIsolatedSubprocessExecutor:
             }]
         }
 
-    def test_execute_with_file_path(self, executor):
-        """Test executing code from a file path"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(METRIC_CODE)
-            f.flush()
-            temp_file = f.name
-        
-        try:
-            result = executor.execute(
-                code=temp_file,
-                data={"input_text": "test data"},
-            )
-            
-            assert result == {
-                "scores": [{
-                    "value": 0.09,
-                    "name": "test_metric",
-                    "reason": "Scored for tenant unknown"
-                }]
-            }
-        finally:
-            Path(temp_file).unlink()
-
     def test_execute_with_env_vars(self, executor):
         """Test executing with scoped environment variables"""
         result = executor.execute(
@@ -281,29 +256,6 @@ class TestIsolatedSubprocessExecutor:
                 "reason": "Scored for tenant unknown"
             }]
         }
-
-    def test_execute_auto_detects_file_path(self, executor):
-        """Test that executor auto-detects file paths"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(METRIC_CODE)
-            f.flush()
-            temp_file = f.name
-        
-        try:
-            result = executor.execute(
-                code=temp_file,
-                data={"input_text": "x"},
-            )
-            
-            assert result == {
-                "scores": [{
-                    "value": 0.01,
-                    "name": "test_metric",
-                    "reason": "Scored for tenant unknown"
-                }]
-            }
-        finally:
-            Path(temp_file).unlink()
 
     def test_execute_timeout(self, executor):
         """Test execution timeout"""

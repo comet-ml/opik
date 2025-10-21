@@ -94,7 +94,7 @@ class IsolatedSubprocessExecutor:
         and don't affect other concurrent executions.
 
         Args:
-            code: Python code to execute or path to Python file
+            code: Python code to execute
             data: Data dictionary to pass to the code
             env_vars: Environment variables to scope to this subprocess (optional).
                      These override/augment the parent environment for this execution only.
@@ -114,11 +114,8 @@ class IsolatedSubprocessExecutor:
             # Prepare environment for subprocess
             subprocess_env = self._prepare_environment(env_vars)
 
-            # Load code from file if needed
-            loaded_code = self._load_code_from_file(code)
-
             # Create wrapper code that reads input from stdin and executes user code
-            wrapper_code = self._create_wrapper_script(loaded_code)
+            wrapper_code = self._create_wrapper_script(code)
 
             # Create subprocess with python -c to execute wrapper code
             process = subprocess.Popen(
@@ -197,41 +194,6 @@ class IsolatedSubprocessExecutor:
         if env_vars:
             env.update(env_vars)
         return env
-
-    def _load_code_from_file(self, code: str) -> str:
-        """
-        Load Python code from file path if code is a file path.
-
-        Check if code is a valid file path before trying to open it.
-        Only treats strings as file paths if:
-        1. They end with .py
-        2. They look like absolute or relative paths
-        3. The file actually exists
-
-        Args:
-            code: Either a file path or Python code string
-
-        Returns:
-            str: Python code to execute
-        """
-        # First, check if this could be a file path
-        if not code.endswith('.py'):
-            # If it doesn't end with .py, it's probably code, not a path
-            return code
-        
-        # If it ends with .py, try to load it as a file
-        try:
-            if os.path.isfile(code):
-                with open(code, 'r') as f:
-                    loaded_code = f.read()
-                self.logger.debug(f"Loaded Python file from: {code}")
-                return loaded_code
-            else:
-                # File doesn't exist, treat as code
-                return code
-        except (FileNotFoundError, IOError, OSError):
-            # Error opening file, treat as code
-            return code
 
     def _create_wrapper_script(self, code: str) -> str:
         """
