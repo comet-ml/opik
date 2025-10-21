@@ -80,22 +80,22 @@ class IsolatedSubprocessExecutor:
 
     def execute(
         self,
-        code: str,
+        file_path: str,
         data: dict,
         env_vars: Optional[dict] = None,
         timeout_secs: Optional[int] = None,
         payload_type: Optional[str] = None,
     ) -> dict:
         """
-        Execute Python code in an isolated subprocess with scoped environment variables.
+        Execute Python file in an isolated subprocess with scoped environment variables.
 
         Each call creates a fresh subprocess with its own isolated environment.
         Environment variables passed in env_vars are scoped to the subprocess
         and don't affect other concurrent executions.
 
         Args:
-            code: Python code to execute
-            data: Data dictionary to pass to the code
+            file_path: Path to Python file to execute (e.g., '/path/to/metric.py')
+            data: Data dictionary to pass to the file via stdin
             env_vars: Environment variables to scope to this subprocess (optional).
                      These override/augment the parent environment for this execution only.
             timeout_secs: Execution timeout in seconds (uses default if not provided)
@@ -114,12 +114,9 @@ class IsolatedSubprocessExecutor:
             # Prepare environment for subprocess
             subprocess_env = self._prepare_environment(env_vars)
 
-            # Create wrapper code that reads input from stdin and executes user code
-            wrapper_code = self._create_wrapper_script(code)
-
-            # Create subprocess with python -c to execute wrapper code
+            # Create subprocess with python to execute the file directly
             process = subprocess.Popen(
-                [sys.executable, "-u", "-c", wrapper_code],
+                [sys.executable, "-u", file_path],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -134,7 +131,7 @@ class IsolatedSubprocessExecutor:
             creation_latency = _calculate_latency_ms(creation_start)
             isolated_creation_histogram.record(creation_latency)
             self.logger.debug(
-                f"Created isolated subprocess. pid: {process.pid}, creation_latency: {creation_latency:.3f}ms"
+                f"Created isolated subprocess for {file_path}. pid: {process.pid}, creation_latency: {creation_latency:.3f}ms"
             )
 
             # Execute code in subprocess
@@ -169,7 +166,7 @@ class IsolatedSubprocessExecutor:
                 f"Error during isolated subprocess execution: {e}", exc_info=True
             )
             self._remove_active_process(process)
-            return {"code": 500, "error": f"Failed to execute code: {str(e)}"}
+            return {"code": 500, "error": f"Failed to execute file: {str(e)}"}
 
     def _remove_active_process(self, process: Optional[subprocess.Popen]) -> None:
         """Remove process from active processes list if it exists."""
@@ -195,50 +192,6 @@ class IsolatedSubprocessExecutor:
             env.update(env_vars)
         return env
 
-    def _create_wrapper_script(self, code: str) -> str:
-        """
-        Create a wrapper script that reads input JSON from stdin and executes code.
-
-        The wrapper:
-        1. Reads JSON from stdin containing data and payload_type
-        2. Makes data and payload_type available to user code
-        3. Executes the user code
-        4. Captures and outputs result as JSON to stdout
-
-        Args:
-            code: User's Python code to execute
-
-        Returns:
-            str: Python code that can be passed to python -c
-        """
-        # The wrapper reads input, makes variables available, and executes user code
-        # User code should not read from stdin - it receives data as variables
-        # Note: Can't use '\n' directly in f-string, so we use a variable
-        newline = '\n'
-        indented_code = newline.join('    ' + line for line in code.split(newline))
-        wrapper = f"""
-import json
-import sys
-import traceback
-
-try:
-    # Read input from stdin (wrapper responsibility)
-    input_data = json.loads(sys.stdin.read())
-    data = input_data.get("data", {{}})
-    payload_type = input_data.get("payload_type")
-
-    # Execute user code in this namespace
-    # User code has access to: data, payload_type, json, sys, traceback
-{indented_code}
-
-    # Expected: User code should print JSON result to stdout
-except Exception as e:
-    error_result = {{"code": 500, "error": str(e), "traceback": traceback.format_exc()}}
-    print(json.dumps(error_result))
-    sys.exit(1)
-"""
-        return wrapper
-
     def _execute_in_subprocess(
         self,
         process: subprocess.Popen,
@@ -247,9 +200,9 @@ except Exception as e:
         timeout_secs: int,
     ) -> dict:
         """
-        Execute code in the subprocess and collect result.
+        Execute file in the subprocess and collect result.
 
-        Uses python -c to execute code inline with stdin for data passing.
+        Passes data as JSON via stdin and collects stdout for results.
 
         Args:
             process: Subprocess Popen instance
