@@ -74,23 +74,45 @@ const PromptModelSelect = ({
   );
 
   const groupOptions = useMemo(() => {
+    const allProviderModels = getProviderModels();
+    
+    // Build a map of configured provider keys
+    // For standard providers: use provider type directly
+    // For custom providers: create dynamic keys like "custom-llm:ollama"
+    const configuredProviderKeys = new Set<string>();
+    configuredProvidersList.forEach((p) => {
+      if (p.provider === PROVIDER_TYPE.CUSTOM) {
+        // For custom providers, add dynamic key
+        const providerKey = p.provider_name 
+          ? `${PROVIDER_TYPE.CUSTOM}:${p.provider_name}`
+          : PROVIDER_TYPE.CUSTOM;
+        configuredProviderKeys.add(providerKey);
+      } else {
+        configuredProviderKeys.add(p.provider);
+      }
+    });
+
+    // Filter models by configured provider keys
     const filteredByConfiguredProviders = pick(
-      getProviderModels(),
-      configuredProvidersList.map((p) => p.provider),
+      allProviderModels,
+      Array.from(configuredProviderKeys),
     );
 
+    // Build model-to-provider mapping
     Object.entries(filteredByConfiguredProviders).forEach(
-      ([pn, providerModels]) => {
+      ([providerKey, providerModels]) => {
         providerModels.forEach(({ value }) => {
-          modelProviderMapRef.current[value] = pn as PROVIDER_TYPE;
+          // For custom providers, map to the base PROVIDER_TYPE.CUSTOM
+          const mappedProvider = providerKey.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)
+            ? PROVIDER_TYPE.CUSTOM
+            : (providerKey as PROVIDER_TYPE);
+          modelProviderMapRef.current[value] = mappedProvider;
         });
       },
     );
 
     return Object.entries(filteredByConfiguredProviders)
-      .map(([pn, providerModels]) => {
-        const providerName = pn as PROVIDER_TYPE;
-
+      .map(([providerKey, providerModels]) => {
         const options = providerModels.map((providerModel) => ({
           label: providerModel.label,
           value: providerModel.value,
@@ -100,11 +122,30 @@ const PromptModelSelect = ({
           return null;
         }
 
+        // Handle custom providers with dynamic labels
+        if (providerKey.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
+          const customProviderName = providerKey.substring(`${PROVIDER_TYPE.CUSTOM}:`.length);
+          // Find the display name from the configured provider
+          const customConfig = configuredProvidersList.find(
+            (p) => p.provider === PROVIDER_TYPE.CUSTOM && p.provider_name === customProviderName
+          );
+          const displayName = customConfig?.keyName || customProviderName;
+          
+          return {
+            label: `${displayName} (Custom)`,
+            options,
+            icon: PROVIDERS[PROVIDER_TYPE.CUSTOM].icon,
+            provider: providerKey as PROVIDER_TYPE,
+          };
+        }
+
+        // Handle standard providers and legacy custom provider
+        const providerType = providerKey as PROVIDER_TYPE;
         return {
-          label: PROVIDERS[providerName].label,
+          label: PROVIDERS[providerType].label,
           options,
-          icon: PROVIDERS[providerName].icon,
-          provider: providerName,
+          icon: PROVIDERS[providerType].icon,
+          provider: providerType,
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
