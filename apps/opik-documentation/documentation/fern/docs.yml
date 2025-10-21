@@ -219,6 +219,9 @@ navigation:
               - page: Custom conversation metric
                 path: docs/evaluation/metrics/custom_conversation_metric.mdx
                 slug: custom_conversation_metric
+              - page: Task span metrics
+                path: docs/evaluation/metrics/task_span_metrics.mdx
+                slug: task_span_metrics
           - section: Tutorials
             skip-slug: true
             collapsed: true
