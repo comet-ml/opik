@@ -187,6 +187,7 @@ You can learn more about the `opik` python SDK in the following sections:
    evaluation/evaluate_experiment
    evaluation/evaluate_threads
    evaluation/metrics/index
+   message_processing_emulation/index
 
 .. toctree::
    :caption: Prompt management
@@ -220,7 +221,7 @@ You can learn more about the `opik` python SDK in the following sections:
 .. toctree::
    :caption: Objects
    :maxdepth: 1
-   
+
    Objects/Trace.rst
    Objects/TraceData.rst
    Objects/TracePublic.rst

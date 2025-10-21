@@ -1,21 +1,41 @@
 import datetime
-from typing import List, Dict, Optional, Any
+import logging
+from typing import List, Dict, Optional, Any, Union
 
-from opik.message_processing.emulation import emulator_message_processor
 from opik.types import ErrorInfoDict, SpanType
-from . import models
+from . import models, emulator_message_processor
+from .. import messages
+from ...rest_api.types import span_write, trace_write
 
 
-class BackendEmulatorMessageProcessor(
+LOGGER = logging.getLogger(__name__)
+
+
+class LocalEmulatorMessageProcessor(
     emulator_message_processor.EmulatorMessageProcessor
 ):
-    """
-    This class serves as a replacement for the real backend. It collects all logged messages
-    to be used in tests.
+    """This class serves as a replacement for the real backend and collects all logged messages
+    locally in memory to be used for evaluation.
     """
 
-    def __init__(self, active: bool = True, merge_duplicates: bool = True) -> None:
+    def __init__(self, active: bool, merge_duplicates: bool = True) -> None:
         super().__init__(active=active, merge_duplicates=merge_duplicates)
+
+    def process(
+        self,
+        message: Union[
+            messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
+        ],
+    ) -> None:
+        if not self.is_active():
+            return
+
+        if hasattr(message, "delivery_attempts") and message.delivery_attempts > 1:
+            # skip retries
+            LOGGER.debug("Skipping retry of the message: %s", message)
+            return
+
+        super().process(message)
 
     def create_trace_model(
         self,
