@@ -1,4 +1,7 @@
 name: jira-description-action
+permissions:
+  contents: read
+  pull-requests: write
 on:
   workflow_dispatch:
   pull_request:
