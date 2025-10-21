@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     # runs-on: self-hosted
     steps:
-      - uses: cakeinpanic/jira-description-action@vmaster
+      - uses: cakeinpanic/jira-description-action@master
         name: jira-description-action
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
