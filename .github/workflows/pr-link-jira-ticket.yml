@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     # runs-on: self-hosted
     steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
       - uses: cakeinpanic/jira-description-action@v0.5.1
         name: jira-description-action
         with:
