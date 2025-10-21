@@ -47,6 +47,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.deserializeEventPayload;
+import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.prepareWebhookPayload;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -351,7 +352,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        var event = deserializeEventPayload(mapAlertToWebhookEvent(alert, workspaceId));
+        var event = prepareWebhookPayload(mapAlertToWebhookEvent(alert, workspaceId));
 
         return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
@@ -415,7 +416,9 @@ class AlertServiceImpl implements AlertService {
                 .id(eventId)
                 .url(alert.webhook().url())
                 .eventType(eventType)
+                .alertType(Optional.ofNullable(alert.alertType()).orElse(AlertType.GENERAL))
                 .alertId(alertId)
+                .alertName(Optional.ofNullable(alert.name()).orElse("Test Alert"))
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
                 .secret(alert.webhook().secretToken())

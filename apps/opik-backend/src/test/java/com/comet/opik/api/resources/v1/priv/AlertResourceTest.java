@@ -68,7 +68,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -860,9 +859,9 @@ class AlertResourceTest {
         }
 
         @ParameterizedTest
-        @EnumSource(AlertEventType.class)
+        @MethodSource
         @DisplayName("Success: should test webhook successfully when webhook server responds with 2xx")
-        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult(AlertEventType eventType) {
+        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult(AlertEventType eventType, AlertType alertType) {
             // Given
             var mock = prepareMockWorkspace();
             var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
@@ -881,6 +880,7 @@ class AlertResourceTest {
                     .build();
             alert = alert.toBuilder()
                     .webhook(webhook)
+                    .alertType(alertType)
                     .triggers(List.of(alert.triggers().getFirst().toBuilder()
                             .eventType(eventType)
                             .build()))
@@ -897,6 +897,12 @@ class AlertResourceTest {
             // Verify HTTP call was made
             externalWebhookServer.verify(postRequestedFor(urlEqualTo(WEBHOOK_PATH))
                     .withHeader(HttpHeader.CONTENT_TYPE.toString(), equalTo(MediaType.APPLICATION_JSON)));
+        }
+
+        private static Stream<Arguments> testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult() {
+            return Stream.of(AlertEventType.values())
+                    .flatMap(eventType -> Stream.of(AlertType.values())
+                            .map(alertType -> Arguments.of(eventType, alertType)));
         }
 
         @Test
