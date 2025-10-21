@@ -76,61 +76,11 @@ jobs:
               }
             });
             
-            console.log('Repository dispatch sent:', response.status);
+            console.log('✅ Repository dispatch sent successfully:', response.status);
+            console.log('📊 Monitor deployment progress: https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml');
+            console.log('🔗 Deployment will verify the version and post a comment on this PR when complete');
 
-      - name: Wait for deployment to be available
-        shell: bash
-        run: |
-          URL="https://pr-${{ github.event.number }}.dev.comet.com/api/health-check"
-          TIMEOUT=600  # 10 minutes in seconds
-          INTERVAL=10  # Check every 10 seconds
-          # Initial delay to allow deployment to start before health checks
-          INITIAL_DELAY=60
-          ELAPSED=0
-          
-          echo "Waiting for deployment to be available at: $URL"
-          echo "Timeout: ${TIMEOUT} seconds (10 minutes)"
-          sleep $INITIAL_DELAY
-          
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            HTTP_CODE=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
-            
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Deployment is available! Health check returned 200"
-              exit 0
-            fi
-            
-            echo "⏳ Waiting... (${ELAPSED}s elapsed, HTTP code: ${HTTP_CODE})"
-            sleep $INTERVAL
-            ELAPSED=$((ELAPSED + INTERVAL))
-          done
-          
-          echo "❌ Timeout: Deployment did not become available within 10 minutes"
-          exit 1
-
-      - name: Comment on PR - Deployment Available
-        if: success()
-        uses: actions/github-script@v7
-        env:
-          VERSION_NAME: ${{ needs.build-apps.outputs.version }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: Number('${{ github.event.number }}'),
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `✅ **Test environment is now available!**
-
-              ### Access Information
-              - **URL:** https://pr-${{ github.event.number }}.dev.comet.com
-              - **Namespace:** pr-${{ github.event.number }}
-              - **Version:** ${process.env.VERSION_NAME}
-              
-              The deployment has been verified and is ready to use.`
-            });
-
-      - name: Handle deployment failure
+      - name: Handle trigger failure
         if: failure()
         uses: actions/github-script@v7
         with:
@@ -140,7 +90,7 @@ jobs:
               issue_number: Number('${{ github.event.number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `❌ **Test environment deployment failed or timed out**
+              body: `❌ **Failed to trigger test environment deployment**
               
-              The deployment did not become available within 10 minutes. Please check the [deployment logs](https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml) for more details.`
+              Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more details.`
             });
