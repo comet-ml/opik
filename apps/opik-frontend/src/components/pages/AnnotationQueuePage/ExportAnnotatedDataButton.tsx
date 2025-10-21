@@ -88,7 +88,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     ];
   }, [annotationQueue?.id]);
 
-  const { data: tracesData, refetch: refetchTraces } = useTracesList(
+  const { refetch: refetchTraces } = useTracesList(
     {
       projectId: annotationQueue.project_id,
       page: 1,
@@ -103,7 +103,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     },
   );
 
-  const { data: threadsData, refetch: refetchThreads } = useThreadsList(
+  const { refetch: refetchThreads } = useThreadsList(
     {
       projectId: annotationQueue.project_id,
       page: 1,
@@ -118,95 +118,102 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     },
   );
 
-  const getTracesExportData = useCallback((): ExportTraceData[] => {
-    if (!tracesData?.content) return [];
+  const getTracesExportData = useCallback(
+    (traces: Trace[]): ExportTraceData[] => {
+      if (!traces?.length) return [];
 
-    return tracesData.content.map((trace: Trace) => {
-      const baseData: ExportTraceData = {
-        id: trace.id,
-        input: prettifyMessage(trace.input).message as JsonNode,
-        output: prettifyMessage(trace.output).message as JsonNode,
-        metadata: trace.metadata ?? {},
-      };
+      return traces.map((trace: Trace) => {
+        const baseData: ExportTraceData = {
+          id: trace.id,
+          input: prettifyMessage(trace.input).message as JsonNode,
+          output: prettifyMessage(trace.output).message as JsonNode,
+          metadata: trace.metadata ?? {},
+        };
 
-      reviewers.forEach((reviewerName) => {
-        const reviewerData: ReviewerData = {};
+        reviewers.forEach((reviewerName) => {
+          const reviewerData: ReviewerData = {};
 
-        const comments = getCommentsByUser(trace.comments, reviewerName);
-        if (comments.length > 0) {
-          reviewerData.comment = comments.join("; ");
-        }
+          const comments = getCommentsByUser(trace.comments, reviewerName);
+          if (comments.length > 0) {
+            reviewerData.comment = comments.join("; ");
+          }
 
-        const feedbackScores = getFeedbackScoresByUser(
-          trace.feedback_scores ?? [],
-          reviewerName,
-          feedbackDefinitionNames,
-        );
+          const feedbackScores = getFeedbackScoresByUser(
+            trace.feedback_scores ?? [],
+            reviewerName,
+            feedbackDefinitionNames,
+          );
 
-        feedbackScores.forEach((score) => {
-          reviewerData[score.name] = score.value;
-          if (score.reason) {
-            reviewerData[`${score.name}.reason`] = score.reason;
+          feedbackScores.forEach((score) => {
+            reviewerData[score.name] = score.value;
+            if (score.reason) {
+              reviewerData[`${score.name}.reason`] = score.reason;
+            }
+          });
+
+          if (!isEmpty(reviewerData)) {
+            baseData[reviewerName] = reviewerData;
           }
         });
 
-        if (!isEmpty(reviewerData)) {
-          baseData[reviewerName] = reviewerData;
-        }
+        return baseData;
       });
+    },
+    [reviewers, feedbackDefinitionNames],
+  );
 
-      return baseData;
-    });
-  }, [tracesData, reviewers, feedbackDefinitionNames]);
+  const getThreadsExportData = useCallback(
+    (threads: Thread[]): ExportThreadData[] => {
+      if (!threads?.length) return [];
 
-  const getThreadsExportData = useCallback((): ExportThreadData[] => {
-    if (!threadsData?.content) return [];
+      return threads.map((thread: Thread) => {
+        const baseData: ExportThreadData = {
+          id: thread.id,
+          first_message: prettifyMessage(thread.first_message)
+            .message as JsonNode,
+          last_message: prettifyMessage(thread.last_message)
+            .message as JsonNode,
+        };
 
-    return threadsData.content.map((thread: Thread) => {
-      const baseData: ExportThreadData = {
-        id: thread.id,
-        first_message: prettifyMessage(thread.first_message)
-          .message as JsonNode,
-        last_message: prettifyMessage(thread.last_message).message as JsonNode,
-      };
+        reviewers.forEach((reviewerName) => {
+          const reviewerData: ReviewerData = {};
 
-      reviewers.forEach((reviewerName) => {
-        const reviewerData: ReviewerData = {};
+          const comments = getCommentsByUser(thread.comments, reviewerName);
+          if (comments.length > 0) {
+            reviewerData.comment = comments.join("; ");
+          }
 
-        const comments = getCommentsByUser(thread.comments, reviewerName);
-        if (comments.length > 0) {
-          reviewerData.comment = comments.join("; ");
-        }
+          const feedbackScores = getFeedbackScoresByUser(
+            thread.feedback_scores ?? [],
+            reviewerName,
+            feedbackDefinitionNames,
+          );
 
-        const feedbackScores = getFeedbackScoresByUser(
-          thread.feedback_scores ?? [],
-          reviewerName,
-          feedbackDefinitionNames,
-        );
+          feedbackScores.forEach((score) => {
+            reviewerData[score.name] = score.value;
+            if (score.reason) {
+              reviewerData[`${score.name}.reason`] = score.reason;
+            }
+          });
 
-        feedbackScores.forEach((score) => {
-          reviewerData[score.name] = score.value;
-          if (score.reason) {
-            reviewerData[`${score.name}.reason`] = score.reason;
+          if (!isEmpty(reviewerData)) {
+            baseData[reviewerName] = reviewerData;
           }
         });
 
-        if (!isEmpty(reviewerData)) {
-          baseData[reviewerName] = reviewerData;
-        }
+        return baseData;
       });
-
-      return baseData;
-    });
-  }, [threadsData, reviewers, feedbackDefinitionNames]);
+    },
+    [reviewers, feedbackDefinitionNames],
+  );
 
   const getData = useCallback(async () => {
     if (annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE) {
-      await refetchTraces();
-      return getTracesExportData();
+      const result = await refetchTraces();
+      return getTracesExportData(result.data?.content ?? []);
     } else {
-      await refetchThreads();
-      return getThreadsExportData();
+      const result = await refetchThreads();
+      return getThreadsExportData(result.data?.content ?? []);
     }
   }, [
     annotationQueue.scope,
