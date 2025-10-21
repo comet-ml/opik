@@ -1411,13 +1411,13 @@ class TestLogProjectConfigurationMessage:
         configurator = OpikConfigurator(api_key="test_key", workspace="test_workspace")
 
         # Mock the methods to simulate no config update needed
-        with patch.object(
-            configurator, "_set_api_key", return_value=False
-        ), patch.object(
-            configurator, "_set_workspace", return_value=False
-        ), patch.object(
-            configurator, "_log_project_configuration_message"
-        ) as mock_log_message:
+        with (
+            patch.object(configurator, "_set_api_key", return_value=False),
+            patch.object(configurator, "_set_workspace", return_value=False),
+            patch.object(
+                configurator, "_log_project_configuration_message"
+            ) as mock_log_message,
+        ):
             configurator._configure_cloud()
 
             # Assert that the log message method was called

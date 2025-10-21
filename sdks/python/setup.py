@@ -17,7 +17,7 @@ if version is None:
 setup(
     author="Comet ML Inc.",
     author_email="mail@comet.com",
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Developers",
@@ -25,11 +25,12 @@ setup(
         "Natural Language :: English",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
     description="Comet tool for logging and evaluating LLM traces",
     long_description=open(
@@ -52,7 +53,6 @@ setup(
         "rich",
         "sentry_sdk>=2.0.0",
         "tenacity",
-        "tokenizers<0.21.0 ; python_version<'3.9.0'",  # no 3.8 support starting from 0.21.0
         "tqdm",
         "uuid6",
         "jinja2",
