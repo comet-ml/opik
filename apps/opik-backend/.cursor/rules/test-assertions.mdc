@@ -1,5 +1,7 @@
 ---
-globs: **/*Test.java,**/*IT.java
+description: Tests Assertions
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 # Backend Test Assertion Patterns
 
@@ -224,5 +226,4 @@ void testFiltering() {
 
 ## Related Rules
 
-- [Backend Test Parameterization](mdc:.cursor/rules/backend-test-parameterization.mdc)
 - [Testing Guidelines](mdc:apps/opik-backend/.cursor/rules/testing.mdc)

@@ -1,5 +1,7 @@
 ---
-globs: **/*Test.java,**/*IT.java
+description: Test Async Patterns
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 # Backend Test Async and Timing Patterns
 
@@ -187,5 +189,4 @@ void testSorting() {
 ## Related Rules
 
 - [Testing Guidelines](mdc:apps/opik-backend/.cursor/rules/testing.mdc)
-- [Backend Test Parameterization](mdc:.cursor/rules/backend-test-parameterization.mdc)
 - [MySQL Transaction Patterns](mdc:apps/opik-backend/.cursor/rules/mysql.mdc)
