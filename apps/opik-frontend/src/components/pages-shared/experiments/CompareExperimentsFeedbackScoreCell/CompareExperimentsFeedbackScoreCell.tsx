@@ -15,6 +15,7 @@ import FeedbackScoreCellValue from "@/components/shared/DataTableCells/FeedbackS
 import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { cn } from "@/lib/utils";
+import FeedbackScoreEditDropdown from "@/components/shared/DataTableCells/FeedbackScoreEditDropdown";
 
 const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -37,10 +38,10 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
   });
 
   const enableUserFeedbackEditing =
-    context.table.options.meta?.enableUserFeedbackEditing ?? false;
+    experimentCompare.experiment_items.length == 1 &&
+    (context.table.options.meta?.enableUserFeedbackEditing ?? false);
   const isUserFeedbackColumn =
     enableUserFeedbackEditing &&
-    experimentCompare.experiment_items.length == 1 &&
     context.column.id === "feedback_scores_User feedback";
 
   const renderContent = (item: ExperimentItem | undefined) => {
@@ -49,7 +50,17 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     );
 
     if (!feedbackScore) {
-      return "-";
+      return (
+        <div className="flex items-center gap-1">
+          {isUserFeedbackColumn && (
+            <FeedbackScoreEditDropdown
+              feedbackScore={feedbackScore}
+              onValueChange={handleValueChange}
+            />
+          )}
+          <span>-</span>
+        </div>
+      );
     }
 
     let reasons = feedbackScore.reason
