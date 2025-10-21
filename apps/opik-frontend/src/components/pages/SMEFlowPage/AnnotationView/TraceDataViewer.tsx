@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
@@ -10,12 +10,15 @@ import {
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
+import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
+import { ExpandedState } from "@tanstack/react-table";
 import useTraceById from "@/api/traces/useTraceById";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 const TraceDataViewer: React.FC = () => {
   const { currentItem, nextItem } = useSMEFlow();
+  const { state, updateExpanded, updateScrollTop } = useAnnotationTreeState();
 
   const trace = currentItem as Trace;
   const nextTrace = nextItem as Trace | undefined;
@@ -46,6 +49,48 @@ const TraceDataViewer: React.FC = () => {
 
   const displayTrace = fullTrace || trace;
 
+  // Handlers for expanded state changes
+  const handleInputExpandedChange = useCallback(
+    (
+      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+    ) => {
+      updateExpanded("input", updaterOrValue);
+    },
+    [updateExpanded],
+  );
+
+  const handleOutputExpandedChange = useCallback(
+    (
+      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+    ) => {
+      updateExpanded("output", updaterOrValue);
+    },
+    [updateExpanded],
+  );
+
+  // Handlers for scroll position changes
+  const handleInputScrollChange = useCallback(
+    (updaterOrValue: number | ((old: number) => number)) => {
+      const newScrollTop =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(state.input.scrollTop)
+          : updaterOrValue;
+      updateScrollTop("input", newScrollTop);
+    },
+    [updateScrollTop, state.input.scrollTop],
+  );
+
+  const handleOutputScrollChange = useCallback(
+    (updaterOrValue: number | ((old: number) => number)) => {
+      const newScrollTop =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(state.output.scrollTop)
+          : updaterOrValue;
+      updateScrollTop("output", newScrollTop);
+    },
+    [updateScrollTop, state.output.scrollTop],
+  );
+
   return (
     <div className="relative pr-4">
       {isFetching && (
@@ -71,6 +116,11 @@ const TraceDataViewer: React.FC = () => {
               prettifyConfig={{ fieldType: "input" }}
               preserveKey="syntax-highlighter-annotation-input"
               withSearch
+              controlledExpanded={state.input.expanded}
+              onExpandedChange={handleInputExpandedChange}
+              scrollPosition={state.input.scrollTop}
+              onScrollPositionChange={handleInputScrollChange}
+              maxHeight="400px"
             />
           </AccordionContent>
         </AccordionItem>
@@ -88,6 +138,11 @@ const TraceDataViewer: React.FC = () => {
               prettifyConfig={{ fieldType: "output" }}
               preserveKey="syntax-highlighter-annotation-output"
               withSearch
+              controlledExpanded={state.output.expanded}
+              onExpandedChange={handleOutputExpandedChange}
+              scrollPosition={state.output.scrollTop}
+              onScrollPositionChange={handleOutputScrollChange}
+              maxHeight="400px"
             />
           </AccordionContent>
         </AccordionItem>
@@ -102,6 +157,7 @@ const TraceDataViewer: React.FC = () => {
               data={displayTrace?.metadata || {}}
               preserveKey="syntax-highlighter-annotation-metadata"
               withSearch
+              maxHeight="400px"
             />
           </AccordionContent>
         </AccordionItem>

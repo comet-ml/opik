@@ -1,4 +1,4 @@
-import React, { ReactNode, useMemo, useRef } from "react";
+import React, { ReactNode, useMemo } from "react";
 import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
@@ -11,6 +11,7 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "node_modules/remark-gfm/lib";
 import { isNull } from "lodash";
 import SyntaxHighlighterSearch from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
+import { ExpandedState } from "@tanstack/react-table";
 
 const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
 
@@ -22,6 +23,13 @@ export interface MarkdownHighlighterProps {
   modeSelector: ReactNode;
   copyButton: ReactNode;
   withSearch?: boolean;
+  controlledExpanded?: ExpandedState;
+  onExpandedChange?: (
+    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+  ) => void;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  maxHeight?: string;
 }
 
 const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
@@ -32,12 +40,17 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   modeSelector,
   copyButton,
   withSearch,
+  controlledExpanded,
+  onExpandedChange,
+  scrollRef,
+  onScroll,
+  maxHeight,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Use scrollRef for both scroll tracking and search container
   const { searchPlugin, searchPlainText, findNext, findPrev } =
     useMarkdownSearch({
       searchValue: localSearchValue || searchValue,
-      container: containerRef.current,
+      container: scrollRef?.current || null,
     });
 
   const markdownPreview = useMemo(() => {
@@ -51,7 +64,11 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         <JsonKeyValueTable
           data={codeOutput.message}
           maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-          localStorageKey="json-table-expanded-state"
+          localStorageKey={
+            controlledExpanded ? undefined : "json-table-expanded-state"
+          }
+          controlledExpanded={controlledExpanded}
+          onExpandedChange={onExpandedChange}
         />
       );
     }
@@ -71,7 +88,11 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
           <JsonKeyValueTable
             data={structuredResult.data}
             maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-            localStorageKey="json-table-expanded-state"
+            localStorageKey={
+              controlledExpanded ? undefined : "json-table-expanded-state"
+            }
+            controlledExpanded={controlledExpanded}
+            onExpandedChange={onExpandedChange}
           />
         );
       }
@@ -102,7 +123,13 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         {searchPlainText(codeOutput.message)}
       </div>
     );
-  }, [codeOutput.message, searchPlugin, searchPlainText]);
+  }, [
+    codeOutput.message,
+    searchPlugin,
+    searchPlainText,
+    controlledExpanded,
+    onExpandedChange,
+  ]);
 
   // Check if the content is a JSON table (not searchable)
   const isJsonTable = useMemo(() => {
@@ -133,7 +160,12 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         </>
       }
     >
-      <div className="p-3" ref={containerRef}>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className={maxHeight ? "overflow-y-auto p-3" : "p-3"}
+        style={maxHeight ? { maxHeight } : undefined}
+      >
         {markdownPreview}
       </div>
     </SyntaxHighlighterLayout>
