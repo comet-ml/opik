@@ -6,13 +6,13 @@ import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.utils.JsonUtils;
+import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
-import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.List;
