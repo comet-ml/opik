@@ -1,6 +1,6 @@
 import langchain_groq
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain import OpikTracer
 from .constants import (
