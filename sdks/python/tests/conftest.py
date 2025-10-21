@@ -13,9 +13,12 @@ from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
 
-from .testlib import environment
 from . import testlib
-from .testlib import backend_emulator_message_processor, noop_file_upload_manager
+from .testlib import (
+    backend_emulator_message_processor,
+    environment,
+    noop_file_upload_manager,
+)
 
 
 @pytest.fixture(autouse=True)
