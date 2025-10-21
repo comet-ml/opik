@@ -13,6 +13,8 @@ import {
 } from "@/lib/feedback-scores";
 import FeedbackScoreCellValue from "@/components/shared/DataTableCells/FeedbackScoreCellValue";
 import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
+import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
+import { cn } from "@/lib/utils";
 
 const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -21,6 +23,26 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
   const { custom } = context.column.columnDef.meta ?? {};
   const { feedbackKey, colorMap } = (custom ?? {}) as CustomMeta &
     FeedbackScoreCustomMeta;
+
+  const firstFeedbackScore =
+    experimentCompare.experiment_items[0]?.feedback_scores?.find(
+      (f) => f.name === feedbackKey,
+    );
+
+  const traceId = experimentCompare.experiment_items[0]?.trace_id;
+
+  const { handleValueChange } = useFeedbackScoreInlineEdit({
+    id: traceId!, // TODO: handle case where traceId is not found
+    isThread: false,
+    feedbackScore: firstFeedbackScore,
+  });
+
+  const enableUserFeedbackEditing =
+    context.table.options.meta?.enableUserFeedbackEditing ?? false;
+  const isUserFeedbackColumn =
+    enableUserFeedbackEditing &&
+    experimentCompare.experiment_items.length == 1 &&
+    context.column.id === "feedback_scores_User feedback";
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -48,8 +70,18 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
 
     return (
-      <div className="flex h-4 w-full items-center justify-end gap-1">
-        <FeedbackScoreCellValue feedbackScore={feedbackScore} color={color} />
+      <div
+        className={cn(
+          "flex h-4 w-full items-center justify-end gap-1",
+          isUserFeedbackColumn && "group",
+        )}
+      >
+        <FeedbackScoreCellValue
+          feedbackScore={feedbackScore}
+          color={color}
+          isUserFeedbackColumn={isUserFeedbackColumn}
+          onValueChange={handleValueChange}
+        />
         {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>
             <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
