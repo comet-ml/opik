@@ -20,6 +20,7 @@ import {
   FEEDBACK_DEFINITION_TYPE,
 } from "@/types/feedback-definitions";
 import sortBy from "lodash/sortBy";
+import TooltipWrapper from "../TooltipWrapper/TooltipWrapper";
 
 interface FeedbackScoreEditDropdownProps {
   feedbackScore?: TraceFeedbackScore;
@@ -42,7 +43,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
     } else {
       const timeout = setTimeout(() => {
         setKeepVisible(false);
-      }, 150); // Match Radix UI default animation duration
+      }, 250); // Match Radix UI default animation duration
       return () => clearTimeout(timeout);
     }
   }, [open]);
@@ -91,7 +92,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
       <DropdownMenuTrigger asChild>
         <Button
           size="icon-xs"
-          variant="ghost"
+          variant="outline"
           className={cn(
             "hidden group-hover:inline-flex",
             keepVisible && "inline-flex",
@@ -100,7 +101,9 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
             e.stopPropagation();
           }}
         >
-          <Pencil className="size-3" />
+          <TooltipWrapper content="Click to edit your score">
+            <Pencil className="size-3" />
+          </TooltipWrapper>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -109,8 +112,8 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
         className="w-fit p-1"
         sideOffset={4}
       >
-        <DropdownMenuLabel className="px-2 text-xs font-medium text-secondary-foreground">
-          Personal user feedback
+        <DropdownMenuLabel className="px-8 text-xs font-medium text-secondary-foreground">
+          Your feedback
         </DropdownMenuLabel>
         <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white">
           {feedbackOptions.map((option) => (

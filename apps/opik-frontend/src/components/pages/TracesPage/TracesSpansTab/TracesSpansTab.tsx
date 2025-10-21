@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -204,12 +204,15 @@ const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
+const USER_FEEDBACK_COLUMN_ID = `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`;
+
 const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "name",
   "input",
   "output",
   "duration",
   COLUMN_COMMENTS_ID,
+  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
@@ -220,7 +223,6 @@ const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
 const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
 const PAGINATION_SIZE_KEY = "traces-pagination-size";
 const ROW_HEIGHT_KEY = "traces-row-height";
-const USER_FEEDBACK_COLUMN_ID = `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`;
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
@@ -526,17 +528,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setSelectedColumns,
   });
 
-  const isUserFeedbackColumnMissing = !selectedColumns.includes(
-    USER_FEEDBACK_COLUMN_ID,
-  );
-
-  // Ensure "User Feedback" column is always selected
-  useEffect(() => {
-    if (isUserFeedbackColumnMissing) {
-      setSelectedColumns((prev) => [...prev, USER_FEEDBACK_COLUMN_ID]);
-    }
-  }, [isUserFeedbackColumnMissing, setSelectedColumns]);
-
   const scoresColumnsData = useMemo(() => {
     // Always include "User feedback" column, even if it has no data
     const userFeedbackColumn: ColumnData<BaseTraceData> = {
@@ -548,7 +539,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       accessorFn: (row) =>
         row.feedback_scores?.find((f) => f.name === USER_FEEDBACK_NAME),
       statisticKey: USER_FEEDBACK_COLUMN_ID,
-      disabled: true,
     };
 
     // Filter out "User feedback" from dynamic columns to avoid duplicates
