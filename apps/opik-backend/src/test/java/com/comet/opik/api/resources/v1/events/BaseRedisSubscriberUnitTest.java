@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
@@ -317,8 +318,21 @@ class BaseRedisSubscriberUnitTest {
 
             subscriber.start();
 
-            // Stop should complete without throwing
-            subscriber.stop();
+            assertThatCode(subscriber::stop).doesNotThrowAnyException();
+        }
+
+        @Test
+        void shouldHandleRemoveConsumerTimeoutOnStop() {
+            whenCreateGroupReturnEmpty();
+            // Mock removeConsumer to never complete
+            when(stream.removeConsumer(eq(CONFIG.getConsumerGroupName()), anyString()))
+                    .thenReturn(Mono.never());
+            // No need to track subscriber, calling stop explicitly
+            var subscriber = TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient);
+
+            subscriber.start();
+
+            assertThatCode(subscriber::stop).doesNotThrowAnyException();
         }
     }
 

@@ -79,6 +79,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final DoubleGauge readSize;
     private final LongCounter ackAndRemoveErrors;
     private final LongHistogram ackAndRemoveProcessingTime;
+    private final LongCounter unexpectedErrors;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription;
@@ -143,6 +144,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .setDescription("Time taken for Redis ack and remove calls")
                 .setUnit("ms")
                 .ofLongs()
+                .build();
+        this.unexpectedErrors = meter
+                .counterBuilder("%s_%s_unexpected_errors".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Unexpected errors caught")
                 .build();
     }
 
@@ -215,31 +220,40 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         }
     }
 
+    /**
+     * Removes the consumer from the Redis consumer group during stop and does not propagate errors.
+     */
     private void removeConsumer() {
-        // Removing the consumer is best-effort, no blocking and not propagating errors to stop
-        stream.removeConsumer(config.getConsumerGroupName(), consumerId)
-                .subscribeOn(consumerScheduler)
-                .doOnSuccess(pendingMessages -> log.info(
-                        "Removed consumer '{}', from group '{}', pendingMessages '{}'",
-                        consumerId, config.getConsumerGroupName(), pendingMessages))
-                .onErrorResume(throwable -> {
-                    log.warn("Failed to remove consumer '{}', group '{}'",
-                            consumerId, config.getConsumerGroupName(), throwable);
-                    return Mono.empty();
-                })
-                .subscribe();
+        try {
+            stream.removeConsumer(config.getConsumerGroupName(), consumerId)
+                    .subscribeOn(consumerScheduler)
+                    .doOnSuccess(pendingMessages -> log.info(
+                            "Removed consumer '{}', from group '{}', pendingMessages '{}'",
+                            consumerId, config.getConsumerGroupName(), pendingMessages))
+                    .onErrorResume(throwable -> {
+                        log.warn("Failed to remove consumer '{}', group '{}'",
+                                consumerId, config.getConsumerGroupName(), throwable);
+                        return Mono.empty();
+                    })
+                    .block(config.getLongPollingDuration().toJavaDuration());
+        } catch (RuntimeException exception) {
+            log.warn("Exception while removing consumer '{}' from group '{}'",
+                    consumerId, config.getConsumerGroupName(), exception);
+        }
     }
 
+    /**
+     * Ensures the stream and consumer group exist.
+     * Propagates errors except BUSYGROUP and makes start fail in that case.
+     */
     private void enforceConsumerGroup() {
-        // Make sure the stream and the consumer group exists.
-        // Propagate errors except BUSYGROUP and make start fail in that case.
         var streamCreateGroupArgs = StreamCreateGroupArgs
                 .name(config.getConsumerGroupName())
                 .makeStream();
         stream.createGroup(streamCreateGroupArgs)
                 .subscribeOn(consumerScheduler)
                 .onErrorResume(throwable -> {
-                    if (throwable.getMessage().contains(BUSYGROUP)) {
+                    if (Objects.toString(throwable.getMessage(), "").contains(BUSYGROUP)) {
                         log.info("Consumer group already exists, name '{}', stream '{}'",
                                 config.getConsumerGroupName(), config.getStreamName());
                         return Mono.empty();
@@ -256,7 +270,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return Flux.interval(config.getPoolingInterval().toJavaDuration(), timerScheduler)
                 .onBackpressureDrop(i -> {
                     intervalDrops.add(1);
-                    log.info("Interval dropped due to backpressure");
+                    // Backpressure should be a common thing due to long polling, better to log at debug level
+                    log.debug("Interval dropped due to backpressure");
                 })
                 // TODO: Implement claimer of orphan pending messages
                 // ConcatMap ensures one readGroup at a time
@@ -270,8 +285,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .flatMap(this::postProcessSuccessMessages)
                 .flatMap(this::postProcessFailureMessages)
                 // Unexpected errors handling: interval is dropped, but processing continues
-                .onErrorContinue((throwable, object) -> log.error("Error processing message from Redis stream '{}'",
-                        object, throwable))
+                .onErrorContinue((throwable, object) -> {
+                    unexpectedErrors.add(1);
+                    log.error("Unexpected error processing message from Redis stream '{}'", object, throwable);
+                })
                 .name("redis-subscriber")
                 .tag("stream", config.getStreamName())
                 .tag("consumer-group", config.getConsumerGroupName())
@@ -286,9 +303,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return stream.readGroup(config.getConsumerGroupName(), consumerId, streamReadGroupArgs)
                 .subscribeOn(consumerScheduler) // Isolates the Redis call
                 .filter(Objects::nonNull)
-                .doOnSuccess(stream -> {
-                    readSize.set(stream.size());
-                    log.debug("Successfully read from stream, size '{}'", stream.size());
+                .doOnSuccess(messages -> {
+                    readSize.set(messages.size());
+                    log.debug("Successfully read from stream, size '{}'", messages.size());
                 })
                 .onErrorResume(throwable -> {
                     readErrors.add(1);
@@ -332,6 +349,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .map(ProcessingResult::messageId)
                 .toList();
         return ackAndRemoveMessages(successIds)
+                // Make sure to always propagate downstream the original processing results
                 .thenReturn(processingResults);
     }
 
@@ -355,6 +373,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var startMillis = System.currentTimeMillis();
         return stream.ack(config.getConsumerGroupName(), idsArray)
                 .subscribeOn(consumerScheduler)
+                // Only attempt to remove if ack was successful
                 .then(stream.remove(idsArray)
                         .subscribeOn(consumerScheduler))
                 .doOnSuccess(size -> log.debug("Successfully ack and remove from stream, size '{}'", size))
