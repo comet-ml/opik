@@ -64,8 +64,8 @@ class BaseRedisSubscriberTest {
 
     @BeforeEach
     void setUp() {
-        // Clean up Redis state before each test
-        redissonClient.getKeys().flushdb().block();
+        // Clean up only this test's stream to avoid affecting other test classes
+        stream.delete().block();
         subscribers.clear();
     }
 
@@ -82,7 +82,6 @@ class BaseRedisSubscriberTest {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
             subscriber.start();
-            waitForConsumerGroupReady();
 
             publishMessagesToStream(messages);
 
@@ -104,7 +103,6 @@ class BaseRedisSubscriberTest {
                         Mono.delay(Duration.ofMillis(500)).block();
                     })));
             subscriber.start();
-            waitForConsumerGroupReady();
 
             publishMessagesToStream(messages);
 
@@ -128,7 +126,6 @@ class BaseRedisSubscriberTest {
                 return Mono.empty();
             }));
             subscriber.start();
-            waitForConsumerGroupReady();
 
             // Publish message with different field (no payload field, will result in null)
             publishMessagesToStream("other-payload", otherPayloadMessages);
@@ -150,7 +147,6 @@ class BaseRedisSubscriberTest {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var subscriber = trackSubscriber(TestRedisSubscriber.failingSubscriber(config, redissonClient));
             subscriber.start();
-            waitForConsumerGroupReady();
 
             publishMessagesToStream(messages);
 
@@ -174,7 +170,6 @@ class BaseRedisSubscriberTest {
                 return Mono.empty();
             }));
             subscriber.start();
-            waitForConsumerGroupReady();
 
             // Publish messages including one with null payload
             publishMessagesToStream("other-payload", otherPayloadMessages);
@@ -193,7 +188,6 @@ class BaseRedisSubscriberTest {
         void shouldHandleExistingConsumerGroup() {
             var subscriber1 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
             subscriber1.start();
-            waitForConsumerGroupReady();
 
             var subscriber2 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
             // Start another subscriber with same group, should handle BUSY GROUP error gracefully
@@ -219,7 +213,6 @@ class BaseRedisSubscriberTest {
             // Not tracking the subscriber, as we want to test stop behavior explicitly
             var subscriber = TestRedisSubscriber.createSubscriber(config, redissonClient);
             subscriber.start();
-            waitForConsumerGroupReady();
             publishMessagesToStream(messages);
             waitForMessagesProcessed(subscriber, messages.size());
             waitForMessagesAckedAndRemoved();
@@ -234,12 +227,9 @@ class BaseRedisSubscriberTest {
             subscriber.stop();
 
             // Verify this specific consumer was removed from the group
-            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-                        var consumersAfterStop = stream.listConsumers(config.getConsumerGroupName()).block();
-                        assertThat(consumersAfterStop)
-                                .noneMatch(consumer -> subscriber.getConsumerId().equals(consumer.getName()));
-                    });
+            var consumersAfterStop = stream.listConsumers(config.getConsumerGroupName()).block();
+            assertThat(consumersAfterStop)
+                    .noneMatch(consumer -> subscriber.getConsumerId().equals(consumer.getName()));
 
             // Publish new messages after stop and verify they are not consumed
             var newMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
@@ -258,18 +248,6 @@ class BaseRedisSubscriberTest {
     private TestRedisSubscriber trackSubscriber(TestRedisSubscriber subscriber) {
         subscribers.add(subscriber);
         return subscriber;
-    }
-
-    /**
-     * This ensures the subscriber is ready to consume messages.
-     */
-    private void waitForConsumerGroupReady() {
-        await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .until(() -> Boolean.TRUE.equals(
-                        stream.listGroups()
-                                .flatMapMany(Flux::fromIterable)
-                                .any(group -> config.getConsumerGroupName().equals(group.getName()))
-                                .block()));
     }
 
     private void publishMessagesToStream(List<String> messages) {
