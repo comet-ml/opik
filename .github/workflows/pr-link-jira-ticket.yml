@@ -14,7 +14,7 @@ jobs:
       - uses: cakeinpanic/jira-description-action@v0.5.1
         name: jira-description-action
         with:
-          github-token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           jira-token: ${{ secrets.JIRA_AUTH }}
           jira-base-url: https://comet-ml.atlassian.net
           custom-issue-number-regexp: '[A-Z]{2,4}-[0-9]{1,10}' 
