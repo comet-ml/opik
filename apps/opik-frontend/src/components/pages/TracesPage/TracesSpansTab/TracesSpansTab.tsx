@@ -531,15 +531,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const scoresColumnsData = useMemo(() => {
     // Always include "User feedback" column, even if it has no data
-    const userFeedbackColumn: ColumnData<BaseTraceData> = {
+    const userFeedbackColumn: DynamicColumn = {
       id: USER_FEEDBACK_COLUMN_ID,
       label: USER_FEEDBACK_NAME,
-      type: COLUMN_TYPE.number,
-      header: FeedbackScoreHeader as never,
-      cell: FeedbackScoreCell as never,
-      accessorFn: (row) =>
-        row.feedback_scores?.find((f) => f.name === USER_FEEDBACK_NAME),
-      statisticKey: USER_FEEDBACK_COLUMN_ID,
+      columnType: COLUMN_TYPE.number,
     };
 
     // Filter out "User feedback" from dynamic columns to avoid duplicates
@@ -547,22 +542,19 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
     );
 
-    return [
-      userFeedbackColumn,
-      ...otherDynamicColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            accessorFn: (row) =>
-              row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
-          }) as ColumnData<BaseTraceData>,
-      ),
-    ];
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+        }) as ColumnData<BaseTraceData>,
+    );
   }, [dynamicScoresColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
