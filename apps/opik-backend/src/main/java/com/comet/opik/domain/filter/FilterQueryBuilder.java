@@ -384,8 +384,7 @@ public class FilterQueryBuilder {
                 TraceField.USAGE_PROMPT_TOKENS,
                 TraceField.USAGE_TOTAL_TOKENS,
                 TraceField.TOTAL_ESTIMATED_COST,
-                TraceField.LLM_SPAN_COUNT,
-                TraceField.PROVIDERS));
+                TraceField.LLM_SPAN_COUNT));
 
         map.put(FilterStrategy.ANNOTATION_AGGREGATION, Set.of(
                 TraceField.ANNOTATION_QUEUE_IDS,
