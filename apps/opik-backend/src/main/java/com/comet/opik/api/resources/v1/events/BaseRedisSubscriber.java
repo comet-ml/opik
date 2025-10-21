@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import lombok.NonNull;
@@ -36,7 +37,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
      */
-    private final Logger log = LoggerFactory.getLogger(this.getClass().getName());
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     private final StreamConfiguration config;
     private final RedissonReactiveClient redisson;
@@ -51,6 +52,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     protected final LongHistogram messageProcessingTime;
     protected final LongHistogram messageQueueDelay;
     protected final String payloadField;
+    protected final LongCounter backpressureDropCounter;
 
     protected BaseRedisSubscriber(@NonNull StreamConfiguration config, @NonNull RedissonReactiveClient redisson,
             @NonNull String metricsBaseName, @NonNull String payloadField) {
@@ -78,6 +80,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .setUnit("ms")
                 .ofLongs()
                 .build();
+
+        this.backpressureDropCounter = meter
+                .counterBuilder("%s_backpressure_drops_total".formatted(metricNamespace))
+                .setDescription("Total number of events dropped due to backpressure")
+                .build();
     }
 
     protected abstract String getMetricNamespace();
@@ -89,12 +96,18 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Override
     public void start() {
         if (stream != null) {
-            log.warn("{} consumer already started. Ignoring start request", getSubscriberName());
+            log.warn("'{}' consumer already started. Ignoring start request", getSubscriberName());
             return;
         }
         // This particular subscriber implementation only consumes the respective Redis stream
         stream = initStream(config, redisson);
-        log.info("{} consumer started successfully", getSubscriberName());
+        log.info(
+                "'{}' consumer started successfully with configuration: streamName='{}', consumerGroupName='{}', consumerBatchSize='{}', poolingInterval='{}'",
+                getSubscriberName(),
+                config.getStreamName(),
+                config.getConsumerGroupName(),
+                batchSize,
+                config.getPoolingInterval().toJavaDuration());
     }
 
     @Override
@@ -107,7 +120,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
         if (streamSubscription == null || streamSubscription.isDisposed()) {
             log.info("No active subscription, deleting Redis stream");
-            stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
+            deleteStream();
             return;
         }
 
@@ -130,15 +143,19 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         } catch (Exception exception) {
             log.error("Error processing last messages before shutdown", exception);
         } finally {
-            stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted")).subscribe();
+            deleteStream();
         }
+    }
+
+    private void deleteStream() {
+        stream.delete().doOnTerminate(() -> log.info("Redis Stream deleted with name '{}'", config.getStreamName()))
+                .subscribe();
     }
 
     private RStreamReactive<String, M> initStream(StreamConfiguration config, RedissonReactiveClient redisson) {
         var streamName = config.getStreamName();
         var codec = config.getCodec();
         RStreamReactive<String, M> streamInstance = redisson.getStream(streamName, codec);
-        log.info("{} consumer listening for events on stream '{}'", getSubscriberName(), streamName);
         enforceConsumerGroup(streamInstance);
         setupStreamListener(streamInstance);
         return streamInstance;
@@ -160,7 +177,13 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private void setupStreamListener(RStreamReactive<String, M> stream) {
         this.streamSubscription = Flux.interval(config.getPoolingInterval().toJavaDuration())
-                .onBackpressureDrop()
+                .onBackpressureDrop(dropped -> {
+                    log.warn(
+                            "Backpressure drop detected: Unable to keep up with polling intervals. Polling interval tick dropped (sequence number: '{}').",
+                            dropped);
+                    // Record metric for dropped polling intervals
+                    backpressureDropCounter.add(1);
+                })
                 .flatMap(i -> stream.readGroup(config.getConsumerGroupName(), consumerId, redisReadConfig))
                 .onErrorContinue((throwable, object) -> log.error("Error reading from Redis stream", throwable))
                 .flatMapIterable(Map::entrySet)
@@ -219,7 +242,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             try {
                 return Optional.of(Long.parseLong(parts[0]));
             } catch (NumberFormatException e) {
-                log.warn("Failed to parse timestamp from message ID: {}", idString, e);
+                log.warn("Failed to parse timestamp from message ID: '{}'", idString, e);
             }
         }
         return Optional.empty();

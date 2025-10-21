@@ -53,8 +53,10 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.core.MediaType;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,19 +74,21 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.apache.commons.lang3.RandomStringUtils;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -1616,6 +1620,538 @@ class AutomationRuleEvaluatorsResourceTest {
 
         assertThat(logPage.content().getFirst().message())
                 .isEqualTo(messageTemplate.formatted(threadModelId, rule.getName()));
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Sorting Functionality")
+    class SortingFunctionality {
+
+        @ParameterizedTest(name = "Sort by {0} {1}")
+        @MethodSource("sortingTestCases")
+        @DisplayName("Sort evaluators by various fields with ASC/DESC")
+        void sortEvaluators(String field, String direction,
+                Function<AutomationRuleEvaluator<?>, Comparable> extractor)
+                throws JsonProcessingException {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            // Create 5 evaluators with different values
+            var evaluators = IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        var builder = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                                .projectId(projectId);
+
+                        // Set specific values based on field being tested
+                        if (field.equals("name")) {
+                            builder.name("name-" + (char) ('a' + i) + "-" + RandomStringUtils.randomAlphanumeric(5));
+                        } else if (field.equals("sampling_rate")) {
+                            builder.samplingRate((float) (i + 1) / 10); // 0.1, 0.2, 0.3, 0.4, 0.5
+                        } else if (field.equals("enabled")) {
+                            builder.enabled(i % 2 == 0); // alternating true/false
+                        }
+
+                        return builder.build();
+                    })
+                    .toList();
+
+            // Create all evaluators
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
+
+            // When
+            var sortingFields = List.of(Map.of("field", field, "direction", direction));
+            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
+
+            // Then - Wait for ClickHouse and verify sorting
+            //Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(5);
+
+            // Extract the values and verify they're sorted correctly
+            var actualValues = page.content().stream()
+                    .filter(e -> evaluators.stream().anyMatch(ev -> ev.getName().equals(e.getName())))
+                    .limit(5)
+                    .map(extractor)
+                    .toList();
+
+            var expectedValues = new ArrayList<>(actualValues);
+            if (direction.equals("ASC")) {
+                expectedValues.sort(Comparator.naturalOrder());
+            } else {
+                expectedValues.sort(Comparator.reverseOrder());
+            }
+
+            assertThat(actualValues).isEqualTo(expectedValues);
+            //});
+        }
+
+        static Stream<Arguments> sortingTestCases() {
+            return Stream.of(
+                    // Name sorting
+                    Arguments.of(
+                            "name", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
+                    Arguments.of(
+                            "name", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
+
+                    // Type sorting
+                    Arguments.of(
+                            "type", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                                    .name()),
+                    Arguments.of(
+                            "type", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                                    .name()),
+
+                    // Sampling rate sorting
+                    Arguments.of(
+                            "sampling_rate", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getSamplingRate()),
+                    Arguments.of(
+                            "sampling_rate", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getSamplingRate()),
+
+                    // Enabled sorting
+                    Arguments.of(
+                            "enabled", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                                    ? 1
+                                    : 0),
+                    Arguments.of(
+                            "enabled", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                                    ? 1
+                                    : 0),
+
+                    // Project name sorting
+                    Arguments.of(
+                            "project_name", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getProjectName()),
+                    Arguments.of(
+                            "project_name", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getProjectName()),
+
+                    // Created at sorting
+                    Arguments.of(
+                            "created_at", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                                    .toEpochMilli()),
+                    Arguments.of(
+                            "created_at", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                                    .toEpochMilli()),
+
+                    // Last updated at sorting
+                    Arguments.of(
+                            "last_updated_at", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedAt().toEpochMilli()),
+                    Arguments.of(
+                            "last_updated_at", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedAt().toEpochMilli()),
+
+                    // ID sorting
+                    Arguments.of(
+                            "id", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                                    .toString()),
+                    Arguments.of(
+                            "id", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                                    .toString()),
+
+                    // Project ID sorting
+                    Arguments.of(
+                            "project_id", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                                    .toString()),
+                    Arguments.of(
+                            "project_id", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                                    .toString()),
+
+                    // Created by sorting
+                    Arguments.of(
+                            "created_by", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getCreatedBy()),
+                    Arguments.of(
+                            "created_by", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getCreatedBy()),
+
+                    // Last updated by sorting
+                    Arguments.of(
+                            "last_updated_by", "ASC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedBy()),
+                    Arguments.of(
+                            "last_updated_by", "DESC",
+                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                                    .getLastUpdatedBy()));
+        }
+
+        @Test
+        @DisplayName("Verify sortable_by field is returned")
+        void verifySortableByField() {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .build();
+            evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // When
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page.sortableBy()).isNotNull();
+            assertThat(page.sortableBy()).contains(
+                    "id", "name", "type", "enabled", "sampling_rate", "project_id", "project_name",
+                    "created_at", "last_updated_at", "created_by", "last_updated_by");
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("List Filtering Functionality")
+    class ListFilteringFunctionality {
+
+        @ParameterizedTest(name = "Filter by {0} with operator {1}")
+        @MethodSource("filteringTestCases")
+        @DisplayName("Filter automation rules by various fields")
+        void filterByField(String fieldName, String operator, String description)
+                throws JsonProcessingException, InterruptedException {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            final String filterValue;
+            final UUID expectedId;
+
+            if (fieldName.equals("id")) {
+                // Test ID filtering
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = id.toString();
+                expectedId = id;
+
+            } else if (fieldName.equals("name")) {
+                // Test Name filtering
+                var uniqueName = "unique-name-" + RandomStringUtils.randomAlphanumeric(10);
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .name(uniqueName)
+                        .projectId(projectId)
+                        .build();
+                expectedId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = "unique-name-";
+
+            } else if (fieldName.equals("created_by")) {
+                // Test Created By filtering
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = "test";
+                expectedId = null;
+
+            } else if (fieldName.equals("created_at")) {
+                // Test Created At filtering
+                var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+
+                var timestamp = Instant.now();
+                Thread.sleep(1000);
+
+                var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                expectedId = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+                filterValue = timestamp.toString();
+
+            } else { // last_updated_at
+                // Test Last Updated At filtering
+                var timestamp = Instant.now().minusSeconds(10);
+                var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                        .projectId(projectId)
+                        .build();
+                expectedId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                filterValue = timestamp.toString();
+            }
+
+            // When
+            var filterFields = List.of(Map.of("field", fieldName, "operator", operator, "value", filterValue));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page).isNotNull();
+            assertThat(page.content()).isNotNull();
+
+            if (fieldName.equals("id") && operator.equals("=")) {
+                assertThat(page.content()).hasSize(1);
+                assertThat(page.content().get(0).getId()).isEqualTo(expectedId);
+            } else if (expectedId != null && !fieldName.equals("created_by")) {
+                assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+                assertThat(page.content()).anyMatch(e -> e.getId().equals(expectedId));
+            } else {
+                // For created_by, just verify API accepts the filter
+                assertThat(page.sortableBy()).isNotNull();
+            }
+        }
+
+        static Stream<Arguments> filteringTestCases() {
+            return Stream.of(
+                    // ID filtering
+                    Arguments.of("id", "=", "Filter by exact ID"),
+
+                    // Name filtering
+                    Arguments.of("name", "contains", "Filter by name contains"),
+
+                    // Created by filtering
+                    Arguments.of("created_by", "contains",
+                            "Filter by created_by contains"),
+
+                    // Created at filtering
+                    Arguments.of("created_at", ">",
+                            "Filter by created_at greater than"),
+
+                    // Last updated at filtering
+                    Arguments.of("last_updated_at", ">=",
+                            "Filter by last_updated_at greater than or equal"));
+        }
+
+        @ParameterizedTest(name = "Filter by project name with operator: {0}")
+        @MethodSource("projectNameFilteringTestCases")
+        @DisplayName("Filter automation rules by project name with various operators")
+        void filterByProjectName(String operator, String matchingPrefix, String nonMatchingPrefix,
+                Predicate<String> matchPredicate) throws JsonProcessingException {
+            // Given
+            var projectName1 = matchingPrefix + RandomStringUtils.randomAlphanumeric(10);
+            var projectName2 = nonMatchingPrefix + RandomStringUtils.randomAlphanumeric(10);
+
+            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, WORKSPACE_NAME);
+            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, WORKSPACE_NAME);
+
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId1)
+                    .build();
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId2)
+                    .build();
+
+            var id1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+
+            // When - Filter by project name with given operator
+            var filterValue = operator.equals("=") ? projectName1 : matchingPrefix;
+            var filterFields = List.of(Map.of(
+                    "field", "project_name",
+                    "operator", operator,
+                    "value", filterValue));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    (UUID) null, null, filters, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Find the matching evaluator
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+            var matchingEvaluators = page.content().stream()
+                    .filter(e -> e.getId().equals(id1))
+                    .toList();
+            assertThat(matchingEvaluators).hasSize(1);
+            assertThat(matchingEvaluators.get(0).getProjectName()).satisfies(matchPredicate::test);
+            assertThat(matchingEvaluators.get(0).getProjectId()).isEqualTo(projectId1);
+        }
+
+        static Stream<Arguments> projectNameFilteringTestCases() {
+            return Stream.of(
+                    Arguments.of(
+                            "contains",
+                            "test-project-",
+                            "other-project-",
+                            (Predicate<String>) name -> name.contains("test-project-")),
+                    Arguments.of(
+                            "=",
+                            "exact-match-",
+                            "different-name-",
+                            (Predicate<String>) name -> name.startsWith("exact-match-")),
+                    Arguments.of(
+                            "starts_with",
+                            "prefix-",
+                            "other-",
+                            (Predicate<String>) name -> name.startsWith("prefix-")));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Pagination Functionality")
+    class PaginationFunctionality {
+
+        @ParameterizedTest(name = "Fetch page {0} with page size {1}, expecting {2} items")
+        @MethodSource("paginationTestCases")
+        @DisplayName("Fetch evaluators using pagination")
+        void paginationTest(int pageNumber, int pageSize, int expectedItemsOnPage, String description) {
+            // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var totalItems = 25;
+            var evaluators = IntStream.range(0, totalItems)
+                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                            .name("evaluator-" + i)
+                            .projectId(projectId)
+                            .build())
+                    .toList();
+
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
+
+            // When - Fetch the specified page
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, null, pageNumber, pageSize, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            assertThat(page.page()).isEqualTo(pageNumber);
+            assertThat(page.size()).isEqualTo(expectedItemsOnPage);
+            assertThat(page.total()).isEqualTo(totalItems);
+            assertThat(page.content()).hasSize(expectedItemsOnPage);
+        }
+
+        static Stream<Arguments> paginationTestCases() {
+            return Stream.of(
+                    // pageNumber, pageSize, expectedItemsOnPage, description
+                    Arguments.of(1, 10, 10, "First page with 10 items"),
+                    Arguments.of(2, 10, 10, "Second page with 10 items"),
+                    Arguments.of(3, 10, 5, "Last page with 5 items"));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("ProjectId Filtering Functionality")
+    class ProjectIdFilteringFunctionality {
+
+        @Test
+        @DisplayName("Filter evaluators by single projectId")
+        void filterBySingleProjectId() {
+            // Given
+            var projectId1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId1)
+                    .build();
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId2)
+                    .build();
+
+            var id1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+            evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+
+            // When - Filter by projectId1
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId1, null, null, null, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Only evaluator1 should be returned
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(1);
+            var matchingEvaluators = page.content().stream()
+                    .filter(e -> e.getId().equals(id1))
+                    .toList();
+            assertThat(matchingEvaluators).hasSize(1);
+            assertThat(matchingEvaluators.get(0).getProjectId()).isEqualTo(projectId1);
+        }
+
+        @Test
+        @DisplayName("Filter evaluators across all projects when projectId is null")
+        void filterAcrossAllProjects() {
+            // Given
+            var projectId1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+
+            var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name("unique-eval-1-" + RandomStringUtils.randomAlphanumeric(10))
+                    .projectId(projectId1)
+                    .build();
+            var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name("unique-eval-2-" + RandomStringUtils.randomAlphanumeric(10))
+                    .projectId(projectId2)
+                    .build();
+
+            var id1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+            var id2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+
+            // When - Query all projects (null projectId)
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    (UUID) null, null, null, null, 1, 100, WORKSPACE_NAME, API_KEY);
+
+            // Then - Both evaluators should be returned
+            var evaluatorIds = page.content().stream().map(AutomationRuleEvaluator::getId).toList();
+            assertThat(evaluatorIds).contains(id1, id2);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Combined Sorting and Filtering Functionality")
+    class CombinedSortingAndFilteringFunctionality {
+
+        @Test
+        @DisplayName("Filter by project name and sort by name ascending")
+        void filterAndSort() throws JsonProcessingException {
+            // Given
+            var projectName = "test-project-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var evaluators = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                            .name("eval-" + (char) ('e' - i) + "-" + RandomStringUtils.randomAlphanumeric(5)) // e, d, c, b, a
+                            .projectId(projectId)
+                            .build())
+                    .toList();
+
+            evaluators.forEach(ev -> evaluatorsResourceClient.createEvaluator(ev, WORKSPACE_NAME, API_KEY));
+
+            // When - Filter by project name and sort by name ASC
+            var filterFields = List.of(Map.of(
+                    "field", "project_name",
+                    "operator", "contains",
+                    "value", "test-project"));
+            String filters = OBJECT_MAPPER.writeValueAsString(filterFields);
+
+            var sortingFields = List.of(Map.of("field", "name", "direction", "ASC"));
+            String sorting = OBJECT_MAPPER.writeValueAsString(sortingFields);
+
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    (UUID) null, null, filters, sorting, 1, 10, WORKSPACE_NAME, API_KEY);
+
+            // Then - Results should be filtered and sorted
+            assertThat(page.content()).hasSizeGreaterThanOrEqualTo(5);
+            var matchingEvaluators = page.content().stream()
+                    .filter(e -> evaluators.stream().anyMatch(ev -> ev.getName().equals(e.getName())))
+                    .limit(5)
+                    .toList();
+
+            assertThat(matchingEvaluators).hasSize(5);
+            // Verify they're sorted by name (should be alphabetically: eval-a, eval-b, eval-c, eval-d, eval-e)
+            for (int i = 0; i < matchingEvaluators.size() - 1; i++) {
+                assertThat(matchingEvaluators.get(i).getName())
+                        .isLessThan(matchingEvaluators.get(i + 1).getName());
+            }
+        }
     }
 
     @Nested

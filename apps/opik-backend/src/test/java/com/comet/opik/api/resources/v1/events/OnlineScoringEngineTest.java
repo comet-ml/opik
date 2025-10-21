@@ -25,6 +25,7 @@ import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResou
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -41,7 +42,9 @@ import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessageType;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.json.JsonBooleanSchema;
 import dev.langchain4j.model.chat.request.json.JsonIntegerSchema;
@@ -51,6 +54,7 @@ import dev.langchain4j.model.chat.request.json.JsonStringSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.text.StringEscapeUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,6 +63,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -104,8 +109,8 @@ class OnlineScoringEngineTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
-    private final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
-    private final String TEST_EVALUATOR = """
+    private static final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
+    private static final String TEST_EVALUATOR = """
             {
               "model": { "name": "gpt-4o", "temperature": 0.3 },
               "messages": [
@@ -129,7 +134,7 @@ class OnlineScoringEngineTest {
             """
             .formatted(MESSAGE_TO_TEST).trim();
 
-    private final String TRACE_THREAD_PROMPT = """
+    private static final String TRACE_THREAD_PROMPT = """
             Based on the given list of message exchanges between a user and an LLM, generate a JSON object to indicate whether the LAST `assistant` message is relevant to context in messages.
 
             ** Guidelines: **
@@ -146,6 +151,9 @@ class OnlineScoringEngineTest {
 
             {{context}}
             """;
+
+    private static final String IMAGE_PLACEHOLDER = MessageContentNormalizer.IMAGE_PLACEHOLDER_START + "%s"
+            + MessageContentNormalizer.IMAGE_PLACEHOLDER_END;
 
     private final String unquoted;
 
@@ -174,9 +182,9 @@ class OnlineScoringEngineTest {
             """
             .formatted(unquoted).trim();
 
-    private final String SUMMARY_STR = "What was the approach to experimenting with different data mixtures?";
-    private final String OUTPUT_STR = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
-    private final String INPUT = """
+    private static final String SUMMARY_STR = "What was the approach to experimenting with different data mixtures?";
+    private static final String OUTPUT_STR = "The study employed a systematic approach to experiment with varying data mixtures by manipulating the proportions and sources of datasets used for model training.";
+    private static final String INPUT = """
             {
                 "questions": {
                     "question1": "%s",
@@ -186,14 +194,14 @@ class OnlineScoringEngineTest {
                 "title": "CRAG -- Comprehensive RAG Benchmark"
             }
             """.formatted(SUMMARY_STR).trim();
-    private final String OUTPUT = """
+    private static final String OUTPUT = """
             {
                 "output": "%s"
             }
             """.formatted(OUTPUT_STR).trim();
 
-    private final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
-    private final String TEST_EVALUATOR_EDGE_CASE = """
+    private static final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
+    private static final String TEST_EVALUATOR_EDGE_CASE = """
             {
               "model": { "name": "gpt-4o", "temperature": 0.3 },
               "messages": [
@@ -219,7 +227,7 @@ class OnlineScoringEngineTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final GenericContainer ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
 
     @RegisterApp
@@ -438,10 +446,15 @@ class OnlineScoringEngineTest {
         assertThat(actualVarLiteral).isEqualTo(expectedVarLiteral);
     }
 
-    @Test
+    Stream<String> testRenderTemplate() {
+        return Stream.of(TEST_EVALUATOR, TEST_EVALUATOR_EDGE_CASE);
+    }
+
+    @ParameterizedTest
+    @MethodSource
     @DisplayName("render message templates with a trace")
-    void testRenderTemplate() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+    void testRenderTemplate(String evaluator) throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.MAPPER.readValue(evaluator, LlmAsJudgeCode.class);
         var traceId = generator.generate();
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId);
@@ -621,30 +634,6 @@ class OnlineScoringEngineTest {
                 .build();
     }
 
-    @Test
-    @DisplayName("render a message template with edge cases")
-    void testRenderEdgeCaseTemplate() throws JsonProcessingException {
-        var evaluatorEdgeCase = JsonUtils.MAPPER.readValue(TEST_EVALUATOR_EDGE_CASE,
-                AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.class);
-        var traceId = generator.generate();
-        var projectId = generator.generate();
-        var trace = createTrace(traceId, projectId);
-        var renderedMessages = OnlineScoringEngine.renderMessages(
-                evaluatorEdgeCase.messages(), evaluatorEdgeCase.variables(), trace);
-
-        assertThat(renderedMessages).hasSize(2);
-
-        var userMessage = renderedMessages.getFirst();
-        assertThat(userMessage.getClass()).isEqualTo(UserMessage.class);
-        assertThat(((UserMessage) userMessage).singleText()).contains(SUMMARY_STR);
-        assertThat(((UserMessage) userMessage).singleText()).contains(OUTPUT_STR);
-        assertThat(((UserMessage) userMessage).singleText()).contains("some.nonexistent.path");
-        assertThat(((UserMessage) userMessage).singleText()).contains("some literal value");
-
-        var systemMessage = renderedMessages.get(1);
-        assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
-    }
-
     @ParameterizedTest
     @MethodSource
     @DisplayName("renderMessages should support keys with dots in their names")
@@ -673,5 +662,61 @@ class OnlineScoringEngineTest {
                 arguments("key.with.dot", "{\"key.with.dot\":\"expected-value\"}"),
                 arguments("regularKey", "{\"regularKey\":\"expected-value\"}"),
                 arguments("subObject.nestedKey", "{\"subObject\":{\"nestedKey\":\"expected-value\"}}"));
+    }
+
+    @Test
+    void renderMessagesParsesImagePlaceholder() {
+        var expectedUrl1 = "https://example.com/image1.png";
+        // Simulate a URL that Mustache has HTML-escaped (& becomes &amp; and = becomes &#61; etc.)
+        var expectedUrl2 = "https://example.com/image2.png?width=200&height=300";
+        var htmlEscapedUrl2 = StringEscapeUtils.escapeHtml4(expectedUrl2);
+        var messages = List.of(
+                new LlmAsJudgeMessage(
+                        ChatMessageType.USER,
+                        "First image: " + IMAGE_PLACEHOLDER.formatted(expectedUrl1) +
+                                "Second image: " + IMAGE_PLACEHOLDER.formatted(htmlEscapedUrl2)));
+
+        var renderedMessages = OnlineScoringEngine.renderMessages(
+                messages, Map.of(), Trace.builder().build());
+
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = renderedMessages.getFirst();
+        assertThat(userMessage).isInstanceOf(UserMessage.class);
+        var parts = ((UserMessage) userMessage).contents();
+        assertThat(parts).hasSize(4);
+        assertThat(parts.get(0)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(0)).text()).isEqualTo("First image: ");
+        assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
+        assertThat(((ImageContent) parts.get(1)).image().url().toString()).isEqualTo(expectedUrl1);
+        assertThat(parts.get(2)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(2)).text()).isEqualTo("Second image: ");
+        assertThat(parts.get(3)).isInstanceOf(ImageContent.class);
+        assertThat(((ImageContent) parts.get(3)).image().url().toString()).isEqualTo(expectedUrl2);
+    }
+
+    @ParameterizedTest
+    // HTML Escaped, Unescaped, Unescaped
+    @ValueSource(strings = {"{{%s}}", "{{{%s}}}", "{{&%s}}"})
+    void renderMessagesParsesImagePlaceholderWithMustache(String mustacheTag) {
+        var expectedUrl = "https://example.com/image.png?width=200&height=300";
+        var placeholder = "image_url";
+        var mustacheVariable = mustacheTag.formatted(placeholder);
+        var messages = List.of(
+                new LlmAsJudgeMessage(
+                        ChatMessageType.USER, "My image: " + IMAGE_PLACEHOLDER.formatted(mustacheVariable)));
+        // When using triple braces, Mustache doesn't escape the URL
+        var rendered = OnlineScoringEngine.renderMessages(
+                messages, Map.of(placeholder, expectedUrl), Trace.builder().build());
+
+        assertThat(rendered).hasSize(1);
+        assertThat(rendered.getFirst()).isInstanceOf(UserMessage.class);
+        var userMessage = (UserMessage) rendered.getFirst();
+        var parts = userMessage.contents();
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(0)).isInstanceOf(TextContent.class);
+        assertThat(((TextContent) parts.get(0)).text()).isEqualTo("My image: ");
+        assertThat(parts.get(1)).isInstanceOf(ImageContent.class);
+        // With triple braces, URL is not escaped - no HTML entities present
+        assertThat(((ImageContent) parts.get(1)).image().url().toString()).isEqualTo(expectedUrl);
     }
 }

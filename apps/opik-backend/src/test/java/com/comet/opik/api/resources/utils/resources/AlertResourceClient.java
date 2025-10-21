@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.filter.AlertFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -172,6 +173,26 @@ public class AlertResourceClient {
             assertThat(result.requestBody()).isNotNull();
 
             return result;
+        }
+    }
+
+    public WebhookExamples getWebhookExamples(String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("webhooks")
+                .path("examples")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(WebhookExamples.class);
+            }
+
+            return null;
         }
     }
 }

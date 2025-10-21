@@ -46,7 +46,10 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
 
     @Override
     public int getConsumerBatchSize() {
-        return onlineScoringConfig.getConsumerBatchSize();
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getConsumerBatchSize() != null
+                ? streamConfig.getConsumerBatchSize()
+                : onlineScoringConfig.getConsumerBatchSize();
     }
 
     @Override
@@ -56,6 +59,9 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
 
     @Override
     public Duration getPoolingInterval() {
-        return onlineScoringConfig.getPoolingInterval();
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getPoolingInterval() != null
+                ? streamConfig.getPoolingInterval()
+                : onlineScoringConfig.getPoolingInterval();
     }
 }

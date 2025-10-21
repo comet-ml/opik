@@ -216,6 +216,12 @@ navigation:
               - page: Custom metric
                 path: docs/evaluation/metrics/custom_metric.mdx
                 slug: custom_metric
+              - page: Custom conversation metric
+                path: docs/evaluation/metrics/custom_conversation_metric.mdx
+                slug: custom_conversation_metric
+              - page: Task span metrics
+                path: docs/evaluation/metrics/task_span_metrics.mdx
+                slug: task_span_metrics
           - section: Tutorials
             skip-slug: true
             collapsed: true
@@ -262,6 +268,9 @@ navigation:
           - page: Guardrails
             path: docs/production/guardrails.mdx
             slug: guardrails
+          - page: Alerts
+            path: docs/production/alerts.mdx
+            slug: alerts
       - section: Configuration
         slug: /configuration
         contents:
@@ -636,6 +645,10 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/best_practices/prompt_engineering.mdx
             slug: prompt_engineering
+          - page: Multi-Metric Optimization
+            icon: fa-regular fa-chart-line
+            path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx
+            slug: multi_metric_optimization
       - section: Example Projects and Cookbooks
         slug: /optimizer-cookbooks
         contents:

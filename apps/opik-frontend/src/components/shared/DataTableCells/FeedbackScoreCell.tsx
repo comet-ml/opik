@@ -1,10 +1,10 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
 
-import { formatNumericData } from "@/lib/utils";
+import { cn, formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { TraceFeedbackScore } from "@/types/traces";
@@ -13,10 +13,21 @@ import {
   getIsMultiValueFeedbackScore,
 } from "@/lib/feedback-scores";
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
+import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
+import { BaseTraceData } from "@/types/traces";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
+import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
+import { USER_FEEDBACK_NAME } from "@/constants/shared";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
   const reason = feedbackScore?.reason;
+  const row = context.row.original as BaseTraceData;
+
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
+  const { mutate: deleteTraceFeedbackScore } =
+    useTraceFeedbackScoreDeleteMutation();
+  const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
 
   const reasons = useMemo(() => {
     if (getIsMultiValueFeedbackScore(feedbackScore?.value_by_author)) {
@@ -39,13 +50,48 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_at,
   ]);
 
+  const handleValueChange = useCallback(
+    (categoryName: string, value: number) => {
+      if (feedbackScore?.value_by_author?.[currentUserName]?.value !== value) {
+        setTraceFeedbackScore({
+          traceId: row.id,
+          name: USER_FEEDBACK_NAME,
+          categoryName,
+          value,
+        });
+      } else {
+        deleteTraceFeedbackScore({
+          traceId: row.id,
+          name: USER_FEEDBACK_NAME,
+        });
+      }
+    },
+    [
+      currentUserName,
+      deleteTraceFeedbackScore,
+      feedbackScore,
+      row.id,
+      setTraceFeedbackScore,
+    ],
+  );
+
+  const enableUserFeedbackEditing =
+    context.table.options.meta?.enableUserFeedbackEditing ?? false;
+  const isUserFeedbackColumn =
+    enableUserFeedbackEditing &&
+    context.column.id === "feedback_scores_User feedback";
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-1"
+      className={cn("gap-1", isUserFeedbackColumn && "group")}
     >
-      <FeedbackScoreCellValue feedbackScore={feedbackScore} />
+      <FeedbackScoreCellValue
+        feedbackScore={feedbackScore}
+        isUserFeedbackColumn={isUserFeedbackColumn}
+        onValueChange={handleValueChange}
+      />
 
       {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>

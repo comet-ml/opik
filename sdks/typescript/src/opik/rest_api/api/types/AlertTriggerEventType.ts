@@ -8,7 +8,7 @@ export type AlertTriggerEventType =
     | "trace_thread:feedback_score"
     | "prompt:created"
     | "prompt:committed"
-    | "span:guardrails_triggered"
+    | "trace:guardrails_triggered"
     | "prompt:deleted";
 export const AlertTriggerEventType = {
     TraceErrors: "trace:errors",
@@ -16,6 +16,6 @@ export const AlertTriggerEventType = {
     TraceThreadFeedbackScore: "trace_thread:feedback_score",
     PromptCreated: "prompt:created",
     PromptCommitted: "prompt:committed",
-    SpanGuardrailsTriggered: "span:guardrails_triggered",
+    TraceGuardrailsTriggered: "trace:guardrails_triggered",
     PromptDeleted: "prompt:deleted",
 } as const;
