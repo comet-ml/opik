@@ -13,8 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
-
 @RequiredArgsConstructor
 @Slf4j
 public class CustomLlmProvider implements LlmProviderService {
@@ -53,12 +51,15 @@ public class CustomLlmProvider implements LlmProviderService {
     }
 
     private static ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
-        if (!request.model().startsWith(CUSTOM_LLM_MODEL_PREFIX)) {
+        if (!CustomLlmModelNameChecker.isCustomLlmModel(request.model())) {
             return request;
         }
 
+        // Extract the actual model name (strips both "custom-llm/" and provider name if present)
+        String actualModelName = CustomLlmModelNameChecker.extractModelName(request.model());
+
         return ChatCompletionRequest.builder()
-                .model(request.model().replace(CUSTOM_LLM_MODEL_PREFIX, ""))
+                .model(actualModelName)
                 .messages(request.messages())
                 .temperature(request.temperature())
                 .topP(request.topP())
