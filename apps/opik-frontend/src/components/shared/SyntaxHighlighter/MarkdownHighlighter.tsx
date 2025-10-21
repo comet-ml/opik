@@ -1,4 +1,4 @@
-import React, { ReactNode, useMemo, useRef } from "react";
+import React, { ReactNode, useMemo } from "react";
 import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
@@ -27,6 +27,9 @@ export interface MarkdownHighlighterProps {
   onExpandedChange?: (
     updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
   ) => void;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  maxHeight?: string;
 }
 
 const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
@@ -39,12 +42,15 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
   withSearch,
   controlledExpanded,
   onExpandedChange,
+  scrollRef,
+  onScroll,
+  maxHeight,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Use scrollRef for both scroll tracking and search container
   const { searchPlugin, searchPlainText, findNext, findPrev } =
     useMarkdownSearch({
       searchValue: localSearchValue || searchValue,
-      container: containerRef.current,
+      container: scrollRef?.current || null,
     });
 
   const markdownPreview = useMemo(() => {
@@ -154,7 +160,12 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
         </>
       }
     >
-      <div className="p-3" ref={containerRef}>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className={maxHeight ? "overflow-y-auto p-3" : "p-3"}
+        style={maxHeight ? { maxHeight } : undefined}
+      >
         {markdownPreview}
       </div>
     </SyntaxHighlighterLayout>

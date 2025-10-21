@@ -1,4 +1,10 @@
-import React, { useState, useMemo } from "react";
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useEffect,
+  useCallback,
+} from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
@@ -11,7 +17,7 @@ import {
 } from "@/components/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import CodeMirrorHighlighter from "@/components/shared/SyntaxHighlighter/CodeMirrorHighlighter";
 import MarkdownHighlighter from "@/components/shared/SyntaxHighlighter/MarkdownHighlighter";
-import { ExpandedState } from "@tanstack/react-table";
+import { ExpandedState, OnChangeFn } from "@tanstack/react-table";
 
 export type SyntaxHighlighterProps = {
   data: object;
@@ -23,6 +29,9 @@ export type SyntaxHighlighterProps = {
   onExpandedChange?: (
     updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
   ) => void;
+  scrollPosition?: number;
+  onScrollPositionChange?: OnChangeFn<number>;
+  maxHeight?: string;
 };
 
 const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
@@ -33,6 +42,9 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   withSearch,
   controlledExpanded,
   onExpandedChange,
+  scrollPosition,
+  onScrollPositionChange,
+  maxHeight,
 }) => {
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
@@ -44,6 +56,27 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     code.canBePrettified,
   );
   const [localSearchValue, setLocalSearchValue] = useState<string>("");
+
+  // Scroll management - ref populated by child components
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Restore scroll position when data or scrollPosition changes
+  useEffect(() => {
+    if (scrollRef.current && scrollPosition !== undefined) {
+      scrollRef.current.scrollTop = scrollPosition;
+    }
+  }, [data, scrollPosition]);
+
+  // Handle scroll events - wrapped in useCallback for stability
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (onScrollPositionChange) {
+        const scrollTop = e.currentTarget.scrollTop;
+        onScrollPositionChange(scrollTop);
+      }
+    },
+    [onScrollPositionChange],
+  );
 
   const handleModeChange = (newMode: string) => {
     setMode(newMode as MODE_TYPE);
@@ -91,6 +124,9 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
         withSearch={withSearch}
         controlledExpanded={controlledExpanded}
         onExpandedChange={onExpandedChange}
+        scrollRef={scrollRef}
+        onScroll={handleScroll}
+        maxHeight={maxHeight}
       />
     );
   }
@@ -104,6 +140,9 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
       modeSelector={modeSelector}
       copyButton={copyButton}
       withSearch={withSearch}
+      scrollRef={scrollRef}
+      onScroll={handleScroll}
+      maxHeight={maxHeight}
     />
   );
 };

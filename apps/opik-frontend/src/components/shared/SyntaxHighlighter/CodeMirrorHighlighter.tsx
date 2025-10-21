@@ -1,4 +1,4 @@
-import React, { ReactNode, useRef } from "react";
+import React, { ReactNode, useRef, useEffect, useCallback } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -20,6 +20,9 @@ export interface CodeMirrorHighlighterProps {
   modeSelector: ReactNode;
   copyButton: ReactNode;
   withSearch?: boolean;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  maxHeight?: string;
 }
 
 const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
@@ -30,6 +33,9 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
   modeSelector,
   copyButton,
   withSearch,
+  scrollRef,
+  onScroll,
+  maxHeight,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
   const theme = useCodemirrorTheme();
@@ -47,10 +53,38 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
     codeOutput,
   });
 
-  const handleCreateEditor = (view: EditorView) => {
-    viewRef.current = view;
-    initSearch(view, localSearchValue || searchValue);
-  };
+  // Handle editor creation - keep it simple
+  const handleCreateEditor = useCallback(
+    (view: EditorView) => {
+      viewRef.current = view;
+      initSearch(view, localSearchValue || searchValue);
+
+      // Expose CodeMirror's scroll container via scrollRef
+      if (scrollRef) {
+        (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current =
+          view.scrollDOM as HTMLDivElement;
+      }
+    },
+    [localSearchValue, searchValue, initSearch], // scrollRef is a ref, doesn't need to be in deps
+  );
+
+  // Set up scroll listener in a separate useEffect
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !onScroll) return;
+
+    const handleScroll = () => {
+      onScroll({
+        currentTarget: view.scrollDOM,
+      } as React.UIEvent<HTMLDivElement>);
+    };
+
+    view.scrollDOM.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      view.scrollDOM.removeEventListener("scroll", handleScroll);
+    };
+  }, [onScroll]); // Don't include viewRef.current to avoid re-subscribing
 
   return (
     <SyntaxHighlighterLayout
@@ -85,7 +119,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           searchExtension,
           hyperLink,
         ]}
-        maxHeight="700px"
+        maxHeight={maxHeight || "700px"}
         onCreateEditor={handleCreateEditor}
       />
     </SyntaxHighlighterLayout>
