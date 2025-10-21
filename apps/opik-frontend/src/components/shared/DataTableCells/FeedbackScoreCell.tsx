@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
@@ -13,29 +13,13 @@ import {
   getIsMultiValueFeedbackScore,
 } from "@/lib/feedback-scores";
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
-import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import { BaseTraceData } from "@/types/traces";
-import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
-import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
-import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackScoreSetMutation";
-import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
-import { USER_FEEDBACK_NAME } from "@/constants/shared";
+import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
   const reason = feedbackScore?.reason;
   const row = context.row.original as BaseTraceData | Thread;
-
-  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
-
-  const { mutate: deleteTraceFeedbackScore } =
-    useTraceFeedbackScoreDeleteMutation();
-  const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
-
-  const { mutate: deleteThreadFeedbackScore } =
-    useThreadFeedbackScoreDeleteMutation();
-  const { mutate: setThreadFeedbackScore } =
-    useThreadFeedbackScoreSetMutation();
 
   // Get projectId and projectName from table meta
   const projectId = (
@@ -44,6 +28,14 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const projectName = (
     context.table.options.meta as { projectName?: string } | undefined
   )?.projectName;
+
+  const { handleValueChange } = useFeedbackScoreInlineEdit({
+    id: row.id,
+    isThread: "thread_model_id" in row,
+    feedbackScore,
+    projectId,
+    projectName,
+  });
 
   const reasons = useMemo(() => {
     if (getIsMultiValueFeedbackScore(feedbackScore?.value_by_author)) {
@@ -65,71 +57,6 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_by,
     feedbackScore?.last_updated_at,
   ]);
-
-  const handleValueChange = useCallback(
-    (categoryName: string, value: number) => {
-      const isSameValue =
-        feedbackScore?.value_by_author?.[currentUserName]?.value === value;
-
-      if ("thread_model_id" in row) {
-        // Handle Thread feedback score
-        if (!projectId || !projectName) {
-          console.error(
-            "projectId and projectName are required for thread feedback scores",
-          );
-          return;
-        }
-
-        if (!isSameValue) {
-          setThreadFeedbackScore({
-            threadId: row.id,
-            projectId,
-            projectName,
-            scores: [
-              {
-                name: USER_FEEDBACK_NAME,
-                categoryName,
-                value,
-              },
-            ],
-          });
-        } else {
-          deleteThreadFeedbackScore({
-            threadId: row.id,
-            projectId,
-            projectName,
-            names: [USER_FEEDBACK_NAME],
-          });
-        }
-      } else {
-        // Handle Trace/Span feedback score
-        if (!isSameValue) {
-          setTraceFeedbackScore({
-            traceId: row.id,
-            name: USER_FEEDBACK_NAME,
-            categoryName,
-            value,
-          });
-        } else {
-          deleteTraceFeedbackScore({
-            traceId: row.id,
-            name: USER_FEEDBACK_NAME,
-          });
-        }
-      }
-    },
-    [
-      currentUserName,
-      feedbackScore,
-      row,
-      projectId,
-      projectName,
-      setThreadFeedbackScore,
-      deleteThreadFeedbackScore,
-      setTraceFeedbackScore,
-      deleteTraceFeedbackScore,
-    ],
-  );
 
   const enableUserFeedbackEditing =
     context.table.options.meta?.enableUserFeedbackEditing ?? false;
