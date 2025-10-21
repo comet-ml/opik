@@ -107,8 +107,9 @@ class IsolatedSubprocessExecutor:
                 - {"code": error_code, "error": message} on failure
         """
         timeout_secs = timeout_secs or self.timeout_secs
-        creation_start = time.time()
+        start_time = time.time()
         process = None  # Initialize to None for exception handling
+        result = None
 
         try:
             # Prepare environment for subprocess
@@ -128,49 +129,49 @@ class IsolatedSubprocessExecutor:
             # Track active process
             self._active_processes.append(process)
 
-            creation_latency = _calculate_latency_ms(creation_start)
+            creation_latency = _calculate_latency_ms(start_time)
             isolated_creation_histogram.record(creation_latency)
             self.logger.debug(
-                f"Created isolated subprocess for {file_path}. pid: {process.pid}, creation_latency: {creation_latency:.3f}ms"
+                f"Created isolated subprocess. pid={process.pid}, creation_latency_ms={creation_latency:.3f}"
             )
 
             # Execute code in subprocess
-            execution_start = time.time()
             result = self._execute_in_subprocess(
                 process, data, payload_type, timeout_secs
             )
 
-            execution_latency = _calculate_latency_ms(execution_start)
+            execution_latency = _calculate_latency_ms(start_time)
             isolated_execution_histogram.record(execution_latency)
             self.logger.debug(
-                f"Isolated subprocess execution completed in {execution_latency:.3f}ms"
+                f"Isolated subprocess execution completed. total_latency_ms={execution_latency:.3f}"
             )
-
-            # Remove from active processes
-            if process in self._active_processes:
-                self._active_processes.remove(process)
 
             return result
 
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
             self.logger.error(
-                f"Isolated subprocess execution timed out after {timeout_secs}s"
+                f"Subprocess execution timed out. timeout_secs={timeout_secs}"
             )
-            self._remove_active_process(process)
             return {
                 "code": 500,
                 "error": f"Execution timed out after {timeout_secs} seconds",
             }
         except Exception as e:
             self.logger.error(
-                f"Error during isolated subprocess execution: {e}", exc_info=True
+                f"Error during subprocess execution. error={str(e)}", exc_info=True
             )
-            self._remove_active_process(process)
             return {"code": 500, "error": f"Failed to execute file: {str(e)}"}
+        finally:
+            # Always remove process from active list and measure total latency
+            self._remove_active_process(process)
+            total_latency = _calculate_latency_ms(start_time)
+            self.logger.debug(
+                f"Subprocess execution finished. total_latency_ms={total_latency:.3f}"
+            )
 
     def _remove_active_process(self, process: Optional[subprocess.Popen]) -> None:
         """Remove process from active processes list if it exists."""
-        if process and process in self._active_processes:
+        if process in self._active_processes:
             self._active_processes.remove(process)
 
     def _prepare_environment(self, env_vars: Optional[dict] = None) -> dict:
