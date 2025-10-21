@@ -23,18 +23,17 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
   const { custom } = context.column.columnDef.meta ?? {};
   const { feedbackKey, colorMap } = (custom ?? {}) as CustomMeta &
     FeedbackScoreCustomMeta;
+  const experimentItem = experimentCompare.experiment_items[0];
 
-  const firstFeedbackScore =
-    experimentCompare.experiment_items[0]?.feedback_scores?.find(
-      (f) => f.name === feedbackKey,
-    );
+  const feedbackScore = experimentItem?.feedback_scores?.find(
+    (f) => f.name === feedbackKey,
+  );
 
-  const traceId = experimentCompare.experiment_items[0]?.trace_id;
+  const traceId = experimentItem?.trace_id;
 
   const { handleValueChange } = useFeedbackScoreInlineEdit({
     id: traceId!, // TODO: handle case where traceId is not found
-    isThread: false,
-    feedbackScore: firstFeedbackScore,
+    feedbackScore,
   });
 
   const enableUserFeedbackEditing =
