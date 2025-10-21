@@ -7,7 +7,7 @@ import isFunction from "lodash/isFunction";
 import { cn, formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
-import { TraceFeedbackScore } from "@/types/traces";
+import { TraceFeedbackScore, Thread } from "@/types/traces";
 import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
@@ -17,17 +17,33 @@ import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScore
 import { BaseTraceData } from "@/types/traces";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
+import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackScoreSetMutation";
+import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
   const reason = feedbackScore?.reason;
-  const row = context.row.original as BaseTraceData;
+  const row = context.row.original as BaseTraceData | Thread;
 
   const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
+
   const { mutate: deleteTraceFeedbackScore } =
     useTraceFeedbackScoreDeleteMutation();
   const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
+
+  const { mutate: deleteThreadFeedbackScore } =
+    useThreadFeedbackScoreDeleteMutation();
+  const { mutate: setThreadFeedbackScore } =
+    useThreadFeedbackScoreSetMutation();
+
+  // Get projectId and projectName from table meta
+  const projectId = (
+    context.table.options.meta as { projectId?: string } | undefined
+  )?.projectId;
+  const projectName = (
+    context.table.options.meta as { projectName?: string } | undefined
+  )?.projectName;
 
   const reasons = useMemo(() => {
     if (getIsMultiValueFeedbackScore(feedbackScore?.value_by_author)) {
@@ -52,26 +68,66 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
 
   const handleValueChange = useCallback(
     (categoryName: string, value: number) => {
-      if (feedbackScore?.value_by_author?.[currentUserName]?.value !== value) {
-        setTraceFeedbackScore({
-          traceId: row.id,
-          name: USER_FEEDBACK_NAME,
-          categoryName,
-          value,
-        });
+      const isSameValue =
+        feedbackScore?.value_by_author?.[currentUserName]?.value === value;
+
+      if ("thread_model_id" in row) {
+        // Handle Thread feedback score
+        if (!projectId || !projectName) {
+          console.error(
+            "projectId and projectName are required for thread feedback scores",
+          );
+          return;
+        }
+
+        if (!isSameValue) {
+          setThreadFeedbackScore({
+            threadId: row.id,
+            projectId,
+            projectName,
+            scores: [
+              {
+                name: USER_FEEDBACK_NAME,
+                categoryName,
+                value,
+              },
+            ],
+          });
+        } else {
+          deleteThreadFeedbackScore({
+            threadId: row.id,
+            projectId,
+            projectName,
+            names: [USER_FEEDBACK_NAME],
+          });
+        }
       } else {
-        deleteTraceFeedbackScore({
-          traceId: row.id,
-          name: USER_FEEDBACK_NAME,
-        });
+        // Handle Trace/Span feedback score
+        if (!isSameValue) {
+          setTraceFeedbackScore({
+            traceId: row.id,
+            name: USER_FEEDBACK_NAME,
+            categoryName,
+            value,
+          });
+        } else {
+          deleteTraceFeedbackScore({
+            traceId: row.id,
+            name: USER_FEEDBACK_NAME,
+          });
+        }
       }
     },
     [
       currentUserName,
-      deleteTraceFeedbackScore,
       feedbackScore,
-      row.id,
+      row,
+      projectId,
+      projectName,
+      setThreadFeedbackScore,
+      deleteThreadFeedbackScore,
       setTraceFeedbackScore,
+      deleteTraceFeedbackScore,
     ],
   );
 
