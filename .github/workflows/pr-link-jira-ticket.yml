@@ -9,7 +9,6 @@ permissions:
 jobs:
   add-jira-description:
     runs-on: ubuntu-latest
-    # runs-on: self-hosted
     steps:
       - uses: cakeinpanic/jira-description-action@v0.5.1
         name: jira-description-action
