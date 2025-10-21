@@ -86,7 +86,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     } as AIProviderFormType,
   });
 
-  const provider = form.watch("provider") as PROVIDER_TYPE | "";
+  const provider = form.watch("provider") as PROVIDER_TYPE | string | "";
 
   const configuredProviderKeys = useMemo(
     () => (configuredProvidersList || []).map((p) => p.provider),
@@ -98,6 +98,16 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     if (forceCreateMode || isAddingCustomProvider) {
       return undefined;
     }
+
+    // If provider is a custom provider ID (not a PROVIDER_TYPE enum)
+    if (
+      provider &&
+      !Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE)
+    ) {
+      return configuredProvidersList?.find((p) => p.id === provider);
+    }
+
+    // Standard provider lookup
     return configuredProvidersList?.find((p) => provider === p.provider);
   }, [configuredProvidersList, provider, forceCreateMode, isAddingCustomProvider]);
 
@@ -122,8 +132,15 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       form.getValues("models") ?? "",
       true,
     );
-    const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
-    const isCustom = provider === PROVIDER_TYPE.CUSTOM;
+    
+    // Determine the actual provider type
+    const actualProvider = calculatedProviderKey?.provider || 
+      (Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE)
+        ? (provider as PROVIDER_TYPE)
+        : PROVIDER_TYPE.CUSTOM);
+    
+    const isVertex = actualProvider === PROVIDER_TYPE.VERTEX_AI;
+    const isCustom = actualProvider === PROVIDER_TYPE.CUSTOM;
 
     const configuration =
       isVertex || isCustom
@@ -145,13 +162,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       });
     } else if (provider) {
       if (isFunction(onAddProvider)) {
-        onAddProvider(provider);
+        onAddProvider(actualProvider);
       }
 
       createMutate({
         providerKey: {
           apiKey,
-          provider,
+          provider: actualProvider,
           base_url: isCustom ? url : undefined,
           keyName: isCustom ? providerName : undefined,
           ...(configuration && { configuration }),
@@ -200,11 +217,17 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       return <VertexAIProviderDetails form={form} />;
     }
 
-    if (provider === PROVIDER_TYPE.CUSTOM) {
+    // Check if provider is CUSTOM_LLM type or a custom provider ID
+    const isCustomProvider =
+      provider === PROVIDER_TYPE.CUSTOM ||
+      (provider &&
+        !Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE));
+
+    if (isCustomProvider) {
       return <CustomProviderDetails form={form} />;
     }
 
-    return <CloudAIProviderDetails provider={provider} form={form} />;
+    return <CloudAIProviderDetails provider={provider as PROVIDER_TYPE} form={form} />;
   };
 
   return (
@@ -235,32 +258,54 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                       <FormControl>
                         <ProviderSelect
                           disabled={Boolean(providerKey) || forceCreateMode || isAddingCustomProvider}
-                          value={(field.value as PROVIDER_TYPE) || ""}
+                          value={(field.value as string) || ""}
                           onChange={(v) => {
-                            const p = v as PROVIDER_TYPE;
-                            const providerData = configuredProvidersList?.find(
-                              (c) => p === c.provider,
+                            // Check if it's a custom provider ID
+                            const customProvider = configuredProvidersList?.find(
+                              (c) => c.id === v
                             );
+                            
+                            // For custom providers, store the ID in the provider field
+                            // The calculatedProviderKey will use this to find the actual provider
+                            if (customProvider) {
+                              // Store the custom provider ID so calculatedProviderKey can find it
+                              field.onChange(v);
+                              
+                              // Populate the form fields with the custom provider's data
+                              form.setValue("url", customProvider.base_url ?? "");
+                              form.setValue("providerName", customProvider.keyName ?? "");
+                              form.setValue(
+                                "models",
+                                convertCustomProviderModels(
+                                  customProvider.configuration?.models ?? "",
+                                ),
+                              );
+                              form.setValue("location", "");
+                            } else {
+                              // For standard providers, store the PROVIDER_TYPE
+                              const p = v as PROVIDER_TYPE;
+                              field.onChange(p);
+                              
+                              const providerData = configuredProvidersList?.find(
+                                (c) => p === c.provider
+                              );
 
-                            form.setValue("url", providerData?.base_url ?? "");
-                            form.setValue(
-                              "providerName",
-                              providerData?.keyName ?? "",
-                            );
-                            form.setValue(
-                              "models",
-                              convertCustomProviderModels(
-                                providerData?.configuration?.models ?? "",
-                              ),
-                            );
-                            form.setValue(
-                              "location",
-                              providerData?.configuration?.location ?? "",
-                            );
-
-                            field.onChange(p);
+                              form.setValue("url", providerData?.base_url ?? "");
+                              form.setValue("providerName", providerData?.keyName ?? "");
+                              form.setValue(
+                                "models",
+                                convertCustomProviderModels(
+                                  providerData?.configuration?.models ?? "",
+                                ),
+                              );
+                              form.setValue(
+                                "location",
+                                providerData?.configuration?.location ?? "",
+                              );
+                            }
                           }}
                           configuredProviderKeys={configuredProviderKeys}
+                          configuredProvidersList={configuredProvidersList}
                           hasError={Boolean(validationErrors?.message)}
                           onAddCustomProvider={handleAddCustomProvider}
                         />
