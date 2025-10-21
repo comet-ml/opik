@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.infrastructure.StreamConfiguration;
-import jakarta.inject.Inject;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -27,14 +26,6 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     private final AtomicInteger failedMessageCount = new AtomicInteger(0);
 
     private final Function<String, Mono<Void>> processor;
-
-    /**
-     * Constructor required for dependency injection during testing with Dropwizard extensions.
-     */
-    @Inject
-    public TestRedisSubscriber(@NonNull RedissonReactiveClient redisson) {
-        this(TestStreamConfiguration.createForDependencyInjection(), redisson, msg -> Mono.empty());
-    }
 
     public TestRedisSubscriber(
             @NonNull StreamConfiguration config,

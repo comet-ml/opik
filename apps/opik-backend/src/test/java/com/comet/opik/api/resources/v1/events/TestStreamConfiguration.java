@@ -45,12 +45,4 @@ public class TestStreamConfiguration implements StreamConfiguration {
                         DEFAULT_CONSUMER_GROUP, RandomStringUtils.secure().nextAlphanumeric(10).toLowerCase()))
                 .build();
     }
-
-    public static TestStreamConfiguration createForDependencyInjection() {
-        return create().toBuilder()
-                .consumerBatchSize(1)
-                .poolingInterval(Duration.minutes(1))
-                .longPollingDuration(Duration.seconds(5))
-                .build();
-    }
 }
