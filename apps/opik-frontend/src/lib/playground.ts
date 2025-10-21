@@ -42,10 +42,16 @@ export const getDefaultConfigByProvider = (
   }
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    // For models requiring exclusive params, clear topP to use temperature by default
+    const isExclusive =
+      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
+      model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
+      model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5;
+
     return {
       temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
-      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
+      topP: isExclusive ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
     } as LLMAnthropicConfigsType;
   }
 
