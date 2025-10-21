@@ -10,13 +10,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import java.util.List;
 import java.util.Map;
 
 import java.util.Set;
 import java.util.UUID;
-import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.NotFoundException;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
@@ -48,7 +47,7 @@ class CommentServiceImpl implements CommentService {
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull TraceThreadDAO traceThreadDAO;
     private final @NonNull IdGenerator idGenerator;
-    private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
+    
 
     @Override
     public Mono<UUID> create(@NonNull UUID entityId, @NonNull Comment comment, CommentDAO.EntityType entityType) {
@@ -97,7 +96,7 @@ class CommentServiceImpl implements CommentService {
         return createBatch(
                 traceIds,
                 text,
-                transactionTemplateAsync.nonTransaction(connection -> traceDAO.getProjectIdsByTraceIds(traceIds, connection)),
+                traceDAO.getProjectIdsByTraceIds(traceIds),
                 CommentDAO.EntityType.TRACE);
     }
 
@@ -122,7 +121,7 @@ class CommentServiceImpl implements CommentService {
 
         return idsToProjectIds.flatMap(map -> {
             if (map.size() != ids.size()) {
-                return Mono.error(new BadRequestException("Some entities were not found in the workspace"));
+                return Mono.error(new NotFoundException("Some entities were not found in the workspace"));
             }
             List<UUID> projectIds = ids.stream().map(map::get).toList();
             List<UUID> generatedIds = ids.stream().map(__ -> idGenerator.generateId()).toList();

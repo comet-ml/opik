@@ -100,6 +100,8 @@ interface TraceDAO {
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(Set<UUID> traceIds, Connection connection);
 
+    Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(Set<UUID> traceIds);
+
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
@@ -3008,6 +3010,16 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMapMany(result -> result.map((row, rowMetadata) ->
                         new java.util.AbstractMap.SimpleEntry<>(row.get("id", UUID.class), row.get("project_id", UUID.class))))
                 .collectMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue);
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> getProjectIdsByTraceIds(traceIds, connection));
     }
 
     @Override
