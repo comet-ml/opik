@@ -94,9 +94,7 @@ class IsolatedSubprocessExecutor:
         and don't affect other concurrent executions.
 
         Args:
-            code: Python code string to execute. To execute code from a file, read the file
-                  contents yourself and pass the string (e.g., with open(path).read()).
-                  The executor does NOT automatically load files from the filesystem.
+            code: Python code to execute
             data: Data dictionary to pass to the code
             env_vars: Environment variables to scope to this subprocess (optional).
                      These override/augment the parent environment for this execution only.
