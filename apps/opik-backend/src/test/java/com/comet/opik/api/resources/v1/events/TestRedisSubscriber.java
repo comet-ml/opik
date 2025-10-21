@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 /**
- * Test-specific implementation of BaseRedisSubscriber that allows customization
+ * Test specific implementation of BaseRedisSubscriber that allows customization
  * of message processing behavior for testing different scenarios.
  */
 public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
@@ -19,16 +19,15 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     private static final String METRIC_NAMESPACE = "opik.test";
     private static final String METRICS_BASE_NAME = "test_subscriber";
 
-    private final Function<String, Mono<Void>> processor;
-
     @Getter
-    private final AtomicInteger processedMessageCount = new AtomicInteger(0);
-
+    private final AtomicInteger successMessageCount = new AtomicInteger(0);
     @Getter
     private final AtomicInteger failedMessageCount = new AtomicInteger(0);
 
+    private final Function<String, Mono<Void>> processor;
+
     /**
-     * Constructor required for dependency injection during testing
+     * Constructor required for dependency injection during testing with Dropwizard extensions.
      */
     @Inject
     public TestRedisSubscriber(@NonNull RedissonReactiveClient redisson) {
@@ -46,17 +45,27 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     @Override
     protected Mono<Void> processEvent(String message) {
         return processor.apply(message)
-                .doOnSuccess(unused -> processedMessageCount.incrementAndGet())
+                .doOnSuccess(unused -> successMessageCount.incrementAndGet())
                 .doOnError(throwable -> failedMessageCount.incrementAndGet());
     }
 
     /**
      * Factory method for creating a subscriber that always succeeds.
      */
-    public static TestRedisSubscriber successfulSubscriber(
+    public static TestRedisSubscriber createSubscriber(
             StreamConfiguration config,
             RedissonReactiveClient redisson) {
-        return new TestRedisSubscriber(config, redisson, msg -> Mono.empty());
+        return createSubscriber(config, redisson, msg -> Mono.empty());
+    }
+
+    /**
+     * Factory method for creating a subscriber with custom processing logic.
+     */
+    public static TestRedisSubscriber createSubscriber(
+            StreamConfiguration config,
+            RedissonReactiveClient redisson,
+            Function<String, Mono<Void>> processor) {
+        return new TestRedisSubscriber(config, redisson, processor);
     }
 
     /**
@@ -67,20 +76,5 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
             RedissonReactiveClient redisson) {
         return new TestRedisSubscriber(config, redisson,
                 msg -> Mono.error(new RuntimeException("Test failure")));
-    }
-
-    /**
-     * Factory method for creating a subscriber with custom processing logic.
-     */
-    public static TestRedisSubscriber customSubscriber(
-            StreamConfiguration config,
-            RedissonReactiveClient redisson,
-            Function<String, Mono<Void>> processor) {
-        return new TestRedisSubscriber(config, redisson, processor);
-    }
-
-    public void resetCounters() {
-        processedMessageCount.set(0);
-        failedMessageCount.set(0);
     }
 }

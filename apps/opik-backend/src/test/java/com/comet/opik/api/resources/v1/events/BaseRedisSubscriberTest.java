@@ -80,7 +80,7 @@ class BaseRedisSubscriberTest {
         @Test
         void shouldSuccessfullyConsumeAndProcessBatchOfMessages() {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(config, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
             subscriber.start();
             waitForConsumerGroupReady();
 
@@ -96,7 +96,7 @@ class BaseRedisSubscriberTest {
             var processedMessages = new CopyOnWriteArraySet<String>();
             var processingThreads = new CopyOnWriteArraySet<String>();
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient,
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient,
                     message -> Mono.fromRunnable(() -> {
                         processedMessages.add(message);
                         processingThreads.add(Thread.currentThread().getName());
@@ -121,7 +121,7 @@ class BaseRedisSubscriberTest {
             var nullCount = new AtomicInteger(0);
             var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient, message -> {
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient, message -> {
                 if (message == null) {
                     nullCount.incrementAndGet();
                 }
@@ -160,14 +160,14 @@ class BaseRedisSubscriberTest {
                             () -> assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size()));
             // Messages should still be in the stream (not removed)
             waitForMessagesAckedAndRemoved(messages.size());
-            assertThat(subscriber.getProcessedMessageCount().get()).isZero();
+            assertThat(subscriber.getSuccessMessageCount().get()).isZero();
         }
 
         @Test
         void shouldContinueProcessingAfterFailedMessages() {
             var otherPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             var usualPayloadMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(config, redissonClient, message -> {
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient, message -> {
                 if (message == null) {
                     return Mono.error(new RuntimeException("Intentional failure"));
                 }
@@ -191,11 +191,11 @@ class BaseRedisSubscriberTest {
 
         @Test
         void shouldHandleExistingConsumerGroup() {
-            var subscriber1 = trackSubscriber(TestRedisSubscriber.successfulSubscriber(config, redissonClient));
+            var subscriber1 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
             subscriber1.start();
             waitForConsumerGroupReady();
 
-            var subscriber2 = trackSubscriber(TestRedisSubscriber.successfulSubscriber(config, redissonClient));
+            var subscriber2 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
             // Start another subscriber with same group, should handle BUSY GROUP error gracefully
             subscriber2.start();
 
@@ -205,8 +205,8 @@ class BaseRedisSubscriberTest {
             // Both subscribers should be able to process messages
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertThat(
-                            subscriber1.getProcessedMessageCount().get() +
-                                    subscriber2.getProcessedMessageCount().get())
+                            subscriber1.getSuccessMessageCount().get() +
+                                    subscriber2.getSuccessMessageCount().get())
                             .isEqualTo(messages.size()));
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber1.getFailedMessageCount().get()).isZero();
@@ -217,7 +217,7 @@ class BaseRedisSubscriberTest {
         void shouldRemoveConsumerOnStop() {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
             // Not tracking the subscriber, as we want to test stop behavior explicitly
-            var subscriber = TestRedisSubscriber.successfulSubscriber(config, redissonClient);
+            var subscriber = TestRedisSubscriber.createSubscriber(config, redissonClient);
             subscriber.start();
             waitForConsumerGroupReady();
             publishMessagesToStream(messages);
@@ -229,7 +229,7 @@ class BaseRedisSubscriberTest {
             var consumersBeforeStop = stream.listConsumers(config.getConsumerGroupName()).block();
             assertThat(consumersBeforeStop)
                     .anyMatch(consumer -> subscriber.getConsumerId().equals(consumer.getName()));
-            var processedCountBeforeStop = subscriber.getProcessedMessageCount().get();
+            var processedCountBeforeStop = subscriber.getSuccessMessageCount().get();
 
             subscriber.stop();
 
@@ -250,7 +250,7 @@ class BaseRedisSubscriberTest {
 
             // Verify no new messages were consumed after stop
             waitForMessagesAckedAndRemoved(newMessages.size());
-            assertThat(subscriber.getProcessedMessageCount().get()).isEqualTo(processedCountBeforeStop);
+            assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(processedCountBeforeStop);
             assertThat(subscriber.getFailedMessageCount().get()).isZero();
         }
     }
@@ -285,7 +285,7 @@ class BaseRedisSubscriberTest {
 
     private void waitForMessagesProcessed(TestRedisSubscriber subscriber, int expectedCount) {
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertThat(subscriber.getProcessedMessageCount().get()).isEqualTo(expectedCount));
+                .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(expectedCount));
     }
 
     private void waitForMessagesAckedAndRemoved() {

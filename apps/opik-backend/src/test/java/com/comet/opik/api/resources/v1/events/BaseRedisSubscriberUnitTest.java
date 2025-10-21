@@ -81,7 +81,7 @@ class BaseRedisSubscriberUnitTest {
         @Test
         void shouldNotDieDuringBackpressure() {
             var readCount = new AtomicInteger(0);
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
             var message = podamFactory.manufacturePojo(String.class);
             // Return messages with delay, simulating slow Redis reads
@@ -103,7 +103,7 @@ class BaseRedisSubscriberUnitTest {
                         // Verify multiple read attempts were made (interval continues)
                         assertThat(readCount.get()).isGreaterThan(2);
                         // Verify some processing happened
-                        assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                     });
         }
 
@@ -111,7 +111,7 @@ class BaseRedisSubscriberUnitTest {
         void shouldNotDieOnReadError() {
             // Read that throws on first message, succeeds on subsequent
             var readAttempts = new AtomicInteger(0);
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
             var message = podamFactory.manufacturePojo(String.class);
             when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
@@ -131,7 +131,7 @@ class BaseRedisSubscriberUnitTest {
             await().atMost(10, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(readAttempts.get()).isGreaterThan(2);
-                        assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                     });
         }
 
@@ -139,7 +139,7 @@ class BaseRedisSubscriberUnitTest {
         void shouldNotDieOnProcessingError() {
             // Subscriber that throws on first message, succeeds on subsequent
             var processCount = new AtomicInteger(0);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(CONFIG, redissonClient, message -> {
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
                 int count = processCount.incrementAndGet();
                 if (count == 1) {
                     return Mono.error(new RuntimeException("Unexpected error"));
@@ -164,14 +164,14 @@ class BaseRedisSubscriberUnitTest {
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(processCount.get()).isGreaterThan(2);
-                        assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                     });
         }
 
         @Test
         void shouldNotDieOnAckError() {
             var ackAttempts = new AtomicInteger(0);
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
             var message = podamFactory.manufacturePojo(String.class);
             whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
@@ -192,14 +192,14 @@ class BaseRedisSubscriberUnitTest {
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(ackAttempts.get()).isGreaterThan(2);
-                        assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                     });
         }
 
         @Test
         void shouldNotDieOnRemoveError() {
             var removeAttempts = new AtomicInteger(0);
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
             var message = podamFactory.manufacturePojo(String.class);
             whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
@@ -220,7 +220,7 @@ class BaseRedisSubscriberUnitTest {
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(removeAttempts.get()).isGreaterThan(2);
-                        assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                     });
         }
 
@@ -228,7 +228,7 @@ class BaseRedisSubscriberUnitTest {
         void shouldNotSkipPostProcessFailureOnPostProcessSuccessError() {
             // Subscriber that throws on first message, succeeds on subsequent
             var processCount = new AtomicInteger(0);
-            var subscriber = trackSubscriber(TestRedisSubscriber.customSubscriber(CONFIG, redissonClient, message -> {
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
                 int count = processCount.incrementAndGet();
                 if (count == 2 || count == 3) {
                     return Mono.error(new RuntimeException("Unexpected error"));
@@ -247,14 +247,14 @@ class BaseRedisSubscriberUnitTest {
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(processCount.get()).isGreaterThan(2);
-                        assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                         assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(2);
                     });
         }
 
         @Test
         void shouldNotDieOnUnhandledError() {
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
             var message = podamFactory.manufacturePojo(String.class);
             whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
@@ -265,14 +265,14 @@ class BaseRedisSubscriberUnitTest {
             // Should continue processing after unexpected error
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                         assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
                     });
         }
 
         @Test
         void shouldHandleInvalidMessageIdTimestamp() {
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
             // Create a valid message ID with invalid format for timestamp extraction
             var messageId = StreamMessageId.MAX;
             var message = podamFactory.manufacturePojo(String.class);
@@ -284,7 +284,7 @@ class BaseRedisSubscriberUnitTest {
 
             // Should log warning but continue processing
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(subscriber.getProcessedMessageCount().get()).isGreaterThan(2));
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2));
         }
     }
 
@@ -299,7 +299,7 @@ class BaseRedisSubscriberUnitTest {
             // Mocking remove consumer and tracking subscriber for cleanup, so stop handles startup failures
             whenRemoveConsumerReturn();
 
-            var subscriber = trackSubscriber(TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
 
             // Start should throw exception when consumer group creation fails
             assertThatThrownBy(subscriber::start)
@@ -314,7 +314,7 @@ class BaseRedisSubscriberUnitTest {
             when(stream.removeConsumer(eq(CONFIG.getConsumerGroupName()), anyString()))
                     .thenReturn(Mono.error(new RuntimeException("Failed to remove consumer")));
             // No need to track subscriber, calling stop explicitly
-            var subscriber = TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient);
+            var subscriber = TestRedisSubscriber.createSubscriber(CONFIG, redissonClient);
 
             subscriber.start();
 
@@ -328,7 +328,7 @@ class BaseRedisSubscriberUnitTest {
             when(stream.removeConsumer(eq(CONFIG.getConsumerGroupName()), anyString()))
                     .thenReturn(Mono.never());
             // No need to track subscriber, calling stop explicitly
-            var subscriber = TestRedisSubscriber.successfulSubscriber(CONFIG, redissonClient);
+            var subscriber = TestRedisSubscriber.createSubscriber(CONFIG, redissonClient);
 
             subscriber.start();
 
