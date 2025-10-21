@@ -421,6 +421,7 @@ export interface ProviderKeyConfiguration {
 export interface ProviderKey {
   id: string;
   keyName: string;
+  provider_name?: string; // For custom providers, unique identifier used in model names
   created_at: string;
   provider: PROVIDER_TYPE;
   base_url?: string;

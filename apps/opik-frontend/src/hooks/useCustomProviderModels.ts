@@ -9,6 +9,10 @@ import {
   LEGACY_CUSTOM_PROVIDER_NAME 
 } from "@/constants/providers";
 
+export interface CustomProviderModels {
+  [providerKey: string]: DropdownOption<PROVIDER_MODEL_TYPE>[];
+}
+
 const useCustomProviderModels = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data } = useProviderKeys({
@@ -16,33 +20,48 @@ const useCustomProviderModels = () => {
   });
 
   return useMemo(() => {
-    const retval: Record<
-      PROVIDER_TYPE.CUSTOM,
-      DropdownOption<PROVIDER_MODEL_TYPE>[]
-    > = {
-      [PROVIDER_TYPE.CUSTOM]: [],
-    };
+    const retval: CustomProviderModels = {};
+    
     if (data) {
       // Get all custom provider configurations
       const customConfigs = data.content.filter(
         (providerKey) => providerKey.provider === PROVIDER_TYPE.CUSTOM,
       );
 
-      // Combine models from all custom providers
-      const allModels: DropdownOption<PROVIDER_MODEL_TYPE>[] = [];
+      console.log('[useCustomProviderModels] Custom configs:', customConfigs.map(c => ({
+        id: c.id,
+        provider_name: c.provider_name,
+        keyName: c.keyName,
+        models: c.configuration?.models
+      })));
 
+      // Create a separate entry for each custom provider
       customConfigs.forEach((customConfig) => {
         if (customConfig.configuration?.models) {
-          const providerName = customConfig.keyName || LEGACY_CUSTOM_PROVIDER_NAME;
-          const isLegacyProvider = providerName === LEGACY_CUSTOM_PROVIDER_NAME;
+          const providerName = customConfig.provider_name || LEGACY_CUSTOM_PROVIDER_NAME;
+          const isLegacyProvider = !customConfig.provider_name;
+          
+          // Use a unique key for each custom provider
+          // For legacy providers: "custom-llm"
+          // For new providers: "custom-llm:{providerName}"
+          const providerKey = isLegacyProvider 
+            ? PROVIDER_TYPE.CUSTOM 
+            : `${PROVIDER_TYPE.CUSTOM}:${providerName}`;
           
           const models = customConfig.configuration.models
             .split(",")
             .map((model) => {
-              const trimmedModel = model.trim();
-              // Build model ID with provider name prefix: {provider}/{provider-name?}/{model-name}
+              let trimmedModel = model.trim();
+              
+              // Strip "custom-llm/" prefix if present (backward compatibility)
+              if (trimmedModel.startsWith(`${CUSTOM_PROVIDER_MODEL_PREFIX}/`)) {
+                trimmedModel = trimmedModel.substring(`${CUSTOM_PROVIDER_MODEL_PREFIX}/`.length);
+              }
+              
+              // For legacy providers (no providerName), keep the model as-is
+              // For new providers, prepend "custom-llm/{providerName}/"
               const modelId = isLegacyProvider
-                ? trimmedModel
+                ? `${CUSTOM_PROVIDER_MODEL_PREFIX}/${trimmedModel}`
                 : `${CUSTOM_PROVIDER_MODEL_PREFIX}/${buildCustomModelId(providerName, trimmedModel)}`;
 
               // Display label strips the "custom-llm/" prefix for better UX
@@ -56,12 +75,24 @@ const useCustomProviderModels = () => {
               };
             });
 
-          allModels.push(...models);
+          retval[providerKey] = models;
+          
+          console.log(`[useCustomProviderModels] Provider "${providerKey}":`, {
+            provider_name: customConfig.provider_name,
+            keyName: customConfig.keyName,
+            isLegacy: isLegacyProvider,
+            modelCount: models.length,
+            models: models.map(m => ({ value: m.value, label: m.label }))
+          });
         }
       });
-
-      retval[PROVIDER_TYPE.CUSTOM] = allModels;
     }
+    
+    console.log('[useCustomProviderModels] Final result:', Object.keys(retval).map(key => ({
+      key,
+      modelCount: retval[key].length
+    })));
+    
     return retval;
   }, [data]);
 };
