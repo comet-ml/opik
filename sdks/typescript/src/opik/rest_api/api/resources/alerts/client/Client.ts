@@ -156,7 +156,6 @@ export class Alerts {
      *
      * @example
      *     await client.alerts.createAlert({
-     *         name: "name",
      *         webhook: {
      *             url: "url"
      *         }
@@ -426,7 +425,6 @@ export class Alerts {
      *
      * @example
      *     await client.alerts.updateAlert("id", {
-     *         name: "name",
      *         webhook: {
      *             url: "url"
      *         }
@@ -602,7 +600,6 @@ export class Alerts {
      *
      * @example
      *     await client.alerts.testWebhook({
-     *         name: "name",
      *         webhook: {
      *             url: "url"
      *         }

@@ -285,17 +285,17 @@ class AlertResourceTest {
                     arguments(
                             generateAlert().toBuilder().name(null).build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("").build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("   ").build(),
                             422,
-                            new ErrorMessage(List.of("name must not be blank")),
+                            new ErrorMessage(List.of("Alert name is required")),
                             ErrorMessage.class),
                     arguments(
                             generateAlert().toBuilder().name("a".repeat(256)).build(),

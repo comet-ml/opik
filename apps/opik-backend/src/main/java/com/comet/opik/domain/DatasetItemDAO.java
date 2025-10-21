@@ -754,8 +754,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         arrayFlatten(
                             groupArray(
                                 arrayMap(
-                                    key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
-                                    JSONExtractKeys(output)
+                                    key_type -> map(tupleElement(key_type, 1), [tupleElement(key_type, 2)]),
+                                    output_keys
                                 )
                             )
                         )
@@ -767,7 +767,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             INNER JOIN (
                 SELECT
                     id,
-                    output
+                    output_keys
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT trace_id FROM experiment_items_final)
