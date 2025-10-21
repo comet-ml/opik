@@ -32,7 +32,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Integration tests for {@link BaseRedisSubscriber}  using real Redis test container.
- * Generally, tests should be created here instead of in the unit test class  {@link BaseRedisSubscriberTest}.
+ * Generally, tests should be created here instead of in the unit test class  {@link BaseRedisSubscriberUnitTest}.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BaseRedisSubscriberTest {
