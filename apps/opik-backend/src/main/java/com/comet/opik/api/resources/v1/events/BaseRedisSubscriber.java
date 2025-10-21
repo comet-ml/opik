@@ -357,8 +357,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var failures = processingResults.stream()
                 .filter(processingResult -> processingResult.status() == MessageStatus.FAILURE)
                 .toList();
-        // TODO: Implement proper error handling and dead letter queue
-        // For now: log + metric only. No ack and remove
+        // TODO: Implement proper error handling, potential approaches:
+        //  - claim the messages back to the consumers for reprocessing retryable errors
+        //  - send to the dead letter queue (DLQ) when consuming up to max retries
+        //  - directly ack and remove non-retryable errors
+        // For now: log and metric, no ack and remove
         messageProcessingErrors.add(failures.size());
         failures.forEach(failure -> log.error("Processing failed for message messageId '{}'",
                 failure.messageId(), failure.error));
@@ -378,6 +381,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .subscribeOn(consumerScheduler))
                 .doOnSuccess(size -> log.debug("Successfully ack and remove from stream, size '{}'", size))
                 .onErrorResume(throwable -> {
+                    // TODO: Some related error handling might be needed, potential approaches:
+                    //  - add as failure to processingResults and handle downstream
+                    //  - Implement similar logic as in postProcessFailureMessages (claim, DLQ, retries, etc.)
+                    // For now: log, metric and resume
                     ackAndRemoveErrors.add(1);
                     log.error("Error acknowledging or removing from Redis stream, size '{}'",
                             idsArray.length, throwable);

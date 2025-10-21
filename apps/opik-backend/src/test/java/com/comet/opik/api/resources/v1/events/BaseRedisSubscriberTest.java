@@ -58,7 +58,7 @@ class BaseRedisSubscriberTest {
         redissonConfig.setCodec(new JsonJacksonCodec(JsonUtils.MAPPER));
         redissonClient = Redisson.create(redissonConfig).reactive();
 
-        config = TestStreamConfiguration.createWithFastPolling();
+        config = TestStreamConfiguration.create();
         stream = redissonClient.getStream(config.getStreamName(), config.getCodec());
     }
 

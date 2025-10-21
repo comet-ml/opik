@@ -4,6 +4,7 @@ import com.comet.opik.infrastructure.StreamConfiguration;
 import jakarta.inject.Inject;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 
@@ -14,6 +15,7 @@ import java.util.function.Function;
  * Test specific implementation of BaseRedisSubscriber that allows customization
  * of message processing behavior for testing different scenarios.
  */
+@Slf4j
 public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
 
     private static final String METRIC_NAMESPACE = "opik.test";
@@ -31,7 +33,7 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
      */
     @Inject
     public TestRedisSubscriber(@NonNull RedissonReactiveClient redisson) {
-        this(TestStreamConfiguration.createWithFastPolling(), redisson, msg -> Mono.empty());
+        this(TestStreamConfiguration.createForDependencyInjection(), redisson, msg -> Mono.empty());
     }
 
     public TestRedisSubscriber(
@@ -55,7 +57,22 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
     public static TestRedisSubscriber createSubscriber(
             StreamConfiguration config,
             RedissonReactiveClient redisson) {
-        return createSubscriber(config, redisson, msg -> Mono.empty());
+        return createSubscriber(config, redisson, msg -> {
+            log.info("Received message: '{}'", msg);
+            return Mono.empty();
+        });
+    }
+
+    /**
+     * Factory method for creating a subscriber that always fails.
+     */
+    public static TestRedisSubscriber failingSubscriber(
+            StreamConfiguration config,
+            RedissonReactiveClient redisson) {
+        return createSubscriber(config, redisson, msg -> {
+            log.warn("Received message (will fail): '{}'", msg);
+            return Mono.error(new RuntimeException("Test failure for message '%s'".formatted(msg)));
+        });
     }
 
     /**
@@ -66,15 +83,5 @@ public class TestRedisSubscriber extends BaseRedisSubscriber<String> {
             RedissonReactiveClient redisson,
             Function<String, Mono<Void>> processor) {
         return new TestRedisSubscriber(config, redisson, processor);
-    }
-
-    /**
-     * Factory method for creating a subscriber that always fails.
-     */
-    public static TestRedisSubscriber failingSubscriber(
-            StreamConfiguration config,
-            RedissonReactiveClient redisson) {
-        return new TestRedisSubscriber(config, redisson,
-                msg -> Mono.error(new RuntimeException("Test failure")));
     }
 }

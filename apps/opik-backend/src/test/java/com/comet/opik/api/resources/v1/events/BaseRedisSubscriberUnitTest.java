@@ -56,7 +56,7 @@ class BaseRedisSubscriberUnitTest {
 
     @BeforeAll
     static void setUpAll() {
-        CONFIG = TestStreamConfiguration.createWithFastPolling();
+        CONFIG = TestStreamConfiguration.create();
     }
 
     @BeforeEach
@@ -82,15 +82,15 @@ class BaseRedisSubscriberUnitTest {
         void shouldNotDieDuringBackpressure() {
             var readCount = new AtomicInteger(0);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
-            var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
-            var message = podamFactory.manufacturePojo(String.class);
             // Return messages with delay, simulating slow Redis reads
             when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
                     .thenAnswer(invocation -> {
                         readCount.incrementAndGet();
                         // Delay longer than polling interval to cause backpressure
                         return Mono.delay(Duration.ofMillis(CONFIG.getPoolingInterval().toMilliseconds() * 3))
-                                .thenReturn(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
+                                .thenReturn(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                                        Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                                podamFactory.manufacturePojo(String.class))));
                     });
             whenAckReturn();
             whenRemoveReturn();
@@ -104,23 +104,23 @@ class BaseRedisSubscriberUnitTest {
                         assertThat(readCount.get()).isGreaterThan(2);
                         // Verify some processing happened
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
                     });
         }
 
         @Test
         void shouldNotDieOnReadError() {
-            // Read that throws on first message, succeeds on subsequent
-            var readAttempts = new AtomicInteger(0);
+            var readCount = new AtomicInteger(0);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
-            var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
-            var message = podamFactory.manufacturePojo(String.class);
+            // Read that throws on first message, succeeds on subsequent
             when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
                     .thenAnswer(invocation -> {
-                        int count = readAttempts.incrementAndGet();
+                        int count = readCount.incrementAndGet();
                         if (count == 1) {
                             return Mono.error(new RuntimeException("Redis read error"));
                         }
-                        return Mono.just(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0), Map.of(
+                                TestStreamConfiguration.PAYLOAD_FIELD, podamFactory.manufacturePojo(String.class))));
                     });
             whenAckReturn();
             whenRemoveReturn();
@@ -130,8 +130,9 @@ class BaseRedisSubscriberUnitTest {
             // Should continue processing after error
             await().atMost(10, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        assertThat(readAttempts.get()).isGreaterThan(2);
+                        assertThat(readCount.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
                     });
         }
 
@@ -146,15 +147,7 @@ class BaseRedisSubscriberUnitTest {
                 }
                 return Mono.empty();
             }));
-            var currentTimeMillis = System.currentTimeMillis();
-            var messageId1 = new StreamMessageId(currentTimeMillis, 0);
-            var messageId2 = new StreamMessageId(currentTimeMillis, 1);
-            var message1 = podamFactory.manufacturePojo(String.class);
-            var message2 = podamFactory.manufacturePojo(String.class);
-            // Return different messages on different calls
-            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
-                    .thenReturn(Mono.just(Map.of(messageId1, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message1))))
-                    .thenReturn(Mono.just(Map.of(messageId2, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message2))));
+            whenReadGroupReturnMessages();
             whenAckReturn();
             whenRemoveReturn();
 
@@ -165,6 +158,7 @@ class BaseRedisSubscriberUnitTest {
                     .untilAsserted(() -> {
                         assertThat(processCount.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(1);
                     });
         }
 
@@ -172,9 +166,7 @@ class BaseRedisSubscriberUnitTest {
         void shouldNotDieOnAckError() {
             var ackAttempts = new AtomicInteger(0);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
-            var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
-            var message = podamFactory.manufacturePojo(String.class);
-            whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
+            whenReadGroupReturnMessages();
             // Mock ack to fail once, then succeed
             when(stream.ack(eq(CONFIG.getConsumerGroupName()), any(StreamMessageId[].class)))
                     .thenAnswer(invocation -> {
@@ -193,6 +185,7 @@ class BaseRedisSubscriberUnitTest {
                     .untilAsserted(() -> {
                         assertThat(ackAttempts.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
                     });
         }
 
@@ -200,9 +193,7 @@ class BaseRedisSubscriberUnitTest {
         void shouldNotDieOnRemoveError() {
             var removeAttempts = new AtomicInteger(0);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
-            var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
-            var message = podamFactory.manufacturePojo(String.class);
-            whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
+            whenReadGroupReturnMessages();
             whenAckReturn();
             // Mock remove to fail once, then succeed
             when(stream.remove(any(StreamMessageId[].class)))
@@ -221,12 +212,13 @@ class BaseRedisSubscriberUnitTest {
                     .untilAsserted(() -> {
                         assertThat(removeAttempts.get()).isGreaterThan(2);
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
                     });
         }
 
         @Test
         void shouldNotSkipPostProcessFailureOnPostProcessSuccessError() {
-            // Subscriber that throws on first message, succeeds on subsequent
+            // Subscriber that throws on some messages, succeeds on the rest
             var processCount = new AtomicInteger(0);
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient, message -> {
                 int count = processCount.incrementAndGet();
@@ -235,11 +227,9 @@ class BaseRedisSubscriberUnitTest {
                 }
                 return Mono.empty();
             }));
-            var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
-            var message = podamFactory.manufacturePojo(String.class);
-            whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
+            whenReadGroupReturnMessages();
             whenAckReturn();
-            // Not mocking remove, so unhandled null pointer exceptions occur in post-processing succes
+            // Not mocking remove, so unhandled null pointer exceptions occur in post-processing success
 
             subscriber.start();
 
@@ -255,9 +245,7 @@ class BaseRedisSubscriberUnitTest {
         @Test
         void shouldNotDieOnUnhandledError() {
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
-            var messageId = new StreamMessageId(System.currentTimeMillis(), 0);
-            var message = podamFactory.manufacturePojo(String.class);
-            whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
+            whenReadGroupReturnMessages();
             // Not mocking ack and remove, so unhandled null pointer exceptions occur
 
             subscriber.start();
@@ -276,7 +264,8 @@ class BaseRedisSubscriberUnitTest {
             // Create a valid message ID with invalid format for timestamp extraction
             var messageId = StreamMessageId.MAX;
             var message = podamFactory.manufacturePojo(String.class);
-            whenReadGroupReturnMessages(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message)));
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenReturn(Mono.just(Map.of(messageId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, message))));
             whenAckReturn();
             whenRemoveReturn();
 
@@ -284,7 +273,10 @@ class BaseRedisSubscriberUnitTest {
 
             // Should log warning but continue processing
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2));
+                    .untilAsserted(() -> {
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
         }
     }
 
@@ -296,7 +288,7 @@ class BaseRedisSubscriberUnitTest {
             // Fail with non-BUSY GROUP error
             when(stream.createGroup(any(StreamCreateGroupArgs.class)))
                     .thenReturn(Mono.error(new RuntimeException("Redis connection error")));
-            // Mocking remove consumer and tracking subscriber for cleanup, so stop handles startup failures
+            // Mocking remove consumer and tracking subscriber for cleanup, to prove that stop handles startup failures
             whenRemoveConsumerReturn();
 
             var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
@@ -345,9 +337,11 @@ class BaseRedisSubscriberUnitTest {
         when(stream.createGroup(any(StreamCreateGroupArgs.class))).thenReturn(Mono.empty());
     }
 
-    private void whenReadGroupReturnMessages(Map<StreamMessageId, Map<String, String>> messages) {
+    private void whenReadGroupReturnMessages() {
+        // Return different messages on different calls
         when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
-                .thenReturn(Mono.just(messages));
+                .thenReturn(Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                        Map.of(TestStreamConfiguration.PAYLOAD_FIELD, podamFactory.manufacturePojo(String.class)))));
     }
 
     private void whenAckReturn() {
