@@ -73,7 +73,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongHistogram messageProcessingTime;
     private final LongHistogram messageQueueDelay;
     private final LongCounter messageProcessingErrors;
-    private final LongCounter intervalDrops;
+    private final LongCounter backpressureDropCounter;
     private final LongCounter readErrors;
     private final LongHistogram readTime;
     private final DoubleGauge readSize;
@@ -117,9 +117,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .counterBuilder("%s_%s_processing_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Errors when processing messages")
                 .build();
-        this.intervalDrops = meter
-                .counterBuilder("%s_%s_interval_dropped".formatted(metricNamespace, metricsBaseName))
-                .setDescription("Intervals dropped due to backpressure")
+        this.backpressureDropCounter = meter
+                .counterBuilder("%s_%s_backpressure_drops_total".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Total number of events dropped due to backpressure")
                 .build();
         this.readErrors = meter
                 .counterBuilder("%s_%s_read_errors".formatted(metricNamespace, metricsBaseName))
@@ -269,9 +269,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         // The timerScheduler isolates interval
         return Flux.interval(config.getPoolingInterval().toJavaDuration(), timerScheduler)
                 .onBackpressureDrop(i -> {
-                    intervalDrops.add(1);
+                    backpressureDropCounter.add(1);
                     // Backpressure should be a common thing due to long polling, better to log at debug level
-                    log.debug("Interval dropped due to backpressure");
+                    log.debug(
+                            "Backpressure drop detected: Unable to keep up with polling intervals. Polling interval tick dropped (sequence number: '{}').",
+                            i);
                 })
                 // TODO: Implement claimer of orphan pending messages
                 // ConcatMap ensures one readGroup at a time

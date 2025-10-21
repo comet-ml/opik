@@ -45,7 +45,7 @@ public class WebhookConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
-    private Duration longPollingDuration = Duration.seconds(5);
+    private Duration longPollingDuration;
 
     // Webhook-specific configuration
     @Valid @JsonProperty

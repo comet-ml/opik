@@ -11,7 +11,7 @@ import org.redisson.client.codec.Codec;
  * Test specific implementation of StreamConfiguration for quicker test execution.
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 public class TestStreamConfiguration implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
@@ -47,6 +47,10 @@ public class TestStreamConfiguration implements StreamConfiguration {
     }
 
     public static TestStreamConfiguration createForDependencyInjection() {
-        return TestStreamConfiguration.builder().build();
+        return create().toBuilder()
+                .consumerBatchSize(1)
+                .poolingInterval(Duration.minutes(1))
+                .longPollingDuration(Duration.seconds(5))
+                .build();
     }
 }
