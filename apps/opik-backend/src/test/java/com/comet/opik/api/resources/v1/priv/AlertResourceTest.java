@@ -861,7 +861,8 @@ class AlertResourceTest {
         @ParameterizedTest
         @MethodSource
         @DisplayName("Success: should test webhook successfully when webhook server responds with 2xx")
-        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult(AlertEventType eventType, AlertType alertType) {
+        void testWebhook__whenWebhookServerRespondsWithSuccess__thenReturnSuccessResult(AlertEventType eventType,
+                AlertType alertType) {
             // Given
             var mock = prepareMockWorkspace();
             var webhookUrl = "http://localhost:" + externalWebhookServer.port() + WEBHOOK_PATH;
@@ -1969,15 +1970,16 @@ class AlertResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetWebhookExamples {
 
-        @Test
-        @DisplayName("Success: should return webhook examples for all event types")
-        void getWebhookExamples__whenCalled__thenReturnExamplesForAllEventTypes() {
+        @ParameterizedTest
+        @MethodSource("alertTypeProvider")
+        @DisplayName("Success: should return webhook examples for all event types with different alert types")
+        void getWebhookExamples__whenCalled__thenReturnExamplesForAllEventTypes(String testName, AlertType alertType) {
             // Given
             var mock = prepareMockWorkspace();
 
             // When
             var webhookExamples = alertResourceClient.getWebhookExamples(mock.getLeft(), mock.getRight(),
-                    HttpStatus.SC_OK);
+                    alertType, HttpStatus.SC_OK);
 
             // Then
             assertThat(webhookExamples).isNotNull();
@@ -1998,6 +2000,14 @@ class AlertResourceTest {
             webhookExamples.responseExamples().values().forEach(example -> {
                 assertThat(example).isNotNull();
             });
+        }
+
+        private Stream<Arguments> alertTypeProvider() {
+            return Stream.of(
+                    Arguments.of("alertType is null (defaults to GENERAL)", null),
+                    Arguments.of("alertType is GENERAL", AlertType.GENERAL),
+                    Arguments.of("alertType is SLACK", AlertType.SLACK),
+                    Arguments.of("alertType is PAGERDUTY", AlertType.PAGERDUTY));
         }
     }
 
