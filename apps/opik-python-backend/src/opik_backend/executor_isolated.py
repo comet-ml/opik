@@ -143,7 +143,7 @@ class IsolatedSubprocessExecutor:
             # Track active process
             self._active_processes.append(process)
 
-            creation_latency = _calculate_latency_ms(start_time)
+            creation_latency = _calculate_latency_ms(creation_start)
             isolated_creation_histogram.record(creation_latency)
             self.logger.debug(
                 f"Created isolated subprocess. pid={process.pid}, creation_latency_ms={creation_latency:.3f}"
@@ -154,7 +154,7 @@ class IsolatedSubprocessExecutor:
                 process, data, payload_type, timeout_secs
             )
 
-            execution_latency = _calculate_latency_ms(start_time)
+            execution_latency = _calculate_latency_ms(creation_start)
             isolated_execution_histogram.record(execution_latency)
             self.logger.debug(
                 f"Isolated subprocess execution completed. total_latency_ms={execution_latency:.3f}"
@@ -178,7 +178,7 @@ class IsolatedSubprocessExecutor:
         finally:
             # Always remove process from active list and measure total latency
             self._remove_active_process(process)
-            total_latency = _calculate_latency_ms(start_time)
+            total_latency = _calculate_latency_ms(creation_start)
             self.logger.debug(
                 f"Subprocess execution finished. total_latency_ms={total_latency:.3f}"
             )
