@@ -1,6 +1,6 @@
 import langchain_google_vertexai
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from . import google_helpers
@@ -57,15 +57,12 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         expected_llm_span_input = {
             "messages": [
                 [
-                    {
-                        "content": expected_input_prompt,
-                        "additional_kwargs": {},
-                        "response_metadata": {},
-                        "type": "human",
-                        "name": None,
-                        "id": None,
-                        "example": False,
-                    }
+                    ANY_DICT.containing(
+                        {
+                            "content": expected_input_prompt,
+                            "type": "human",
+                        }
+                    ),
                 ]
             ]
         }
@@ -186,15 +183,12 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
         expected_llm_span_input = {
             "messages": [
                 [
-                    {
-                        "content": expected_input_prompt,
-                        "additional_kwargs": {},
-                        "response_metadata": {},
-                        "type": "human",
-                        "name": None,
-                        "id": None,
-                        "example": False,
-                    }
+                    ANY_DICT.containing(
+                        {
+                            "content": expected_input_prompt,
+                            "type": "human",
+                        }
+                    ),
                 ]
             ]
         }
