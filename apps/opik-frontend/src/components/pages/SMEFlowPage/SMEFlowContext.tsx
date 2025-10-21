@@ -215,6 +215,7 @@ interface SMEFlowContextValue {
   // Navigation state
   currentIndex: number;
   currentItem: Trace | Thread | undefined;
+  nextItem: Trace | Thread | undefined;
   currentView: WORKFLOW_STATUS;
   isLastUnprocessedItem: boolean;
 
@@ -317,6 +318,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     if (!annotationQueue?.id) return [];
     return [
       createFilter({
+        id: "annotation_queue_ids",
         field: "annotation_queue_ids",
         value: annotationQueue.id,
         operator: "contains",
@@ -399,6 +401,10 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
 
   const currentItem = useMemo(() => {
     return queueItems[currentIndex] || undefined;
+  }, [queueItems, currentIndex]);
+
+  const nextItem = useMemo(() => {
+    return queueItems[currentIndex + 1] || undefined;
   }, [queueItems, currentIndex]);
 
   const isItemsLoading = isTracesLoading || isThreadsLoading;
@@ -755,6 +761,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     // Navigation state
     currentIndex,
     currentItem,
+    nextItem,
     currentView: currentView || WORKFLOW_STATUS.INITIAL,
     isLastUnprocessedItem,
 
