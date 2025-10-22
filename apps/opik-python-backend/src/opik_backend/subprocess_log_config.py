@@ -18,11 +18,13 @@ class SubprocessLogConfig:
     FLUSH_INTERVAL_ENV = "SUBPROCESS_LOG_FLUSH_INTERVAL"
     MAX_SIZE_ENV = "SUBPROCESS_LOG_MAX_SIZE"
     REQUEST_TIMEOUT_ENV = "SUBPROCESS_LOG_REQUEST_TIMEOUT"
+    LOG_READER_TIMEOUT_ENV = "SUBPROCESS_LOG_READER_TIMEOUT"
     
     # Defaults
     DEFAULT_FLUSH_INTERVAL_MS = 1000  # 1 second
     DEFAULT_MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
     DEFAULT_REQUEST_TIMEOUT_SECS = 60
+    DEFAULT_LOG_READER_TIMEOUT_SECS = 5  # 5 seconds
     
     @classmethod
     def get_backend_url(cls) -> Optional[str]:
@@ -63,6 +65,19 @@ class SubprocessLogConfig:
             return int(os.getenv(cls.REQUEST_TIMEOUT_ENV, str(cls.DEFAULT_REQUEST_TIMEOUT_SECS)))
         except (ValueError, TypeError):
             return cls.DEFAULT_REQUEST_TIMEOUT_SECS
+    
+    @classmethod
+    def get_log_reader_timeout_secs(cls) -> int:
+        """
+        Get log reader thread timeout in seconds.
+        
+        Returns:
+            int: Timeout in seconds (default: 5)
+        """
+        try:
+            return int(os.getenv(cls.LOG_READER_TIMEOUT_ENV, str(cls.DEFAULT_LOG_READER_TIMEOUT_SECS)))
+        except (ValueError, TypeError):
+            return cls.DEFAULT_LOG_READER_TIMEOUT_SECS
     
     @classmethod
     def is_fully_configured(cls) -> bool:

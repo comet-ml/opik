@@ -83,18 +83,17 @@ class IsolatedSubprocessExecutor:
         self._active_processes: List[subprocess.Popen] = []  # Track active processes for cleanup
         self._process_lock = Lock()
         self._teardown_callbacks: List[Callable[[], None]] = []  # Callbacks to run on teardown
-        self._log_collector = None
+        self._log_collectors = {}  # Map process PID to log collector instance
 
     def execute(
         self,
-        file_path: Optional[str] = None,
-        data: dict = None,
+        file_path: str,
+        data: dict = {},
         env_vars: Optional[dict] = None,
         timeout_secs: Optional[int] = None,
         payload_type: Optional[str] = None,
         optimization_id: Optional[str] = None,
         job_id: Optional[str] = None,
-        code: Optional[str] = None,
     ) -> dict:
         """
         Execute Python file in an isolated subprocess with scoped environment variables.
@@ -105,7 +104,6 @@ class IsolatedSubprocessExecutor:
 
         Args:
             file_path: Path to Python file to execute (e.g., '/path/to/metric.py')
-            code: Inline Python code to execute (alternative to file_path)
             data: Data dictionary to pass to the file via stdin
             env_vars: Environment variables to scope to this subprocess (optional).
                      These override/augment the parent environment for this execution only.
@@ -134,12 +132,7 @@ class IsolatedSubprocessExecutor:
 
             # Build command: either execute inline code or a file path
             cmd = [sys.executable, "-u"]
-            if code is not None:
-                cmd += ["-c", code]
-            else:
-                if not file_path:
-                    raise ValueError("Either 'code' or 'file_path' must be provided")
-                cmd.append(file_path)
+            cmd.append(file_path)
 
             # Create subprocess with python to execute the code
             process = subprocess.Popen(
@@ -266,28 +259,27 @@ class IsolatedSubprocessExecutor:
 
         try:
             # Initialize logger BEFORE process starts if configured
+            # Lazy initialization on first use
             if SubprocessLogConfig.is_fully_configured():
-                from opik_backend.subprocess_logger import BatchLogCollector
-                
-                backend_url = SubprocessLogConfig.get_backend_url()
-                
                 try:
-                    self._log_collector = BatchLogCollector(
-                        backend_url=backend_url,
+                    from opik_backend.subprocess_logger import BatchLogCollector
+                    self._log_collectors[process.pid] = BatchLogCollector(
+                        backend_url=SubprocessLogConfig.get_backend_url(),
                         optimization_id=optimization_id or "",
                         job_id=job_id or "",
                         api_key=env_vars.get("OPIK_API_KEY", ""),
                         workspace=env_vars.get("OPIK_WORKSPACE", ""),
                     )
-                except (ValueError, ImportError) as e:
+                except ImportError as e:
+                    self.logger.error(f"Subprocess logging is configured but BatchLogCollector import failed: {e}")
+                    raise
+                except (ValueError, Exception) as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
-                except Exception as e:
-                    self.logger.error(f"Unexpected error initializing subprocess logging: {e}")
             
             # Decide execution strategy based on logging configuration
-            if self._log_collector:
+            if self._log_collectors.get(process.pid):
                 # Real-time streaming: start log collector threads, then wait for process
-                self._log_collector.start_stream_from_process(process)
+                self._log_collectors[process.pid].start_stream_from_process(process)
                 
                 # Send input to the process
                 process.stdin.write(input_json)
@@ -297,11 +289,11 @@ class IsolatedSubprocessExecutor:
                 process.wait(timeout=timeout_secs)
                 
                 # Wait for reader threads to finish reading all output
-                self._log_collector.wait_for_reader_threads(timeout=5.0)
+                self._log_collectors[process.pid].wait_for_reader_threads(timeout=SubprocessLogConfig.get_log_reader_timeout_secs())
                 
                 # Get stdout/stderr from last lines (no memory accumulation)
                 # Safe to do now that threads have finished
-                last_lines = self._log_collector.get_last_lines()
+                last_lines = self._log_collectors[process.pid].get_last_lines()
                 stdout = last_lines.get('stdout', '')
                 stderr = last_lines.get('stderr', '')
             else:
@@ -333,8 +325,6 @@ class IsolatedSubprocessExecutor:
                 }
         
         except subprocess.TimeoutExpired:
-            # Ensure log manager is closed even on timeout
-            self._close_log_collector()
             process.kill()
             try:
                 process.wait(timeout=2)
@@ -343,17 +333,22 @@ class IsolatedSubprocessExecutor:
             raise
         finally:
             # Ensure log collector is properly closed and threads are joined
-            self._close_log_collector()
+            self._close_log_collector(process.pid)
 
-    def _close_log_collector(self):
-        """Close the log collector if it exists."""
+    def _close_log_collector(self, pid: int):
+        """Close the log collector for a specific process if it exists.
+        
+        This properly signals shutdown, waits for any pending flushes, 
+        and cleans up all threads.
+        """
         try:
-            if self._log_collector:
-                self._log_collector.flush()
-                self._log_collector.close()
-                self._log_collector = None
+            with self._process_lock:
+                if pid in self._log_collectors:
+                    # close() handles: signal stop -> shutdown executor -> final flush -> cleanup threads
+                    self._log_collectors[pid].close()
+                    del self._log_collectors[pid]
         except Exception as e:
-            self.logger.warning(f"Error closing log collector: {e}")
+            self.logger.warning(f"Error closing log collector for PID {pid}: {e}")
 
     def register_teardown_callback(self, callback):
         """
@@ -390,6 +385,9 @@ class IsolatedSubprocessExecutor:
                 process.wait()
                 self.logger.warning(f"Process {pid} force killed after timeout")
             
+            # Close log collector after process is terminated to capture any final logs
+            self._close_log_collector(pid)
+            
             self._active_processes.remove(process)
             return True
         except Exception as e:
@@ -403,22 +401,16 @@ class IsolatedSubprocessExecutor:
         Args:
             timeout: Seconds to wait before force killing each process
         """
-        for process in list(self._active_processes):
-            try:
-                process.terminate()
-            except Exception as e:
-                self.logger.error(f"Error terminating process {process.pid}: {e}")
+        # Collect PIDs first to avoid modification during iteration
+        pids = [p.pid for p in list(self._active_processes)]
         
-        for process in list(self._active_processes):
+        # Use kill_process for each to avoid code duplication and ensure consistent cleanup
+        for pid in pids:
             try:
-                process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+                self.kill_process(pid, timeout=timeout)
             except Exception as e:
-                self.logger.error(f"Error waiting for process {process.pid}: {e}")
+                self.logger.error(f"Error killing process {pid}: {e}")
         
-        self._active_processes.clear()
         self.logger.info("All active processes terminated")
 
     def teardown(self):
@@ -427,8 +419,15 @@ class IsolatedSubprocessExecutor:
         """
         self.logger.info("Running teardown...")
         
-        # Kill all active processes
+        # Kill all active processes (which will also close their log collectors)
         self.kill_all_processes()
+        
+        # Close any remaining log collectors that weren't cleaned up
+        for pid in list(self._log_collectors.keys()):
+            try:
+                self._close_log_collector(pid)
+            except Exception as e:
+                self.logger.error(f"Error closing remaining log collector for PID {pid}: {e}")
         
         # Execute all teardown callbacks
         for callback in self._teardown_callbacks:

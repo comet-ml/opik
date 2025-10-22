@@ -12,6 +12,7 @@ import json
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List, Dict, Any, IO
 import subprocess
 from opik_backend.subprocess_log_config import SubprocessLogConfig
@@ -110,13 +111,13 @@ class BatchLogCollector(logging.Handler):
         self.buffer_size_bytes: int = 0
         self.buffer_lock = threading.Lock()
         self.last_flush_time = time.time()
-        self.flush_thread: Optional[threading.Thread] = None
+        self.flush_executor: Optional[ThreadPoolExecutor] = None
         self.should_stop = False
 
         # Set formatter
         self.setFormatter(logging.Formatter("%(levelname)s - %(name)s - %(message)s"))
 
-        # Start background flush thread
+        # Start background flush thread pool
         self._start_flush_thread()
 
     def emit(self, record: dict) -> None:
@@ -155,8 +156,8 @@ class BatchLogCollector(logging.Handler):
 
     def _start_flush_thread(self) -> None:
         """Start background thread for periodic log flushing."""
-        self.flush_thread = threading.Thread(target=self._periodic_flush, daemon=True)
-        self.flush_thread.start()
+        self.flush_executor = ThreadPoolExecutor(max_workers=1)
+        self.flush_executor.submit(self._periodic_flush)
 
     def _periodic_flush(self) -> None:
         """Periodically flush logs based on time interval."""
@@ -236,14 +237,19 @@ class BatchLogCollector(logging.Handler):
         Should be called when done collecting logs to ensure all data is sent
         and all threads are properly cleaned up.
         """
-        self.flush()
-        
-        # Signal flush thread to stop
+        # Signal periodic flush to stop
         self.should_stop = True
         
-        # Wait for flush thread to finish (with timeout to avoid hanging)
-        if self.flush_thread and self.flush_thread.is_alive():
-            self.flush_thread.join(timeout=5.0)
+        # Shutdown executor and wait for it to finish its current/pending work
+        if self.flush_executor:
+            try:
+                # shutdown(wait=True) will wait for any pending tasks to complete
+                self.flush_executor.shutdown(wait=True)
+            except Exception as e:
+                logger.warning(f"Error shutting down flush executor: {e}")
+        
+        # Do a final flush to ensure all remaining logs are sent
+        self.flush()
         
         # Wait for reader threads to finish (with timeout to avoid hanging)
         if self._stdout_thread and self._stdout_thread.is_alive():
