@@ -5,15 +5,19 @@ import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.Webhook;
+import com.comet.opik.infrastructure.db.AlertTypeArgumentFactory;
+import com.comet.opik.infrastructure.db.AlertTypeColumnMapper;
+import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -37,6 +41,10 @@ import java.util.UUID;
 
 @RegisterRowMapper(AlertDAO.AlertWithWebhookRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterArgumentFactory(MapFlatArgumentFactory.class)
+@RegisterColumnMapper(MapFlatArgumentFactory.class)
+@RegisterArgumentFactory(AlertTypeArgumentFactory.class)
+@RegisterColumnMapper(AlertTypeColumnMapper.class)
 interface AlertDAO {
 
     String FIND = """
@@ -45,6 +53,8 @@ interface AlertDAO {
                     a.id as id,
                     a.name as name,
                     a.enabled as enabled,
+                    a.alert_type as alert_type,
+                    a.metadata as metadata,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -122,8 +132,8 @@ interface AlertDAO {
             """;
 
     @SqlUpdate("""
-            INSERT INTO alerts (id, name, enabled, webhook_id, workspace_id, created_by, last_updated_by, created_at)
-            VALUES (:bean.id, :bean.name, :bean.enabled, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
+            INSERT INTO alerts (id, name, enabled, alert_type, metadata, webhook_id, workspace_id, created_by, last_updated_by, created_at)
+            VALUES (:bean.id, :bean.name, :bean.enabled, :bean.alertType, :bean.metadata, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
             """)
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
             @Bind("webhookId") UUID webhookId);
@@ -148,6 +158,8 @@ interface AlertDAO {
                     a.id as id,
                     a.name as name,
                     a.enabled as enabled,
+                    a.alert_type as alert_type,
+                    a.metadata as metadata,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -228,6 +240,7 @@ interface AlertDAO {
                 SELECT
                     a.id as id,
                     a.name as name,
+                    a.alert_type as alert_type,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -262,25 +275,14 @@ interface AlertDAO {
     @Slf4j
     class AlertWithWebhookRowMapper implements RowMapper<Alert> {
 
-        private static final TypeReference<Map<String, String>> MAP_TYPE_REF = new TypeReference<>() {
-        };
-
         private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS")
                 .withZone(java.time.ZoneOffset.UTC);
+        private static final MapFlatArgumentFactory MAP_MAPPER = new MapFlatArgumentFactory();
 
         @Override
         public Alert map(ResultSet rs, StatementContext ctx) throws SQLException {
-            // Parse webhook headers JSON to Map
-            Map<String, String> webhookHeaders = null;
-            String headersJson = rs.getString("webhook_headers");
-            if (headersJson != null && !headersJson.trim().isEmpty()) {
-                try {
-                    webhookHeaders = JsonUtils.readValue(headersJson, MAP_TYPE_REF);
-                } catch (Exception e) {
-                    log.warn("Failed to parse webhook headers JSON: '{}'", headersJson, e);
-                    webhookHeaders = Map.of();
-                }
-            }
+            // Parse webhook headers JSON to Map using column mapper
+            Map<String, String> webhookHeaders = MAP_MAPPER.map(rs, "webhook_headers", ctx);
 
             // Build Webhook object
             Webhook webhook = Webhook.builder()
@@ -300,11 +302,28 @@ interface AlertDAO {
                     .map(this::mapTriggers)
                     .orElse(null);
 
+            // Parse alert_type using column mapper
+            AlertType alertType = ctx.findColumnMapperFor(AlertType.class)
+                    .map(mapper -> {
+                        try {
+                            return mapper.map(rs, "alert_type", ctx);
+                        } catch (SQLException e) {
+                            log.warn("Failed to map alert_type column", e);
+                            return null;
+                        }
+                    })
+                    .orElse(null);
+
+            // Parse metadata JSON to Map using column mapper
+            Map<String, String> metadata = MAP_MAPPER.map(rs, "metadata", ctx);
+
             // Build Alert object with embedded Webhook and Triggers
             return Alert.builder()
                     .id(UUID.fromString(rs.getString("id")))
                     .name(rs.getString("name"))
                     .enabled(rs.getBoolean("enabled"))
+                    .alertType(alertType)
+                    .metadata(metadata)
                     .webhook(webhook)
                     .triggers(triggers)
                     .createdAt(rs.getTimestamp("created_at").toInstant())
@@ -398,10 +417,10 @@ interface AlertDAO {
                 if (configValueNode.isTextual()) {
                     String configStr = configValueNode.asText();
                     if (!configStr.trim().isEmpty()) {
-                        return JsonUtils.readValue(configStr, MAP_TYPE_REF);
+                        return JsonUtils.readValue(configStr, MapFlatArgumentFactory.TYPE_REFERENCE);
                     }
                 } else if (configValueNode.isObject()) {
-                    return JsonUtils.MAPPER.convertValue(configValueNode, MAP_TYPE_REF);
+                    return JsonUtils.MAPPER.convertValue(configValueNode, MapFlatArgumentFactory.TYPE_REFERENCE);
                 }
             } catch (Exception e) {
                 log.warn("Failed to parse config value: '{}'", configValueNode, e);
