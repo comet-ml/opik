@@ -4,7 +4,7 @@ import litellm
 import litellm.types.utils
 
 import opik
-from opik.integrations.litellm import track_litellm
+from opik.integrations.litellm import track_completion
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -25,14 +25,14 @@ MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 @pytest.mark.parametrize("model,expected_provider", constants.TEST_MODELS_PARAMETRIZE)
 def test_litellm_completion_create__happyflow(fake_backend, model, expected_provider):
     """Test basic LiteLLM completion tracking."""
-    track_litellm()
+    tracked_completion = track_completion()(litellm.completion)
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Tell a fact"},
     ]
 
-    response = litellm.completion(
+    response = tracked_completion(
         model=model,
         messages=messages,
         max_tokens=10,
@@ -89,14 +89,14 @@ def test_litellm_completion_create__happyflow(fake_backend, model, expected_prov
 @pytest.mark.asyncio
 async def test_litellm_acompletion_create__happyflow(fake_backend):
     """Test async LiteLLM completion tracking."""
-    track_litellm()
+    tracked_acompletion = track_completion()(litellm.acompletion)
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Tell a fact"},
     ]
 
-    response = await litellm.acompletion(
+    response = await tracked_acompletion(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
@@ -152,11 +152,11 @@ async def test_litellm_acompletion_create__happyflow(fake_backend):
 
 def test_litellm_completion_error_handling__exception_logged(fake_backend):
     """Test error handling in LiteLLM completion tracking."""
-    track_litellm()
+    tracked_completion = track_completion()(litellm.completion)
 
     # This should cause an error due to invalid model
     with pytest.raises(Exception):
-        litellm.completion(
+        tracked_completion(
             model="invalid-model-name",
             messages=[{"role": "user", "content": "Test"}],
         )
@@ -207,7 +207,7 @@ def test_litellm_completion_error_handling__exception_logged(fake_backend):
 
 def test_litellm_completion_with_tools__tools_logged(fake_backend):
     """Test LiteLLM completion tracking with tools/function calling."""
-    track_litellm()
+    tracked_completion = track_completion()(litellm.completion)
 
     messages = [
         {"role": "user", "content": "What's the weather like?"},
@@ -227,7 +227,7 @@ def test_litellm_completion_with_tools__tools_logged(fake_backend):
         }
     ]
 
-    response = litellm.completion(
+    response = tracked_completion(
         model=MODEL_FOR_TESTS,
         messages=messages,
         tools=tools,
@@ -284,7 +284,7 @@ def test_litellm_completion_with_tools__tools_logged(fake_backend):
 
 def test_litellm_completion_create__opik_args__happyflow(fake_backend):
     """Test basic LiteLLM completion tracking with opik_args."""
-    track_litellm()
+    tracked_completion = track_completion()(litellm.completion)
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -300,7 +300,7 @@ def test_litellm_completion_create__opik_args__happyflow(fake_backend):
         },
     }
 
-    response = litellm.completion(
+    response = tracked_completion(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
@@ -357,7 +357,7 @@ def test_litellm_completion_create__opik_args__happyflow(fake_backend):
 @pytest.mark.asyncio
 async def test_litellm_acompletion_create__opik_args__happyflow(fake_backend):
     """Test async LiteLLM completion tracking with opik_args."""
-    track_litellm()
+    tracked_acompletion = track_completion()(litellm.acompletion)
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -373,7 +373,7 @@ async def test_litellm_acompletion_create__opik_args__happyflow(fake_backend):
         },
     }
 
-    response = await litellm.acompletion(
+    response = await tracked_acompletion(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,

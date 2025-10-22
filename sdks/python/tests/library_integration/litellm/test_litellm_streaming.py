@@ -4,7 +4,7 @@ import litellm
 import litellm.litellm_core_utils.streaming_handler
 
 import opik
-from opik.integrations.litellm import track_litellm
+from opik.integrations.litellm import track_completion
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -27,14 +27,14 @@ def test_litellm_completion_streaming__happyflow(
     fake_backend, model, expected_provider
 ):
     """Test basic LiteLLM streaming completion tracking."""
-    track_litellm()
+    tracked_completion = track_completion()(litellm.completion)
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Say hello in one word"},
     ]
 
-    stream = litellm.completion(
+    stream = tracked_completion(
         model=model,
         messages=messages,
         max_tokens=5,
@@ -104,14 +104,14 @@ def test_litellm_completion_streaming__happyflow(
 @pytest.mark.asyncio
 async def test_litellm_acompletion_streaming__happyflow(fake_backend):
     """Test async LiteLLM streaming completion tracking."""
-    track_litellm()
+    tracked_acompletion = track_completion()(litellm.acompletion)
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Say hello in one word"},
     ]
 
-    stream = await litellm.acompletion(
+    stream = await tracked_acompletion(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=5,
@@ -180,7 +180,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
 
 def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
     """Test LiteLLM streaming with custom opik_args."""
-    track_litellm()
+    tracked_completion = track_completion()(litellm.completion)
 
     messages = [
         {"role": "user", "content": "Hello"},
@@ -198,7 +198,7 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
         },
     }
 
-    stream = litellm.completion(
+    stream = tracked_completion(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=5,
