@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Callable, List
 from threading import Lock
 
-from opik_backend.executor import CodeExecutorBase
 from opik_backend.subprocess_log_config import SubprocessLogConfig
 
 logger = logging.getLogger(__name__)
@@ -329,7 +328,8 @@ class IsolatedSubprocessExecutor:
                 process.kill()
             raise
         finally:
-            # Ensure log collector is properly closed and threads are joined
+            # Close log collector immediately after execution completes to flush all logs
+            # This ensures cleanup happens even if teardown() is not called
             self._close_log_collector(process.pid)
 
     def _close_log_collector(self, pid: int):
