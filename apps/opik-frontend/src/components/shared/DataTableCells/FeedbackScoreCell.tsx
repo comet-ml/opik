@@ -16,6 +16,7 @@ import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
+import { ThreadStatus } from "@/types/thread";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
@@ -61,7 +62,9 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   ]);
 
   const enableUserFeedbackEditing =
-    context.table.options.meta?.enableUserFeedbackEditing ?? false;
+    ((!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
+      context.table.options.meta?.enableUserFeedbackEditing) ??
+    false;
   const isUserFeedbackColumn =
     enableUserFeedbackEditing &&
     context.column.id === "feedback_scores_User feedback";
