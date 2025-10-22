@@ -44,12 +44,12 @@ jobs:
             gh api /repos/${{ github.repository }}/collaborators/"$EVENT_ACTOR" > /dev/null 2>&1
             COLLABORATOR_STATUS=$?
 
-            if [[ "$COLLABORATOR_STATUS" -ne 0 ]]; then
-              ASSIGN_USER="$EVENT_ACTOR"
+            if [[ "$COLLABORATOR_STATUS" -eq 0 ]]; then
               echo "User '$EVENT_ACTOR' IS a collaborator on ${{ github.repository }}."
+              ASSIGN_USER="$EVENT_ACTOR"
             else
-              ASSIGN_USER=""
               echo "User '$EVENT_ACTOR' IS NOT a collaborator on ${{ github.repository }}."
+              ASSIGN_USER=""
             fi
 
             echo "Determined user: $ASSIGN_USER"
