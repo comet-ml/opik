@@ -26,8 +26,11 @@ def track_crewai(
     Parameters:
         project_name: The name of the project to associate with the tracking.
     """
-    global __IS_TRACKING_ENABLED, _ORIGINAL_LITELLM_COMPLETION, _ORIGINAL_LITELLM_ACOMPLETION
-    
+    global \
+        __IS_TRACKING_ENABLED, \
+        _ORIGINAL_LITELLM_COMPLETION, \
+        _ORIGINAL_LITELLM_ACOMPLETION
+
     if __IS_TRACKING_ENABLED:
         return
     __IS_TRACKING_ENABLED = True
@@ -47,9 +50,13 @@ def track_crewai(
     if _ORIGINAL_LITELLM_COMPLETION is None:
         _ORIGINAL_LITELLM_COMPLETION = litellm.completion
         _ORIGINAL_LITELLM_ACOMPLETION = litellm.acompletion
-        
-        litellm.completion = track_completion(project_name=project_name)(litellm.completion)
-        litellm.acompletion = track_completion(project_name=project_name)(litellm.acompletion)
+
+        litellm.completion = track_completion(project_name=project_name)(
+            litellm.completion
+        )
+        litellm.acompletion = track_completion(project_name=project_name)(
+            litellm.acompletion
+        )
 
     flow_patchers.patch_flow_init(project_name=project_name)
     flow_patchers.patch_flow_kickoff_async(project_name=project_name)

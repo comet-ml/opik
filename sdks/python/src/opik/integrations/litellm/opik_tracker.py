@@ -34,7 +34,7 @@ def track_completion(
     """
     decorator_factory = litellm_completion_decorator.LiteLLMCompletionTrackDecorator()
 
-    return decorator_factory.track(
+    return decorator_factory.track(  # type: ignore
         type="llm",
         name=None,  # Use the function's name (completion or acompletion)
         project_name=project_name,
