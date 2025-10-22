@@ -395,15 +395,22 @@ class IsolatedSubprocessExecutor:
         Terminate all active processes.
 
         Args:
-            timeout: Seconds to wait before force killing each process
+            timeout: Total seconds to wait for all processes (distributed across them)
         """
         # Collect PIDs first to avoid modification during iteration
         pids = [p.pid for p in list(self._active_processes)]
         
+        if not pids:
+            self.logger.info("No active processes to terminate")
+            return
+        
+        # Distribute timeout across all processes
+        per_process_timeout = max(1, timeout // len(pids)) if pids else timeout
+        
         # Use kill_process for each to avoid code duplication and ensure consistent cleanup
         for pid in pids:
             try:
-                self.kill_process(pid, timeout=timeout)
+                self.kill_process(pid, timeout=per_process_timeout)
             except Exception as e:
                 self.logger.error(f"Error killing process {pid}: {e}")
         
