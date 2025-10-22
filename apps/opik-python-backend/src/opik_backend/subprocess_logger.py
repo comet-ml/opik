@@ -113,8 +113,8 @@ class BatchLogCollector(logging.Handler):
         self.last_flush_time = time.time()
         self.flush_executor: Optional[ThreadPoolExecutor] = None
         self.should_stop = False
-        self._stdout_thread: Optional[threading.Thread] = None
-        self._stderr_thread: Optional[threading.Thread] = None
+        self._reader_executor: Optional[ThreadPoolExecutor] = None
+        self._reader_futures: List = []
 
         # Set formatter
         self.setFormatter(logging.Formatter("%(levelname)s - %(name)s - %(message)s"))
@@ -254,17 +254,23 @@ class BatchLogCollector(logging.Handler):
         self.flush()
         
         # Wait for reader threads to finish (with timeout to avoid hanging)
-        if self._stdout_thread and self._stdout_thread.is_alive():
+        if self._reader_executor:
             try:
-                self._stdout_thread.join(timeout=2.0)
+                # Wait for all reader futures to complete
+                for future in self._reader_futures:
+                    if not future.done():
+                        future.result(timeout=2.0)
             except Exception as e:
-                logger.warning(f"Error joining stdout thread: {e}")
-        
-        if self._stderr_thread and self._stderr_thread.is_alive():
+                logger.warning(f"Error waiting for reader threads: {e}")
+            
+            # Shutdown the reader executor
             try:
-                self._stderr_thread.join(timeout=2.0)
+                self._reader_executor.shutdown(wait=False)
             except Exception as e:
-                logger.warning(f"Error joining stderr thread: {e}")
+                logger.warning(f"Error shutting down reader executor: {e}")
+            
+            # Clear futures list
+            self._reader_futures.clear()
 
     def start_stream_from_process(self, process: subprocess.Popen) -> Dict[str, str]:
         """
@@ -290,29 +296,17 @@ class BatchLogCollector(logging.Handler):
         last_lines = {'stdout': '', 'stderr': ''}
         
         # Keep reference to threads for cleanup in close()
-        self._stdout_thread = None
-        self._stderr_thread = None
+        self._reader_executor = ThreadPoolExecutor(max_workers=2) # Two threads for stdout and stderr
+        self._reader_futures = []
         
         # Spawn reader threads for stdout and stderr
         if process.stdout:
-            stdout_thread = threading.Thread(
-                target=self._read_stream,
-                args=(process.stdout, "stdout", last_lines),
-                daemon=False
-            )
-            stdout_thread.start()
-            threads['stdout_thread'] = stdout_thread
-            self._stdout_thread = stdout_thread
+            future = self._reader_executor.submit(self._read_stream, process.stdout, "stdout", last_lines)
+            self._reader_futures.append(future)
         
         if process.stderr:
-            stderr_thread = threading.Thread(
-                target=self._read_stream,
-                args=(process.stderr, "stderr", last_lines),
-                daemon=False
-            )
-            stderr_thread.start()
-            threads['stderr_thread'] = stderr_thread
-            self._stderr_thread = stderr_thread
+            future = self._reader_executor.submit(self._read_stream, process.stderr, "stderr", last_lines)
+            self._reader_futures.append(future)
         
         # Store last lines for caller to access after joining threads
         threads['last_stdout_line'] = last_lines['stdout']
@@ -342,17 +336,14 @@ class BatchLogCollector(logging.Handler):
         Args:
             timeout: Maximum time to wait for threads in seconds
         """
-        if self._stdout_thread and self._stdout_thread.is_alive():
+        if self._reader_executor:
             try:
-                self._stdout_thread.join(timeout=timeout)
+                # Wait for all reader futures to complete
+                for future in self._reader_futures:
+                    if not future.done():
+                        future.result(timeout=timeout)
             except Exception as e:
-                logger.warning(f"Error waiting for stdout thread: {e}")
-        
-        if self._stderr_thread and self._stderr_thread.is_alive():
-            try:
-                self._stderr_thread.join(timeout=timeout)
-            except Exception as e:
-                logger.warning(f"Error waiting for stderr thread: {e}")
+                logger.warning(f"Error waiting for reader threads: {e}")
 
     def _read_stream(self, pipe: Optional[IO], stream_name: str, last_lines: Dict[str, str]) -> None:
         """
