@@ -26,15 +26,30 @@ logger = logging.getLogger(__name__)
 
 
 class GepaOptimizer(BaseOptimizer):
-    """Minimal integration against the upstream GEPA engine."""
+    """
+    The GEPA (Genetic-Pareto) Optimizer uses a genetic algorithm with Pareto optimization
+    to improve prompts while balancing multiple objectives.
+
+    This algorithm is well-suited for complex optimization tasks where you want to find
+    prompts that balance trade-offs between different quality metrics.
+
+    Args:
+        model: LiteLLM model name for the optimization algorithm
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
+        n_threads: Number of parallel threads for evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
+    """
 
     def __init__(
         self,
         model: str = "gpt-4o",
+        model_parameters: dict[str, Any] | None = None,
         n_threads: int = 6,
         verbose: int = 1,
         seed: int = 42,
-        model_parameters: dict[str, Any] | None = None,
     ) -> None:
         # Validate required parameters
         if model is None:
@@ -139,7 +154,6 @@ class GepaOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
-        *args: Any,
         max_trials: int = 10,
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
@@ -152,8 +166,6 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar: bool = False,
         seed: int = 42,
         raise_on_exception: bool = True,
-        mcp_config: Any = None,
-        **kwargs: Any,
     ) -> OptimizationResult:
         """
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
@@ -178,7 +190,6 @@ class GepaOptimizer(BaseOptimizer):
             display_progress_bar: Display progress bar (default: False)
             seed: Random seed for reproducibility (default: 42)
             raise_on_exception: Raise exceptions instead of continuing (default: True)
-            mcp_config: MCP tool calling configuration (default: None)
 
         Returns:
             OptimizationResult: Result of the optimization

@@ -87,10 +87,32 @@ def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
 
 class MetaPromptOptimizer(BaseOptimizer):
     """
-    The Meta-Prompt Optimizer uses meta-prompting to improve prompts based on examples and performance.
+    Meta-Prompt Optimizer that uses LLM-based meta-reasoning to iteratively improve prompts.
 
-    This algorithm is best used when you have a prompt and would like to make sure it follows best
-    practices.
+    This optimizer uses an LLM to analyze prompt performance and generate improved variations
+    by reasoning about what changes would be most effective. It's particularly useful for:
+    - Ensuring prompts follow best practices
+    - Refining prompts for clarity and effectiveness
+    - Optimizing prompts for specific evaluation metrics
+    - Improving prompts based on performance feedback
+
+    The optimizer works by:
+    1. Evaluating the current prompt on a dataset
+    2. Using an LLM to reason about improvements based on performance
+    3. Generating candidate prompt variations
+    4. Evaluating candidates and selecting the best
+    5. Repeating until max_trials is reached or performance plateaus
+
+    Args:
+        model: LiteLLM model name for optimizer's internal reasoning/generation calls
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
+        prompts_per_round: Number of candidate prompts to generate per optimization round
+        enable_context: Whether to include task-specific context when reasoning about improvements
+        n_threads: Number of parallel threads for prompt evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
     """
 
     # --- Constants for Default Configuration ---
@@ -133,24 +155,13 @@ class MetaPromptOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str = "gpt-4o",
+        model_parameters: dict[str, Any] | None = None,
         prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
-        verbose: int = 1,
         enable_context: bool = True,
         n_threads: int = 12,
+        verbose: int = 1,
         seed: int = 42,
-        model_parameters: dict[str, Any] | None = None,
     ) -> None:
-        """
-        Args:
-            model: The model to use for the optimization algorithm (reasoning and prompt generation)
-            prompts_per_round: Number of prompts to generate per round
-            n_threads: Number of threads for parallel evaluation
-            verbose: Controls internal logging/progress bars (0=off, 1=on).
-            enable_context: Whether to include task-specific context (metrics, examples) in the reasoning prompt.
-            model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
-                Common params: temperature, max_tokens, max_completion_tokens, top_p.
-                See: https://docs.litellm.ai/docs/completion/input
-        """
         super().__init__(
             model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
         )
@@ -360,24 +371,67 @@ class MetaPromptOptimizer(BaseOptimizer):
         **kwargs: Any,
     ) -> OptimizationResult:
         """
-        Optimize a prompt using meta-reasoning.
+        Optimize a prompt using LLM-based meta-reasoning to iteratively improve performance.
+
+        The optimizer evaluates the initial prompt, uses an LLM to reason about improvements,
+        generates candidate variations, and iteratively selects the best performers until
+        max_trials is reached.
 
         Args:
-            prompt: The prompt to optimize
-            dataset: The dataset to evaluate against
-            metric: The metric to use for evaluation
-            experiment_config: A dictionary to log with the experiments
-            max_trials: Maximum number of prompts to test across all rounds (default: 12)
-            n_samples: The number of dataset items to use for evaluation
-            auto_continue: If True, the algorithm may continue if goal not met
-            agent_class: Optional agent class to use
-            project_name: Opik project name for logging traces (default: "Optimization")
-            mcp_config: MCP tool calling configuration (default: None)
-            candidate_generator: Optional candidate generator
-            candidate_generator_kwargs: Optional kwargs for candidate generator
+            prompt: The ChatPrompt to optimize. Can include system/user/assistant messages,
+                tools, and model configuration.
+            dataset: Opik Dataset containing evaluation examples. Each item is passed to the
+                prompt during evaluation.
+            metric: Evaluation function that takes (dataset_item, llm_output) and returns a
+                score (float). Higher scores indicate better performance.
+            experiment_config: Optional metadata dictionary to log with Opik experiments.
+                Useful for tracking experiment parameters and context.
+            n_samples: Number of dataset items to use per evaluation. If None, uses full dataset.
+                Lower values speed up optimization but may be less reliable.
+            auto_continue: If True, optimizer may continue beyond max_trials if improvements
+                are still being found. Default: False
+            agent_class: Custom agent class for prompt execution. If None, uses default
+                LiteLLM-based agent. Must inherit from OptimizableAgent.
+            project_name: Opik project name for logging traces and experiments. Default: "Optimization"
+            max_trials: Maximum total number of prompts to evaluate across all rounds.
+                Optimizer stops when this limit is reached. Default: 12
+            mcp_config: Optional MCP (Model Context Protocol) execution configuration for
+                prompts that use external tools. Enables tool-calling workflows. Default: None
+            candidate_generator: Optional custom function to generate candidate prompts.
+                Overrides default meta-reasoning generator. Should return list[ChatPrompt].
+            candidate_generator_kwargs: Optional kwargs to pass to candidate_generator.
 
         Returns:
-            OptimizationResult: Structured result containing optimization details
+            OptimizationResult: Contains the best prompt found, final score, optimization
+                history, and metadata about the optimization run.
+
+        Example:
+            ```python
+            from opik_optimizer import MetaPromptOptimizer, ChatPrompt
+            from opik import Opik
+
+            client = Opik()
+            dataset = client.get_dataset("my_dataset")
+
+            prompt = ChatPrompt(
+                system="You are a helpful assistant.",
+                user_template="Answer this question: {question}"
+            )
+
+            def accuracy_metric(dataset_item, llm_output):
+                return 1.0 if llm_output == dataset_item["expected"] else 0.0
+
+            optimizer = MetaPromptOptimizer(model="gpt-4o")
+            result = optimizer.optimize_prompt(
+                prompt=prompt,
+                dataset=dataset,
+                metric=accuracy_metric,
+                max_trials=12
+            )
+
+            print(f"Best score: {result.best_score}")
+            print(f"Best prompt: {result.best_prompt}")
+            ```
         """
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)

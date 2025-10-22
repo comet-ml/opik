@@ -61,39 +61,38 @@ class FewShotPromptTemplate(BaseModel):
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     """
-    The Few-Shot Bayesian Optimizer can be used to add few-shot examples to prompts. This algorithm
-    employes a two stage pipeline:
+    Few-Shot Bayesian Optimizer that adds few-shot examples to prompts using Bayesian optimization.
 
-    1. We generate a few-shot prompt template that is inserted can be inserted into the prompt
-       provided
-    2. We use Bayesian Optimization to determine the best examples to include in the prompt.
+    This algorithm employs a two-stage pipeline:
 
-    This algorithm is best used when you have a well defined task and would like to guide the LLM
-    by providing some examples.
+    1. Generate a few-shot prompt template that can be inserted into the prompt
+    2. Use Bayesian Optimization to determine the best examples to include in the prompt
+
+    This algorithm is best used when you have a well-defined task and would like to guide the LLM
+    by providing examples. It automatically finds the optimal number and selection of examples.
+
+    Args:
+        model: LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
+        min_examples: Minimum number of examples to include in the prompt
+        max_examples: Maximum number of examples to include in the prompt
+        n_threads: Number of threads for parallel evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
     """
 
     def __init__(
         self,
         model: str = "gpt-4o",
+        model_parameters: dict[str, Any] | None = None,
         min_examples: int = 2,
         max_examples: int = 8,
-        seed: int = 42,
         n_threads: int = 8,
         verbose: int = 1,
-        model_parameters: dict[str, Any] | None = None,
+        seed: int = 42,
     ) -> None:
-        """
-        Args:
-            model: The model used for the optimization algorithm (generating few-shot templates)
-            min_examples: Minimum number of examples to include
-            max_examples: Maximum number of examples to include
-            seed: Random seed for reproducibility
-            n_threads: Number of threads for parallel evaluation
-            verbose: Controls internal logging/progress bars (0=off, 1=on).
-            model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
-                Common params: temperature, max_tokens, max_completion_tokens, top_p.
-                See: https://docs.litellm.ai/docs/completion/input
-        """
         super().__init__(model, verbose, seed=seed, model_parameters=model_parameters)
         self.min_examples = min_examples
         self.max_examples = max_examples

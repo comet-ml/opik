@@ -63,8 +63,8 @@ class BaseOptimizer(ABC):
 
         Args:
            model: LiteLLM model name for optimizer's internal reasoning/generation calls
-           verbose: Controls internal logging/progress bars (0=off, 1=on).
-           seed: Random seed for reproducibility (default: 42)
+           verbose: Controls internal logging/progress bars (0=off, 1=on)
+           seed: Random seed for reproducibility
            model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
                Common params: temperature, max_tokens, max_completion_tokens, top_p,
                presence_penalty, frequency_penalty.
@@ -670,90 +670,6 @@ class BaseOptimizer(ABC):
            **kwargs: Additional arguments for optimization
         """
         pass
-
-    def optimize_mcp(
-        self,
-        prompt: "chat_prompt.ChatPrompt",
-        dataset: Dataset,
-        metric: Callable,
-        *,
-        tool_name: str,
-        second_pass: Any,
-        experiment_config: dict | None = None,
-        n_samples: int | None = None,
-        auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
-        fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
-        fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
-        allow_tool_use_on_second_pass: bool = False,
-        **kwargs: Any,
-    ) -> optimization_result.OptimizationResult:
-        """
-        Optimize prompts that rely on MCP (Model Context Protocol) tooling.
-
-        This method provides a standardized interface for optimizing prompts that use
-        external tools through the MCP protocol. It handles tool invocation, second-pass
-        coordination, and fallback mechanisms.
-
-        Args:
-            prompt: The chat prompt to optimize, must include tools
-            dataset: Opik dataset containing evaluation data
-            metric: Evaluation function that takes (dataset_item, llm_output) and returns a score
-            tool_name: Name of the MCP tool to use for optimization
-            second_pass: MCPSecondPassCoordinator for handling second-pass tool calls
-            experiment_config: Optional configuration for the experiment
-            n_samples: Number of samples to use for optimization (default: None)
-            auto_continue: Whether to auto-continue optimization (default: False)
-            agent_class: Custom agent class to use (default: None)
-            fallback_invoker: Fallback function for tool invocation (default: None)
-            fallback_arguments: Function to extract tool arguments (default: None)
-            allow_tool_use_on_second_pass: Whether to allow tool use on second pass (default: False)
-            **kwargs: Additional arguments for optimization
-
-        Returns:
-            OptimizationResult: The optimization result containing the optimized prompt and metrics
-
-        Raises:
-            NotImplementedError: If the optimizer doesn't implement MCP optimization
-            ValueError: If the prompt doesn't include required tools
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement optimize_mcp yet."
-        )
-
-    def optimize_parameter(
-        self,
-        prompt: "chat_prompt.ChatPrompt",
-        dataset: Dataset,
-        metric: Callable,
-        parameter_space: Any,
-        experiment_config: dict | None = None,
-        n_trials: int | None = None,
-        n_samples: int | None = None,
-        agent_class: type[OptimizableAgent] | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> optimization_result.OptimizationResult:
-        """
-        Optimize LLM call parameters such as temperature or top_k.
-
-        Args:
-            prompt: The chat prompt to evaluate with tuned parameters
-            dataset: Dataset providing evaluation examples
-            metric: Objective function to maximize
-            parameter_space: Definition of the search space for tunable parameters
-            experiment_config: Optional experiment metadata
-            n_trials: Number of trials to run (optimizer specific default if None)
-            n_samples: Number of dataset samples to evaluate per trial (None for all)
-            agent_class: Optional custom agent class to execute evaluations
-            **kwargs: Additional optimizer specific settings
-
-        Returns:
-            OptimizationResult: Structured result describing the best parameters found
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement optimize_parameter yet."
-        )
 
     def get_history(self) -> list[OptimizationRound]:
         """

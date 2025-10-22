@@ -26,19 +26,37 @@ logger = logging.getLogger(__name__)
 
 
 class ParameterOptimizer(BaseOptimizer):
-    """Optimizer that tunes model call parameters (temperature, top_p, etc.)."""
+    """
+    The Parameter Optimizer uses Bayesian optimization to tune model parameters like
+    temperature, top_p, and other LLM call parameters for optimal performance.
+
+    This optimizer is ideal when you have a good prompt but want to fine-tune the
+    model's behavior through parameter adjustments rather than prompt modifications.
+
+    Args:
+        model: LiteLLM model name (used for metadata, not for optimization calls)
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
+        default_n_trials: Default number of optimization trials to run
+        local_search_ratio: Ratio of trials to dedicate to local search refinement (0.0-1.0)
+        local_search_scale: Scale factor for narrowing search space during local search
+        n_threads: Number of parallel threads for evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
+    """
 
     def __init__(
         self,
         model: str = "gpt-4o",
         *,
+        model_parameters: dict[str, Any] | None = None,
         default_n_trials: int = 20,
-        n_threads: int = 4,
-        seed: int = 42,
-        verbose: int = 1,
         local_search_ratio: float = 0.3,
         local_search_scale: float = 0.2,
-        model_parameters: dict[str, Any] | None = None,
+        n_threads: int = 4,
+        verbose: int = 1,
+        seed: int = 42,
     ) -> None:
         super().__init__(
             model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
@@ -59,11 +77,13 @@ class ParameterOptimizer(BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
-        metric: Callable[[Any, Any], float],
+        metric: Callable,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
+        *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
         raise NotImplementedError(

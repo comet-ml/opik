@@ -51,15 +51,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     complex prompt that you want to systematically refine based on understanding why it fails.
 
     Args:
-        model: LiteLLM model name for the optimization algorithm (reasoning and analysis) (default: "gpt-4o")
-        n_threads: Number of parallel threads for evaluation (default: 12)
-        verbose: Controls internal logging/progress bars (0=off, 1=on) (default: 1)
-        seed: Random seed for reproducibility (default: 42)
+        model: LiteLLM model name for the optimization algorithm (reasoning and analysis)
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
         max_parallel_batches: Maximum number of batches to process concurrently during
-            hierarchical root cause analysis (default: 5)
-        batch_size: Number of test cases per batch for root cause analysis (default: 25)
-        convergence_threshold: Stop if relative improvement is below this threshold (default: 0.01)
-        **model_kwargs: Additional arguments passed to the LLM model
+            hierarchical root cause analysis
+        batch_size: Number of test cases per batch for root cause analysis
+        convergence_threshold: Stop if relative improvement is below this threshold
+        n_threads: Number of parallel threads for evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
     """
 
     DEFAULT_ROUNDS = 10
@@ -69,13 +71,13 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str = "gpt-4o",
-        n_threads: int = 12,
-        verbose: int = 1,
-        seed: int = 42,
+        model_parameters: dict[str, Any] | None = None,
         max_parallel_batches: int = 5,
         batch_size: int = 25,
         convergence_threshold: float = DEFAULT_CONVERGENCE_THRESHOLD,
-        model_parameters: dict[str, Any] | None = None,
+        n_threads: int = 12,
+        verbose: int = 1,
+        seed: int = 42,
     ):
         super().__init__(
             model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
@@ -400,9 +402,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
-        *args: Any,
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
+        *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
         # Reset counters at the start of optimization

@@ -47,19 +47,41 @@ creator = cast(Any, _creator)  # type: ignore[assignment]
 
 class EvolutionaryOptimizer(BaseOptimizer):
     """
-    The Evolutionary Optimizer can be used to optimize prompts using a 4 stage genetic algorithm
-    approach:
+    Evolutionary Optimizer that uses genetic algorithms to evolve and improve prompts over generations.
 
-    1. Generate a set of candidate prompts based on variations of the best prompts (exploitation) as
-    well as completely new prompts (exploration)
-    2. Evaluate the candidate prompts
-    3. Select the best prompts
-    4. Repeat until convergence
+    This optimizer uses a 4-stage genetic algorithm approach:
+
+    1. Generate candidate prompts through variations of the best prompts (exploitation) and
+       completely new prompts (exploration)
+    2. Evaluate the candidate prompts on the dataset
+    3. Select the best prompts based on fitness
+    4. Repeat until convergence or max generations reached
 
     This algorithm is best used if you have a first draft prompt and would like to find a better
-    prompt.
+    prompt through iterative evolution. It supports both single-objective and multi-objective
+    optimization (balancing performance and prompt length).
 
     Note: This algorithm is time consuming and can be expensive to run.
+
+    Args:
+        model: LiteLLM model name for optimizer's internal operations (mutations, crossover, etc.)
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
+        population_size: Number of prompts in the population
+        num_generations: Number of generations to run
+        mutation_rate: Mutation rate for genetic operations
+        crossover_rate: Crossover rate for genetic operations
+        tournament_size: Tournament size for selection
+        elitism_size: Number of elite prompts to preserve across generations
+        adaptive_mutation: Whether to use adaptive mutation that adjusts based on population diversity
+        enable_moo: Whether to enable multi-objective optimization (optimizes metric and prompt length)
+        enable_llm_crossover: Whether to enable LLM-based crossover operations
+        output_style_guidance: Optional guidance for output style in generated prompts
+        infer_output_style: Whether to automatically infer output style from the dataset
+        n_threads: Number of threads for parallel evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
     """
 
     DEFAULT_POPULATION_SIZE = 30
@@ -98,6 +120,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     def __init__(
         self,
         model: str = "gpt-4o",
+        model_parameters: dict[str, Any] | None = None,
         population_size: int = DEFAULT_POPULATION_SIZE,
         num_generations: int = DEFAULT_NUM_GENERATIONS,
         mutation_rate: float = DEFAULT_MUTATION_RATE,
@@ -107,32 +130,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
         adaptive_mutation: bool = DEFAULT_ADAPTIVE_MUTATION,
         enable_moo: bool = DEFAULT_ENABLE_MOO,
         enable_llm_crossover: bool = DEFAULT_ENABLE_LLM_CROSSOVER,
-        seed: int = DEFAULT_SEED,
         output_style_guidance: str | None = None,
         infer_output_style: bool = False,
-        verbose: int = 1,
         n_threads: int = DEFAULT_NUM_THREADS,
-        **model_kwargs: Any,
+        verbose: int = 1,
+        seed: int = DEFAULT_SEED,
     ) -> None:
-        """
-        Args:
-            model: The model to use for the optimization algorithm (mutations, crossover, etc.)
-            population_size: Number of prompts in the population
-            num_generations: Number of generations to run
-            mutation_rate: Mutation rate for genetic operations
-            crossover_rate: Crossover rate for genetic operations
-            tournament_size: Tournament size for selection
-            n_threads: Number of threads for parallel evaluation
-            elitism_size: Number of elitism prompts
-            adaptive_mutation: Whether to use adaptive mutation
-            enable_moo: Whether to enable multi-objective optimization - When enable optimizes for both the supplied metric and the length of the prompt
-            enable_llm_crossover: Whether to enable LLM crossover
-            seed: Random seed for reproducibility
-            output_style_guidance: Output style guidance for prompts
-            infer_output_style: Whether to infer output style
-            verbose: Controls internal logging/progress bars (0=off, 1=on).
-            **model_kwargs: Additional model parameters
-        """
         # Initialize base class first
         if sys.version_info >= (3, 13):
             warnings.warn(
@@ -140,16 +143,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "You may see asyncio teardown warnings. Prefer Python 3.12.",
                 RuntimeWarning,
             )
-        if "project_name" in model_kwargs:
-            warnings.warn(
-                "The 'project_name' parameter in optimizer constructor is deprecated. "
-                "Set project_name in the ChatPrompt instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            del model_kwargs["project_name"]
 
-        super().__init__(model=model, verbose=verbose, **model_kwargs)
+        super().__init__(
+            model=model, verbose=verbose, seed=seed, model_parameters=model_parameters
+        )
         self.population_size = population_size
         self.num_generations = num_generations
         self.mutation_rate = mutation_rate
