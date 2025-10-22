@@ -143,7 +143,7 @@ def update_current_trace(
         thread_id: Used to group multiple traces into a thread.
             The identifier is user-defined and has to be unique per project.
         attachments: The list of attachments to be uploaded to the trace.
-        prompts: The list of prompts used in the span.
+        prompts: The list of prompts used in the trace.
     """
     if not tracing_runtime_config.is_tracing_active():
         return
