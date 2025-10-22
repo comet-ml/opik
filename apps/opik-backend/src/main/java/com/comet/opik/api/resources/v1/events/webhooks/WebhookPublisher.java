@@ -67,6 +67,7 @@ public class WebhookPublisher {
                 .alertType(Optional.ofNullable(alert.alertType()).orElse(AlertType.GENERAL))
                 .alertId(alert.id())
                 .alertName(alert.name())
+                .alertMetadata(Optional.ofNullable(alert.metadata()).orElse(Map.of()))
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
                 .secret(alert.webhook().secretToken())
