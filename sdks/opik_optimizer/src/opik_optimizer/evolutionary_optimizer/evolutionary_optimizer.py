@@ -167,7 +167,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             else self.DEFAULT_OUTPUT_STYLE_GUIDANCE
         )
         self.infer_output_style = infer_output_style
-        self._current_optimization_id: str | None = None
         self._current_generation = 0
         self._best_fitness_history: list[float] = []
         self._generations_without_improvement = 0
@@ -512,6 +511,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
         *args: Any,
         mcp_config: MCPExecutionConfig | None = None,
         **kwargs: Any,
@@ -525,6 +525,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             n_samples: Optional number of samples to use
             auto_continue: Whether to automatically continue optimization
             agent_class: Optional agent class to use
+            project_name: Opik project name for logging traces (default: "Optimization")
             mcp_config: MCP tool calling configuration (default: None)
         """
         # Use base class validation and setup methods
@@ -534,7 +535,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         if mcp_config is not None:
             evaluation_kwargs["mcp_config"] = mcp_config
 
-        self.project_name = self.agent_class.project_name
+        # Set project name from parameter
+        self.project_name = project_name
 
         # Step 0. Start Opik optimization run
         opik_optimization_run: optimization.Optimization | None = None
@@ -544,14 +546,14 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
-            self._current_optimization_id = opik_optimization_run.id
+            self.current_optimization_id = opik_optimization_run.id
         except Exception as e:
             logger.warning(f"Opik server error: {e}. Continuing without Opik tracking.")
-            self._current_optimization_id = None
+            self.current_optimization_id = None
 
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=self._current_optimization_id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -590,7 +592,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self._current_optimization_id,
+                    optimization_id=self.current_optimization_id,
                     verbose=0,
                     **evaluation_kwargs,
                 )
@@ -609,7 +611,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
-                    optimization_id=self._current_optimization_id,
+                    optimization_id=self.current_optimization_id,
                     verbose=0,
                     **evaluation_kwargs,
                 )
@@ -913,7 +915,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             try:
                 opik_optimization_run.update(status="completed")
                 logger.info(
-                    f"Opik Optimization run {self._current_optimization_id} status updated to completed."
+                    f"Opik Optimization run {self.current_optimization_id} status updated to completed."
                 )
             except Exception as e:
                 logger.warning(f"Failed to update Opik Optimization run status: {e}")
@@ -975,7 +977,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             llm_calls=self.llm_call_counter,
             tool_calls=self.tool_call_counter,
             dataset_id=dataset.id,
-            optimization_id=self._current_optimization_id,
+            optimization_id=self.current_optimization_id,
             tool_prompts=tool_prompts,
         )
 

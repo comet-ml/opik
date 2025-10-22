@@ -13,7 +13,7 @@ import importlib.metadata
 import litellm
 from opik.rest_api.core import ApiError
 from opik.api_objects import optimization
-from opik import Dataset
+from opik import Dataset, opik_context
 from pydantic import BaseModel
 
 from . import _throttle, optimization_result
@@ -81,6 +81,8 @@ class BaseOptimizer(ABC):
         self.llm_call_counter = 0
         self.tool_call_counter = 0
         self._opik_client = None  # Lazy initialization
+        self.current_optimization_id: str | None = None  # Track current optimization
+        self.project_name: str = "Optimization"  # Default project name
 
         # Initialize shared cache
         initialize_cache()
@@ -234,6 +236,22 @@ class BaseOptimizer(ABC):
             if "opik_call_type" not in final_params["metadata"]:
                 final_params["metadata"]["opik_call_type"] = "reasoning"
 
+        # Configure project_name and tags for Opik tracing
+        if "metadata" not in final_params:
+            final_params["metadata"] = {}
+        if "opik" not in final_params["metadata"]:
+            final_params["metadata"]["opik"] = {}
+
+        # Set project name for optimizer reasoning calls
+        final_params["metadata"]["opik"]["project_name"] = self.project_name
+
+        # Add tags if optimization_id is available
+        if self.current_optimization_id:
+            final_params["metadata"]["opik"]["tags"] = [
+                self.current_optimization_id,
+                "Prompt Optimization",
+            ]
+
         # Add structured output support
         if response_model is not None:
             final_params["response_format"] = response_model
@@ -264,6 +282,48 @@ class BaseOptimizer(ABC):
             return response_model.model_validate_json(content)
 
         return content
+
+    def _build_call_time_params(
+        self,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        max_completion_tokens: int | None = None,
+        top_p: float | None = None,
+        presence_penalty: float | None = None,
+        frequency_penalty: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Build dictionary of call-time LiteLLM parameter overrides.
+
+        Args:
+            temperature: Sampling temperature (0-2)
+            max_tokens: Maximum tokens to generate
+            max_completion_tokens: Upper bound for generated tokens
+            top_p: Nucleus sampling probability mass
+            presence_penalty: Penalty for new tokens based on presence
+            frequency_penalty: Penalty for new tokens based on frequency
+            metadata: Optional metadata dict for monitoring
+
+        Returns:
+            Dictionary of non-None parameters for LiteLLM
+        """
+        call_time_params: dict[str, Any] = {}
+        if temperature is not None:
+            call_time_params["temperature"] = temperature
+        if max_tokens is not None:
+            call_time_params["max_tokens"] = max_tokens
+        if max_completion_tokens is not None:
+            call_time_params["max_completion_tokens"] = max_completion_tokens
+        if top_p is not None:
+            call_time_params["top_p"] = top_p
+        if presence_penalty is not None:
+            call_time_params["presence_penalty"] = presence_penalty
+        if frequency_penalty is not None:
+            call_time_params["frequency_penalty"] = frequency_penalty
+        if metadata is not None:
+            call_time_params["metadata"] = metadata
+        return call_time_params
 
     @_throttle.rate_limited(_limiter)
     def _call_model(
@@ -309,28 +369,89 @@ class BaseOptimizer(ABC):
         self._increment_llm_counter()
 
         # Build dict of call-time LiteLLM parameter overrides (non-None only)
-        call_time_params: dict[str, Any] = {}
-        if temperature is not None:
-            call_time_params["temperature"] = temperature
-        if max_tokens is not None:
-            call_time_params["max_tokens"] = max_tokens
-        if max_completion_tokens is not None:
-            call_time_params["max_completion_tokens"] = max_completion_tokens
-        if top_p is not None:
-            call_time_params["top_p"] = top_p
-        if presence_penalty is not None:
-            call_time_params["presence_penalty"] = presence_penalty
-        if frequency_penalty is not None:
-            call_time_params["frequency_penalty"] = frequency_penalty
-        if metadata is not None:
-            call_time_params["metadata"] = metadata
-        # optimization_id is NOT passed to LiteLLM - it's metadata only
+        call_time_params = self._build_call_time_params(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_completion_tokens=max_completion_tokens,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
+            frequency_penalty=frequency_penalty,
+            metadata=metadata,
+        )
 
         final_params_for_litellm = self._prepare_model_params(
             call_time_params, response_model, is_reasoning
         )
 
         response = litellm.completion(
+            model=model or self.model,
+            messages=messages,
+            seed=seed if seed is not None else self.seed,
+            num_retries=6,
+            **final_params_for_litellm,
+        )
+
+        return self._parse_response(response, response_model)
+
+    @_throttle.rate_limited(_limiter)
+    async def _call_model_async(
+        self,
+        messages: list[dict[str, str]],
+        model: str | None = None,
+        seed: int | None = None,
+        response_model: type[BaseModel] | None = None,
+        is_reasoning: bool = False,
+        # Explicit call-time overrides for LiteLLM params
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        max_completion_tokens: int | None = None,
+        top_p: float | None = None,
+        presence_penalty: float | None = None,
+        frequency_penalty: float | None = None,
+        # Optimizer-specific metadata (not passed to LiteLLM)
+        optimization_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> BaseModel | str:
+        """
+        Async version of _call_model using litellm.acompletion.
+
+        Args:
+            messages: List of message dictionaries with 'role' and 'content' keys
+            model: The model to use (defaults to self.model)
+            seed: Random seed for reproducibility (defaults to self.seed)
+            response_model: Optional Pydantic model for structured output
+            is_reasoning: Flag for metadata tagging (not passed to LiteLLM)
+            temperature: Sampling temperature (0-2)
+            max_tokens: Maximum tokens to generate
+            max_completion_tokens: Upper bound for generated tokens
+            top_p: Nucleus sampling probability mass
+            presence_penalty: Penalty for new tokens based on presence
+            frequency_penalty: Penalty for new tokens based on frequency
+            optimization_id: Optional ID for optimization tracking (metadata only)
+            metadata: Optional metadata dict for monitoring
+
+        Returns:
+            If response_model is provided, returns an instance of that model.
+            Otherwise, returns the raw string response.
+        """
+        self._increment_llm_counter()
+
+        # Build dict of call-time LiteLLM parameter overrides (non-None only)
+        call_time_params = self._build_call_time_params(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_completion_tokens=max_completion_tokens,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
+            frequency_penalty=frequency_penalty,
+            metadata=metadata,
+        )
+
+        final_params_for_litellm = self._prepare_model_params(
+            call_time_params, response_model, is_reasoning
+        )
+
+        response = await litellm.acompletion(
             model=model or self.model,
             messages=messages,
             seed=seed if seed is not None else self.seed,
@@ -530,6 +651,7 @@ class BaseOptimizer(ABC):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -544,6 +666,7 @@ class BaseOptimizer(ABC):
            input_key: input field of dataset
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
+           project_name: Opik project name for logging traces (default: "Optimization")
            **kwargs: Additional arguments for optimization
         """
         pass
@@ -696,6 +819,13 @@ class BaseOptimizer(ABC):
             messages = prompt.get_messages(dataset_item)
             raw_model_output = agent.invoke(messages)
             cleaned_model_output = raw_model_output.strip()
+
+            # Add tags to trace for optimization tracking
+            if self.current_optimization_id:
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
+
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
@@ -721,9 +851,9 @@ class BaseOptimizer(ABC):
             metric=metric,
             evaluated_task=llm_task,
             num_threads=n_threads,
-            project_name=experiment_config.get("project_name"),
+            project_name=self.project_name,
             experiment_config=experiment_config,
-            optimization_id=None,
+            optimization_id=self.current_optimization_id,
             verbose=verbose,
         )
         return score

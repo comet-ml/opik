@@ -5,6 +5,7 @@ import opik
 import litellm
 from litellm.caching import Cache
 from litellm.types.caching import LiteLLMCacheType
+from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
 
@@ -104,7 +105,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         response_model: type[T] | None = None,
     ) -> T | str:
         """
-        Async version of _call_model using litellm.acompletion.
+        Adapter for async LLM calls with HierarchicalRootCauseAnalyzer signature.
+
+        This adapter translates the analyzer's expected signature to the base class
+        _call_model_async signature, ensuring project_name and tags are properly set.
 
         Args:
             model: The model to use for the call
@@ -117,21 +121,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             If response_model is provided, returns an instance of that model.
             Otherwise, returns the raw string response.
         """
-        self._increment_llm_counter()
-
-        final_params_for_litellm = self._prepare_model_params(
-            model_kwargs, response_model
-        )
-
-        response = await litellm.acompletion(
-            model=model,
+        # Call the base class async method which properly handles project_name and tags
+        return await super()._call_model_async(
             messages=messages,
+            model=model,
             seed=seed,
-            num_retries=6,
-            **final_params_for_litellm,
+            response_model=response_model,
+            is_reasoning=True,
+            **model_kwargs,
         )
-
-        return self._parse_response(response, response_model)
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         """
@@ -221,6 +219,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
             cleaned_model_output = raw_model_output.strip()
 
+            # Add tags to trace for optimization tracking
+            if self.current_optimization_id:
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
+
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
@@ -239,6 +243,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             nb_samples=n_samples,
             experiment_config=experiment_config,
             verbose=self.verbose,
+            project_name=self.project_name,
         )
 
         return result
@@ -393,6 +398,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
         *args: Any,
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
@@ -404,11 +410,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Setup agent class
         self.agent_class = self._setup_agent_class(prompt, agent_class)
 
+        # Set project name from parameter
+        self.project_name = project_name
+
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
             metadata={"optimizer": self.__class__.__name__},
         )
+        self.current_optimization_id = optimization.id
         logger.debug(f"Created optimization with ID: {optimization.id}")
 
         reporting.display_header(

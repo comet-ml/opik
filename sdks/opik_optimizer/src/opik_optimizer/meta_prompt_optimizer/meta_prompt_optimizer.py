@@ -10,7 +10,7 @@ import litellm
 import opik
 from litellm.caching import Cache
 from litellm.types.caching import LiteLLMCacheType
-from opik import Dataset
+from opik import Dataset, opik_context
 from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer import task_evaluator
@@ -312,6 +312,12 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 cleaned_model_output = raw_model_output.strip()
 
+            # Add tags to trace for optimization tracking
+            if self.current_optimization_id:
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
+
             result = {
                 mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
             }
@@ -327,7 +333,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             evaluated_task=llm_task,
             dataset_item_ids=dataset_item_ids,
             num_threads=self.n_threads,
-            project_name=self.agent_class.project_name,
+            project_name=self.project_name,
             n_samples=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
             optimization_id=optimization_id,
@@ -345,6 +351,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
         *args: Any,
         max_trials: int = 12,
         mcp_config: MCPExecutionConfig | None = None,
@@ -364,6 +371,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_samples: The number of dataset items to use for evaluation
             auto_continue: If True, the algorithm may continue if goal not met
             agent_class: Optional agent class to use
+            project_name: Opik project name for logging traces (default: "Optimization")
             mcp_config: MCP tool calling configuration (default: None)
             candidate_generator: Optional candidate generator
             candidate_generator_kwargs: Optional kwargs for candidate generator
@@ -374,6 +382,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
+
+        # Set project name from parameter
+        self.project_name = project_name
 
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
@@ -389,12 +400,14 @@ class MetaPromptOptimizer(BaseOptimizer):
                 objective_name=getattr(metric, "__name__", str(metric)),
                 metadata={"optimizer": self.__class__.__name__},
             )
+            self.current_optimization_id = optimization.id
             logger.debug(f"Created optimization with ID: {optimization.id}")
         except Exception as e:
             logger.warning(
                 f"Opik server does not support optimizations: {e}. Please upgrade opik."
             )
             optimization = None
+            self.current_optimization_id = None
 
         reporting.display_header(
             algorithm=self.__class__.__name__,
@@ -583,7 +596,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 try:
                     candidate_prompts = generator(
-                        project_name=self.agent_class.project_name,
+                        project_name=self.project_name,
                         current_prompt=best_prompt,
                         best_score=best_score,
                         round_num=round_num,

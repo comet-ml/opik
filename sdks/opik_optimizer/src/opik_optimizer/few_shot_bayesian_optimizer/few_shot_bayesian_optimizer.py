@@ -11,7 +11,7 @@ import optuna
 import optuna.samplers
 
 import opik
-from opik import Dataset
+from opik import Dataset, opik_context
 from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
@@ -308,7 +308,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     metric=metric,
                     evaluated_task=llm_task,
                     num_threads=self.n_threads,
-                    project_name=self.agent_class.project_name,
+                    project_name=self.project_name,
                     experiment_config=trial_config,
                     optimization_id=optimization_id,
                     verbose=self.verbose,
@@ -451,6 +451,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
         *args: Any,
         max_trials: int = 10,
         **kwargs: Any,
@@ -465,6 +466,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples: Optional number of items to test in the dataset
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
+            project_name: Opik project name for logging traces (default: "Optimization")
 
         Returns:
             OptimizationResult: Result of the optimization
@@ -473,6 +475,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
 
+        # Set project name from parameter
+        self.project_name = project_name
+
         optimization = None
         try:
             optimization = self.opik_client.create_optimization(
@@ -480,18 +485,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
-            optimization_run_id = optimization.id
+            self.current_optimization_id = optimization.id
         except Exception:
             logger.warning(
                 "Opik server does not support optimizations. Please upgrade opik."
             )
             optimization = None
-            optimization_run_id = None
+            self.current_optimization_id = None
 
         # Start experiment reporting
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=optimization_run_id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -651,6 +656,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     )
 
             result = agent.invoke(messages, seed=self.seed)
+
+            # Add tags to trace for optimization tracking
+            if self.current_optimization_id:
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
 
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: result}
 

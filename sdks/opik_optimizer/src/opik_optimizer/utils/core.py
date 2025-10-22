@@ -327,7 +327,6 @@ def create_litellm_agent_class(
         class LiteLLMAgent(OptimizableAgent):
             model = prompt.model
             model_kwargs = prompt.model_kwargs
-            project_name = prompt.project_name
             optimizer = optimizer_ref
 
             def invoke(
@@ -342,7 +341,6 @@ def create_litellm_agent_class(
         class LiteLLMAgent(OptimizableAgent):  # type: ignore[no-redef]
             model = prompt.model
             model_kwargs = prompt.model_kwargs
-            project_name = prompt.project_name
             optimizer = optimizer_ref
 
     return LiteLLMAgent

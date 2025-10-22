@@ -41,7 +41,6 @@ class ChatPrompt:
         function_map: dict[str, Callable] | None = None,
         model: str = "gpt-4o-mini",
         invoke: Callable | None = None,
-        project_name: str | None = "Default Project",
         model_parameters: dict[str, Any] | None = None,
     ) -> None:
         if system is None and user is None and messages is None:
@@ -94,7 +93,6 @@ class ChatPrompt:
         self.model = model
         self.model_kwargs = model_parameters or {}
         self.invoke = invoke
-        self.project_name = project_name
 
     def get_messages(
         self,
@@ -161,7 +159,6 @@ class ChatPrompt:
             function_map=self.function_map,
             model=self.model,
             invoke=self.invoke,
-            project_name=self.project_name,
             model_parameters=model_parameters,
         )
 

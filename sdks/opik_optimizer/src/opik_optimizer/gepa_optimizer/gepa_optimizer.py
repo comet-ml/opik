@@ -4,7 +4,7 @@ from typing import Any, ContextManager
 from collections.abc import Callable
 
 import opik
-from opik import Dataset
+from opik import Dataset, opik_context
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from ..base_optimizer import BaseOptimizer
@@ -137,6 +137,7 @@ class GepaOptimizer(BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
         *args: Any,
         max_trials: int = 10,
         reflection_minibatch_size: int = 3,
@@ -207,10 +208,13 @@ class GepaOptimizer(BaseOptimizer):
 
         base_prompt = prompt.copy()
 
+        # Set project name from parameter
+        self.project_name = project_name
+
         opt_id: str | None = None
         ds_id: str | None = getattr(dataset, "id", None)
 
-        opik_client = opik.Opik(project_name=prompt.project_name)
+        opik_client = opik.Opik(project_name=self.project_name)
 
         disable_experiment_reporting()
 
@@ -223,8 +227,10 @@ class GepaOptimizer(BaseOptimizer):
             ) as optimization:
                 try:
                     opt_id = optimization.id if optimization is not None else None
+                    self.current_optimization_id = opt_id
                 except Exception:
                     opt_id = None
+                    self.current_optimization_id = None
 
             gepa_reporting.display_header(
                 algorithm=self.__class__.__name__,
@@ -281,7 +287,6 @@ class GepaOptimizer(BaseOptimizer):
                     logger.exception("Baseline evaluation failed")
 
             adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
-            adapter_prompt.project_name = base_prompt.project_name
             adapter_prompt.model = self.model
             # Filter out GEPA-specific parameters that shouldn't be passed to LLM
             filtered_model_kwargs = {
@@ -364,7 +369,6 @@ class GepaOptimizer(BaseOptimizer):
                 candidate, seed_prompt_text
             )
             prompt_variant = self._apply_system_text(prompt, candidate_prompt)
-            prompt_variant.project_name = prompt.project_name
             prompt_variant.model = self.model
             # Filter out GEPA-specific parameters that shouldn't be passed to LLM
             filtered_model_kwargs = {
@@ -429,7 +433,6 @@ class GepaOptimizer(BaseOptimizer):
         )
 
         final_prompt = self._apply_system_text(prompt, best_prompt_text)
-        final_prompt.project_name = prompt.project_name
         final_prompt.model = self.model
         # Filter out GEPA-specific parameters that shouldn't be passed to LLM
         filtered_model_kwargs = {
@@ -601,6 +604,13 @@ class GepaOptimizer(BaseOptimizer):
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
             raw = agent.invoke(messages)
+
+            # Add tags to trace for optimization tracking
+            if self.current_optimization_id:
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
+
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: raw.strip()}
 
         configuration_updates = self._drop_none({"gepa": extra_metadata})
