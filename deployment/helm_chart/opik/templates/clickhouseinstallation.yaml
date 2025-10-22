@@ -92,6 +92,14 @@ spec:
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
+            {{- if .Values.clickhouse.livenessProbe }}
+            livenessProbe:
+              {{- toYaml .Values.clickhouse.livenessProbe | nindent 14 }}
+            {{- end }}
+            {{- if .Values.clickhouse.readinessProbe }}
+            readinessProbe:
+              {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
+            {{- end }}
           {{- if .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup
             image: {{ .Values.clickhouse.backupServer.image }}
