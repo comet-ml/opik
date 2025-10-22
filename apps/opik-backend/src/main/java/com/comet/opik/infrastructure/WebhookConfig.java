@@ -71,6 +71,17 @@ public class WebhookConfig implements StreamConfiguration {
     @Valid @JsonProperty
     private DebouncingConfig debouncing = new DebouncingConfig();
 
+    // Pending message claiming configuration
+    @Valid @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration pendingMessageTimeout = Duration.minutes(10);
+
+    @Valid @JsonProperty
+    @Min(1) private int claimIntervalTicks = 10;
+
+    @Valid @JsonProperty
+    @Min(1) @Max(10) private int maxRetryAttempts = 3;
+
     @Override
     @JsonIgnore
     public Codec getCodec() {
