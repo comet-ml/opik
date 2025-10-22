@@ -7,11 +7,16 @@ toc_max_heading_level: 4
 
 Task span metrics are a powerful type of evaluation metric in Opik that can analyze the detailed execution information of your LLM tasks. Unlike traditional metrics that only evaluate input-output pairs, task span metrics have access to the complete execution context, including intermediate steps, metadata, timing information, and hierarchical structure.
 
-**Important:** only spans created with `@trak` decorators and native OPIK integrations are available for task span metrics.
+**Important:** only spans created with `@track` decorators and native OPIK integrations are available for task span metrics.
 
 ## What are Task Span Metrics?
 
-Task span metrics receive a `task_span` parameter containing a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object that represents the complete execution context of your task. This includes:
+Task span metrics are evaluation metrics that include a `task_span` parameter in their `score` method. The Opik evaluation engine automatically detects that.
+
+When a metric has a `task_span` parameter, it receives a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object containing the complete execution context of your task.
+
+
+The `task_span` parameter provides:
 
 - **Execution Details**: Input, output, start/end times, and execution metadata
 - **Nested Operations**: Hierarchical structure of sub-operations and function calls
@@ -32,7 +37,7 @@ Task span metrics are particularly valuable for:
 
 ## Creating Task Span Metrics
 
-To create a task span metric, define a class that inherits from `BaseMetric` and implements a `score` method that accepts a `task_span` parameter:
+To create a task span metric, define a class that inherits from `BaseMetric` and implements a `score` method that accepts a `task_span` parameter (you can still add other parameters as in regular metrics, Opik will perform a separate check for `task_span` argument presence):
 
 ```python
 from typing import Any, Dict, Optional
@@ -74,7 +79,7 @@ class TaskExecutionQualityMetric(BaseMetric):
 
         return execution_stats
 
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Check execution success across the entire span tree.
         # Only for illustrative purposes.
         # Please adjust for your specific use case!
@@ -130,7 +135,7 @@ The `SpanModel` object provides rich information about task execution:
 
 ```python
 class BasicSpanAnalysisMetric(BaseMetric):
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Basic span information
         span_id = task_span.id
         span_name = task_span.name
@@ -208,7 +213,7 @@ class PerformanceMetric(BaseMetric):
 
         return usage_summary
 
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Timing analysis
         # Only for illustrative purposes.
         # Please adjust for your specific use case!
@@ -281,7 +286,7 @@ class ErrorAnalysisMetric(BaseMetric):
 
         return errors
 
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Collect all errors from the entire span tree
         all_errors = self._collect_errors_recursively(task_span)
 
@@ -302,7 +307,7 @@ class ErrorAnalysisMetric(BaseMetric):
 
 ## Using Task Span Metrics in Evaluation
 
-Task span metrics work seamlessly with regular evaluation metrics and are automatically detected by the evaluation system:
+Task span metrics work seamlessly with regular evaluation metrics. The Opik evaluation engine automatically detects task span metrics by checking if the `score` method includes a `task_span` parameter, and handles them appropriately:
 
 ```python
 from opik import evaluate
@@ -332,7 +337,7 @@ evaluation = evaluate(
 Always check for `None` values in optional span attributes:
 
 ```python
-def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
     # Safe access to optional fields
     duration = None
     if task_span.start_time and task_span.end_time:
@@ -399,7 +404,7 @@ def _analyze_caching_efficiency_recursively(self, span: SpanModel, cache_stats: 
 
     return cache_stats
 
-def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
     # Analyze caching efficiency across an entire span tree.
     # Only for illustrative purposes.
     # Please adjust for your specific use case!
@@ -499,7 +504,7 @@ scoring_metrics = [
 Be mindful of sensitive data in span information:
 
 ```python
-def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
     # Avoid logging sensitive input data
     input_size = len(str(task_span.input)) if task_span.input else 0
 
@@ -559,7 +564,7 @@ class AgentTrajectoryMetric(BaseMetric):
 
         return trajectory_stats
 
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Analyze agent trajectory across an entire span tree
         trajectory_stats = self._analyze_trajectory_recursively(task_span)
 

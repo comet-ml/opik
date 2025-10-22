@@ -643,12 +643,12 @@ To create a task span evaluation metric, define a metric class that accepts a `t
 
 <CodeBlocks>
 ```python title="Python" language="python"
-from typing import Optional
+from typing import Any, Optional
 from opik.evaluation.metrics import BaseMetric, score_result
 from opik.message_processing.emulation.models import SpanModel
 
 class ExecutionTimeMetric(BaseMetric):
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Calculate execution duration
         if task_span.start_time and task_span.end_time:
             duration = (task_span.end_time - task_span.start_time).total_seconds()
@@ -1374,7 +1374,7 @@ class HierarchyAnalysisMetric(BaseMetric):
 
         return hierarchy_stats
 
-    def score(self, task_span: SpanModel) -> score_result.ScoreResult:
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Analyze hierarchy across the entire span tree
         # Only for illustrative purposes.
         # Please adjust for your specific use case!

@@ -286,19 +286,29 @@ class EvaluationEngine:
             client=self._client,
         ):
             score_results = self._score_llm_task_result_span(
-                trace_id=trace_id, task_span=evaluation_span
+                trace_id=trace_id,
+                task_span=evaluation_span,
+                test_case_=evaluation_task_result.test_case,
             )
             # append scores to the input test result
             evaluation_task_result.score_results += score_results
             return evaluation_task_result
 
-    @opik.track(name="task_span_metrics_calculation")  # type: ignore[attr-defined,has-type]
+    @opik.track(  # type: ignore[attr-defined,has-type]
+        name="task_span_metrics_calculation",
+        ignore_arguments=["test_case_"],
+    )
     def _score_llm_task_result_span(
         self,
         trace_id: str,
         task_span: models.SpanModel,
+        test_case_: test_case.TestCase,
     ) -> List[score_result.ScoreResult]:
-        score_kwargs = {EVALUATION_SPAN_PARAMETER_NAME: task_span}
+        score_kwargs = {
+            **test_case_.scoring_inputs,
+            EVALUATION_SPAN_PARAMETER_NAME: task_span,
+        }
+
         score_results = _scores_by_metrics(
             scoring_metrics=self._task_span_scoring_metrics,
             score_kwargs=score_kwargs,
