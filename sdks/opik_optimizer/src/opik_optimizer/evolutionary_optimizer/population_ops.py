@@ -88,13 +88,21 @@ class PopulationOps:
                             p.get("role") is not None for p in fresh_prompts
                         ):
                             population.append(
-                                chat_prompt.ChatPrompt(messages=fresh_prompts)
+                                chat_prompt.ChatPrompt(
+                                    messages=fresh_prompts,
+                                    tools=prompt.tools,
+                                    function_map=prompt.function_map,
+                                )
                             )
                             init_pop_report.success_fresh_prompts(1)
                         elif all(isinstance(p, list) for p in fresh_prompts):
                             population.extend(
                                 [
-                                    chat_prompt.ChatPrompt(messages=p)
+                                    chat_prompt.ChatPrompt(
+                                        messages=p,
+                                        tools=prompt.tools,
+                                        function_map=prompt.function_map,
+                                    )
                                     for p in fresh_prompts[:num_fresh_starts]
                                 ]
                             )
@@ -157,7 +165,11 @@ class PopulationOps:
                         )
                         population.extend(
                             [
-                                chat_prompt.ChatPrompt(messages=p)
+                                chat_prompt.ChatPrompt(
+                                    messages=p,
+                                    tools=prompt.tools,
+                                    function_map=prompt.function_map,
+                                )
                                 for p in generated_prompts_variations[
                                     :num_variations_on_initial
                                 ]
@@ -212,7 +224,9 @@ class PopulationOps:
 
         seed_prompt = (
             chat_prompt.ChatPrompt(
-                messages=max(elites, key=lambda x: x.fitness.values[0])
+                messages=max(elites, key=lambda x: x.fitness.values[0]),
+                tools=best_prompt_so_far.tools,
+                function_map=best_prompt_so_far.function_map,
             )
             if elites
             else best_prompt_so_far

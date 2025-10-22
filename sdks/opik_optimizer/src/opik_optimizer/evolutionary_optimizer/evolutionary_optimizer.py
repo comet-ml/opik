@@ -406,7 +406,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         seed_prompt = (
             chat_prompt.ChatPrompt(
-                messages=max(elites, key=lambda x: x.fitness.values[0])
+                messages=max(elites, key=lambda x: x.fitness.values[0]),
+                tools=best_prompt_so_far.tools,
+                function_map=best_prompt_so_far.function_map,
             )
             if elites
             else best_prompt_so_far
@@ -704,14 +706,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 )
                 best_primary_score_overall = current_best_for_primary.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
-                    messages=current_best_for_primary
+                    messages=current_best_for_primary,
+                    tools=prompt.tools,
+                    function_map=prompt.function_map,
                 )
             else:
                 # Single-objective
                 current_best_on_front = hof[0]
                 best_primary_score_overall = current_best_on_front.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
-                    messages=current_best_on_front
+                    messages=current_best_on_front,
+                    tools=prompt.tools,
+                    function_map=prompt.function_map,
                 )
 
             if self.enable_moo:
@@ -843,7 +849,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     final_results_log += f"  Solution {i + 1}: Primary Score={sol.fitness.values[0]:.4f}, Length={sol.fitness.values[1]:.0f}, Prompt='{str(sol)[:100]}...'\n"
                 best_overall_solution = sorted_hof[0]
                 final_best_prompt = chat_prompt.ChatPrompt(
-                    messages=best_overall_solution
+                    messages=best_overall_solution,
+                    tools=prompt.tools,
+                    function_map=prompt.function_map,
                 )
                 final_primary_score = best_overall_solution.fitness.values[0]
                 final_length = best_overall_solution.fitness.values[1]

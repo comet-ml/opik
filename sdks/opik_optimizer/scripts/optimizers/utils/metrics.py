@@ -1,28 +1,8 @@
-"""
-Hierarchical Reflective Optimizer example on Hotpot dataset using LiteLLM.
-
-This script demonstrates:
-- Using HierarchicalReflectiveOptimizer to systematically improve prompts
-- Creating a custom LLM-as-judge metric for semantic similarity
-- The importance of metrics that provide reasoning for root cause analysis
-- Optimizing prompts with tool calling support
-
-Note: The HierarchicalReflectiveOptimizer requires metrics that return
-ScoreResult with detailed 'reason' fields for effective root cause analysis.
-"""
-
 from typing import Any
+from pydantic import BaseModel
+from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation import models
 import json
-
-import opik  # noqa: E402
-from opik_optimizer import ChatPrompt  # noqa: E402
-from opik_optimizer import HierarchicalReflectiveOptimizer  # noqa: E402
-from opik_optimizer.datasets import hotpot_300  # noqa: E402
-from opik_optimizer.utils import search_wikipedia  # noqa: E402
-
-from opik.evaluation.metrics import base_metric, score_result  # noqa: E402
-from opik.evaluation import models  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
 
 
 # Define structured output for LLM judge
@@ -141,64 +121,3 @@ def answer_correctness_score(
 
     reference_answer = dataset_item.get("answer", "")
     return correctness_metric.score(output=llm_output, reference=reference_answer)
-
-
-# Load dataset
-dataset = hotpot_300()
-
-# Define initial prompt
-system_prompt = """Answer the question with a direct, accurate response.
-You have access to a Wikipedia search tool - use it to find relevant information before answering.
-Provide concise answers based on the search results."""
-
-prompt = ChatPrompt(
-    project_name="HierarchicalReflective-Hotpot",
-    system=system_prompt,
-    user="{question}",
-    tools=[
-        {
-            "type": "function",
-            "function": {
-                "name": "search_wikipedia",
-                "description": "Search Wikipedia for information about a topic. Returns relevant article abstracts.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The search query - a topic, person, place, or concept to look up.",
-                        },
-                    },
-                    "required": ["query"],
-                },
-            },
-        },
-    ],
-    function_map={
-        "search_wikipedia": opik.track(type="tool")(
-            lambda query: search_wikipedia(query, use_api=True)
-        )
-    },
-)
-
-
-# Initialize the Hierarchical Reflective Optimizer
-optimizer = HierarchicalReflectiveOptimizer(
-    model="openai/gpt-4o",  # Model for analysis and improvement
-    n_threads=4,  # Parallel evaluation threads
-    max_parallel_batches=3,  # Batches analyzed concurrently
-    model_parameters={"temperature": 0.7, "max_tokens": 4096},
-    seed=42,
-    verbose=1,  # Show progress
-)
-
-# Run optimization
-optimization_result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=answer_correctness_score,
-    n_samples=50,  # Use 50 samples for evaluation
-    max_retries=2,  # Retry improvements up to 2 times if they don't help
-)
-
-optimization_result.display()

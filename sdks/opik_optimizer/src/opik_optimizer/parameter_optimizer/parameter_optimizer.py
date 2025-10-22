@@ -20,6 +20,7 @@ from ..optimization_result import OptimizationResult
 from .parameter_search_space import ParameterSearchSpace
 from .search_space_types import ParameterType
 from .sensitivity_analysis import compute_sensitivity_from_trials
+from . import reporting
 
 logger = logging.getLogger(__name__)
 
@@ -126,17 +127,55 @@ class ParameterOptimizer(BaseOptimizer):
 
         metric_name = getattr(metric, "__name__", str(metric))
 
-        self.agent_class = self._setup_agent_class(base_prompt, agent_class)
-        baseline_score = self.evaluate_prompt(
-            prompt=base_prompt,
-            dataset=dataset,
-            metric=metric,
-            n_threads=self.n_threads,
-            verbose=self.verbose,
-            experiment_config=experiment_config,
-            n_samples=n_samples,
-            agent_class=self.agent_class,
+        # Create optimization run
+        optimization = self.opik_client.create_optimization(
+            dataset_name=dataset.name,
+            objective_name=metric_name,
+            metadata={"optimizer": self.__class__.__name__},
         )
+        self.current_optimization_id = optimization.id
+        logger.debug(f"Created optimization with ID: {optimization.id}")
+
+        # Display header with optimization link
+        reporting.display_header(
+            algorithm=self.__class__.__name__,
+            optimization_id=optimization.id,
+            dataset_id=dataset.id,
+            verbose=self.verbose,
+        )
+
+        # Display configuration
+        reporting.display_configuration(
+            messages=prompt.get_messages(),
+            optimizer_config={
+                "optimizer": self.__class__.__name__,
+                "n_trials": max_trials
+                if max_trials is not None
+                else self.default_n_trials,
+                "n_samples": n_samples,
+                "n_threads": self.n_threads,
+                "local_search_ratio": self.local_search_ratio,
+                "local_search_scale": self.local_search_scale,
+            },
+            verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
+        )
+
+        self.agent_class = self._setup_agent_class(base_prompt, agent_class)
+
+        # Evaluate baseline with reporting
+        with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+            baseline_score = self.evaluate_prompt(
+                prompt=base_prompt,
+                dataset=dataset,
+                metric=metric,
+                n_threads=self.n_threads,
+                verbose=self.verbose,
+                experiment_config=experiment_config,
+                n_samples=n_samples,
+                agent_class=self.agent_class,
+            )
+            baseline_reporter.set_score(baseline_score)
 
         history: list[dict[str, Any]] = [
             {
@@ -180,8 +219,11 @@ class ParameterOptimizer(BaseOptimizer):
         current_stage = "global"
         stage_records: list[dict[str, Any]] = []
         search_ranges: dict[str, dict[str, Any]] = {}
+        current_best_score = baseline_score
 
         def objective(trial: Trial) -> float:
+            nonlocal current_best_score
+
             sampled_values = current_space.suggest(trial)
             tuned_prompt = parameter_space.apply(
                 prompt,
@@ -189,16 +231,33 @@ class ParameterOptimizer(BaseOptimizer):
                 base_model_kwargs=base_model_kwargs,
             )
             tuned_agent_class = self._setup_agent_class(tuned_prompt, agent_class)
-            score = self.evaluate_prompt(
-                prompt=tuned_prompt,
-                dataset=dataset,
-                metric=metric,
-                n_threads=self.n_threads,
+
+            # Display trial evaluation with parameters
+            with reporting.display_trial_evaluation(
+                trial_number=trial.number,
+                total_trials=total_trials,
+                stage=current_stage,
+                parameters=sampled_values,
                 verbose=self.verbose,
-                experiment_config=experiment_config,
-                n_samples=n_samples,
-                agent_class=tuned_agent_class,
-            )
+            ) as trial_reporter:
+                score = self.evaluate_prompt(
+                    prompt=tuned_prompt,
+                    dataset=dataset,
+                    metric=metric,
+                    n_threads=self.n_threads,
+                    verbose=self.verbose,
+                    experiment_config=experiment_config,
+                    n_samples=n_samples,
+                    agent_class=tuned_agent_class,
+                )
+
+                # Check if this is a new best
+                is_best = score > current_best_score
+                if is_best:
+                    current_best_score = score
+
+                trial_reporter.set_score(score, is_best=is_best)
+
             trial.set_user_attr("parameters", sampled_values)
             trial.set_user_attr(
                 "model_kwargs", copy.deepcopy(tuned_prompt.model_kwargs)
@@ -219,6 +278,20 @@ class ParameterOptimizer(BaseOptimizer):
         search_ranges["global"] = global_range
 
         if global_trials > 0:
+            if self.verbose >= 1:
+                from rich.text import Text
+                from rich.console import Console
+
+                console = Console()
+                console.print("")
+                console.print(Text("> Starting global search phase", style="bold cyan"))
+                console.print(
+                    Text(
+                        f"│ Exploring full parameter space with {global_trials} trials"
+                    )
+                )
+                console.print("")
+
             study.optimize(
                 objective,
                 n_trials=global_trials,
@@ -299,6 +372,22 @@ class ParameterOptimizer(BaseOptimizer):
                 )
                 search_ranges["local"] = local_range
 
+                if self.verbose >= 1:
+                    from rich.text import Text
+                    from rich.console import Console
+
+                    console = Console()
+                    console.print("")
+                    console.print(
+                        Text("> Starting local search phase", style="bold cyan")
+                    )
+                    console.print(
+                        Text(
+                            f"│ Refining around best parameters with {local_trials} trials (scale: {local_scale})"
+                        )
+                    )
+                    console.print("")
+
                 current_space = local_space
                 study.optimize(
                     objective,
@@ -367,6 +456,22 @@ class ParameterOptimizer(BaseOptimizer):
                 completed_trials, parameter_space.parameters
             )
 
+        # Display final results
+        reporting.display_result(
+            initial_score=baseline_score,
+            best_score=best_score,
+            best_prompt=prompt.get_messages(),
+            verbose=self.verbose,
+            tools=getattr(prompt, "tools", None),
+        )
+
+        # Update optimization status to completed
+        try:
+            optimization.update(status="completed")
+            logger.info(f"Optimization {optimization.id} status updated to completed.")
+        except Exception as e:
+            logger.warning(f"Failed to update optimization status: {e}")
+
         details = {
             "initial_score": baseline_score,
             "optimized_parameters": best_parameters,
@@ -400,4 +505,6 @@ class ParameterOptimizer(BaseOptimizer):
             history=history,
             llm_calls=self.llm_call_counter,
             tool_calls=self.tool_call_counter,
+            optimization_id=optimization.id,
+            dataset_id=dataset.id,
         )

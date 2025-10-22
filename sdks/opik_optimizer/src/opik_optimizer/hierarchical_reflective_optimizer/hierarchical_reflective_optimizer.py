@@ -356,7 +356,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         improved_chat_prompt = chat_prompt.ChatPrompt(
             name=prompt.name,
             messages=messages_as_dicts,
-            tools=prompt.tools,
+            tools=best_prompt.tools,
+            function_map=best_prompt.function_map,
         )
 
         # Evaluate improved prompt
@@ -468,9 +469,18 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Multi-iteration optimization loop
         iteration = 0
         previous_iteration_score = initial_score
+        trials_used = 0
 
         for iteration in range(1, max_trials + 1):
             logger.info(f"Starting iteration {iteration}/{max_trials}")
+
+            # Check if we've reached the trial limit
+            if trials_used >= max_trials:
+                logger.info(
+                    f"Reached max_trials limit ({max_trials}). "
+                    f"Stopping after {iteration - 1} iterations and {trials_used} trials."
+                )
+                break
 
             with reporting.display_optimization_iteration(
                 iteration=iteration, verbose=self.verbose
@@ -515,7 +525,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     improved_score = None
 
                     for attempt in range(1, max_attempts + 1):
-                        # Generate and evaluate improvement
+                        # Check if we've reached the trial limit before starting a new trial
+                        if trials_used >= max_trials:
+                            logger.info(
+                                f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
+                                f"Stopping optimization."
+                            )
+                            break
+
+                        # Generate and evaluate improvement (this is 1 trial)
                         (
                             improved_chat_prompt,
                             improved_score,
@@ -532,6 +550,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             attempt=attempt,
                             max_attempts=max_attempts,
                         )
+                        trials_used += 1
 
                         # Check if we got improvement
                         if improved_score > best_score:
@@ -541,7 +560,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             break
 
                         # No improvement - should we retry?
-                        if attempt < max_attempts:
+                        if attempt < max_attempts and trials_used < max_trials:
                             reporting.display_retry_attempt(
                                 attempt=attempt,
                                 max_attempts=max_attempts,
@@ -552,6 +571,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             logger.debug(
                                 f"No improvement after {attempt} attempts for '{root_cause.name}'"
                             )
+
+                    # Break out of failure mode loop if we've hit trial limit
+                    if trials_used >= max_trials:
+                        break
 
                     # Check if final result is an improvement
                     if (
@@ -641,6 +664,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "max_trials": max_trials,
             "convergence_threshold": self.convergence_threshold,
             "iterations_completed": iteration,
+            "trials_used": trials_used,
         }
 
         # Extract tool prompts if tools exist

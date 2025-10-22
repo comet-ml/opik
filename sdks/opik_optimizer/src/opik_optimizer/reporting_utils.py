@@ -54,35 +54,44 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
 
     from opik.evaluation import report
 
+    # Store original functions
+    original_display_experiment_results = report.display_experiment_results
+    original_display_experiment_link = report.display_experiment_link
+
+    # Replace with no-ops
     report.display_experiment_results = lambda *args, **kwargs: None
     report.display_experiment_link = lambda *args, **kwargs: None
 
     try:
         yield
     finally:
+        # Restore everything
         opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
+        report.display_experiment_results = original_display_experiment_results
+        report.display_experiment_link = original_display_experiment_link
 
 
 @contextmanager
 def suppress_opik_logs() -> Any:
     """Suppress Opik startup logs by temporarily increasing the log level."""
-    # Optimizer log level
-    optimizer_logger = logging.getLogger("opik_optimizer")
+    # Get all loggers we need to suppress
+    opik_client_logger = logging.getLogger("opik.api_objects.opik_client")
+    opik_logger = logging.getLogger("opik")
 
-    # Get the Opik logger
-    opik_logger = logging.getLogger("opik.api_objects.opik_client")
+    # Store original log levels
+    original_client_level = opik_client_logger.level
+    original_opik_level = opik_logger.level
 
-    # Store original log level
-    original_level = opik_logger.level
-
-    # Set log level to ERROR to suppress INFO messages
-    opik_logger.setLevel(optimizer_logger.level)
+    # Set log level to WARNING to suppress INFO messages
+    opik_client_logger.setLevel(logging.WARNING)
+    opik_logger.setLevel(logging.WARNING)
 
     try:
         yield
     finally:
-        # Restore original log level
-        opik_logger.setLevel(original_level)
+        # Restore original log levels
+        opik_client_logger.setLevel(original_client_level)
+        opik_logger.setLevel(original_opik_level)
 
 
 def display_messages(messages: list[dict[str, str]], prefix: str = "") -> None:

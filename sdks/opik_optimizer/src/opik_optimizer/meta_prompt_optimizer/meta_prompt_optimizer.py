@@ -970,6 +970,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                             chat_prompt.ChatPrompt(
                                 system=item["prompt"][0]["content"],
                                 user=user_text,
+                                tools=current_prompt.tools,
+                                function_map=current_prompt.function_map,
                             )
                         )
 
