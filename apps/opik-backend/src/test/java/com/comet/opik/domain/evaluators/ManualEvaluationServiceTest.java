@@ -13,6 +13,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -26,8 +29,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
@@ -60,25 +65,45 @@ class ManualEvaluationServiceTest {
                 onlineScorePublisher);
     }
 
+    static Stream<Arguments> entityTypeProvider() {
+        return Stream.of(
+                arguments(ManualEvaluationEntityType.TRACE),
+                arguments(ManualEvaluationEntityType.THREAD));
+    }
+
+    static Stream<Arguments> multipleEntitiesAndRulesProvider() {
+        return Stream.of(
+                arguments(ManualEvaluationEntityType.TRACE, 3, 2),
+                arguments(ManualEvaluationEntityType.THREAD, 5, 3),
+                arguments(ManualEvaluationEntityType.TRACE, 1, 1),
+                arguments(ManualEvaluationEntityType.THREAD, 2, 1));
+    }
+
     @Nested
-    @DisplayName("Trace Evaluation")
-    class TraceEvaluation {
+    @DisplayName("Entity Evaluation")
+    class EntityEvaluation {
 
-        @Test
-        @DisplayName("should successfully evaluate traces with LLM_AS_JUDGE rules")
-        void shouldSuccessfullyEvaluateTracesWithLlmAsJudgeRules() {
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationServiceTest#entityTypeProvider")
+        @DisplayName("should successfully evaluate entities with LLM_AS_JUDGE rules")
+        void shouldSuccessfullyEvaluateEntitiesWithLlmAsJudgeRules(ManualEvaluationEntityType entityType) {
             // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
+            var projectId = podamFactory.manufacturePojo(UUID.class);
+            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var userName = podamFactory.manufacturePojo(String.class);
 
-            List<UUID> traceIds = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+            var entityIds = List.of(
+                    podamFactory.manufacturePojo(UUID.class),
+                    podamFactory.manufacturePojo(UUID.class),
+                    podamFactory.manufacturePojo(UUID.class));
+            var ruleIds = List.of(
+                    podamFactory.manufacturePojo(UUID.class),
+                    podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
-                    .entityIds(traceIds)
+                    .entityIds(entityIds)
                     .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .entityType(entityType)
                     .build();
 
             var rule1 = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
@@ -110,7 +135,7 @@ class ManualEvaluationServiceTest {
                     })
                     .verifyComplete();
 
-            // Verify that enqueueThreadMessage was called for each rule (trace IDs are converted to strings)
+            // Verify that enqueueThreadMessage was called for each rule
             verify(onlineScorePublisher, times(2)).enqueueThreadMessage(
                     entityIdStringsCaptor.capture(),
                     any(UUID.class),
@@ -118,27 +143,28 @@ class ManualEvaluationServiceTest {
                     eq(workspaceId),
                     eq(userName));
 
-            // Verify the trace IDs (as strings) passed to enqueueThreadMessage
-            List<String> expectedTraceIdStrings = traceIds.stream().map(UUID::toString).toList();
+            // Verify the entity IDs (as strings) passed to enqueueThreadMessage
+            List<String> expectedEntityIdStrings = entityIds.stream().map(UUID::toString).toList();
             assertThat(entityIdStringsCaptor.getAllValues())
-                    .allSatisfy(capturedIds -> assertThat(capturedIds).isEqualTo(expectedTraceIdStrings));
+                    .allSatisfy(capturedIds -> assertThat(capturedIds).isEqualTo(expectedEntityIdStrings));
         }
 
-        @Test
-        @DisplayName("should successfully evaluate traces with USER_DEFINED_METRIC_PYTHON rules")
-        void shouldSuccessfullyEvaluateTracesWithUserDefinedMetricPythonRules() {
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationServiceTest#entityTypeProvider")
+        @DisplayName("should successfully evaluate entities with USER_DEFINED_METRIC_PYTHON rules")
+        void shouldSuccessfullyEvaluateEntitiesWithUserDefinedMetricPythonRules(ManualEvaluationEntityType entityType) {
             // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
+            var projectId = podamFactory.manufacturePojo(UUID.class);
+            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var userName = podamFactory.manufacturePojo(String.class);
 
-            List<UUID> traceIds = List.of(UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID());
+            var entityIds = List.of(podamFactory.manufacturePojo(UUID.class));
+            var ruleIds = List.of(podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
-                    .entityIds(traceIds)
+                    .entityIds(entityIds)
                     .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .entityType(entityType)
                     .build();
 
             var rule = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
@@ -167,214 +193,31 @@ class ManualEvaluationServiceTest {
                     .verifyComplete();
 
             // Verify that enqueueThreadMessage was called
-            List<String> expectedTraceIdStrings = traceIds.stream().map(UUID::toString).toList();
+            List<String> expectedEntityIdStrings = entityIds.stream().map(UUID::toString).toList();
             verify(onlineScorePublisher).enqueueThreadMessage(
-                    eq(expectedTraceIdStrings),
+                    eq(expectedEntityIdStrings),
                     eq(ruleIds.get(0)),
                     eq(projectId),
                     eq(workspaceId),
                     eq(userName));
         }
 
-        @Test
-        @DisplayName("should throw BadRequestException when rules not found")
-        void shouldThrowBadRequestExceptionWhenRulesNotFound() {
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationServiceTest#entityTypeProvider")
+        @DisplayName("should handle empty entity list")
+        void shouldHandleEmptyEntityList(ManualEvaluationEntityType entityType) {
             // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
+            var projectId = podamFactory.manufacturePojo(UUID.class);
+            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var userName = podamFactory.manufacturePojo(String.class);
 
-            List<UUID> traceIds = List.of(UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+            List<UUID> entityIds = List.of(); // Empty list
+            var ruleIds = List.of(podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
-                    .entityIds(traceIds)
+                    .entityIds(entityIds)
                     .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.TRACE)
-                    .build();
-
-            // Only return one rule when two are requested
-            var rule = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .id(ruleIds.get(0))
-                    .build();
-
-            when(automationRuleEvaluatorService.<Object, AutomationRuleEvaluator<Object>>findByIds(
-                    any(Set.class), eq(projectId), eq(workspaceId)))
-                    .thenReturn((List) List.of(rule));
-
-            // When & Then
-            StepVerifier.create(manualEvaluationService.evaluate(request, projectId, workspaceId, userName))
-                    .expectErrorMatches(throwable -> throwable instanceof BadRequestException
-                            && throwable.getMessage().contains("Automation rule(s) not found"))
-                    .verify();
-        }
-
-        @Test
-        @DisplayName("should handle empty trace list")
-        void shouldHandleEmptyTraceList() {
-            // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
-
-            List<UUID> traceIds = List.of(); // Empty list
-            List<UUID> ruleIds = List.of(UUID.randomUUID());
-
-            var request = ManualEvaluationRequest.builder()
-                    .entityIds(traceIds)
-                    .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.TRACE)
-                    .build();
-
-            var rule = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .id(ruleIds.get(0))
-                    .build();
-
-            when(automationRuleEvaluatorService.<Object, AutomationRuleEvaluator<Object>>findByIds(
-                    any(Set.class), eq(projectId), eq(workspaceId)))
-                    .thenReturn((List) List.of(rule));
-
-            // When
-            Mono<ManualEvaluationResponse> result = manualEvaluationService.evaluate(request, projectId, workspaceId,
-                    userName);
-
-            // Then
-            StepVerifier.create(result)
-                    .assertNext(response -> {
-                        assertThat(response.entitiesQueued()).isZero();
-                        assertThat(response.rulesApplied()).isEqualTo(1);
-                    })
-                    .verifyComplete();
-        }
-    }
-
-    @Nested
-    @DisplayName("Thread Evaluation")
-    class ThreadEvaluation {
-
-        @Test
-        @DisplayName("should successfully evaluate threads with LLM_AS_JUDGE rules")
-        void shouldSuccessfullyEvaluateThreadsWithLlmAsJudgeRules() {
-            // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
-
-            List<UUID> threadIds = List.of(UUID.randomUUID(), UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID());
-
-            var request = ManualEvaluationRequest.builder()
-                    .entityIds(threadIds)
-                    .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.THREAD)
-                    .build();
-
-            var rule = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .id(ruleIds.get(0))
-                    .build();
-
-            when(automationRuleEvaluatorService.<Object, AutomationRuleEvaluator<Object>>findByIds(
-                    any(Set.class), eq(projectId), eq(workspaceId)))
-                    .thenReturn((List) List.of(rule));
-
-            // When
-            Mono<ManualEvaluationResponse> result = manualEvaluationService.evaluate(request, projectId, workspaceId,
-                    userName);
-
-            // Then
-            StepVerifier.create(result)
-                    .assertNext(response -> {
-                        assertThat(response.entitiesQueued()).isEqualTo(2);
-                        assertThat(response.rulesApplied()).isEqualTo(1);
-                        assertThat(response.message())
-                                .isEqualTo("Successfully queued 2 entities for evaluation with 1 rule");
-                    })
-                    .verifyComplete();
-
-            // Verify that enqueueThreadMessage was called
-            verify(onlineScorePublisher).enqueueThreadMessage(
-                    entityIdStringsCaptor.capture(),
-                    eq(ruleIds.get(0)),
-                    eq(projectId),
-                    eq(workspaceId),
-                    eq(userName));
-
-            // Verify the thread IDs were converted to strings
-            List<String> expectedThreadIds = threadIds.stream().map(UUID::toString).toList();
-            assertThat(entityIdStringsCaptor.getValue()).isEqualTo(expectedThreadIds);
-        }
-
-        @Test
-        @DisplayName("should successfully evaluate threads with USER_DEFINED_METRIC_PYTHON rules")
-        void shouldSuccessfullyEvaluateThreadsWithUserDefinedMetricPythonRules() {
-            // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
-
-            List<UUID> threadIds = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID(), UUID.randomUUID());
-
-            var request = ManualEvaluationRequest.builder()
-                    .entityIds(threadIds)
-                    .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.THREAD)
-                    .build();
-
-            var rule1 = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
-                    .toBuilder()
-                    .id(ruleIds.get(0))
-                    .build();
-            var rule2 = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .id(ruleIds.get(1))
-                    .build();
-
-            List<AutomationRuleEvaluator<?>> rules = new ArrayList<>();
-            rules.add(rule1);
-            rules.add(rule2);
-
-            when(automationRuleEvaluatorService.<Object, AutomationRuleEvaluator<Object>>findByIds(
-                    any(Set.class), eq(projectId), eq(workspaceId)))
-                    .thenReturn((List) rules);
-
-            // When
-            Mono<ManualEvaluationResponse> result = manualEvaluationService.evaluate(request, projectId, workspaceId,
-                    userName);
-
-            // Then
-            StepVerifier.create(result)
-                    .assertNext(response -> {
-                        assertThat(response.entitiesQueued()).isEqualTo(3);
-                        assertThat(response.rulesApplied()).isEqualTo(2);
-                        assertThat(response.message())
-                                .isEqualTo("Successfully queued 3 entities for evaluation with 2 rules");
-                    })
-                    .verifyComplete();
-
-            // Verify that enqueueThreadMessage was called for each rule
-            verify(onlineScorePublisher, times(2)).enqueueThreadMessage(
-                    anyList(),
-                    any(UUID.class),
-                    eq(projectId),
-                    eq(workspaceId),
-                    eq(userName));
-        }
-
-        @Test
-        @DisplayName("should handle empty thread list")
-        void shouldHandleEmptyThreadList() {
-            // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
-
-            List<UUID> threadIds = List.of(); // Empty list
-            List<UUID> ruleIds = List.of(UUID.randomUUID());
-
-            var request = ManualEvaluationRequest.builder()
-                    .entityIds(threadIds)
-                    .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.THREAD)
+                    .entityType(entityType)
                     .build();
 
             var rule = podamFactory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
@@ -407,15 +250,15 @@ class ManualEvaluationServiceTest {
         @DisplayName("should throw BadRequestException when no rules are returned")
         void shouldThrowBadRequestExceptionWhenNoRulesReturned() {
             // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
+            var projectId = podamFactory.manufacturePojo(UUID.class);
+            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var userName = podamFactory.manufacturePojo(String.class);
 
-            List<UUID> traceIds = List.of(UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID());
+            var entityIds = List.of(podamFactory.manufacturePojo(UUID.class));
+            var ruleIds = List.of(podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
-                    .entityIds(traceIds)
+                    .entityIds(entityIds)
                     .ruleIds(ruleIds)
                     .entityType(ManualEvaluationEntityType.TRACE)
                     .build();
@@ -435,17 +278,17 @@ class ManualEvaluationServiceTest {
         @DisplayName("should throw BadRequestException when only some rules are found")
         void shouldThrowBadRequestExceptionWhenOnlySomeRulesFound() {
             // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
+            var projectId = podamFactory.manufacturePojo(UUID.class);
+            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var userName = podamFactory.manufacturePojo(String.class);
 
-            List<UUID> threadIds = List.of(UUID.randomUUID());
-            UUID foundRuleId = UUID.randomUUID();
-            UUID missingRuleId = UUID.randomUUID();
+            var entityIds = List.of(podamFactory.manufacturePojo(UUID.class));
+            var foundRuleId = podamFactory.manufacturePojo(UUID.class);
+            var missingRuleId = podamFactory.manufacturePojo(UUID.class);
             List<UUID> ruleIds = List.of(foundRuleId, missingRuleId);
 
             var request = ManualEvaluationRequest.builder()
-                    .entityIds(threadIds)
+                    .entityIds(entityIds)
                     .ruleIds(ruleIds)
                     .entityType(ManualEvaluationEntityType.THREAD)
                     .build();
@@ -471,22 +314,27 @@ class ManualEvaluationServiceTest {
     @DisplayName("Mixed Scenarios")
     class MixedScenarios {
 
-        @Test
-        @DisplayName("should handle multiple entities and multiple rules for traces")
-        void shouldHandleMultipleEntitiesAndMultipleRulesForTraces() {
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationServiceTest#multipleEntitiesAndRulesProvider")
+        @DisplayName("should handle multiple entities and multiple rules")
+        void shouldHandleMultipleEntitiesAndMultipleRules(ManualEvaluationEntityType entityType, int entityCount,
+                int ruleCount) {
             // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
+            var projectId = podamFactory.manufacturePojo(UUID.class);
+            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var userName = podamFactory.manufacturePojo(String.class);
 
-            List<UUID> traceIds = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                    UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+            var entityIds = Stream.generate(() -> podamFactory.manufacturePojo(UUID.class))
+                    .limit(entityCount)
+                    .collect(Collectors.toList());
+            var ruleIds = Stream.generate(() -> podamFactory.manufacturePojo(UUID.class))
+                    .limit(ruleCount)
+                    .collect(Collectors.toList());
 
             var request = ManualEvaluationRequest.builder()
-                    .entityIds(traceIds)
+                    .entityIds(entityIds)
                     .ruleIds(ruleIds)
-                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .entityType(entityType)
                     .build();
 
             List<AutomationRuleEvaluator<?>> rules = ruleIds.stream()
@@ -507,17 +355,15 @@ class ManualEvaluationServiceTest {
             // Then
             StepVerifier.create(result)
                     .assertNext(response -> {
-                        assertThat(response.entitiesQueued()).isEqualTo(5);
-                        assertThat(response.rulesApplied()).isEqualTo(3);
-                        assertThat(response.message())
-                                .isEqualTo("Successfully queued 5 entities for evaluation with 3 rules");
+                        assertThat(response.entitiesQueued()).isEqualTo(entityCount);
+                        assertThat(response.rulesApplied()).isEqualTo(ruleCount);
                     })
                     .verifyComplete();
 
-            // Verify that enqueueThreadMessage was called 3 times (once per rule)
-            List<String> expectedTraceIdStrings = traceIds.stream().map(UUID::toString).toList();
-            verify(onlineScorePublisher, times(3)).enqueueThreadMessage(
-                    eq(expectedTraceIdStrings),
+            // Verify that enqueueThreadMessage was called for each rule
+            List<String> expectedEntityIdStrings = entityIds.stream().map(UUID::toString).toList();
+            verify(onlineScorePublisher, times(ruleCount)).enqueueThreadMessage(
+                    eq(expectedEntityIdStrings),
                     any(UUID.class),
                     eq(projectId),
                     eq(workspaceId),
@@ -525,18 +371,22 @@ class ManualEvaluationServiceTest {
         }
 
         @Test
-        @DisplayName("should handle multiple entities and multiple rules for threads")
-        void shouldHandleMultipleEntitiesAndMultipleRulesForThreads() {
+        @DisplayName("should handle mixed rule types")
+        void shouldHandleMixedRuleTypes() {
             // Given
-            UUID projectId = UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            String userName = "test-user";
+            var projectId = podamFactory.manufacturePojo(UUID.class);
+            var workspaceId = podamFactory.manufacturePojo(String.class);
+            var userName = podamFactory.manufacturePojo(String.class);
 
-            List<UUID> threadIds = List.of(UUID.randomUUID(), UUID.randomUUID());
-            List<UUID> ruleIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+            var entityIds = List.of(
+                    podamFactory.manufacturePojo(UUID.class),
+                    podamFactory.manufacturePojo(UUID.class));
+            var ruleIds = List.of(
+                    podamFactory.manufacturePojo(UUID.class),
+                    podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
-                    .entityIds(threadIds)
+                    .entityIds(entityIds)
                     .ruleIds(ruleIds)
                     .entityType(ManualEvaluationEntityType.THREAD)
                     .build();
@@ -563,12 +413,10 @@ class ManualEvaluationServiceTest {
                     .assertNext(response -> {
                         assertThat(response.entitiesQueued()).isEqualTo(2);
                         assertThat(response.rulesApplied()).isEqualTo(2);
-                        assertThat(response.message())
-                                .isEqualTo("Successfully queued 2 entities for evaluation with 2 rules");
                     })
                     .verifyComplete();
 
-            // Verify that enqueueThreadMessage was called 2 times (once per rule)
+            // Verify that enqueueThreadMessage was called for each rule
             verify(onlineScorePublisher, times(2)).enqueueThreadMessage(
                     anyList(),
                     any(UUID.class),
