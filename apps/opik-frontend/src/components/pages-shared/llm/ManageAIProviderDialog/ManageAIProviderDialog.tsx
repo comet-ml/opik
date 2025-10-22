@@ -123,21 +123,23 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       : "Add configuration"
     : "Done";
 
-  const cloudConfigHandler = useCallback(() => {
-    const apiKey = form.getValues("apiKey");
-    const url = form.getValues("url");
-    const location = form.getValues("location");
-    const providerName = form.getValues("providerName");
-    const models = convertCustomProviderModels(
-      form.getValues("models") ?? "",
-      true,
-    );
+  const cloudConfigHandler = useCallback((data: AIProviderFormType) => {
+    // Use the validated data passed from form.handleSubmit instead of form.getValues()
+    const apiKey = data.apiKey;
+    const url = "url" in data ? data.url : "";
+    const location = "location" in data ? data.location : "";
+    const providerName = "providerName" in data ? data.providerName : "";
+    const modelsRaw = "models" in data ? (data.models ?? "") : "";
+    const models = convertCustomProviderModels(modelsRaw, true);
     
     // Determine the actual provider type
-    const actualProvider = calculatedProviderKey?.provider || 
-      (Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE)
-        ? (provider as PROVIDER_TYPE)
-        : PROVIDER_TYPE.CUSTOM);
+    // If isAddingCustomProvider is true, we know it's a custom provider
+    const actualProvider = isAddingCustomProvider
+      ? PROVIDER_TYPE.CUSTOM
+      : (calculatedProviderKey?.provider || 
+        (Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE)
+          ? (provider as PROVIDER_TYPE)
+          : PROVIDER_TYPE.CUSTOM));
     
     const isVertex = actualProvider === PROVIDER_TYPE.VERTEX_AI;
     const isCustom = actualProvider === PROVIDER_TYPE.CUSTOM;
@@ -160,7 +162,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           ...(configuration && { configuration }),
         },
       });
-    } else if (provider) {
+    } else if (provider || isAddingCustomProvider) {
+      // Use provider from form or isAddingCustomProvider flag for new providers
       if (isFunction(onAddProvider)) {
         onAddProvider(actualProvider);
       }
@@ -186,7 +189,20 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     updateMutate,
     onAddProvider,
     createMutate,
+    isAddingCustomProvider,
   ]);
+
+  const handleSubmitClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    
+    // Ensure provider field is set before validation when adding custom provider
+    if (isAddingCustomProvider && form.getValues("provider") !== PROVIDER_TYPE.CUSTOM) {
+      form.setValue("provider", PROVIDER_TYPE.CUSTOM);
+    }
+    
+    // Trigger form submission with validation and pass validated data to handler
+    form.handleSubmit(cloudConfigHandler)();
+  }, [form, isAddingCustomProvider, cloudConfigHandler]);
 
   const deleteProviderKeyHandler = useCallback(() => {
     if (calculatedProviderKey) {
@@ -202,23 +218,28 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const handleAddCustomProvider = useCallback(() => {
     setIsAddingCustomProvider(true);
-    form.reset({
-      provider: PROVIDER_TYPE.CUSTOM,
-      apiKey: "",
-      location: "",
-      url: "",
-      providerName: "",
-      models: "",
-    } as AIProviderFormType);
+    // Set provider value without resetting other fields
+    // This allows the form to properly track changes to providerName, url, and models
+    form.setValue("provider", PROVIDER_TYPE.CUSTOM, { shouldDirty: true, shouldTouch: true });
   }, [form]);
+  
+  // Reset isAddingCustomProvider when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setIsAddingCustomProvider(false);
+    }
+  }, [open]);
 
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
       return <VertexAIProviderDetails form={form} />;
     }
 
-    // Check if provider is CUSTOM_LLM type or a custom provider ID
+    // When adding a custom provider, the form.reset() might not have updated the watched
+    // provider value yet, so we need to check the isAddingCustomProvider flag
+    // Check if provider is CUSTOM_LLM type or a custom provider ID (UUID)
     const isCustomProvider =
+      isAddingCustomProvider ||
       provider === PROVIDER_TYPE.CUSTOM ||
       (provider &&
         !Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE));
@@ -344,7 +365,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(cloudConfigHandler)}>
+          <Button type="submit" onClick={handleSubmitClick}>
             {buttonText}
           </Button>
         </DialogFooter>
