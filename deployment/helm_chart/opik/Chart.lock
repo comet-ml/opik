@@ -3,8 +3,8 @@ dependencies:
   repository: https://charts.bitnami.com/bitnami
   version: 11.1.9
 - name: zookeeper
-  repository: https://charts.bitnami.com/bitnami
-  version: 13.8.3
+  repository: oci://registry-1.docker.io/cloudpirates
+  version: 0.2.0
 - name: redis
   repository: https://charts.bitnami.com/bitnami
   version: 18.19.2
@@ -17,5 +17,5 @@ dependencies:
 - name: common
   repository: oci://registry-1.docker.io/bitnamicharts
   version: 2.31.4
-digest: sha256:7052bd5e933f7a6e5f7f23ca138c1af61918f94b59c19537b4a2502f65204745
-generated: "2025-10-05T18:13:42.961122+03:00"
+digest: sha256:ba356df2519c0b7e965eeea3ee64a48dff502ea60c7debdc76bf698c64de6163
+generated: "2025-10-22T16:21:06.702401+03:00"
