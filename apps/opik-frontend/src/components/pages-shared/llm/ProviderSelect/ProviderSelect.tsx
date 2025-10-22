@@ -130,6 +130,12 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       const Icon = PROVIDERS[value as PROVIDER_TYPE]?.icon;
       const label = PROVIDERS[value as PROVIDER_TYPE]?.label;
 
+      // If Icon or label is undefined, it means the provider was deleted or is invalid
+      // Fall back to placeholder
+      if (!Icon || !label) {
+        return <SelectValue placeholder="Select a provider" />;
+      }
+
       return (
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
@@ -149,13 +155,10 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     }
 
     const isAddCustom = option.isAddCustom || false;
-    const isCustomProvider = option.isCustomProvider || false;
-    const Icon = isAddCustom
-      ? Plus
-      : isCustomProvider
-      ? PROVIDERS[PROVIDER_TYPE.CUSTOM].icon
-      : PROVIDERS[option.value as PROVIDER_TYPE]?.icon;
     const isConfigured = option.configured || false;
+    
+    // Use the icon from the option if it exists, otherwise look it up
+    const Icon = option.icon || PROVIDERS[option.value as PROVIDER_TYPE]?.icon;
 
     return (
       <SelectItem
