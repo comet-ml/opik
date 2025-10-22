@@ -51,9 +51,7 @@ def track_crewai(
 
 
 def _patch_litellm_completion(project_name: Optional[str] = None) -> None:
-    litellm.completion = track_completion(project_name=project_name)(
-        litellm.completion
-    )
+    litellm.completion = track_completion(project_name=project_name)(litellm.completion)
     litellm.acompletion = track_completion(project_name=project_name)(
         litellm.acompletion
     )

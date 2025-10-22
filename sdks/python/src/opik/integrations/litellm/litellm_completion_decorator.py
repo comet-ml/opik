@@ -145,7 +145,9 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         # Filter out sensitive parameters before logging
         filtered_kwargs = {
-            key: value for key, value in kwargs.items() if key not in SENSITIVE_PARAMS_TO_EXCLUDE
+            key: value
+            for key, value in kwargs.items()
+            if key not in SENSITIVE_PARAMS_TO_EXCLUDE
         }
 
         input_data, new_metadata = dict_utils.split_dict_by_keys(
