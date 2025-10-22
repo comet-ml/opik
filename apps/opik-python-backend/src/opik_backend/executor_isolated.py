@@ -409,21 +409,18 @@ class IsolatedSubprocessExecutor:
             self.logger.info("No active processes to terminate")
             return
         
-        # Distribute timeout across all processes
-        per_process_timeout = max(1, timeout // len(pids)) if pids else timeout
-        
         # Kill processes in parallel using ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=len(pids)) as executor:
             futures = [
-                executor.submit(self.kill_process, pid, per_process_timeout)
+                executor.submit(self.kill_process, pid, timeout)
                 for pid in pids
             ]
             # Wait for all to complete (with timeout for safety)
             for future in futures:
                 try:
-                    future.result(timeout=per_process_timeout + 1)
+                    future.result(timeout=timeout)
                 except Exception as e:
-                    self.logger.error(f"Error waiting for kill_process result: {e}")
+                    self.logger.warning(f"Error waiting for kill_process result: {e}")
         
         self.logger.info("All active processes terminated")
 
