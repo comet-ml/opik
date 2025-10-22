@@ -77,7 +77,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const hasPrompts = useMemo(() => {
     const prompts = get(data.metadata, "opik_prompts", null);
     if (!prompts) return false;
-    if (Array.isArray(prompts)) return (prompts as any[]).length > 0;
+    if (Array.isArray(prompts)) return (prompts as unknown[]).length > 0;
     return false; // opik_prompts should always be an array
   }, [data.metadata]);
 

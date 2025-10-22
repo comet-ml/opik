@@ -10,6 +10,12 @@ import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighl
 import get from "lodash/get";
 import { MessageSquareMore } from "lucide-react";
 
+type PromptInfoDict = {
+  name: string;
+  prompt: string;
+  commit?: string;
+};
+
 type PromptsTabProps = {
   data: Trace | Span;
   search?: string;
@@ -23,7 +29,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
 
   const hasPrompts = useMemo(() => {
     if (!prompts) return false;
-    if (Array.isArray(prompts)) return (prompts as any[]).length > 0;
+    if (Array.isArray(prompts)) return (prompts as PromptInfoDict[]).length > 0;
     return false; // opik_prompts should always be an array
   }, [prompts]);
 
@@ -33,7 +39,8 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
         <div className="text-center">
           <p className="comet-body-s">No prompts found in metadata</p>
           <p className="comet-body-xs text-muted-slate">
-            Prompts will appear here when they are included in the trace or span metadata
+            Prompts will appear here when they are included in the trace or span
+            metadata
           </p>
         </div>
       </div>
@@ -43,40 +50,47 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   const renderPrompts = () => {
     if (!prompts || !Array.isArray(prompts)) return null;
 
-    return (prompts as any[]).map((promptInfo: any, index: number) => {
-      // Handle PromptInfoDict structure: {name, prompt, commit?}
-      const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-      const promptContent = promptInfo?.prompt || promptInfo;
-      const commitHash = promptInfo?.commit;
+    return (prompts as PromptInfoDict[]).map(
+      (promptInfo: PromptInfoDict, index: number) => {
+        // Handle PromptInfoDict structure: {name, prompt, commit?}
+        const promptName = promptInfo?.name || `Prompt ${index + 1}`;
+        const promptContent = promptInfo?.prompt || promptInfo;
+        const commitHash = promptInfo?.commit;
 
-      return (
-        <AccordionItem key={index} value={`prompt-${index}`}>
-          <AccordionTrigger>
-            <div className="flex items-center gap-2">
-              <MessageSquareMore className="size-4 shrink-0 text-muted-slate" />
-              <div className="flex flex-col items-start">
-                <span>{promptName}</span>
+        return (
+          <AccordionItem key={index} value={`prompt-${index}`}>
+            <AccordionTrigger>
+              <div className="flex items-center gap-2">
+                <MessageSquareMore className="size-4 shrink-0 text-muted-slate" />
+                <div className="flex flex-col items-start">
+                  <span>{promptName}</span>
+                  {commitHash && (
+                    <span className="font-mono text-xs text-muted-slate">
+                      {commitHash.substring(0, 8)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2">
+                <SyntaxHighlighter
+                  withSearch
+                  data={promptContent as object}
+                  search={search}
+                />
                 {commitHash && (
-                  <span className="text-xs text-muted-slate font-mono">
-                    {commitHash.substring(0, 8)}
-                  </span>
+                  <div className="border-t pt-2 text-xs text-muted-slate">
+                    <strong>Commit:</strong>{" "}
+                    <code className="font-mono">{commitHash}</code>
+                  </div>
                 )}
               </div>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-2">
-              <SyntaxHighlighter withSearch data={promptContent} search={search} />
-              {commitHash && (
-                <div className="text-xs text-muted-slate border-t pt-2">
-                  <strong>Commit:</strong> <code className="font-mono">{commitHash}</code>
-                </div>
-              )}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      );
-    });
+            </AccordionContent>
+          </AccordionItem>
+        );
+      },
+    );
   };
 
   return (
