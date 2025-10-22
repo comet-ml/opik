@@ -82,6 +82,10 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import {
+  USER_FEEDBACK_COLUMN_ID,
+  USER_FEEDBACK_NAME,
+} from "@/constants/shared";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -120,7 +124,11 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", COLUMN_COMMENTS_ID];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "id",
+  COLUMN_COMMENTS_ID,
+  USER_FEEDBACK_COLUMN_ID,
+];
 
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
@@ -415,7 +423,19 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
 
   const scoresColumnsData = useMemo(() => {
-    return dynamicScoresColumns.map(
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: DynamicColumn = {
+      id: USER_FEEDBACK_COLUMN_ID,
+      label: USER_FEEDBACK_NAME,
+      columnType: COLUMN_TYPE.number,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
+    );
+
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -423,7 +443,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
           header: FeedbackScoreHeader as never,
           cell: CompareExperimentsFeedbackScoreCell as never,
-          statisticKey: `feedback_scores.${label}`,
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
           customMeta: {
             experimentsIds,
             feedbackKey: label,
@@ -690,6 +710,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         setExpandedCommentSections([String(idx)]);
       },
       columnsStatistic,
+      enableUserFeedbackEditing: true,
     }),
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
