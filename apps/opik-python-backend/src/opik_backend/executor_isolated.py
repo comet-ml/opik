@@ -6,6 +6,7 @@ import resource
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Callable, List
 from threading import Lock
 
@@ -367,11 +368,15 @@ class IsolatedSubprocessExecutor:
             bool: True if process was terminated, False if not found
         """
         try:
-            process = next((p for p in self._active_processes if p.pid == pid), None)
-            if process is None:
-                self.logger.warning(f"Process with PID {pid} not found in active processes")
-                return False
+            # Atomically find and remove process from active list
+            with self._process_lock:
+                process = next((p for p in self._active_processes if p.pid == pid), None)
+                if process is None:
+                    self.logger.warning(f"Process with PID {pid} not found in active processes")
+                    return False
+                self._active_processes.remove(process)
             
+            # Now kill the process (outside lock to avoid long hold times)
             process.terminate()
             try:
                 process.wait(timeout=timeout)
@@ -384,7 +389,6 @@ class IsolatedSubprocessExecutor:
             # Close log collector after process is terminated to capture any final logs
             self._close_log_collector(pid)
             
-            self._active_processes.remove(process)
             return True
         except Exception as e:
             self.logger.error(f"Error killing process {pid}: {e}")
@@ -392,13 +396,14 @@ class IsolatedSubprocessExecutor:
 
     def kill_all_processes(self, timeout: int = 2):
         """
-        Terminate all active processes.
+        Terminate all active processes in parallel.
 
         Args:
             timeout: Total seconds to wait for all processes (distributed across them)
         """
         # Collect PIDs first to avoid modification during iteration
-        pids = [p.pid for p in list(self._active_processes)]
+        with self._process_lock:
+            pids = [p.pid for p in list(self._active_processes)]
         
         if not pids:
             self.logger.info("No active processes to terminate")
@@ -407,12 +412,18 @@ class IsolatedSubprocessExecutor:
         # Distribute timeout across all processes
         per_process_timeout = max(1, timeout // len(pids)) if pids else timeout
         
-        # Use kill_process for each to avoid code duplication and ensure consistent cleanup
-        for pid in pids:
-            try:
-                self.kill_process(pid, timeout=per_process_timeout)
-            except Exception as e:
-                self.logger.error(f"Error killing process {pid}: {e}")
+        # Kill processes in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(pids)) as executor:
+            futures = [
+                executor.submit(self.kill_process, pid, per_process_timeout)
+                for pid in pids
+            ]
+            # Wait for all to complete (with timeout for safety)
+            for future in futures:
+                try:
+                    future.result(timeout=per_process_timeout + 1)
+                except Exception as e:
+                    self.logger.error(f"Error waiting for kill_process result: {e}")
         
         self.logger.info("All active processes terminated")
 
