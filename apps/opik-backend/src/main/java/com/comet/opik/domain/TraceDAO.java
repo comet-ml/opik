@@ -440,6 +440,7 @@ class TraceDAOImpl implements TraceDAO {
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
                 toInt64(countIf(s.type = 'llm')) AS llm_span_count,
+                arraySort(groupUniqArrayIf(s.provider, s.provider != '')) as providers,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations
@@ -462,7 +463,8 @@ class TraceDAOImpl implements TraceDAO {
                     usage,
                     total_estimated_cost,
                     id,
-                    type
+                    type,
+                    provider
                 FROM spans
                 WHERE workspace_id = :workspace_id
                   AND trace_id = :id
@@ -704,7 +706,7 @@ class TraceDAOImpl implements TraceDAO {
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count,
-                    arraySort(groupUniqArray(provider)) as providers
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -1206,7 +1208,7 @@ class TraceDAOImpl implements TraceDAO {
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count,
-                    arraySort(groupUniqArray(provider)) as providers
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
@@ -1504,7 +1506,7 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
-                    arraySort(groupUniqArray(provider)) as providers
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -1782,7 +1784,7 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
-                    arraySort(groupUniqArray(provider)) as providers
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -2112,7 +2114,7 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
-                    arraySort(groupUniqArray(provider)) as providers
+                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -2985,8 +2987,6 @@ class TraceDAOImpl implements TraceDAO {
                 } else {
                     statement.bindNull("visibility_mode" + i, String.class);
                 }
-
-                statement.bind("providers", trace.providers());
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
