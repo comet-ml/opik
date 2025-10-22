@@ -53,7 +53,7 @@ ignore_missing_imports = true
 disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
-exclude = "src/opik_optimizer/mipro_optimizer/"
+exclude = ["src/opik_optimizer/mipro_optimizer/", "scripts/"]
 
 [tool.uv]
 managed = false

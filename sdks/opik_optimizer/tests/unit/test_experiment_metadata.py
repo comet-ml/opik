@@ -90,7 +90,6 @@ def dummy_prompt() -> ChatPrompt:
         tools=[tool_schema],
         function_map={"sample_tool": sample_tool},
         model="test-model",
-        project_name="prompt-project",
     )
 
 

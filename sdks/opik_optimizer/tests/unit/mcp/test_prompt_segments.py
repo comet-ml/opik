@@ -1,36 +1,9 @@
-from . import stub_opik  # noqa: F401
-import importlib
-import sys
-import types
-from pathlib import Path
-
-
-root = Path(__file__).resolve().parents[3]
-src_root = root / "src"
-
-if "opik_optimizer" not in sys.modules:
-    pkg = types.ModuleType("opik_optimizer")
-    pkg.__path__ = [str(src_root / "opik_optimizer")]
-    sys.modules["opik_optimizer"] = pkg
-
-if "opik_optimizer.optimization_config" not in sys.modules:
-    opt_pkg = types.ModuleType("opik_optimizer.optimization_config")
-    opt_pkg.__path__ = [str(src_root / "opik_optimizer" / "optimization_config")]
-    sys.modules["opik_optimizer.optimization_config"] = opt_pkg
-
-if "opik_optimizer.utils" not in sys.modules:
-    utils_pkg = types.ModuleType("opik_optimizer.utils")
-    utils_pkg.__path__ = [str(src_root / "opik_optimizer" / "utils")]
-    sys.modules["opik_optimizer.utils"] = utils_pkg
-
-
-chat_prompt = importlib.import_module("opik_optimizer.optimization_config.chat_prompt")
-prompt_segments = importlib.import_module("opik_optimizer.utils.prompt_segments")
-
-ChatPrompt = chat_prompt.ChatPrompt
-apply_segment_updates = prompt_segments.apply_segment_updates
-extract_prompt_segments = prompt_segments.extract_prompt_segments
-segment_ids_for_tools = prompt_segments.segment_ids_for_tools
+from opik_optimizer import ChatPrompt
+from opik_optimizer.utils.prompt_segments import (
+    apply_segment_updates,
+    extract_prompt_segments,
+    segment_ids_for_tools,
+)
 
 
 def test_extract_and_update_system_user_and_tool_segments() -> None:
