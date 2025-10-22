@@ -34,8 +34,8 @@ dependencies:
   repository: "https://charts.bitnami.com/bitnami"
   condition: mysql.enabled
 - name: zookeeper
-  version: 13.8.3
-  repository: https://charts.bitnami.com/bitnami
+  version: 0.2.0
+  repository: oci://registry-1.docker.io/cloudpirates
   condition: zookeeper.enabled
 - name: redis
   version: "18.19.2"
