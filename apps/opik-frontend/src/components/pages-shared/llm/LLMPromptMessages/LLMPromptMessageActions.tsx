@@ -21,13 +21,14 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import PromptImprovementWizard from "@/components/shared/PromptImprovementWizard/PromptImprovementWizard";
-import { LLMPromptConfigsType } from "@/types/providers";
+import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
 
 type ConfirmType = "load" | "reset" | "save";
 
 export interface ImprovePromptConfig {
   enabled: boolean;
   model: string;
+  provider: PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedContent: string) => void;
@@ -221,7 +222,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 disabled={isPromptButtonDisabled}
               >
                 <Wand2 className="mr-2 size-4" />
-                Generate Prompt
+                Generate prompt
               </Button>
             </span>
           </TooltipWrapper>
@@ -231,12 +232,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             <span>
               <Button
                 variant="outline"
-                size="icon-sm"
+                size="sm"
                 onClick={handleOpenWizard}
                 type="button"
                 disabled={isPromptButtonDisabled}
               >
-                <Wand2 />
+                <Wand2 className="mr-2 size-4" />
+                Improve prompt
               </Button>
             </span>
           </TooltipWrapper>
@@ -311,6 +313,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           id={message.id}
           originalPrompt={content}
           model={improvePromptConfig.model}
+          provider={improvePromptConfig.provider}
           configs={improvePromptConfig.configs}
           workspaceName={improvePromptConfig.workspaceName}
           onAccept={improvePromptConfig.onAccept}

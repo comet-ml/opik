@@ -18,6 +18,7 @@ export const PROMPT_IMPROVEMENT_SYSTEM_PROMPT = `You are an expert prompt engine
 
 **TECHNICAL REQUIREMENTS:**
 - Preserve all {{mustache_variables}} exactly as they appear
+- Avoid adding new variables unless absolutely necessary (variables typically come from dataset)
 - Add minimal context around variables if unclear (e.g., "Name: {{user_name}}")
 - Consider {{#sections}} only for truly dynamic content
 
@@ -49,8 +50,9 @@ export const PROMPT_GENERATION_SYSTEM_PROMPT = `You are an expert prompt enginee
 - Use bullet points for multiple requirements, not paragraphs
 - For complex tasks, use numbered steps (3-5 max) not lengthy explanations
 
-**MUSTACHE VARIABLES (when needed):**
-- Use {{variable_name}} for dynamic content
+**MUSTACHE VARIABLES (use sparingly):**
+- Only add {{variable_name}} if truly necessary - variables typically come from dataset
+- Keep variable count minimal (1-3 variables recommended)
 - Place in context briefly: "User: {{user_name}}" or "Analyze {{data_type}} data"
 - Use {{#condition}}...{{/condition}} only for truly conditional sections
 
