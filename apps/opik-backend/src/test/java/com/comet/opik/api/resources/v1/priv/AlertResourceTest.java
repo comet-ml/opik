@@ -1666,31 +1666,31 @@ class AlertResourceTest {
         private void verifySlackBlockStructure(SlackWebhookPayload slackPayload, int expectedEventCount,
                 String expectedEventType) {
             // Verify blocks structure
-            assertThat(slackPayload.getBlocks()).isNotNull();
-            assertThat(slackPayload.getBlocks()).hasSize(3);
+            assertThat(slackPayload.blocks()).isNotNull();
+            assertThat(slackPayload.blocks()).hasSize(3);
 
             // Verify header block
-            SlackBlock headerBlock = slackPayload.getBlocks().get(0);
-            assertThat(headerBlock.getType()).isEqualTo("header");
-            assertThat(headerBlock.getText()).isNotNull();
-            assertThat(headerBlock.getText().getType()).isEqualTo("plain_text");
-            assertThat(headerBlock.getText().getText()).isEqualTo(ALERT_NAME);
+            SlackBlock headerBlock = slackPayload.blocks().get(0);
+            assertThat(headerBlock.type()).isEqualTo("header");
+            assertThat(headerBlock.text()).isNotNull();
+            assertThat(headerBlock.text().type()).isEqualTo("plain_text");
+            assertThat(headerBlock.text().text()).isEqualTo(ALERT_NAME);
 
             // Verify summary block
-            SlackBlock summaryBlock = slackPayload.getBlocks().get(1);
-            assertThat(summaryBlock.getType()).isEqualTo("section");
-            assertThat(summaryBlock.getText()).isNotNull();
-            assertThat(summaryBlock.getText().getType()).isEqualTo("mrkdwn");
-            String summaryContent = summaryBlock.getText().getText();
+            SlackBlock summaryBlock = slackPayload.blocks().get(1);
+            assertThat(summaryBlock.type()).isEqualTo("section");
+            assertThat(summaryBlock.text()).isNotNull();
+            assertThat(summaryBlock.text().type()).isEqualTo("mrkdwn");
+            String summaryContent = summaryBlock.text().text();
             assertThat(summaryContent).contains("*" + expectedEventCount + "*");
             assertThat(summaryContent).contains(expectedEventType);
 
             // Verify details block exists
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            assertThat(detailsBlock.getType()).isEqualTo("section");
-            assertThat(detailsBlock.getText()).isNotNull();
-            assertThat(detailsBlock.getText().getType()).isEqualTo("mrkdwn");
-            assertThat(detailsBlock.getText().getText()).isNotNull();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            assertThat(detailsBlock.type()).isEqualTo("section");
+            assertThat(detailsBlock.text()).isNotNull();
+            assertThat(detailsBlock.text().type()).isEqualTo("mrkdwn");
+            assertThat(detailsBlock.text().text()).isNotNull();
         }
 
         @Test
@@ -1720,8 +1720,8 @@ class AlertResourceTest {
             verifySlackBlockStructure(slackPayload, 1, "Prompt Created");
 
             // Verify details block contains prompt ID
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            String details = detailsBlock.getText().getText();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            String details = detailsBlock.text().text();
             assertThat(details).contains("*Prompt IDs:*");
             assertThat(details).contains(promptId.toString());
         }
@@ -1763,8 +1763,8 @@ class AlertResourceTest {
             verifySlackBlockStructure(slackPayload, 1, "Prompt Deleted");
 
             // Verify details block contains prompt IDs
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            String details = detailsBlock.getText().getText();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            String details = detailsBlock.text().text();
             assertThat(details).contains("*Prompt IDs:*");
             assertThat(details).contains(promptId1.toString());
             assertThat(details).contains(promptId2.toString());
@@ -1793,8 +1793,8 @@ class AlertResourceTest {
             verifySlackBlockStructure(slackPayload, 1, "Prompt Committed");
 
             // Verify details block contains prompt and commit info
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            String details = detailsBlock.getText().getText();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            String details = detailsBlock.text().text();
             assertThat(details).contains(expectedPromptVersion.promptId().toString());
             assertThat(details).contains(expectedPromptVersion.commit());
         }
@@ -1834,8 +1834,8 @@ class AlertResourceTest {
             verifySlackBlockStructure(slackPayload, 1, "Trace Errors");
 
             // Verify details block contains trace IDs
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            String details = detailsBlock.getText().getText();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            String details = detailsBlock.text().text();
             assertThat(details).contains("*Trace IDs:*");
             tracesWithErrors.forEach(trace -> assertThat(details).contains(trace.id().toString()));
         }
@@ -1874,8 +1874,8 @@ class AlertResourceTest {
             verifySlackBlockStructure(slackPayload, 1, "Trace Feedback Score");
 
             // Verify details block contains trace ID and score
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            String details = detailsBlock.getText().getText();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            String details = detailsBlock.text().text();
             assertThat(details).contains(trace.id().toString());
             assertThat(details).contains(feedbackScore.name());
         }
@@ -1941,8 +1941,8 @@ class AlertResourceTest {
             verifySlackBlockStructure(slackPayload, 1, "Thread Feedback Score");
 
             // Verify details block contains thread ID and score
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            String details = detailsBlock.getText().getText();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            String details = detailsBlock.text().text();
             assertThat(details).contains(thread.id().toString());
             assertThat(details).contains(feedbackScore.name());
         }
@@ -1988,8 +1988,8 @@ class AlertResourceTest {
             verifySlackBlockStructure(slackPayload, 1, "Guardrail Triggered");
 
             // Verify details block contains trace ID
-            SlackBlock detailsBlock = slackPayload.getBlocks().get(2);
-            String details = detailsBlock.getText().getText();
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            String details = detailsBlock.text().text();
             assertThat(details).contains("*Trace IDs:*");
             assertThat(details).contains(trace.id().toString());
         }

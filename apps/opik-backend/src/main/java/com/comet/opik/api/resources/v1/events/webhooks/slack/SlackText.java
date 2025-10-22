@@ -3,22 +3,16 @@ package com.comet.opik.api.resources.v1.events.webhooks.slack;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.Value;
 
 /**
  * Represents a Slack text element.
  *
  * @see <a href="https://api.slack.com/reference/block-kit/composition-objects#text">Slack Text Object</a>
  */
-@Value
-@Builder
-public class SlackText {
-
-    @NonNull @JsonProperty("type")
-    String type;
-
-    @NonNull @JsonProperty("text")
-    String text;
+@Builder(toBuilder = true)
+public record SlackText(
+        @NonNull @JsonProperty("type") String type,
+        @NonNull @JsonProperty("text") String text) {
 
     /**
      * Creates a plain text element.

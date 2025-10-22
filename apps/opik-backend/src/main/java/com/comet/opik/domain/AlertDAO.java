@@ -7,16 +7,13 @@ import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.Webhook;
+import com.comet.opik.infrastructure.db.AlertTypeArgumentFactory;
+import com.comet.opik.infrastructure.db.AlertTypeColumnMapper;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
-import org.jdbi.v3.core.argument.AbstractArgumentFactory;
-import org.jdbi.v3.core.argument.Argument;
-import org.jdbi.v3.core.config.ConfigRegistry;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -34,7 +31,6 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -47,7 +43,8 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(MapFlatArgumentFactory.class)
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
-@RegisterArgumentFactory(AlertDAO.AlertTypeArgumentFactory.class)
+@RegisterArgumentFactory(AlertTypeArgumentFactory.class)
+@RegisterColumnMapper(AlertTypeColumnMapper.class)
 interface AlertDAO {
 
     String FIND = """
@@ -278,25 +275,14 @@ interface AlertDAO {
     @Slf4j
     class AlertWithWebhookRowMapper implements RowMapper<Alert> {
 
-        private static final TypeReference<Map<String, String>> MAP_TYPE_REF = new TypeReference<>() {
-        };
-
         private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS")
                 .withZone(java.time.ZoneOffset.UTC);
+        private static final MapFlatArgumentFactory MAP_MAPPER = new MapFlatArgumentFactory();
 
         @Override
         public Alert map(ResultSet rs, StatementContext ctx) throws SQLException {
-            // Parse webhook headers JSON to Map
-            Map<String, String> webhookHeaders = null;
-            String headersJson = rs.getString("webhook_headers");
-            if (headersJson != null && !headersJson.trim().isEmpty()) {
-                try {
-                    webhookHeaders = JsonUtils.readValue(headersJson, MAP_TYPE_REF);
-                } catch (Exception e) {
-                    log.warn("Failed to parse webhook headers JSON: '{}'", headersJson, e);
-                    webhookHeaders = Map.of();
-                }
-            }
+            // Parse webhook headers JSON to Map using column mapper
+            Map<String, String> webhookHeaders = MAP_MAPPER.map(rs, "webhook_headers", ctx);
 
             // Build Webhook object
             Webhook webhook = Webhook.builder()
@@ -316,27 +302,20 @@ interface AlertDAO {
                     .map(this::mapTriggers)
                     .orElse(null);
 
-            // Parse alert_type
-            AlertType alertType = null;
-            String alertTypeStr = rs.getString("alert_type");
-            if (alertTypeStr != null) {
-                try {
-                    alertType = AlertType.fromString(alertTypeStr);
-                } catch (Exception e) {
-                    log.warn("Failed to parse alert_type: '{}'", alertTypeStr, e);
-                }
-            }
+            // Parse alert_type using column mapper
+            AlertType alertType = ctx.findColumnMapperFor(AlertType.class)
+                    .map(mapper -> {
+                        try {
+                            return mapper.map(rs, "alert_type", ctx);
+                        } catch (SQLException e) {
+                            log.warn("Failed to map alert_type column", e);
+                            return null;
+                        }
+                    })
+                    .orElse(null);
 
-            // Parse metadata JSON to Map
-            Map<String, String> metadata = null;
-            String metadataJson = rs.getString("metadata");
-            if (StringUtils.isNotBlank(metadataJson)) {
-                try {
-                    metadata = JsonUtils.readValue(metadataJson, MAP_TYPE_REF);
-                } catch (Exception e) {
-                    log.warn("Failed to parse metadata JSON: '{}'", metadataJson, e);
-                }
-            }
+            // Parse metadata JSON to Map using column mapper
+            Map<String, String> metadata = MAP_MAPPER.map(rs, "metadata", ctx);
 
             // Build Alert object with embedded Webhook and Triggers
             return Alert.builder()
@@ -438,32 +417,15 @@ interface AlertDAO {
                 if (configValueNode.isTextual()) {
                     String configStr = configValueNode.asText();
                     if (!configStr.trim().isEmpty()) {
-                        return JsonUtils.readValue(configStr, MAP_TYPE_REF);
+                        return JsonUtils.readValue(configStr, MapFlatArgumentFactory.TYPE_REFERENCE);
                     }
                 } else if (configValueNode.isObject()) {
-                    return JsonUtils.MAPPER.convertValue(configValueNode, MAP_TYPE_REF);
+                    return JsonUtils.MAPPER.convertValue(configValueNode, MapFlatArgumentFactory.TYPE_REFERENCE);
                 }
             } catch (Exception e) {
                 log.warn("Failed to parse config value: '{}'", configValueNode, e);
             }
             return Map.of();
-        }
-    }
-
-    class AlertTypeArgumentFactory extends AbstractArgumentFactory<AlertType> {
-        public AlertTypeArgumentFactory() {
-            super(Types.VARCHAR);
-        }
-
-        @Override
-        protected Argument build(AlertType value, ConfigRegistry config) {
-            return (position, statement, ctx) -> {
-                if (value == null) {
-                    statement.setNull(position, Types.VARCHAR);
-                } else {
-                    statement.setString(position, value.getValue());
-                }
-            };
         }
     }
 }

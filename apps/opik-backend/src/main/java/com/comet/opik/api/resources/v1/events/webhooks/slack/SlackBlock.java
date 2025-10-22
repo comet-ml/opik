@@ -4,23 +4,17 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.Value;
 
 /**
  * Represents a Slack block element.
  *
  * @see <a href="https://api.slack.com/reference/block-kit/blocks">Slack Block Kit</a>
  */
-@Value
-@Builder
+@Builder(toBuilder = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class SlackBlock {
-
-    @NonNull @JsonProperty("type")
-    String type;
-
-    @JsonProperty("text")
-    SlackText text;
+public record SlackBlock(
+        @NonNull @JsonProperty("type") String type,
+        @JsonProperty("text") SlackText text) {
 
     /**
      * Creates a header block.
