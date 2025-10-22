@@ -32,7 +32,7 @@ jobs:
 
             // 1. Validate PR Title
             const title = pr.title;
-            const titleRegex = /^\[(OPIK-\d+|DEV-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI\HELM)\])*\s*.+$/;
+            const titleRegex = /^\[(OPIK-\d+|DEV-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI|HELM)\])*\s*.+$/;
             if (!titleRegex.test(title)) {
               errors.push(
                 "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and may optionally include component tags (`[FE]`, `[BE]`, etc.).\n\n" +
