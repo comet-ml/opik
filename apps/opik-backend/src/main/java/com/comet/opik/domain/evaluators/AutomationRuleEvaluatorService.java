@@ -59,6 +59,9 @@ public interface AutomationRuleEvaluatorService {
     <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, UUID projectId,
             @NonNull String workspaceId);
 
+    <E, T extends AutomationRuleEvaluator<E>> List<T> findByIds(@NonNull Set<UUID> ids, UUID projectId,
+            @NonNull String workspaceId);
+
     void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId);
 
     AutomationRuleEvaluatorPage find(int page, int size,
@@ -261,6 +264,32 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     })
                     .map(evaluator -> (T) evaluator)
                     .orElseThrow(this::newNotFoundException);
+        });
+    }
+
+    @Override
+    public <E, T extends AutomationRuleEvaluator<E>> List<T> findByIds(@NonNull Set<UUID> ids, UUID projectId,
+            @NonNull String workspaceId) {
+        log.debug("Finding AutomationRuleEvaluators with ids '{}' in projectId '{}' and workspaceId '{}'", ids,
+                projectId, workspaceId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
+            var criteria = AutomationRuleEvaluatorCriteria.builder().ids(ids).build();
+            return dao.find(workspaceId, projectId, criteria)
+                    .stream()
+                    .map(ruleEvaluator -> switch (ruleEvaluator) {
+                        case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
+                        case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel traceThreadLlmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadLlmAsJudge);
+                        case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel traceThreadUserDefinedMetricPython ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadUserDefinedMetricPython);
+                    })
+                    .map(evaluator -> (T) evaluator)
+                    .toList();
         });
     }
 
