@@ -309,7 +309,6 @@ class EvaluationEngine:
         # Metrics should use **ignored_kwargs to handle parameters they don't need.
         score_kwargs = {
             **test_case_.scoring_inputs,
-            **test_case_.task_output,
             EVALUATION_SPAN_PARAMETER_NAME: task_span,
         }
 
