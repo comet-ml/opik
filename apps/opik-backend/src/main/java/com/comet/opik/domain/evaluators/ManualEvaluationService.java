@@ -56,7 +56,6 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                 "Starting manual evaluation for '{}' entities of type '{}' with '{}' rules in project '{}', workspace '{}'",
                 request.entityIds().size(), request.entityType(), request.ruleIds().size(), projectId, workspaceId);
 
-        // Fetch automation rules in a single database call
         return Mono.fromCallable(() -> {
             Set<UUID> ruleIdSet = new HashSet<>(request.ruleIds());
             List<?> rawRules = automationRuleEvaluatorService.findByIds(ruleIdSet, projectId, workspaceId);
