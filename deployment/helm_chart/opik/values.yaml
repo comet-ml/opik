@@ -510,26 +510,18 @@ clickhouse:
 zookeeper:
     enabled: true
     fullnameOverride: opik-zookeeper
-    image:
-      repository: bitnamilegacy/zookeeper
-      tag: 3.9.3-debian-12-r16
     replicaCount: 1
-    # podAntiAffinityPreset: hard
-    podDisruptionBudget:
-      enabled: true
+    
+    image:
+      repository: zookeeper
+      tag: "3.9.3"
+      imagePullPolicy: IfNotPresent
+    
     persistence:
       enabled: true
-      ## The amount of PV storage allocated to each Zookeeper pod in the statefulset
-      size: "50Gi"
-    ## Environmental variables to set in Zookeeper
-    ##
-    env:
-      ## The JVM heap size to allocate to Zookeeper
-      ZK_HEAP_SIZE: "512M"
-    ## Configure Zookeeper headless
-    headless:
-      publishNotReadyAddresses: true
-
+      size: 50Gi
+    
+    # All other settings use chart defaults
     # resources:
     #   requests:
     #     cpu: 300m
