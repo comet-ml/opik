@@ -432,14 +432,14 @@ def test_evaluate__with_task_span_metrics__metric_with_multiple_parameters__happ
     assert len(evaluation_result.test_results) == 1
     test_result = evaluation_result.test_results[0]
     assert len(test_result.score_results) == 1
-    
+
     score_result = test_result.score_results[0]
     assert score_result.name == "task_span_multi_param_metric"
     assert score_result.value == 1.0
     assert "task_span=SpanModel" in score_result.reason
     assert "input=dict" in score_result.reason
     assert "output=str" in score_result.reason
-    
+
     # Verify the parameters were stored correctly in metadata
     assert score_result.metadata is not None
     assert score_result.metadata["input"] == {"question": "What is 2+2?"}
