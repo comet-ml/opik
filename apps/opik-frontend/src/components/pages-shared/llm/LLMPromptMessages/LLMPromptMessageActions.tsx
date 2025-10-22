@@ -21,13 +21,15 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import PromptImprovementWizard from "@/components/shared/PromptImprovementWizard/PromptImprovementWizard";
-import { LLMPromptConfigsType } from "@/types/providers";
+import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
+import { useToast } from "@/components/ui/use-toast";
 
 type ConfirmType = "load" | "reset" | "save";
 
 export interface ImprovePromptConfig {
   enabled: boolean;
   model: string;
+  provider: PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedContent: string) => void;
@@ -55,6 +57,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const isPromptSelectBoxOpenedRef = useRef<boolean>(false);
   const isPromptSaveWarningRef = useRef<boolean>(false);
   const [showImproveWizard, setShowImproveWizard] = useState(false);
+
+  const { toast } = useToast();
 
   const [datasetId] = useLocalStorageState<string | null>(
     PLAYGROUND_SELECTED_DATASET_KEY,
@@ -84,26 +88,43 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     setShowImproveWizard(true);
   }, []);
 
-  // Auto-open improvement wizard when sessionStorage flag is set
+  // Auto-open improvement wizard when message autoImprove flag is set
   useEffect(() => {
-    const shouldAutoImprove = sessionStorage.getItem("playground-auto-improve");
-
     if (
-      shouldAutoImprove === "true" &&
+      message.autoImprove &&
       improvePromptConfig?.enabled &&
       promptId && // Only trigger for message loaded from prompt library
       hasContent // Only trigger if there's content to improve
     ) {
       // Use a small delay to ensure the component is fully mounted and model is loaded
       const timeoutId = setTimeout(() => {
-        // Remove the flag first to prevent other instances from triggering
-        sessionStorage.removeItem("playground-auto-improve");
+        // Clear the flag first to prevent other instances from triggering
+        onChangeMessage({ autoImprove: false });
+
+        // Validate model and provider are configured
+        if (!hasModel) {
+          toast({
+            title: "Model configuration required",
+            description:
+              "Please configure a model and provider before improving the prompt. Select a model from the dropdown above.",
+          });
+          return;
+        }
+
         setShowImproveWizard(true);
       }, 300);
 
       return () => clearTimeout(timeoutId);
     }
-  }, [improvePromptConfig?.enabled, promptId, hasContent]);
+  }, [
+    message.autoImprove,
+    improvePromptConfig?.enabled,
+    promptId,
+    hasContent,
+    hasModel,
+    onChangeMessage,
+    toast,
+  ]);
 
   const handleUpdateExternalPromptId = useCallback(
     (selectedPromptId?: string) => {
@@ -221,7 +242,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 disabled={isPromptButtonDisabled}
               >
                 <Wand2 className="mr-2 size-4" />
-                Generate Prompt
+                Generate prompt
               </Button>
             </span>
           </TooltipWrapper>
@@ -231,12 +252,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             <span>
               <Button
                 variant="outline"
-                size="icon-sm"
+                size="sm"
                 onClick={handleOpenWizard}
                 type="button"
                 disabled={isPromptButtonDisabled}
               >
-                <Wand2 />
+                <Wand2 className="mr-2 size-4" />
+                Improve prompt
               </Button>
             </span>
           </TooltipWrapper>
@@ -311,6 +333,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           id={message.id}
           originalPrompt={content}
           model={improvePromptConfig.model}
+          provider={improvePromptConfig.provider}
           configs={improvePromptConfig.configs}
           workspaceName={improvePromptConfig.workspaceName}
           onAccept={improvePromptConfig.onAccept}

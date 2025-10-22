@@ -21,11 +21,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Description } from "@/components/ui/description";
 import { FormErrorSkeleton } from "@/components/ui/form";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tag } from "@/components/ui/tag";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
 import usePromptImprovement from "@/hooks/usePromptImprovement";
 import useAdjustedLLMConfigs from "@/hooks/useAdjustedLLMConfigs";
-import { LLMPromptConfigsType } from "@/types/providers";
+import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
+import { PROVIDERS } from "@/constants/providers";
 import { getPromptMustacheTags } from "@/lib/prompt";
 import { parseContentWithImages, combineContentWithImages } from "@/lib/llm";
 import { DEFAULT_IMPROVEMENT_INSTRUCTION } from "@/constants/promptImprovement";
@@ -46,6 +47,7 @@ interface PromptImprovementWizardProps {
   id: string;
   originalPrompt?: string;
   model: string;
+  provider: PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   workspaceName: string;
   onAccept: (messageId: string, improvedPrompt: string) => void;
@@ -57,6 +59,7 @@ const PromptImprovementWizard: React.FC<PromptImprovementWizardProps> = ({
   id,
   originalPrompt = "",
   model,
+  provider,
   configs,
   workspaceName,
   onAccept,
@@ -234,18 +237,21 @@ const PromptImprovementWizard: React.FC<PromptImprovementWizardProps> = ({
     generatedPrompt.trim() && generatedPrompt !== originalPromptText;
   const canContinue = generatedPrompt.trim() && !isLoading && !error;
 
-  const title =
-    currentStep === WIZARD_STEP.instructions
-      ? isGenerateMode
-        ? "Generate a prompt"
-        : "Improve prompt"
-      : "Your prompt";
+  const title = isGenerateMode ? "Generate prompt" : "Improve prompt";
 
   const instructionsPlaceholder = isGenerateMode
     ? "Describe your task..."
     : "What would you like to improve?";
 
-  const actionButtonText = isGenerateMode ? "Generate" : "Improve";
+  const modelDisplayName = useMemo(() => {
+    if (!model) return "not configured";
+    const providerLabel = provider ? PROVIDERS[provider]?.label : "";
+    return providerLabel ? `${providerLabel} ${model}` : model;
+  }, [model, provider]);
+
+  const actionButtonText = isGenerateMode
+    ? "Generate prompt"
+    : "Improve prompt";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -265,16 +271,14 @@ const PromptImprovementWizard: React.FC<PromptImprovementWizardProps> = ({
               {hasOriginalPrompt && (
                 <div className="flex flex-col gap-2">
                   <Label>Original prompt</Label>
-                  <div className="comet-code max-h-[300px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted p-3">
+                  <div className="comet-code max-h-[300px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted p-3 text-muted-foreground">
                     {originalPromptText}
                   </div>
                 </div>
               )}
 
               <div className="flex flex-col gap-2">
-                <Label>
-                  {isGenerateMode ? "Task description" : "Instructions"}
-                </Label>
+                <Label>Instructions</Label>
                 <Textarea
                   className="comet-code min-h-32"
                   placeholder={instructionsPlaceholder}
@@ -290,32 +294,19 @@ const PromptImprovementWizard: React.FC<PromptImprovementWizardProps> = ({
                     ? "The prompt will be generated"
                     : "The prompt will be improved"}{" "}
                   using the selected model (
-                  <span className="font-semibold">
-                    {model || "not configured"}
-                  </span>
-                  ) and parameters defined for this prompt.
+                  <span className="font-semibold">{modelDisplayName}</span>) and
+                  parameters defined for this prompt.
+                  {needsAdjustment &&
+                    ` The max output tokens parameter will be automatically increased to ${minTokens} tokens to ensure comprehensive prompt generation.`}
                 </Description>
               </div>
-
-              {needsAdjustment && (
-                <Alert variant="callout" size="sm">
-                  <AlertDescription size="sm">
-                    The max output tokens parameter will be automatically
-                    increased to {minTokens} tokens to ensure comprehensive
-                    prompt generation.
-                  </AlertDescription>
-                </Alert>
-              )}
 
               {error && <FormErrorSkeleton>{error}</FormErrorSkeleton>}
             </div>
           ) : (
             <div className="flex flex-col gap-4 pb-4">
-              <div className="flex items-center justify-between">
-                <Label>
-                  {isGenerateMode ? "Generated prompt" : "Improved prompt"}
-                </Label>
-                {hasOriginalPrompt && !isLoading && (
+              {hasOriginalPrompt && !isLoading && (
+                <div className="flex items-center justify-end">
                   <ToggleGroup
                     type="single"
                     value={previewMode}
@@ -338,24 +329,31 @@ const PromptImprovementWizard: React.FC<PromptImprovementWizardProps> = ({
                       Preview changes
                     </ToggleGroupItem>
                   </ToggleGroup>
-                )}
-              </div>
+                </div>
+              )}
 
               {error && <FormErrorSkeleton>{error}</FormErrorSkeleton>}
 
               {previewMode === PROMPT_PREVIEW_MODE.write ? (
-                <Textarea
-                  ref={textareaRef}
-                  className="comet-code h-[400px] resize-none overflow-y-auto"
-                  placeholder={
-                    isGenerateMode
-                      ? "Generated prompt will appear here..."
-                      : "Improved prompt will appear here..."
-                  }
-                  value={generatedPrompt}
-                  onChange={(e) => setGeneratedPrompt(e.target.value)}
-                  disabled={isLoading}
-                />
+                <div className="relative">
+                  <Textarea
+                    ref={textareaRef}
+                    className="comet-code h-[400px] resize-none overflow-y-auto"
+                    value={generatedPrompt}
+                    onChange={(e) => setGeneratedPrompt(e.target.value)}
+                    disabled={isLoading}
+                  />
+                  {isLoading && !generatedPrompt && (
+                    <div className="absolute left-3 top-3 flex items-center gap-2">
+                      <Loader2 className="size-4 animate-spin" />
+                      <span className="comet-body-s text-muted-foreground">
+                        {isGenerateMode
+                          ? "Generating prompt..."
+                          : "Improving prompt..."}
+                      </span>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="comet-code h-[400px] overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
                   <TextDiff
@@ -365,39 +363,23 @@ const PromptImprovementWizard: React.FC<PromptImprovementWizardProps> = ({
                 </div>
               )}
 
-              {isLoading && (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="size-4 animate-spin" />
-                  <span className="comet-body-s text-muted-foreground">
-                    {isGenerateMode
-                      ? "Generating prompt..."
-                      : "Improving prompt..."}
-                  </span>
-                </div>
-              )}
-
               {variables.length > 0 && !isLoading && (
                 <div className="flex flex-col gap-2">
                   <Label>Variables</Label>
-                  <div className="rounded-md border bg-muted p-3">
-                    <p className="comet-body-s mb-2 text-muted-foreground">
-                      Variables are placeholder values that make your prompt
-                      flexible and reusable. Variables in your prompt use the{" "}
-                      <code className="comet-code rounded bg-background px-1 py-0.5">
-                        {"{{VARIABLE_NAME}}"}
-                      </code>{" "}
-                      format. This prompt has the following variables:
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {variables.map((variable, index) => (
-                        <code
-                          key={index}
-                          className="comet-code comet-body-xs-accented rounded bg-primary/10 px-2 py-1"
-                        >
-                          {`{{${variable}}}`}
-                        </code>
-                      ))}
-                    </div>
+                  <Description>
+                    This prompt includes variables that can be populated with
+                    data from your dataset. Variables use the{" "}
+                    <code className="comet-code rounded bg-background px-1 py-0.5">
+                      {"{{VARIABLE_NAME}}"}
+                    </code>{" "}
+                    format and must match column names in your dataset:
+                  </Description>
+                  <div className="flex flex-wrap gap-2">
+                    {variables.map((variable, index) => (
+                      <Tag key={index} variant="green" size="sm">
+                        {`{{${variable}}}`}
+                      </Tag>
+                    ))}
                   </div>
                 </div>
               )}
@@ -419,11 +401,15 @@ const PromptImprovementWizard: React.FC<PromptImprovementWizardProps> = ({
             </>
           ) : (
             <>
+              <Button variant="ghost" onClick={handleCancel}>
+                Cancel
+              </Button>
+              <div className="flex-1" />
               <Button variant="outline" onClick={handleBack}>
-                Back
+                Keep refining
               </Button>
               <Button onClick={handleContinue} disabled={!canContinue}>
-                Continue
+                Use this prompt
               </Button>
             </>
           )}

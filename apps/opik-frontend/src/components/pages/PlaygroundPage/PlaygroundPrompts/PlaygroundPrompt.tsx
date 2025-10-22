@@ -280,6 +280,7 @@ const PlaygroundPrompt = ({
         improvePromptConfig={{
           enabled: true,
           model,
+          provider,
           configs,
           workspaceName,
           onAccept: (messageId, improvedContent) => {

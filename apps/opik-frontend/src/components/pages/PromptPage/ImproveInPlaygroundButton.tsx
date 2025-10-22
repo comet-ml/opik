@@ -7,6 +7,7 @@ import { usePromptMap, useSetPromptMap } from "@/store/PlaygroundStore";
 import { PromptWithLatestVersion } from "@/types/prompts";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { generateDefaultPrompt } from "@/lib/playground";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
@@ -67,13 +68,11 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
         content: prompt?.latest_version?.template ?? "",
         promptId: prompt?.id,
         promptVersionId: prompt?.latest_version?.id,
+        autoImprove: true,
       }),
     ];
 
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-
-    // Set a flag in sessionStorage to trigger auto-improve
-    sessionStorage.setItem("playground-auto-improve", "true");
 
     navigate({
       to: "/$workspaceName/playground",
@@ -94,22 +93,24 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!prompt || isPendingProviderKeys}
-        onClick={() => {
-          if (isPlaygroundEmpty) {
-            loadPlayground();
-          } else {
-            resetKeyRef.current = resetKeyRef.current + 1;
-            setOpen(true);
-          }
-        }}
-      >
-        <Wand2 className="mr-1.5 size-3.5" />
-        Improve in the Playground
-      </Button>
+      <TooltipWrapper content="Opens the prompt in the Playground for improvement">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!prompt || isPendingProviderKeys}
+          onClick={() => {
+            if (isPlaygroundEmpty) {
+              loadPlayground();
+            } else {
+              resetKeyRef.current = resetKeyRef.current + 1;
+              setOpen(true);
+            }
+          }}
+        >
+          <Wand2 className="mr-1.5 size-3.5" />
+          Improve prompt
+        </Button>
+      </TooltipWrapper>
       <ConfirmDialog
         key={resetKeyRef.current}
         open={Boolean(open)}
