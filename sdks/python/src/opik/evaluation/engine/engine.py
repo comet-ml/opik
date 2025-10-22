@@ -294,10 +294,10 @@ class EvaluationEngine:
             evaluation_task_result.score_results += score_results
             return evaluation_task_result
 
-    @opik.track(
+    @opik.track(  # type: ignore[attr-defined,has-type]
         name="task_span_metrics_calculation",
         ignore_arguments=["test_case_"],
-    )  # type: ignore[attr-defined,has-type]
+    )
     def _score_llm_task_result_span(
         self,
         trace_id: str,
