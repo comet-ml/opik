@@ -72,9 +72,19 @@ def test_parameter_optimizer_selects_best_parameters(
         raising=False,
     )
 
+    # Mock opik client to avoid needing real dataset
+    mock_optimization = types.SimpleNamespace(id="opt-123")
+    mock_opik_client = types.SimpleNamespace(
+        create_optimization=lambda **kwargs: mock_optimization
+    )
+    monkeypatch.setattr(optimizer, "opik_client", mock_opik_client, raising=False)
+
+    # Create mock dataset with required attributes
+    mock_dataset = types.SimpleNamespace(name="test-dataset", id="dataset-123")
+
     result = optimizer.optimize_parameter(
         prompt=prompt,
-        dataset=object(),
+        dataset=mock_dataset,
         metric=lambda *_: 0.0,
         parameter_space=parameter_space,
         max_trials=2,
