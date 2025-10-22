@@ -30,8 +30,30 @@ KWARGS_KEYS_TO_LOG_AS_INPUTS: List[str] = [
     "function_call",
     "tools",
     "tool_choice",
+    "response_format",
+    "stop",
 ]
 RESPONSE_KEYS_TO_LOG_AS_OUTPUT: List[str] = ["choices"]
+
+# Sensitive parameters that should never be logged
+SENSITIVE_PARAMS_TO_EXCLUDE: List[str] = [
+    "api_key",
+    "aws_access_key_id",
+    "aws_secret_access_key",
+    "azure_ad_token",
+    "azure_key",
+    "vertex_credentials",
+    "vertex_project",
+    "vertex_location",
+    "anthropic_api_key",
+    "openai_api_key",
+    "cohere_api_key",
+    "replicate_api_key",
+    "huggingface_api_key",
+    "togetherai_api_key",
+    "baseten_api_key",
+    "openrouter_api_key",
+]
 
 PROVIDER_MAPPING: Dict[str, LLMProvider] = {
     "openai": LLMProvider.OPENAI,
@@ -121,8 +143,13 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
 
+        # Filter out sensitive parameters before logging
+        filtered_kwargs = {
+            key: value for key, value in kwargs.items() if key not in SENSITIVE_PARAMS_TO_EXCLUDE
+        }
+
         input_data, new_metadata = dict_utils.split_dict_by_keys(
-            kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
+            filtered_kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
         metadata["created_from"] = "litellm"

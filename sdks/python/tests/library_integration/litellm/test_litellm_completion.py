@@ -425,3 +425,35 @@ async def test_litellm_acompletion_create__opik_args__happyflow(fake_backend):
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_litellm_completion_double_decoration__idempotent(fake_backend):
+    """Test that double decoration doesn't create double wrapping."""
+    # First decoration
+    tracked_completion_1 = track_completion()(litellm.completion)
+    # Second decoration of the SAME wrapped function
+    tracked_completion_2 = track_completion()(tracked_completion_1)
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    response = tracked_completion_2(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_tokens=10,
+    )
+
+    opik.flush_tracker()
+
+    assert isinstance(response, litellm.types.utils.ModelResponse)
+
+    # Should only create ONE trace, not nested traces
+    assert len(fake_backend.trace_trees) == 1
+
+    trace = fake_backend.trace_trees[0]
+    # Should have exactly one span, not nested spans
+    assert len(trace.spans) == 1
+    # The span should not have any nested spans
+    assert len(trace.spans[0].spans) == 0

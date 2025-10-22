@@ -32,6 +32,7 @@ def track_completion(
     Returns:
         Decorator function that wraps the completion function with Opik tracking.
     """
+
     decorator_factory = litellm_completion_decorator.LiteLLMCompletionTrackDecorator()
 
     return decorator_factory.track(  # type: ignore
