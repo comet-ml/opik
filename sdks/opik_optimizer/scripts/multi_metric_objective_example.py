@@ -64,10 +64,10 @@ result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=multi_metric_objective,
-    max_trials=60,
+    max_trials=5,
+    n_samples=12,
     reflection_minibatch_size=5,
     candidate_selection_strategy="best",
-    n_samples=12,
 )
 
 result.display()
