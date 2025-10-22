@@ -111,8 +111,8 @@ def mock_backend():
     
     try:
         server.shutdown()
-    except:
-        pass
+    except Exception as e:
+        logger.warning(f"Error shutting down test HTTP server: {e}")
 
 
 @pytest.fixture(autouse=True)

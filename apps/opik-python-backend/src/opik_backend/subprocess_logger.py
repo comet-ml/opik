@@ -113,6 +113,8 @@ class BatchLogCollector(logging.Handler):
         self.last_flush_time = time.time()
         self.flush_executor: Optional[ThreadPoolExecutor] = None
         self.should_stop = False
+        self._stdout_thread: Optional[threading.Thread] = None
+        self._stderr_thread: Optional[threading.Thread] = None
 
         # Set formatter
         self.setFormatter(logging.Formatter("%(levelname)s - %(name)s - %(message)s"))
@@ -246,7 +248,7 @@ class BatchLogCollector(logging.Handler):
                 # shutdown(wait=True) will wait for any pending tasks to complete
                 self.flush_executor.shutdown(wait=True)
             except Exception as e:
-                logger.warning(f"Error shutting down flush executor: {e}")
+                logger.error(f"Error shutting down flush executor: {e}")
         
         # Do a final flush to ensure all remaining logs are sent
         self.flush()

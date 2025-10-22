@@ -270,7 +270,7 @@ class IsolatedSubprocessExecutor:
                 except ImportError as e:
                     self.logger.error(f"Subprocess logging is configured but BatchLogCollector import failed: {e}")
                     raise
-                except (ValueError, Exception) as e:
+                except Exception as e:
                     self.logger.error(f"Failed to initialize subprocess logging: {e}")
             
             # Decide execution strategy based on logging configuration
@@ -301,7 +301,7 @@ class IsolatedSubprocessExecutor:
             if process.returncode == 0:
                 try:
                     # Extract last non-empty line from stdout as the result JSON
-                    lines = [l for l in stdout.split('\n') if l.strip()]
+                    lines = [line for line in stdout.split('\n') if line.strip()]
                     if not lines:
                         raise ValueError("No output produced by subprocess")
                     result = json.loads(lines[-1])
