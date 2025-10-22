@@ -44,7 +44,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   >({
     resolver: zodResolver(AIProviderFormSchema),
     defaultValues: {
-      provider: "" as PROVIDER_TYPE,
+      provider: PROVIDER_TYPE.OPEN_AI,
       apiKey: "",
       // @ts-expect-error - union type compatibility
       url: "",
