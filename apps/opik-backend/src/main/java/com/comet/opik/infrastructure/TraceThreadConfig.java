@@ -44,6 +44,11 @@ public class TraceThreadConfig implements StreamConfiguration {
 
     @Valid @JsonProperty
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
+    private Duration longPollingDuration;
+
+    @Valid @JsonProperty
+    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration timeoutToMarkThreadAsInactive;
 
     @Valid @JsonProperty
