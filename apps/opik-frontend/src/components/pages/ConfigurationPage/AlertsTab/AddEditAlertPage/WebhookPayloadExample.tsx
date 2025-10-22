@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import isString from "lodash/isString";
-import { ALERT_EVENT_TYPE } from "@/types/alerts";
+import { ALERT_EVENT_TYPE, ALERT_TYPE } from "@/types/alerts";
 import useWebhookExamplesQuery from "@/api/alerts/useWebhookExamplesQuery";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
@@ -10,13 +10,16 @@ import { safelyParseJSON } from "@/lib/utils";
 
 type WebhookPayloadExampleProps = {
   eventType: ALERT_EVENT_TYPE;
+  alertType?: ALERT_TYPE;
   actionButton?: React.ReactNode;
 };
 
 const WebhookPayloadExample: React.FunctionComponent<
   WebhookPayloadExampleProps
-> = ({ eventType, actionButton }) => {
-  const { data: examples, isPending } = useWebhookExamplesQuery();
+> = ({ eventType, alertType, actionButton }) => {
+  const { data: examples, isPending } = useWebhookExamplesQuery({
+    alertType,
+  });
 
   const formattedPayload = useMemo(() => {
     if (!examples || !examples.response_examples?.[eventType]) {
