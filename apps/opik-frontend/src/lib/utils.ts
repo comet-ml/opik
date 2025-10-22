@@ -21,6 +21,10 @@ export const buildDocsUrl = (path: string = "", hash: string = "") => {
   return `${BASE_DOCUMENTATION_URL}${path}?from=llm${hash}`;
 };
 
+export const buildFullBaseUrl = () => {
+  return new URL(import.meta.env.VITE_BASE_URL, location.origin).toString();
+};
+
 export const isSameDomainUrl = (url: string) => {
   try {
     const resolvedUrl = new URL(url, window.location.href);

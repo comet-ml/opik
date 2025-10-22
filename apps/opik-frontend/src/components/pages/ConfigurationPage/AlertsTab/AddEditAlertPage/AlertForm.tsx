@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import get from "lodash/get";
+import capitalize from "lodash/capitalize";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 
-import { cn } from "@/lib/utils";
+import { buildFullBaseUrl, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,12 +17,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import Loader from "@/components/shared/Loader/Loader";
 
-import { Alert } from "@/types/alerts";
+import { Alert, ALERT_TYPE } from "@/types/alerts";
 import useAlertCreateMutation from "@/api/alerts/useAlertCreateMutation";
 import useAlertUpdateMutation from "@/api/alerts/useAlertUpdateMutation";
 import useAppStore from "@/store/AppStore";
@@ -61,6 +63,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
     defaultValues: {
       name: alert?.name || "",
       enabled: alert?.enabled ?? true,
+      alertType: alert?.alert_type || ALERT_TYPE.general,
       url: alert?.webhook?.url || "",
       secretToken: alert?.webhook?.secret_token || "",
       headers: alert?.webhook?.headers
@@ -79,6 +82,11 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
     return {
       name: formData.name.trim(),
       enabled: formData.enabled,
+      alert_type: formData.alertType,
+      metadata: {
+        ...alert?.metadata,
+        base_url: buildFullBaseUrl(),
+      },
       webhook: {
         url: formData.url.trim(),
         secret_token: formData.secretToken || undefined,
@@ -95,7 +103,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
       },
       triggers: formTriggersToAlertTriggers(formData.triggers, projectsIds),
     };
-  }, [form, projectsIds]);
+  }, [form, projectsIds, alert?.metadata]);
 
   const handleNavigateBack = useCallback(() => {
     navigate({
@@ -267,6 +275,38 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
                       </FormControl>
                     </FormItem>
                   )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="alertType"
+                  render={({ field, formState }) => {
+                    const validationErrors = get(formState.errors, [
+                      "alertType",
+                    ]);
+                    return (
+                      <FormItem>
+                        <Label>Type</Label>
+                        <FormControl>
+                          <SelectBox
+                            value={field.value}
+                            onChange={field.onChange}
+                            options={Object.values(ALERT_TYPE).map((type) => ({
+                              value: type,
+                              label: capitalize(type),
+                            }))}
+                            placeholder="Select type"
+                            className={cn({
+                              "border-destructive": Boolean(
+                                validationErrors?.message,
+                              ),
+                            })}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
               </div>
 
