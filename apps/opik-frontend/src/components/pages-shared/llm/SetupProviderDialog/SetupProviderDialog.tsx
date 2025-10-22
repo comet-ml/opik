@@ -35,7 +35,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   onProviderAdded,
 }) => {
   const [selectedProvider, setSelectedProvider] = useState<PROVIDER_TYPE | "">(
-    "",
+    PROVIDER_TYPE.OPEN_AI,
   );
   const { mutate: createProviderKey } = useProviderKeysCreateMutation();
 
