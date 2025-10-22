@@ -26,10 +26,11 @@ def track_crewai(
     Parameters:
         project_name: The name of the project to associate with the tracking.
     """
-    global \
-        __IS_TRACKING_ENABLED, \
-        _ORIGINAL_LITELLM_COMPLETION, \
+    global (
+        __IS_TRACKING_ENABLED,
+        _ORIGINAL_LITELLM_COMPLETION,
         _ORIGINAL_LITELLM_ACOMPLETION
+    )
 
     if __IS_TRACKING_ENABLED:
         return
