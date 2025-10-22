@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -213,6 +214,8 @@ class WebhookSubscriberLoggingTest {
     private WebhookEvent<?> createWebhookEvent(String url, UUID alertId, String eventId) {
         return WebhookEvent.builder()
                 .id(eventId)
+                .alertName("Test Alert")
+                .alertType(AlertType.GENERAL)
                 .eventType(AlertEventType.PROMPT_CREATED)
                 .alertId(alertId)
                 .workspaceId(WORKSPACE_ID)

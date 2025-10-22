@@ -88,6 +88,7 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
     private static final String WEBHOOK_URL_DB = "webhook_url";
+    private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
@@ -320,6 +321,7 @@ public class FilterQueryBuilder {
             ImmutableMap.<AlertField, String>builder()
                     .put(AlertField.ID, ID_DB)
                     .put(AlertField.NAME, NAME_DB)
+                    .put(AlertField.ALERT_TYPE, ALERT_TYPE_DB)
                     .put(AlertField.WEBHOOK_URL, WEBHOOK_URL_DB)
                     .put(AlertField.CREATED_AT, CREATED_AT_DB)
                     .put(AlertField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
@@ -486,6 +488,7 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.ALERT, Set.of(
                 AlertField.ID,
                 AlertField.NAME,
+                AlertField.ALERT_TYPE,
                 AlertField.WEBHOOK_URL,
                 AlertField.CREATED_AT,
                 AlertField.LAST_UPDATED_AT,

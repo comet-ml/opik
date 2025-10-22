@@ -5,7 +5,6 @@ import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -21,7 +20,6 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
 import java.util.Map;
@@ -62,14 +60,13 @@ public class WebhookHttpClient {
                 event.getId(), event.getUrl(), event.getMaxRetries());
 
         // Serialize payload asynchronously (non-blocking JSON serialization)
-        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> JsonUtils.writeValueAsString(
-                event.toBuilder().url(null).headers(null).secret(null).build()))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(jsonPayload -> performWebhookRequest(event, jsonPayload, ctx.get(RequestContext.WORKSPACE_ID)))
-                .retryWhen(createRetrySpec(event.getId(), event.getMaxRetries()))
-                .doOnError(throwable -> logError(event,
-                        ctx.get(RequestContext.WORKSPACE_ID),
-                        "Webhook '%s' permanently failed after all retries".formatted(event.getId()), throwable)));
+        return Mono.deferContextual(
+                ctx -> performWebhookRequest(event, event.getJsonPayload(), ctx.get(RequestContext.WORKSPACE_ID))
+                        .retryWhen(createRetrySpec(event.getId(), event.getMaxRetries()))
+                        .doOnError(throwable -> logError(event,
+                                ctx.get(RequestContext.WORKSPACE_ID),
+                                "Webhook '%s' permanently failed after all retries".formatted(event.getId()),
+                                throwable)));
     }
 
     private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
@@ -187,6 +188,8 @@ class WebhookSubscriberTest {
                 .id("webhook-" + System.currentTimeMillis())
                 .eventType(AlertEventType.PROMPT_CREATED)
                 .alertId(UUID.randomUUID())
+                .alertName("Test Alert")
+                .alertType(AlertType.GENERAL)
                 .workspaceId(WORKSPACE_ID)
                 .url(url)
                 .payload(Map.of("message", "test payload", "timestamp", Instant.now().toString()))

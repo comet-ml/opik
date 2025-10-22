@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
@@ -176,10 +177,17 @@ public class AlertResourceClient {
         }
     }
 
-    public WebhookExamples getWebhookExamples(String apiKey, String workspaceName, int expectedStatus) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+    public WebhookExamples getWebhookExamples(String apiKey, String workspaceName, AlertType alertType,
+            int expectedStatus) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("webhooks")
-                .path("examples")
+                .path("examples");
+
+        if (alertType != null) {
+            target = target.queryParam("alert_type", alertType.getValue());
+        }
+
+        try (var response = target
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)

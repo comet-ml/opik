@@ -1,6 +1,5 @@
 package com.comet.opik.api;
 
-import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -15,7 +14,7 @@ import lombok.RequiredArgsConstructor;
 public record WebhookTestResult(
         Status status,
         int statusCode,
-        WebhookEvent<?> requestBody,
+        String requestBody,
         String errorMessage) {
 
     @Getter
