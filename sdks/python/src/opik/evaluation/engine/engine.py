@@ -304,9 +304,6 @@ class EvaluationEngine:
         task_span: models.SpanModel,
         test_case_: test_case.TestCase,
     ) -> List[score_result.ScoreResult]:
-        # Build score_kwargs from dataset item content, task output, and task_span.
-        # Metrics can access any of these via their score() method parameters.
-        # Metrics should use **ignored_kwargs to handle parameters they don't need.
         score_kwargs = {
             **test_case_.scoring_inputs,
             EVALUATION_SPAN_PARAMETER_NAME: task_span,
