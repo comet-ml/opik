@@ -11,5 +11,5 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record WebhookExamples(
-        Map<AlertEventType, Object> responseExamples) {
+        Map<AlertEventType, ?> responseExamples) {
 }
