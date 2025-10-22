@@ -41,7 +41,17 @@ jobs:
             echo "Skipping bot user: $EVENT_ACTOR"
             ASSIGN_USER=""
           else
-            ASSIGN_USER="$EVENT_ACTOR"
+            gh api "/repos/${{ github.repository }}/collaborators/$EVENT_ACTOR" > /dev/null 2>&1
+            COLLABORATOR_STATUS=$?
+
+            if [[ $COLLABORATOR_STATUS -ne 0 ]]; then
+              ASSIGN_USER="$EVENT_ACTOR"
+              echo "User '$EVENT_ACTOR' IS a collaborator on ${{ github.repository }}."
+            else
+              ASSIGN_USER=""
+              echo "User '$EVENT_ACTOR' IS NOT a collaborator on ${{ github.repository }}."
+            fi
+
             echo "Determined user: $ASSIGN_USER"
           fi
         
