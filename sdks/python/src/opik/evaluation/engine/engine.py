@@ -286,7 +286,9 @@ class EvaluationEngine:
             client=self._client,
         ):
             score_results = self._score_llm_task_result_span(
-                trace_id=trace_id, task_span=evaluation_span
+                trace_id=trace_id,
+                task_span=evaluation_span,
+                test_case_=evaluation_task_result.test_case,
             )
             # append scores to the input test result
             evaluation_task_result.score_results += score_results
@@ -297,8 +299,17 @@ class EvaluationEngine:
         self,
         trace_id: str,
         task_span: models.SpanModel,
+        test_case_: test_case.TestCase,
     ) -> List[score_result.ScoreResult]:
-        score_kwargs = {EVALUATION_SPAN_PARAMETER_NAME: task_span}
+        # Build score_kwargs from dataset item content, task output, and task_span.
+        # Metrics can access any of these via their score() method parameters.
+        # Metrics should use **ignored_kwargs to handle parameters they don't need.
+        score_kwargs = {
+            **test_case_.scoring_inputs,
+            **test_case_.task_output,
+            EVALUATION_SPAN_PARAMETER_NAME: task_span,
+        }
+
         score_results = _scores_by_metrics(
             scoring_metrics=self._task_span_scoring_metrics,
             score_kwargs=score_kwargs,
