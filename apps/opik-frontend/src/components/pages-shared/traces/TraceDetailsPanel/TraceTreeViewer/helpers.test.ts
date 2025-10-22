@@ -29,6 +29,7 @@ describe("helpers.ts", () => {
         completion_tokens: 50,
       },
       total_estimated_cost: 0.001,
+      providers: ["openai", "anthropic"],
     };
 
     const mockSpan: Span = {
