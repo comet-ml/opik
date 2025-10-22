@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This is the Base Redis Subscriber, for all particular implementations to extend. It listens to a Redis stream.
@@ -89,7 +90,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private volatile Scheduler timerScheduler;
     private volatile Scheduler consumerScheduler;
     private volatile Scheduler workersScheduler;
-    private volatile long pollingTickCounter = 0;
+    private final AtomicInteger pollingTickCounter = new AtomicInteger(0);
 
     protected BaseRedisSubscriber(
             @NonNull StreamConfiguration config,
@@ -295,8 +296,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 })
                 // ConcatMap ensures one readGroup/claim at a time
                 .concatMap(i -> {
-                    pollingTickCounter++;
-                    if (pollingTickCounter % config.getClaimIntervalTicks() == 0) {
+                    int currentTick = pollingTickCounter.incrementAndGet();
+                    if (currentTick % config.getClaimIntervalTicks() == 0) {
                         return claimPendingMessages();
                     } else {
                         return readMessages();
@@ -391,13 +392,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private Mono<ProcessingResult> processMessage(Map.Entry<StreamMessageId, Map<String, M>> entry) {
         var messageId = entry.getKey();
         log.info("Message received with messageId '{}'", messageId);
-        var startMillis = System.currentTimeMillis();
-
-        // Proceed with normal processing
         var message = Optional.ofNullable(entry.getValue())
                 .map(valueMap -> valueMap.get(payloadField))
                 .orElse(null);
-
+        var startMillis = System.currentTimeMillis();
         // Deferring as processEvent is out of our control, it might not return a cold Mono
         return Mono.defer(() -> processEvent(message))
                 .subscribeOn(workersScheduler)
