@@ -2,14 +2,13 @@ import contextlib
 from typing import Any, Dict, List, Optional, Union, Iterator
 
 import opik.llm_usage as llm_usage
-from opik.api_objects import span, trace, opik_client
+from opik.api_objects import span, trace, opik_client, prompt
 from opik.api_objects.attachment import Attachment
 from opik.types import (
     DistributedTraceHeadersDict,
     FeedbackScoreDict,
     LLMProvider,
     ErrorInfoDict,
-    PromptInfoDict,
 )
 
 import opik.decorator.tracing_runtime_config as tracing_runtime_config
@@ -69,7 +68,7 @@ def update_current_span(
     total_cost: Optional[float] = None,
     attachments: Optional[List[Attachment]] = None,
     error_info: Optional[ErrorInfoDict] = None,
-    prompts: Optional[List[PromptInfoDict]] = None,
+    prompts: Optional[List[prompt.Prompt]] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -96,6 +95,9 @@ def update_current_span(
     """
     if not tracing_runtime_config.is_tracing_active():
         return
+
+    if prompts is not None:
+        prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
 
     new_params = {
         "name": name,
@@ -128,7 +130,7 @@ def update_current_trace(
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     thread_id: Optional[str] = None,
     attachments: Optional[List[Attachment]] = None,
-    prompts: Optional[List[PromptInfoDict]] = None,
+    prompts: Optional[List[prompt.Prompt]] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -147,6 +149,9 @@ def update_current_trace(
     """
     if not tracing_runtime_config.is_tracing_active():
         return
+
+    if prompts is not None:
+        prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
 
     new_params = {
         "name": name,

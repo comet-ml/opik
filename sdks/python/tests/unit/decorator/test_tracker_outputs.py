@@ -6,10 +6,9 @@ from typing import Dict
 from unittest import mock
 import pytest
 
-from opik import context_storage, opik_context
-from opik.api_objects import opik_client, trace
+from opik import context_storage, opik_context, rest_api, PromptType
+from opik.api_objects import opik_client, trace, prompt
 from opik.decorator import tracker
-from opik.types import PromptInfoDict
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
@@ -1682,14 +1681,20 @@ def test_track__span_usage_updated__openai_format(fake_backend):
 
 def test_track__span_updated_with_prompts__happy_flow(fake_backend):
     prompts = [
-        PromptInfoDict(
+        prompt.Prompt.from_fern_prompt_version(
             name="system_prompt",
-            prompt="""You are a helpful assistant that helps with research of the specific topic.""",
-            commit="asdb123",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""You are a helpful assistant that helps with research of the specific topic.""",
+                commit="asdb123",
+                type=PromptType.MUSTACHE,
+            ),
         ),
-        PromptInfoDict(
+        prompt.Prompt.from_fern_prompt_version(
             name="user_prompt",
-            prompt="""Research more details about the topic.""",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""Research more details about the topic.""",
+                type=PromptType.MUSTACHE,
+            ),
         ),
     ]
 
@@ -1701,6 +1706,8 @@ def test_track__span_updated_with_prompts__happy_flow(fake_backend):
 
     f("f-input")
     tracker.flush_tracker()
+
+    expected_prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -1718,7 +1725,7 @@ def test_track__span_updated_with_prompts__happy_flow(fake_backend):
                 output={"output": "f-output"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                metadata={"opik_prompts": prompts},
+                metadata={"opik_prompts": expected_prompts},
             )
         ],
     )
@@ -1730,14 +1737,20 @@ def test_track__span_updated_with_prompts__happy_flow(fake_backend):
 
 def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
     prompts = [
-        PromptInfoDict(
+        prompt.Prompt.from_fern_prompt_version(
             name="system_prompt",
-            prompt="""You are a helpful assistant that helps with research of the specific topic.""",
-            commit="asdb123",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""You are a helpful assistant that helps with research of the specific topic.""",
+                commit="asdb123",
+                type=PromptType.MUSTACHE,
+            ),
         ),
-        PromptInfoDict(
+        prompt.Prompt.from_fern_prompt_version(
             name="user_prompt",
-            prompt="""Research more details about the topic.""",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""Research more details about the topic.""",
+                type=PromptType.MUSTACHE,
+            ),
         ),
     ]
 
@@ -1750,6 +1763,8 @@ def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
     f("f-input")
     tracker.flush_tracker()
 
+    expected_prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
+
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="f",
@@ -1758,7 +1773,7 @@ def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
-        metadata={"opik_prompts": prompts},
+        metadata={"opik_prompts": expected_prompts},
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,

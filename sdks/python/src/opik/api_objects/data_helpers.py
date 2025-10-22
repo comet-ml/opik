@@ -3,7 +3,6 @@ from typing import Optional, Any, Dict, List, Union
 import pydantic
 
 from opik import dict_utils
-from opik.types import PromptInfoDict
 
 
 def merge_tags(
@@ -27,7 +26,7 @@ def merge_tags(
 def merge_metadata(
     existing_metadata: Optional[Dict[str, Any]],
     new_metadata: Optional[Union[Dict[str, Any], pydantic.BaseModel]],
-    prompts: Optional[List[PromptInfoDict]] = None,
+    prompts: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Merge the existing metadata dictionary with new data, with new values taking precedence.
 

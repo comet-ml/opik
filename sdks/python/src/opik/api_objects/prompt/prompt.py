@@ -110,3 +110,14 @@ class Prompt:
         prompt._metadata = prompt_version.metadata
         prompt._type = prompt_version.type
         return prompt
+
+
+def to_info_dict(prompt: Prompt) -> Dict[str, Any]:
+    info_dict = {
+        "name": prompt.name,
+        "prompt": prompt.prompt,
+    }
+    if prompt.commit is not None:
+        info_dict["commit"] = prompt.commit
+
+    return info_dict
