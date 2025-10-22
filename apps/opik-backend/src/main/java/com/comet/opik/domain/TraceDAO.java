@@ -2666,7 +2666,7 @@ class TraceDAOImpl implements TraceDAO {
                         .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
                                 Integer.class))
                         .orElse(0))
-                .providers(row.get("providers", String[].class))
+                .providers(row.get("providers", List.class))
                 .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
                 .totalEstimatedCost(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.TOTAL_ESTIMATED_COST, row,

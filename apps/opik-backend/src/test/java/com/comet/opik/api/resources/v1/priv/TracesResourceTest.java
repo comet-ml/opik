@@ -1677,7 +1677,7 @@ class TracesResourceTest {
                         .filter(provider -> provider != null && !provider.isEmpty())
                         .distinct()
                         .sorted()
-                        .toArray(String[]::new);
+                        .toList();
 
                 return trace.toBuilder()
                         .providers(providers)
@@ -3952,12 +3952,12 @@ class TracesResourceTest {
                     .map(trace -> {
                         if (trace.id().equals(traces.get(0).id())) {
                             return trace.toBuilder()
-                                    .providers(new String[]{"anthropic", "openai"})
+                                    .providers(List.of("anthropic", "openai"))
                                     .spanCount(2)
                                     .build();
                         } else {
                             return trace.toBuilder()
-                                    .providers(new String[]{"google", "openai"})
+                                    .providers(List.of("google", "openai"))
                                     .spanCount(2)
                                     .build();
                         }
@@ -3965,7 +3965,7 @@ class TracesResourceTest {
                     .toList();
 
             unexpectedTraces = List.of(traces.get(1).toBuilder()
-                    .providers(new String[]{"google"})
+                    .providers(List.of("google"))
                     .spanCount(1)
                     .build());
 
@@ -4049,16 +4049,16 @@ class TracesResourceTest {
 
             var expectedTraces = List.of(
                     traces.get(1).toBuilder()
-                            .providers(new String[]{"anthropic"})
+                            .providers(List.of("anthropic"))
                             .spanCount(1)
                             .build(),
                     traces.get(2).toBuilder()
-                            .providers(new String[]{"google"})
+                            .providers(List.of("google"))
                             .spanCount(1)
                             .build());
 
             var unexpectedTraces = List.of(traces.get(0).toBuilder()
-                    .providers(new String[]{"openai"})
+                    .providers(List.of("openai"))
                     .spanCount(1)
                     .build());
 
@@ -11446,9 +11446,16 @@ class TracesResourceTest {
                     List<Span> ts = spansByTraceId.getOrDefault(trace.id(), List.of());
                     var total = ts.size();
                     var llmCount = ts.stream().filter(s -> s.type() == SpanType.llm).toList().size();
+                    var providers = ts.stream()
+                            .map(Span::provider)
+                            .filter(provider -> !provider.isEmpty())
+                            .distinct()
+                            .sorted()
+                            .toList();
                     return trace.toBuilder()
                             .spanCount(total)
                             .llmSpanCount(llmCount)
+                            .providers(providers)
                             .build();
                 })
                 .toList();
