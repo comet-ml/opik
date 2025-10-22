@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class ManualEvaluationResourceClient {
 
-    private static final String TRACES_RESOURCE_PATH = "%s/v1/private/projects/%s/traces/evaluate";
-    private static final String THREADS_RESOURCE_PATH = "%s/v1/private/projects/%s/threads/evaluate";
+    private static final String TRACES_RESOURCE_PATH = "%s/v1/private/manual-evaluation/traces";
+    private static final String THREADS_RESOURCE_PATH = "%s/v1/private/manual-evaluation/threads";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -44,7 +44,7 @@ public class ManualEvaluationResourceClient {
 
     public Response callEvaluateTraces(UUID projectId, ManualEvaluationRequest request, String apiKey,
             String workspaceName) {
-        return client.target(TRACES_RESOURCE_PATH.formatted(baseURI, projectId))
+        return client.target(TRACES_RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -69,7 +69,7 @@ public class ManualEvaluationResourceClient {
 
     public Response callEvaluateThreads(UUID projectId, ManualEvaluationRequest request, String apiKey,
             String workspaceName) {
-        return client.target(THREADS_RESOURCE_PATH.formatted(baseURI, projectId))
+        return client.target(THREADS_RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

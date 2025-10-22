@@ -18,15 +18,12 @@ import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.UUID;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -35,7 +32,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
  * Allows users to run online evaluation metrics on specific entities without sampling,
  * directly from the UI.
  */
-@Path("/v1/private/projects/{projectId}")
+@Path("/v1/private/manual-evaluation")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
@@ -48,13 +45,13 @@ public class ManualEvaluationResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
-    @Path("/traces/evaluate")
+    @Path("/traces")
     @Operation(operationId = "evaluateTraces", summary = "Manually evaluate traces", description = "Manually trigger evaluation rules on selected traces. Bypasses sampling and enqueues all specified traces for evaluation.", responses = {
             @ApiResponse(responseCode = "202", description = "Accepted - Evaluation request queued successfully", content = @Content(schema = @Schema(implementation = ManualEvaluationResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request or missing automation rules", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found - Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
-    public Response evaluateTraces(@PathParam("projectId") UUID projectId,
+    public Response evaluateTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = ManualEvaluationRequest.class))) @Valid @NonNull ManualEvaluationRequest request) {
 
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -62,14 +59,14 @@ public class ManualEvaluationResource {
 
         log.info(
                 "Manual evaluation request for '{}' traces with '{}' rules in project '{}', workspace '{}' by user '{}'",
-                request.entityIds().size(), request.ruleIds().size(), projectId, workspaceId, userName);
+                request.entityIds().size(), request.ruleIds().size(), request.projectId(), workspaceId, userName);
 
-        var response = manualEvaluationService.evaluate(request, projectId, workspaceId, userName)
+        var response = manualEvaluationService.evaluate(request, request.projectId(), workspaceId, userName)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info("Manual evaluation request accepted for '{}' traces in project '{}', workspace '{}'",
-                request.entityIds().size(), projectId, workspaceId);
+                request.entityIds().size(), request.projectId(), workspaceId);
 
         return Response.status(Response.Status.ACCEPTED)
                 .entity(response)
@@ -77,13 +74,13 @@ public class ManualEvaluationResource {
     }
 
     @POST
-    @Path("/threads/evaluate")
+    @Path("/threads")
     @Operation(operationId = "evaluateThreads", summary = "Manually evaluate threads", description = "Manually trigger evaluation rules on selected threads. Bypasses sampling and enqueues all specified threads for evaluation.", responses = {
             @ApiResponse(responseCode = "202", description = "Accepted - Evaluation request queued successfully", content = @Content(schema = @Schema(implementation = ManualEvaluationResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request or missing automation rules", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found - Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
-    public Response evaluateThreads(@PathParam("projectId") UUID projectId,
+    public Response evaluateThreads(
             @RequestBody(content = @Content(schema = @Schema(implementation = ManualEvaluationRequest.class))) @Valid @NonNull ManualEvaluationRequest request) {
 
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -91,14 +88,14 @@ public class ManualEvaluationResource {
 
         log.info(
                 "Manual evaluation request for '{}' threads with '{}' rules in project '{}', workspace '{}' by user '{}'",
-                request.entityIds().size(), request.ruleIds().size(), projectId, workspaceId, userName);
+                request.entityIds().size(), request.ruleIds().size(), request.projectId(), workspaceId, userName);
 
-        var response = manualEvaluationService.evaluate(request, projectId, workspaceId, userName)
+        var response = manualEvaluationService.evaluate(request, request.projectId(), workspaceId, userName)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info("Manual evaluation request accepted for '{}' threads in project '{}', workspace '{}'",
-                request.entityIds().size(), projectId, workspaceId);
+                request.entityIds().size(), request.projectId(), workspaceId);
 
         return Response.status(Response.Status.ACCEPTED)
                 .entity(response)

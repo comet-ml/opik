@@ -101,6 +101,7 @@ class ManualEvaluationServiceTest {
                     podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(entityIds)
                     .ruleIds(ruleIds)
                     .entityType(entityType)
@@ -160,6 +161,7 @@ class ManualEvaluationServiceTest {
             var ruleIds = List.of(podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(entityIds)
                     .ruleIds(ruleIds)
                     .entityType(entityType)
@@ -211,6 +213,7 @@ class ManualEvaluationServiceTest {
             var ruleIds = List.of(podamFactory.manufacturePojo(UUID.class));
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(entityIds)
                     .ruleIds(ruleIds)
                     .entityType(entityType)
@@ -328,6 +331,7 @@ class ManualEvaluationServiceTest {
                     .collect(Collectors.toList());
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(entityIds)
                     .ruleIds(ruleIds)
                     .entityType(entityType)

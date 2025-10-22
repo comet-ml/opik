@@ -192,6 +192,7 @@ class ManualEvaluationResourceTest {
             var ruleId = evaluatorResourceClient.createEvaluator(rule, WORKSPACE_NAME, API_KEY);
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(List.of(traceId))
                     .ruleIds(List.of(ruleId))
                     .entityType(entityType)
@@ -261,6 +262,7 @@ class ManualEvaluationResourceTest {
             var ruleId2 = evaluatorResourceClient.createEvaluator(rule2, WORKSPACE_NAME, API_KEY);
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(List.of(traceId1, traceId2))
                     .ruleIds(List.of(ruleId1, ruleId2))
                     .entityType(entityType)
@@ -299,6 +301,7 @@ class ManualEvaluationResourceTest {
             var nonExistentRuleId = UUID.randomUUID();
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(List.of(traceId))
                     .ruleIds(List.of(nonExistentRuleId))
                     .entityType(entityType)
@@ -328,6 +331,7 @@ class ManualEvaluationResourceTest {
 
             // Empty entity IDs list should fail validation
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(List.of()) // Empty list
                     .ruleIds(List.of(UUID.randomUUID()))
                     .entityType(entityType)
@@ -351,6 +355,7 @@ class ManualEvaluationResourceTest {
             var nonExistentProjectId = UUID.randomUUID();
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(nonExistentProjectId)
                     .entityIds(List.of(UUID.randomUUID()))
                     .ruleIds(List.of(UUID.randomUUID()))
                     .entityType(entityType)
@@ -396,6 +401,7 @@ class ManualEvaluationResourceTest {
             var ruleId = evaluatorResourceClient.createEvaluator(rule, WORKSPACE_NAME, API_KEY);
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(List.of(traceId))
                     .ruleIds(List.of(ruleId))
                     .entityType(ManualEvaluationEntityType.TRACE)
@@ -442,6 +448,7 @@ class ManualEvaluationResourceTest {
             var ruleId = evaluatorResourceClient.createEvaluator(rule, WORKSPACE_NAME, API_KEY);
 
             var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
                     .entityIds(List.of(traceId))
                     .ruleIds(List.of(ruleId))
                     .entityType(ManualEvaluationEntityType.THREAD)
