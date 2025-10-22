@@ -7,11 +7,11 @@ toc_max_heading_level: 4
 
 Task span metrics are a powerful type of evaluation metric in Opik that can analyze the detailed execution information of your LLM tasks. Unlike traditional metrics that only evaluate input-output pairs, task span metrics have access to the complete execution context, including intermediate steps, metadata, timing information, and hierarchical structure.
 
-**Important:** only spans created with `@trak` decorators and native OPIK integrations are available for task span metrics.
+**Important:** only spans created with `@track` decorators and native OPIK integrations are available for task span metrics.
 
 ## What are Task Span Metrics?
 
-Task span metrics are evaluation metrics that include a `task_span` parameter in their `score` method. The Opik evaluation engine automatically detects these metrics by inspecting the `score` method signature and handles them differently from regular metrics.
+Task span metrics are evaluation metrics that include a `task_span` parameter in their `score` method. The Opik evaluation engine automatically detects that.
 
 When a metric has a `task_span` parameter, it receives a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object containing the complete execution context of your task.
 
