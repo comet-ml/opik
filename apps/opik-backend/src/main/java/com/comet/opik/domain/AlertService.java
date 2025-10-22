@@ -4,6 +4,7 @@ import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
@@ -29,6 +30,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.jdbi.v3.core.Handle;
 import reactor.core.publisher.Mono;
@@ -45,7 +47,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.comet.opik.api.resources.v1.events.WebhookSubscriber.deserializeEventPayload;
+import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.deserializeEventPayload;
+import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.prepareWebhookPayload;
+import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.webhookEventPayloadPerType;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -69,7 +73,7 @@ public interface AlertService {
 
     WebhookTestResult testWebhook(Alert alert);
 
-    WebhookExamples getWebhookExamples();
+    WebhookExamples getWebhookExamples(AlertType alertType);
 }
 
 @Slf4j
@@ -230,7 +234,7 @@ class AlertServiceImpl implements AlertService {
                     .build())
             .build();
 
-    private static final WebhookExamples WEBHOOK_EXAMPLES = prepareWebhookPayloadExamples();
+    private static final Map<AlertType, WebhookExamples> WEBHOOK_EXAMPLES = prepareWebhookPayloadExamples();
 
     @Override
     public UUID create(@NonNull Alert alert) {
@@ -350,7 +354,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        var event = deserializeEventPayload(mapAlertToWebhookEvent(alert, workspaceId));
+        var event = prepareWebhookPayload(mapAlertToWebhookEvent(alert, workspaceId));
 
         return Mono.defer(() -> webhookHttpClient.sendWebhook(event))
                 .contextWrite(ctx -> setRequestContext(ctx, userName, workspaceId))
@@ -362,7 +366,7 @@ class AlertServiceImpl implements AlertService {
                     return WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.SUCCESS)
                             .statusCode(200) // Success defaults to 200
-                            .requestBody(event.toBuilder().url(null).headers(null).secret(null).build())
+                            .requestBody(event.getJsonPayload())
                             .errorMessage(null)
                             .build();
                 })
@@ -378,7 +382,7 @@ class AlertServiceImpl implements AlertService {
                     return Mono.just(WebhookTestResult.builder()
                             .status(WebhookTestResult.Status.FAILURE)
                             .statusCode(statusCode)
-                            .requestBody(event.toBuilder().url(null).headers(null).secret(null).build())
+                            .requestBody(event.getJsonPayload())
                             .errorMessage(throwable.getMessage())
                             .build());
                 })
@@ -386,8 +390,8 @@ class AlertServiceImpl implements AlertService {
     }
 
     @Override
-    public WebhookExamples getWebhookExamples() {
-        return WEBHOOK_EXAMPLES;
+    public WebhookExamples getWebhookExamples(@NonNull AlertType alertType) {
+        return WEBHOOK_EXAMPLES.get(alertType);
     }
 
     private static WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId) {
@@ -414,7 +418,9 @@ class AlertServiceImpl implements AlertService {
                 .id(eventId)
                 .url(alert.webhook().url())
                 .eventType(eventType)
+                .alertType(Optional.ofNullable(alert.alertType()).orElse(AlertType.GENERAL))
                 .alertId(alertId)
+                .alertName(StringUtils.isBlank(alert.name()) ? "Test Alert" : alert.name())
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
                 .secret(alert.webhook().secretToken())
@@ -492,6 +498,7 @@ class AlertServiceImpl implements AlertService {
         return alert.toBuilder()
                 .id(id)
                 .enabled(alert.enabled() != null ? alert.enabled() : true) // Set default to true only when not explicitly provided
+                .alertType(alert.alertType() != null ? alert.alertType() : AlertType.GENERAL) // Set default to GENERAL when not provided
                 .webhook(webhook)
                 .triggers(preparedTriggers)
                 .createdBy(Optional.ofNullable(alert.createdBy()).orElse(userName))
@@ -533,24 +540,33 @@ class AlertServiceImpl implements AlertService {
                 .build();
     }
 
-    private static WebhookExamples prepareWebhookPayloadExamples() {
-        Map<AlertEventType, WebhookEvent<?>> examples = new HashMap<>();
+    private static Map<AlertType, WebhookExamples> prepareWebhookPayloadExamples() {
+        Map<AlertType, WebhookExamples> result = new HashMap<>();
 
-        Arrays.stream(AlertEventType.values())
-                .forEach(eventType -> {
-                    var alert = DUMMY_ALERT.toBuilder()
-                            .triggers(List.of(
-                                    AlertTrigger.builder()
-                                            .eventType(eventType)
-                                            .build()))
-                            .build();
+        Arrays.stream(AlertType.values())
+                .forEach(alertType -> {
+                    Map<AlertEventType, Object> examples = new HashMap<>();
 
-                    var webhookEvent = deserializeEventPayload(mapAlertToWebhookEvent(alert, "demo-workspace-id"));
-                    examples.put(eventType, webhookEvent.toBuilder().url(null).headers(null).secret(null).build());
+                    Arrays.stream(AlertEventType.values())
+                            .forEach(eventType -> {
+                                var alert = DUMMY_ALERT.toBuilder()
+                                        .alertType(alertType)
+                                        .triggers(List.of(
+                                                AlertTrigger.builder()
+                                                        .eventType(eventType)
+                                                        .build()))
+                                        .build();
+
+                                var webhookEvent = deserializeEventPayload(
+                                        mapAlertToWebhookEvent(alert, "demo-workspace-id"));
+                                examples.put(eventType, webhookEventPayloadPerType(webhookEvent));
+                            });
+
+                    result.put(alertType, WebhookExamples.builder()
+                            .responseExamples(examples)
+                            .build());
                 });
 
-        return WebhookExamples.builder()
-                .responseExamples(examples)
-                .build();
+        return result;
     }
 }
