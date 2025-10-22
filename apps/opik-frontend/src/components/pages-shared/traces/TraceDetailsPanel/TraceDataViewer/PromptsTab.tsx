@@ -98,12 +98,6 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                   search={search}
                 />
                 <div className="flex flex-col gap-2 border-t pt-2 text-xs text-muted-slate">
-                  {commitHash && (
-                    <div>
-                      <strong>Commit:</strong>{" "}
-                      <code className="font-mono">{commitHash}</code>
-                    </div>
-                  )}
                   {promptId && (
                     <div>
                       <Link
