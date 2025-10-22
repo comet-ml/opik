@@ -16,6 +16,8 @@ import {
   INTERVAL_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { formatCost } from "@/lib/money";
 import { generateVisibilityFilters } from "@/lib/filters";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -26,14 +28,12 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-import {
-  DURATION_LABELS_MAP,
-  INTERVAL_DESCRIPTIONS,
-  renderDurationTooltipValue,
-  durationYTickFormatter,
-} from "./utils";
+import { INTERVAL_DESCRIPTIONS } from "./utils";
 
-const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
+const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
+  formatCost(value as number);
+
+const PROJECT_METRICS_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
     id: COLUMN_ID_ID,
     label: "ID",
@@ -101,7 +101,7 @@ const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   },
 ];
 
-interface TraceMetricsSectionProps {
+interface ProjectMetricsSectionProps {
   projectId: string;
   interval: INTERVAL_TYPE;
   intervalStart: string;
@@ -109,7 +109,7 @@ interface TraceMetricsSectionProps {
   hasTraces: boolean;
 }
 
-const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
+const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
   projectId,
   interval,
   intervalStart,
@@ -120,19 +120,19 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
 
-  const [traceFilters = [], setTraceFilters] = useQueryParam(
-    "traces_metrics_filters",
+  const [projectMetricsFilters = [], setProjectMetricsFilters] = useQueryParam(
+    "project_metrics_filters",
     JsonParam,
     {
       updateType: "replaceIn",
     },
   );
 
-  const processedTracesFilters = useMemo(() => {
-    return [...traceFilters, ...generateVisibilityFilters()];
-  }, [traceFilters]);
+  const processedProjectMetricsFilters = useMemo(() => {
+    return [...projectMetricsFilters, ...generateVisibilityFilters()];
+  }, [projectMetricsFilters]);
 
-  const traceFiltersConfig = useMemo(
+  const projectMetricsFiltersConfig = useMemo(
     () => ({
       rowsMap: {
         [COLUMN_METADATA_ID]: {
@@ -199,8 +199,8 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
     [projectId],
   );
 
-  const traceFilterColumns = useMemo(() => {
-    const baseColumns = [...TRACE_FILTER_COLUMNS];
+  const projectMetricsFilterColumns = useMemo(() => {
+    const baseColumns = [...PROJECT_METRICS_FILTER_COLUMNS];
 
     if (isGuardrailsEnabled) {
       baseColumns.push({
@@ -220,12 +220,12 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
   return (
     <div className="pt-6">
       <div className="sticky top-0 z-10 flex items-center justify-between bg-soft-background pb-3 pt-2">
-        <h2 className="comet-title-s truncate break-words">Trace metrics</h2>
+        <h2 className="comet-title-s truncate break-words">Project metrics</h2>
         <FiltersButton
-          columns={traceFilterColumns}
-          filters={traceFilters}
-          onChange={setTraceFilters}
-          config={traceFiltersConfig}
+          columns={projectMetricsFilterColumns}
+          filters={projectMetricsFilters}
+          onChange={setProjectMetricsFilters}
+          config={projectMetricsFiltersConfig}
         />
       </div>
       <div
@@ -234,72 +234,38 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
       >
         <div>
           <MetricContainerChart
-            chartId="feedback_scores_chart"
-            key="feedback_scores_chart"
-            name="Trace feedback scores"
-            description={INTERVAL_DESCRIPTIONS.AVERAGES[interval]}
-            metricName={METRIC_NAME_TYPE.FEEDBACK_SCORES}
-            interval={interval}
-            intervalStart={intervalStart}
-            intervalEnd={intervalEnd}
-            projectId={projectId}
-            chartType="line"
-            traceFilters={processedTracesFilters}
-          />
-        </div>
-        <div>
-          <MetricContainerChart
-            chartId="number_of_traces_chart"
-            key="number_of_traces_chart"
-            name="Number of traces"
+            chartId="token_usage_chart"
+            key="token_usage_chart"
+            name="Token usage"
             description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
-            metricName={METRIC_NAME_TYPE.TRACE_COUNT}
+            metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
             interval={interval}
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
             chartType="line"
-            traceFilters={processedTracesFilters}
+            traceFilters={processedProjectMetricsFilters}
           />
         </div>
         <div>
           <MetricContainerChart
-            chartId="duration_chart"
-            key="duration_chart"
-            name="Trace duration"
-            description={INTERVAL_DESCRIPTIONS.QUANTILES[interval]}
-            metricName={METRIC_NAME_TYPE.TRACE_DURATION}
+            chartId="estimated_cost_chart"
+            key="estimated_cost_chart"
+            name="Estimated cost"
+            description={INTERVAL_DESCRIPTIONS.COST[interval]}
+            metricName={METRIC_NAME_TYPE.COST}
             interval={interval}
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
-            renderValue={renderDurationTooltipValue}
-            labelsMap={DURATION_LABELS_MAP}
-            customYTickFormatter={durationYTickFormatter}
+            renderValue={renderCostTooltipValue}
             chartType="line"
-            traceFilters={processedTracesFilters}
+            traceFilters={processedProjectMetricsFilters}
           />
         </div>
-        {isGuardrailsEnabled && (
-          <div className="md:col-span-2">
-            <MetricContainerChart
-              chartId="failed_guardrails_chart"
-              key="failed_guardrails_chart"
-              name="Failed guardrails"
-              description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
-              metricName={METRIC_NAME_TYPE.FAILED_GUARDRAILS}
-              interval={interval}
-              intervalStart={intervalStart}
-              intervalEnd={intervalEnd}
-              projectId={projectId}
-              chartType="bar"
-              traceFilters={processedTracesFilters}
-            />
-          </div>
-        )}
       </div>
     </div>
   );
 };
 
-export default TraceMetricsSection;
+export default ProjectMetricsSection;
