@@ -92,7 +92,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     log.info(
                             "Successfully queued '{}' entities for evaluation with '{}' rules in project '{}', workspace '{}'",
                             evaluatedCount, request.ruleIds().size(), projectId, workspaceId);
-                    return ManualEvaluationResponse.of(evaluatedCount, request.ruleIds().size());
+                    return new ManualEvaluationResponse(evaluatedCount, request.ruleIds().size());
                 });
     }
 

@@ -210,8 +210,6 @@ class ManualEvaluationResourceTest {
             // Then
             assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
             assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
-            assertThat(evaluationResponse.message())
-                    .isEqualTo("Successfully queued 1 entity for evaluation with 1 rule");
         }
 
         @ParameterizedTest
@@ -281,8 +279,6 @@ class ManualEvaluationResourceTest {
             // Then
             assertThat(evaluationResponse.entitiesQueued()).isEqualTo(2);
             assertThat(evaluationResponse.rulesApplied()).isEqualTo(2);
-            assertThat(evaluationResponse.message())
-                    .isEqualTo("Successfully queued 2 entities for evaluation with 2 rules");
         }
 
         @ParameterizedTest

@@ -130,8 +130,6 @@ class ManualEvaluationServiceTest {
                     .assertNext(response -> {
                         assertThat(response.entitiesQueued()).isEqualTo(3);
                         assertThat(response.rulesApplied()).isEqualTo(2);
-                        assertThat(response.message())
-                                .isEqualTo("Successfully queued 3 entities for evaluation with 2 rules");
                     })
                     .verifyComplete();
 
@@ -187,8 +185,6 @@ class ManualEvaluationServiceTest {
                     .assertNext(response -> {
                         assertThat(response.entitiesQueued()).isEqualTo(1);
                         assertThat(response.rulesApplied()).isEqualTo(1);
-                        assertThat(response.message())
-                                .isEqualTo("Successfully queued 1 entity for evaluation with 1 rule");
                     })
                     .verifyComplete();
 
