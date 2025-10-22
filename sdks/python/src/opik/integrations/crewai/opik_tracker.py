@@ -7,8 +7,6 @@ from opik.integrations.litellm import track_completion
 from . import crewai_decorator, flow_patchers
 
 __IS_TRACKING_ENABLED = False
-_ORIGINAL_LITELLM_COMPLETION = None
-_ORIGINAL_LITELLM_ACOMPLETION = None
 
 
 def track_crewai(
@@ -26,11 +24,7 @@ def track_crewai(
     Parameters:
         project_name: The name of the project to associate with the tracking.
     """
-    global (
-        __IS_TRACKING_ENABLED,
-        _ORIGINAL_LITELLM_COMPLETION,
-        _ORIGINAL_LITELLM_ACOMPLETION
-    )
+    global __IS_TRACKING_ENABLED
 
     if __IS_TRACKING_ENABLED:
         return
@@ -48,18 +42,18 @@ def track_crewai(
     crewai.Task.execute_sync = crewai_wrapper(crewai.Task.execute_sync)
 
     # Patch LiteLLM functions used by CrewAI
-    if _ORIGINAL_LITELLM_COMPLETION is None:
-        _ORIGINAL_LITELLM_COMPLETION = litellm.completion
-        _ORIGINAL_LITELLM_ACOMPLETION = litellm.acompletion
-
-        litellm.completion = track_completion(project_name=project_name)(
-            litellm.completion
-        )
-        litellm.acompletion = track_completion(project_name=project_name)(
-            litellm.acompletion
-        )
+    _patch_litellm_completion(project_name=project_name)
 
     flow_patchers.patch_flow_init(project_name=project_name)
     flow_patchers.patch_flow_kickoff_async(project_name=project_name)
 
     return None
+
+
+def _patch_litellm_completion(project_name: Optional[str] = None) -> None:
+    litellm.completion = track_completion(project_name=project_name)(
+        litellm.completion
+    )
+    litellm.acompletion = track_completion(project_name=project_name)(
+        litellm.acompletion
+    )
