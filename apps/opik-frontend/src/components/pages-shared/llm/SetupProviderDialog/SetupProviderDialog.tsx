@@ -123,12 +123,11 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Add a model provider</DialogTitle>
+          <DialogTitle>Add an AI provider</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 pb-4">
           <p className="comet-body-s text-muted-foreground">
-            Select an AI model provider and enter an API key. You&apos;ll be
-            able to configure custom providers and cloud providers later.
+            To use the Playground, select an AI provider and enter your API key
           </p>
 
           <Form {...form}>

@@ -27,7 +27,7 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
               type="button"
               onClick={() => onSelectProvider(provider.value)}
               className={cn(
-                "flex flex-col items-center justify-center gap-2 rounded-md border-2 p-4 transition-all hover:border-primary hover:bg-muted",
+                "flex flex-col items-center justify-center gap-2 rounded-md border p-4 transition-all hover:border-primary hover:bg-muted",
                 isSelected ? "border-primary bg-muted" : "border-border",
               )}
             >
