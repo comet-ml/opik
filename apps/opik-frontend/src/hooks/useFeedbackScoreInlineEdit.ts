@@ -13,6 +13,7 @@ interface UseFeedbackScoreInlineEditProps {
   projectId?: string;
   projectName?: string;
   isThread?: boolean;
+  isSpan?: boolean;
 }
 
 const useFeedbackScoreInlineEdit = ({
@@ -21,6 +22,7 @@ const useFeedbackScoreInlineEdit = ({
   projectId,
   projectName,
   isThread = false,
+  isSpan = false,
 }: UseFeedbackScoreInlineEditProps) => {
   const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
@@ -73,6 +75,7 @@ const useFeedbackScoreInlineEdit = ({
         if (!isSameValue) {
           setTraceFeedbackScore({
             traceId: id,
+            spanId: isSpan ? id : undefined,
             name: USER_FEEDBACK_NAME,
             categoryName,
             value,
@@ -80,6 +83,7 @@ const useFeedbackScoreInlineEdit = ({
         } else {
           deleteTraceFeedbackScore({
             traceId: id,
+            spanId: isSpan ? id : undefined,
             name: USER_FEEDBACK_NAME,
           });
         }
@@ -95,6 +99,7 @@ const useFeedbackScoreInlineEdit = ({
       id,
       deleteThreadFeedbackScore,
       setTraceFeedbackScore,
+      isSpan,
       deleteTraceFeedbackScore,
     ],
   );

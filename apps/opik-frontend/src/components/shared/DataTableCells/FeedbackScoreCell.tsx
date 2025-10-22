@@ -7,7 +7,7 @@ import isFunction from "lodash/isFunction";
 import { cn, formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
-import { TraceFeedbackScore, Thread } from "@/types/traces";
+import { TraceFeedbackScore, Thread, Span } from "@/types/traces";
 import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
@@ -15,11 +15,12 @@ import {
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
+import { isObjectSpan, isObjectThread } from "@/lib/traces";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
   const reason = feedbackScore?.reason;
-  const row = context.row.original as BaseTraceData | Thread;
+  const row = context.row.original as BaseTraceData | Thread | Span;
 
   // Get projectId and projectName from table meta
   const projectId = (
@@ -31,7 +32,8 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
 
   const { handleValueChange } = useFeedbackScoreInlineEdit({
     id: row.id,
-    isThread: "thread_model_id" in row,
+    isThread: isObjectThread(row),
+    isSpan: isObjectSpan(row),
     feedbackScore,
     projectId,
     projectName,
