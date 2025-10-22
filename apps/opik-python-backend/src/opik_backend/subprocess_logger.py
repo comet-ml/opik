@@ -309,7 +309,8 @@ class BatchLogCollector(logging.Handler):
             if self._reader_executor is None:
                 self._reader_executor = ThreadPoolExecutor(max_workers=2)  # Concurrent stdout and stderr reading
             
-            # Clear previous futures for new stream
+            # Clear previous futures before starting new reader threads
+            # (ensures futures list doesn't accumulate if close() wasn't called)
             self._reader_futures.clear()
             
             # Spawn reader tasks for stdout and stderr concurrently in single executor
