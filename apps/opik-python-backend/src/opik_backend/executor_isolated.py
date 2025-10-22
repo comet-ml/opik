@@ -130,13 +130,9 @@ class IsolatedSubprocessExecutor:
             # Prepare environment for subprocess
             subprocess_env = self._prepare_environment(env_vars)
 
-            # Build command: either execute inline code or a file path
-            cmd = [sys.executable, "-u"]
-            cmd.append(file_path)
-
-            # Create subprocess with python to execute the code
+            # Create subprocess with python to execute the file directly
             process = subprocess.Popen(
-                cmd,
+                [sys.executable, "-u", file_path],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
