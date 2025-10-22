@@ -17,6 +17,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
+import com.comet.opik.api.resources.utils.resources.ManualEvaluationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -25,8 +26,6 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -52,7 +51,6 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -65,8 +63,6 @@ class ManualEvaluationResourceTest {
     private static final String USER = "user-" + RandomStringUtils.randomAlphanumeric(10);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(10);
-
-    private static final String URL_TEMPLATE = "%s/v1/private/projects/%s/%s/evaluate";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -99,6 +95,7 @@ class ManualEvaluationResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private AutomationRuleEvaluatorResourceClient evaluatorResourceClient;
+    private ManualEvaluationResourceClient manualEvaluationResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -112,6 +109,7 @@ class ManualEvaluationResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
+        this.manualEvaluationResourceClient = new ManualEvaluationResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -119,7 +117,7 @@ class ManualEvaluationResourceTest {
         wireMock.server().stop();
     }
 
-    static Stream<Arguments> entityTypeProvider() {
+    private static Stream<Arguments> entityTypeProvider() {
         return Stream.of(
                 arguments("traces", ManualEvaluationEntityType.TRACE),
                 arguments("threads", ManualEvaluationEntityType.THREAD));
@@ -131,7 +129,7 @@ class ManualEvaluationResourceTest {
     class EvaluateEntitiesEndpoint {
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationResourceTest#entityTypeProvider")
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ManualEvaluationResourceTest#entityTypeProvider")
         @DisplayName("should return 202 Accepted when evaluation request is successful")
         void shouldReturn202AcceptedWhenEvaluationRequestIsSuccessful(String endpoint,
                 ManualEvaluationEntityType entityType) {
@@ -163,25 +161,24 @@ class ManualEvaluationResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId, endpoint))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
-
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
-
-                var evaluationResponse = response.readEntity(ManualEvaluationResponse.class);
-                assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
-                assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
-                assertThat(evaluationResponse.message())
-                        .isEqualTo("Successfully queued 1 entity for evaluation with 1 rule");
+            ManualEvaluationResponse evaluationResponse;
+            if ("traces".equals(endpoint)) {
+                evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
+                        WORKSPACE_NAME);
+            } else {
+                evaluationResponse = manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY,
+                        WORKSPACE_NAME);
             }
+
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
+            assertThat(evaluationResponse.message())
+                    .isEqualTo("Successfully queued 1 entity for evaluation with 1 rule");
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationResourceTest#entityTypeProvider")
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ManualEvaluationResourceTest#entityTypeProvider")
         @DisplayName("should handle multiple entities and rules")
         void shouldHandleMultipleEntitiesAndRules(String endpoint, ManualEvaluationEntityType entityType) {
             // Given
@@ -229,25 +226,24 @@ class ManualEvaluationResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId, endpoint))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
-
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
-
-                var evaluationResponse = response.readEntity(ManualEvaluationResponse.class);
-                assertThat(evaluationResponse.entitiesQueued()).isEqualTo(2);
-                assertThat(evaluationResponse.rulesApplied()).isEqualTo(2);
-                assertThat(evaluationResponse.message())
-                        .isEqualTo("Successfully queued 2 entities for evaluation with 2 rules");
+            ManualEvaluationResponse evaluationResponse;
+            if ("traces".equals(endpoint)) {
+                evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
+                        WORKSPACE_NAME);
+            } else {
+                evaluationResponse = manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY,
+                        WORKSPACE_NAME);
             }
+
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(2);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(2);
+            assertThat(evaluationResponse.message())
+                    .isEqualTo("Successfully queued 2 entities for evaluation with 2 rules");
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationResourceTest#entityTypeProvider")
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ManualEvaluationResourceTest#entityTypeProvider")
         @DisplayName("should return 400 when rules not found")
         void shouldReturn400WhenRulesNotFound(String endpoint, ManualEvaluationEntityType entityType) {
             // Given
@@ -270,15 +266,13 @@ class ManualEvaluationResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId, endpoint))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+            try (var response = "traces".equals(endpoint)
+                    ? manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY, WORKSPACE_NAME,
+                            HttpStatus.SC_BAD_REQUEST)
+                    : manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY, WORKSPACE_NAME,
+                            HttpStatus.SC_BAD_REQUEST)) {
 
                 // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-
                 var errorMessage = response.readEntity(ErrorMessage.class);
                 assertThat(errorMessage.getMessage()).contains("Automation rule(s) not found");
                 assertThat(errorMessage.getMessage()).contains(nonExistentRuleId.toString());
@@ -286,7 +280,7 @@ class ManualEvaluationResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationResourceTest#entityTypeProvider")
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ManualEvaluationResourceTest#entityTypeProvider")
         @DisplayName("should return 400 when request validation fails")
         void shouldReturn400WhenRequestValidationFails(String endpoint, ManualEvaluationEntityType entityType) {
             // Given
@@ -300,20 +294,18 @@ class ManualEvaluationResourceTest {
                     .entityType(entityType)
                     .build();
 
-            // When
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId, endpoint))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
-
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            // When / Then
+            try (var response = "traces".equals(endpoint)
+                    ? manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY, WORKSPACE_NAME,
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY)
+                    : manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY, WORKSPACE_NAME,
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                // Just verify the response status was asserted in the client
             }
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.domain.evaluators.ManualEvaluationResourceTest#entityTypeProvider")
+        @MethodSource("com.comet.opik.api.resources.v1.priv.ManualEvaluationResourceTest#entityTypeProvider")
         @DisplayName("should return 404 when project not found")
         void shouldReturn404WhenProjectNotFound(String endpoint, ManualEvaluationEntityType entityType) {
             // Given
@@ -326,11 +318,11 @@ class ManualEvaluationResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, nonExistentProjectId, endpoint))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+            try (var response = "traces".equals(endpoint)
+                    ? manualEvaluationResourceClient.callEvaluateTraces(nonExistentProjectId, request, API_KEY,
+                            WORKSPACE_NAME)
+                    : manualEvaluationResourceClient.callEvaluateThreads(nonExistentProjectId, request, API_KEY,
+                            WORKSPACE_NAME)) {
 
                 // Then - Either 404 or 400 depending on whether rules are validated first
                 assertThat(response.getStatus()).isIn(HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_NOT_FOUND);
@@ -366,19 +358,12 @@ class ManualEvaluationResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId, "traces"))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+            var evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
+                    WORKSPACE_NAME);
 
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
-
-                var evaluationResponse = response.readEntity(ManualEvaluationResponse.class);
-                assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
-                assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
-            }
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
         }
 
         @Test
@@ -414,19 +399,12 @@ class ManualEvaluationResourceTest {
                     .build();
 
             // When
-            try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId, "threads"))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, WORKSPACE_NAME)
-                    .post(Entity.json(request))) {
+            var evaluationResponse = manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY,
+                    WORKSPACE_NAME);
 
-                // Then
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
-
-                var evaluationResponse = response.readEntity(ManualEvaluationResponse.class);
-                assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
-                assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
-            }
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
         }
     }
 }
