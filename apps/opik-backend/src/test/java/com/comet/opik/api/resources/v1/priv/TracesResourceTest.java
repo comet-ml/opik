@@ -11446,9 +11446,16 @@ class TracesResourceTest {
                     List<Span> ts = spansByTraceId.getOrDefault(trace.id(), List.of());
                     var total = ts.size();
                     var llmCount = ts.stream().filter(s -> s.type() == SpanType.llm).toList().size();
+                    var providers = ts.stream()
+                            .map(Span::provider)
+                            .filter(provider -> provider != null && !provider.isEmpty())
+                            .distinct()
+                            .sorted()
+                            .toArray(String[]::new);
                     return trace.toBuilder()
                             .spanCount(total)
                             .llmSpanCount(llmCount)
+                            .providers(providers.length > 0 ? providers : null)
                             .build();
                 })
                 .toList();
