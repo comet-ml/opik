@@ -92,3 +92,22 @@ class ErrorInfoDict(TypedDict):
 
     traceback: str
     """Exception traceback"""
+
+
+class PromptInfoDict(TypedDict):
+    """
+    A dictionary-like structure representing information about a specific prompt.
+
+    This class is used to define the structure of prompt-related information,
+    including its name, content, and optional commit hash. It ensures that all
+    attributes are typed and clearly documented.
+    """
+
+    name: str
+    """The name of the prompt"""
+
+    prompt: str
+    """The prompt string"""
+
+    commit: NotRequired[Optional[str]]
+    """The commit hash of the prompt"""
