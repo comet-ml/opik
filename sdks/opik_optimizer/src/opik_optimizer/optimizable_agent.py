@@ -40,18 +40,19 @@ class OptimizableAgent:
 
     model: str | None = None
     model_kwargs: dict[str, Any] = {}
-    project_name: str | None = "Default Project"
     input_dataset_field: str | None = None
     prompts: dict[str, "ChatPrompt"]
     prompt: "ChatPrompt"
 
-    def __init__(self, prompt: "ChatPrompt") -> None:
+    def __init__(self, prompt: "ChatPrompt", project_name: str | None = None) -> None:
         """
         Initialize the OptimizableAgent.
 
         Args:
             prompt: a chat prompt
+            project_name: Optional project name for Opik tracking
         """
+        self.project_name = project_name or "Default Project"
         self.init_llm()
         self.init_agent(prompt)
 
@@ -83,6 +84,7 @@ class OptimizableAgent:
             metadata={
                 "opik": {
                     "current_span_data": get_current_span_data(),
+                    "project_name": self.project_name,
                 },
             },
             **self.model_kwargs,
