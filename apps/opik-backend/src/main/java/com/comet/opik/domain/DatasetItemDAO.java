@@ -681,14 +681,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
                 LEFT JOIN comments_final AS c ON t.id = c.entity_id
                 LEFT JOIN (
-                    SELECT
-                        trace_id,
-                        SUM(total_estimated_cost) AS total_estimated_cost,
-                        sumMap(usage) AS usage
-                    FROM spans final
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                    GROUP BY workspace_id, project_id, trace_id
+                SELECT
+                    trace_id,
+                    SUM(total_estimated_cost) AS total_estimated_cost,
+                    sumMap(usage) AS usage
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                GROUP BY workspace_id, trace_id
                 ) s ON t.id = s.trace_id
                 GROUP BY
                     t.id,
@@ -754,8 +754,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         arrayFlatten(
                             groupArray(
                                 arrayMap(
-                                    key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
-                                    JSONExtractKeys(output)
+                                    key_type -> map(tupleElement(key_type, 1), [tupleElement(key_type, 2)]),
+                                    output_keys
                                 )
                             )
                         )
@@ -767,7 +767,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             INNER JOIN (
                 SELECT
                     id,
-                    output
+                    output_keys
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT trace_id FROM experiment_items_final)

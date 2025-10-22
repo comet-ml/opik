@@ -10,7 +10,7 @@ from .webhook_write import WebhookWrite
 
 class AlertWrite(UniversalBaseModel):
     id: typing.Optional[str] = None
-    name: str
+    name: typing.Optional[str] = None
     enabled: typing.Optional[bool] = None
     webhook: WebhookWrite
     triggers: typing.Optional[typing.List[AlertTriggerWrite]] = None

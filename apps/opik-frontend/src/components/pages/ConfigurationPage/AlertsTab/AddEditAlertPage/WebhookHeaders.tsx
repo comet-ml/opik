@@ -110,16 +110,16 @@ const WebhookHeaders: React.FC<WebhookHeadersProps> = ({ form }) => {
                   );
                 }}
               />
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="size-10 p-0"
-                onClick={() => removeHeader(index)}
-              >
-                <X className="size-4" />
-              </Button>
+              <div className="flex items-center self-stretch">
+                <Button
+                  type="button"
+                  variant="minimal"
+                  size="icon-xs"
+                  onClick={() => removeHeader(index)}
+                >
+                  <X />
+                </Button>
+              </div>
             </div>
           ))}
         </div>

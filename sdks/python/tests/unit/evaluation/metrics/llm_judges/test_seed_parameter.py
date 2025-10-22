@@ -384,24 +384,34 @@ class TestSeedParameter:
 
     def test_all_metrics_accept_seed_parameter(self, test_seed: int) -> None:
         """Test that all LLM judge metrics accept seed parameter in constructor."""
-        with patch(
-            "opik.evaluation.metrics.llm_judges.answer_relevance.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.context_precision.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.context_recall.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.g_eval.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.hallucination.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.moderation.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.trajectory_accuracy.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.usefulness.metric.models_factory.get"
-        ), patch(
-            "opik.evaluation.metrics.llm_judges.structure_output_compliance.metric.models_factory.get"
+        with (
+            patch(
+                "opik.evaluation.metrics.llm_judges.answer_relevance.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.context_precision.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.context_recall.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.g_eval.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.hallucination.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.moderation.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.trajectory_accuracy.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.usefulness.metric.models_factory.get"
+            ),
+            patch(
+                "opik.evaluation.metrics.llm_judges.structure_output_compliance.metric.models_factory.get"
+            ),
         ):
             metrics = [
                 AnswerRelevance(seed=test_seed, track=False),

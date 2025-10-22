@@ -62,14 +62,26 @@ export class AutomationRuleEvaluators {
         request: OpikApi.FindEvaluatorsRequest = {},
         requestOptions?: AutomationRuleEvaluators.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.AutomationRuleEvaluatorPagePublic>> {
-        const { projectId, name, page, size } = request;
+        const { projectId, id, name, filters, sorting, page, size } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (projectId != null) {
             _queryParams["project_id"] = projectId;
         }
 
+        if (id != null) {
+            _queryParams["id"] = id;
+        }
+
         if (name != null) {
             _queryParams["name"] = name;
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
         }
 
         if (page != null) {

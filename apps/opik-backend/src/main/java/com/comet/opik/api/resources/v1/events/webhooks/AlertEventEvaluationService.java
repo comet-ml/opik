@@ -39,7 +39,8 @@ public class AlertEventEvaluationService {
                         String eventId = idGenerator.generateId().toString();
                         alertBucketService
                                 .addEventToBucket(alert.id(), alertEvent.workspaceId(), alertEvent.eventType(),
-                                        eventId, JsonUtils.writeValueAsString(alertEvent.payload()))
+                                        eventId, JsonUtils.writeValueAsString(alertEvent.payload()),
+                                        alertEvent.userName())
                                 .block();
                     }
                 });

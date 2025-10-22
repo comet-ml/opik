@@ -2,7 +2,9 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.AlertFilter;
@@ -41,10 +43,13 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.api.AlertType.GENERAL;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 
@@ -77,6 +82,13 @@ public class AlertResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        if (StringUtils.isBlank(alert.name())) {
+            log.warn("Alert name is required, workspaceId '{}'", workspaceId);
+            return Response.status(422)
+                    .entity(new ErrorMessage(List.of("Alert name is required")))
+                    .build();
+        }
+
         log.info("Creating alert with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
 
         var alertId = alertService.create(alert);
@@ -102,6 +114,13 @@ public class AlertResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+
+        if (StringUtils.isBlank(alert.name())) {
+            log.warn("Alert name is required, workspaceId '{}'", workspaceId);
+            return Response.status(422)
+                    .entity(new ErrorMessage(List.of("Alert name is required")))
+                    .build();
+        }
 
         log.info("Updating alert with id '{}', on workspace_id '{}'", id, workspaceId);
 
@@ -136,11 +155,7 @@ public class AlertResource {
 
         return Response.ok(alertPage.toBuilder()
                 .content(alertPage.content().stream()
-                        .map(alert -> alert.toBuilder().webhook(alert.webhook().toBuilder()
-                                .secretToken(alert.webhook().secretToken() != null
-                                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
-                                        : null)
-                                .build()).build())
+                        .map(this::maskSecretToken)
                         .toList())
                 .build()).build();
     }
@@ -162,11 +177,7 @@ public class AlertResource {
 
         log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
 
-        return Response.ok().entity(alert.toBuilder().webhook(alert.webhook().toBuilder()
-                .secretToken(alert.webhook().secretToken() != null
-                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
-                        : null)
-                .build()).build()).build();
+        return Response.ok().entity(maskSecretToken(alert)).build();
     }
 
     @POST
@@ -209,5 +220,31 @@ public class AlertResource {
         log.info("Tested alert webhook with name '{}', on workspace_id '{}'", alert.name(), workspaceId);
 
         return Response.ok().entity(response).build();
+    }
+
+    @GET
+    @Path("/webhooks/examples")
+    @Operation(operationId = "getWebhookExamples", summary = "Get webhook payload examples", description = "Get webhook payload examples for all alert event types, optionally filtered by alert type", responses = {
+            @ApiResponse(responseCode = "200", description = "Webhook examples", content = @Content(schema = @Schema(implementation = WebhookExamples.class)))
+    })
+    public Response getWebhookExamples(@QueryParam("alert_type") AlertType alertType) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting webhook examples on workspace_id '{}', alertType '{}'", workspaceId, alertType);
+
+        var examples = alertService.getWebhookExamples(Optional.ofNullable(alertType).orElse(GENERAL));
+
+        log.info("Got webhook examples on workspace_id '{}', alertType '{}'", workspaceId, alertType);
+
+        return Response.ok().entity(examples).build();
+    }
+
+    private Alert maskSecretToken(Alert alert) {
+        return alert.toBuilder().webhook(alert.webhook().toBuilder()
+                .secretToken(alert.webhook().secretToken() != null
+                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
+                        : null)
+                .build()).build();
     }
 }

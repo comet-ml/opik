@@ -37,7 +37,12 @@ from .. import (
     rest_client_configurator,
     url_helpers,
 )
-from ..message_processing import messages, streamer_constructors, message_queue
+from ..message_processing import (
+    messages,
+    streamer_constructors,
+    message_queue,
+    message_processors_chain,
+)
 from ..message_processing.batching import sequence_splitter
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
@@ -175,6 +180,11 @@ class Opik:
             batch_factor=self._config.maximal_queue_size_batch_factor,
         )
 
+        self._message_processor = (
+            message_processors_chain.create_message_processors_chain(
+                rest_client=self._rest_client
+            )
+        )
         self._streamer = streamer_constructors.construct_online_streamer(
             n_consumers=workers,
             rest_client=self._rest_client,
@@ -182,6 +192,7 @@ class Opik:
             use_batching=use_batching,
             file_upload_worker_count=file_upload_worker_count,
             max_queue_size=max_queue_size,
+            message_processor=self._message_processor,
         )
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:

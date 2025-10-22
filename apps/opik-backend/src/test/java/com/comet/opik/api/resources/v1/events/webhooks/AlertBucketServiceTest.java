@@ -78,7 +78,9 @@ class AlertBucketServiceTest {
         var payload = "test-payload-1";
 
         // When
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload))
+        StepVerifier
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload,
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // Then - verify bucket structure
@@ -123,7 +125,9 @@ class AlertBucketServiceTest {
         var payload2 = "test-payload-2";
 
         // When - add first event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId1, payload1))
+        StepVerifier
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId1, payload1,
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
@@ -135,7 +139,9 @@ class AlertBucketServiceTest {
         String originalWorkspaceId = (String) bucket.get("workspaceId").block();
 
         // When - add second event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2, payload2))
+        StepVerifier
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2, payload2,
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // Then - verify values haven't changed
@@ -174,7 +180,9 @@ class AlertBucketServiceTest {
         var event1Id = "test-event-1";
         var payload1 = "test-payload-1";
 
-        StepVerifier.create(alertBucketService.addEventToBucket(alert1Id, workspaceId1, eventType, event1Id, payload1))
+        StepVerifier
+                .create(alertBucketService.addEventToBucket(alert1Id, workspaceId1, eventType, event1Id, payload1,
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         String bucket1Key = BUCKET_KEY_PREFIX + alert1Id + ":" + eventType.getValue();
@@ -207,7 +215,7 @@ class AlertBucketServiceTest {
 
         StepVerifier
                 .create(updatedAlertBucketService.addEventToBucket(alert2Id, workspaceId2, eventType, event2Id,
-                        payload2))
+                        payload2, UUID.randomUUID().toString()))
                 .verifyComplete();
 
         String bucket2Key = BUCKET_KEY_PREFIX + alert2Id + ":" + eventType.getValue();
@@ -249,7 +257,8 @@ class AlertBucketServiceTest {
         var eventType = AlertEventType.TRACE_ERRORS;
 
         StepVerifier
-                .create(shortWindowService.addEventToBucket(alert1Id, workspaceId1, eventType, "event-1", "payload-1"))
+                .create(shortWindowService.addEventToBucket(alert1Id, workspaceId1, eventType, "event-1", "payload-1",
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // When - change to 3-second window and create second bucket
@@ -265,7 +274,8 @@ class AlertBucketServiceTest {
         var workspaceId2 = "test-workspace-" + UUID.randomUUID();
 
         StepVerifier
-                .create(longWindowService.addEventToBucket(alert2Id, workspaceId2, eventType, "event-2", "payload-2"))
+                .create(longWindowService.addEventToBucket(alert2Id, workspaceId2, eventType, "event-2", "payload-2",
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // Wait for first bucket's window to elapse (500ms + buffer)
@@ -301,7 +311,8 @@ class AlertBucketServiceTest {
         var eventType = AlertEventType.TRACE_ERRORS;
 
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1", "payload-1"))
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1", "payload-1",
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // When - change config to 2-second window
@@ -314,7 +325,9 @@ class AlertBucketServiceTest {
         var updatedService = new AlertBucketService(redissonClient, webhookConfig);
 
         // Add another event to the same alert
-        StepVerifier.create(updatedService.addEventToBucket(alertId, workspaceId, eventType, "event-2", "payload-2"))
+        StepVerifier
+                .create(updatedService.addEventToBucket(alertId, workspaceId, eventType, "event-2", "payload-2",
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // Then - bucket should still have original 1-second window
@@ -344,8 +357,11 @@ class AlertBucketServiceTest {
 
         // When - add multiple events
         StepVerifier.create(
-                alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId1, payload1)
-                        .then(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2, payload2)))
+                alertBucketService
+                        .addEventToBucket(alertId, workspaceId, eventType, eventId1, payload1,
+                                UUID.randomUUID().toString())
+                        .then(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2, payload2,
+                                UUID.randomUUID().toString())))
                 .verifyComplete();
 
         String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
@@ -375,7 +391,9 @@ class AlertBucketServiceTest {
         var eventId = "test-event-1";
         var payload = "test-payload-1";
 
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload))
+        StepVerifier
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload,
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
@@ -407,7 +425,9 @@ class AlertBucketServiceTest {
         long expectedTtlMillis = webhookConfig.getDebouncing().getBucketTtl().toMilliseconds();
 
         // When - add first event
-        StepVerifier.create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload))
+        StepVerifier
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload,
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // Then - verify TTL is set
@@ -435,7 +455,8 @@ class AlertBucketServiceTest {
 
         // When - add first event
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1", "payload-1"))
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1", "payload-1",
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         String bucketKey = BUCKET_KEY_PREFIX + alertId + ":" + eventType.getValue();
@@ -453,7 +474,8 @@ class AlertBucketServiceTest {
 
         // Add second event
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-2", "payload-2"))
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-2", "payload-2",
+                        UUID.randomUUID().toString()))
                 .verifyComplete();
 
         // Then - verify TTL was NOT refreshed (it should be less than initial)

@@ -302,6 +302,10 @@ onlineScoring:
   # Description: How often Online Scoring will check Redis for new messages (in milliseconds)
   # This is the global default value, can be overridden per stream
   poolingInterval: ${REDIS_SCORING_CONSUMER_POOL_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  # This is the global default value, can be overridden per stream
+  longPollingDuration: ${REDIS_SCORING_LONG_POLLING_DURATION:-5s}
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: ${REDIS_SCORING_CONSUMER_GROUP_NAME:-'online_scoring'}
@@ -313,6 +317,7 @@ onlineScoring:
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
   ## poolingInterval: (optional, but highly recommended) per stream pooling interval, overrides global value
+  ## longPollingDuration: (optional, but highly recommended) per stream long polling duration, overrides global value
   ## consumerBatchSize: (optional, but highly recommended) per stream batch size, overrides global value
   streams:
     - scorer: llm_as_judge
@@ -320,24 +325,28 @@ onlineScoring:
       codec: java
       # Optional per stream configuration (falls back to global if not specified)
       poolingInterval: ${REDIS_SCORING_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
       # Optional per stream configuration (falls back to global if not specified)
       poolingInterval: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
     - scorer: trace_thread_llm_as_judge
       streamName: stream_scoring_trace_thread_llm_as_judge
       codec: java
       # Optional per stream configuration (falls back to global if not specified)
       poolingInterval: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
     - scorer: trace_thread_user_defined_metric_python
       streamName: stream_scoring_trace_thread_user_defined_metric_python
       codec: java
       # Optional per stream configuration (falls back to global if not specified)
       poolingInterval: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
       consumerBatchSize: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
 
 # LLM providers client configuration
@@ -466,7 +475,7 @@ serviceToggles:
   opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not Alert feature is enabled
-  alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"false"}
+  alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
@@ -485,9 +494,12 @@ traceThreadConfig:
   # Default: 100
   # Description: Maximum number of messages returned within a Redis Stream get
   consumerBatchSize: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_BATCH_SIZE:-100}
-  # Default: 200 milliseconds
+  # Default: 500ms
   # Description: How often the trace thread consumer will check Redis for new messages (in milliseconds)
-  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-200 milliseconds}
+  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  longPollingDuration: ${OPIK_REDIS_TRACE_THREAD_LONG_POLLING_DURATION:-5s}
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
@@ -500,7 +512,7 @@ traceThreadConfig:
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 1000
+  # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
 
@@ -519,11 +531,26 @@ responseFormatting:
   # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
   truncationSize: ${OPIK_RESPONSE_TRUNCATION_CHAR_LIMIT:-10001}
 
+# Queue configuration for Python RQ workers
+queues:
+  # Default: true
+  # Description: Whether queue functionality is enabled
+  enabled: ${OPIK_QUEUES_ENABLED:-true}
+    # Default: 14 days
+  # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
+  defaultJobTtl: ${OPIK_QUEUES_DEFAULT_JOB_TTL:-14 days}
+  # Per-queue specific configurations
+  queues:
+    # Optimizer cloud queue configuration
+    opik:optimizer-cloud:
+      # Job TTL for optimizer jobs
+      jobTTl: ${OPIK_OPTIMIZER_QUEUE_JOB_TTL:-1 day}
+
 # Webhook configuration
 webhook:
   # Default: false
   # Description: Whether or not webhook functionality is enabled
-  enabled: ${WEBHOOK_ENABLED:-false}
+  enabled: ${WEBHOOK_ENABLED:-true}
   # Default: webhook-events
   # Description: Redis stream name for webhook events
   streamName: ${WEBHOOK_STREAM_NAME:-webhook-events}
@@ -536,6 +563,9 @@ webhook:
   # Default: 1s
   # Description: How often webhook consumer will check Redis for new messages
   poolingInterval: ${WEBHOOK_POOLING_INTERVAL:-1s}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  longPollingDuration: ${WEBHOOK_LONG_POLLING_DURATION:-5s}
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: ${WEBHOOK_MAX_RETRIES:-3}

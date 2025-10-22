@@ -2,6 +2,7 @@ package com.comet.opik.domain.filter;
 
 import com.comet.opik.api.filter.AlertField;
 import com.comet.opik.api.filter.AnnotationQueueField;
+import com.comet.opik.api.filter.AutomationRuleEvaluatorField;
 import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.DatasetItemField;
 import com.comet.opik.api.filter.ExperimentField;
@@ -87,6 +88,15 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
     private static final String WEBHOOK_URL_DB = "webhook_url";
+    private static final String ALERT_TYPE_DB = "alert_type";
+    private static final String ENABLED_DB = "enabled";
+    private static final String SAMPLING_RATE_DB = "sampling_rate";
+    private static final String TYPE_DB = "type";
+
+    // Table alias prefixes for AutomationRuleEvaluator queries
+    private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
+    private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
+    private static final String AUTOMATION_PROJECT_TABLE_ALIAS = "p.%s";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -311,11 +321,34 @@ public class FilterQueryBuilder {
             ImmutableMap.<AlertField, String>builder()
                     .put(AlertField.ID, ID_DB)
                     .put(AlertField.NAME, NAME_DB)
+                    .put(AlertField.ALERT_TYPE, ALERT_TYPE_DB)
                     .put(AlertField.WEBHOOK_URL, WEBHOOK_URL_DB)
                     .put(AlertField.CREATED_AT, CREATED_AT_DB)
                     .put(AlertField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(AlertField.CREATED_BY, CREATED_BY_DB)
                     .put(AlertField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
+    private static final Map<AutomationRuleEvaluatorField, String> AUTOMATION_RULE_EVALUATOR_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<AutomationRuleEvaluatorField, String>builder()
+                    .put(AutomationRuleEvaluatorField.ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, ID_DB))
+                    .put(AutomationRuleEvaluatorField.NAME, String.format(AUTOMATION_RULE_TABLE_ALIAS, NAME_DB))
+                    .put(AutomationRuleEvaluatorField.TYPE, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, TYPE_DB))
+                    .put(AutomationRuleEvaluatorField.ENABLED, String.format(AUTOMATION_RULE_TABLE_ALIAS, ENABLED_DB))
+                    .put(AutomationRuleEvaluatorField.SAMPLING_RATE,
+                            String.format(AUTOMATION_RULE_TABLE_ALIAS, SAMPLING_RATE_DB))
+                    .put(AutomationRuleEvaluatorField.PROJECT_ID,
+                            String.format(AUTOMATION_RULE_TABLE_ALIAS, PROJECT_ID_DB))
+                    .put(AutomationRuleEvaluatorField.PROJECT_NAME,
+                            String.format(AUTOMATION_PROJECT_TABLE_ALIAS, NAME_DB))
+                    .put(AutomationRuleEvaluatorField.CREATED_AT,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_AT_DB))
+                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_AT,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, LAST_UPDATED_AT_DB))
+                    .put(AutomationRuleEvaluatorField.CREATED_BY,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_BY_DB))
+                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_BY,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, LAST_UPDATED_BY_DB))
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
@@ -455,11 +488,25 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.ALERT, Set.of(
                 AlertField.ID,
                 AlertField.NAME,
+                AlertField.ALERT_TYPE,
                 AlertField.WEBHOOK_URL,
                 AlertField.CREATED_AT,
                 AlertField.LAST_UPDATED_AT,
                 AlertField.CREATED_BY,
                 AlertField.LAST_UPDATED_BY));
+
+        map.put(FilterStrategy.AUTOMATION_RULE_EVALUATOR, Set.of(
+                AutomationRuleEvaluatorField.ID,
+                AutomationRuleEvaluatorField.NAME,
+                AutomationRuleEvaluatorField.TYPE,
+                AutomationRuleEvaluatorField.ENABLED,
+                AutomationRuleEvaluatorField.SAMPLING_RATE,
+                AutomationRuleEvaluatorField.PROJECT_ID,
+                AutomationRuleEvaluatorField.PROJECT_NAME,
+                AutomationRuleEvaluatorField.CREATED_AT,
+                AutomationRuleEvaluatorField.LAST_UPDATED_AT,
+                AutomationRuleEvaluatorField.CREATED_BY,
+                AutomationRuleEvaluatorField.LAST_UPDATED_BY));
 
         return map;
     }
@@ -558,6 +605,8 @@ public class FilterQueryBuilder {
             case DatasetItemField datasetItemField -> DATASET_ITEM_FIELDS_MAP.get(datasetItemField);
             case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
             case AlertField alertField -> ALERT_FIELDS_MAP.get(alertField);
+            case AutomationRuleEvaluatorField automationRuleEvaluatorField ->
+                AUTOMATION_RULE_EVALUATOR_FIELDS_MAP.get(automationRuleEvaluatorField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

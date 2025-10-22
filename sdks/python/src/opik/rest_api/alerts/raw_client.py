@@ -17,6 +17,7 @@ from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.alert_page_public import AlertPagePublic
 from ..types.alert_public import AlertPublic
 from ..types.alert_trigger_write import AlertTriggerWrite
+from ..types.webhook_examples import WebhookExamples
 from ..types.webhook_test_result import WebhookTestResult
 from ..types.webhook_write import WebhookWrite
 
@@ -87,9 +88,9 @@ class RawAlertsClient:
     def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -99,11 +100,11 @@ class RawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -278,9 +279,9 @@ class RawAlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -292,11 +293,11 @@ class RawAlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -370,12 +371,48 @@ class RawAlertsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_webhook_examples(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[WebhookExamples]:
+        """
+        Get webhook payload examples for all alert event types
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[WebhookExamples]
+            Webhook examples
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/alerts/webhooks/examples",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WebhookExamples,
+                    parse_obj_as(
+                        type_=WebhookExamples,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def test_webhook(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -385,11 +422,11 @@ class RawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -513,9 +550,9 @@ class AsyncRawAlertsClient:
     async def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -525,11 +562,11 @@ class AsyncRawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -704,9 +741,9 @@ class AsyncRawAlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -718,11 +755,11 @@ class AsyncRawAlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
@@ -796,12 +833,48 @@ class AsyncRawAlertsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def get_webhook_examples(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[WebhookExamples]:
+        """
+        Get webhook payload examples for all alert event types
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[WebhookExamples]
+            Webhook examples
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/alerts/webhooks/examples",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WebhookExamples,
+                    parse_obj_as(
+                        type_=WebhookExamples,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def test_webhook(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -811,11 +884,11 @@ class AsyncRawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
+
+        name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
 
