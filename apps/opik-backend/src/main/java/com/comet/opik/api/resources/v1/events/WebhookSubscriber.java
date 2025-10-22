@@ -38,7 +38,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     public WebhookSubscriber(@NonNull WebhookConfig webhookConfig,
             @NonNull RedissonReactiveClient redisson,
             @NonNull WebhookHttpClient webhookHttpClient) {
-        super(webhookConfig, redisson, METRICS_BASE_NAME, WebhookConfig.PAYLOAD_FIELD);
+        super(webhookConfig, redisson, WebhookConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.webhookHttpClient = webhookHttpClient;
         this.webhookConfig = webhookConfig;
 
@@ -47,11 +47,6 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                 .counterBuilder("opik_webhook_events_processed_total")
                 .setDescription("Total number of webhook events processed")
                 .build();
-    }
-
-    @Override
-    protected String getMetricNamespace() {
-        return METRICS_NAMESPACE;
     }
 
     @Override
