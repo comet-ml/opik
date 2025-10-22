@@ -187,6 +187,20 @@ server:
     - type: http
       maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
 
+# Jackson JSON processing configuration
+# Controls limits for JSON deserialization to prevent memory exhaustion
+jacksonConfig:
+  # Default: 262144000 (250MB in bytes) for self-hosted installations
+  # Description: Maximum size for individual string values during JSON deserialization.
+  #   This limit prevents memory exhaustion from extremely large base64-encoded attachments
+  #   before they can be stripped and stored separately in S3/MinIO.
+  #   - Cloud deployments: 100MB (set via MAX_JSON_STRING_LENGTH in docker-compose.yaml)
+  #   - Self-hosted: 250MB default (can be increased via MAX_JSON_STRING_LENGTH environment variable)
+  #   Note: This applies to individual string fields, not total payload size.
+  #   Example: A JSON with 3x 40MB strings will work, but a single 60MB string will fail.
+  #   This configuration is used by both HTTP layer and internal JSON processing for consistency.
+  maxStringLength: ${MAX_JSON_STRING_LENGTH:-262144000}
+
 # Configuration for batch operations
 batchOperations:
   datasets:
@@ -313,6 +327,9 @@ onlineScoring:
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
+  # Default: 60s
+  # Description: How often to log idle state when no messages are being processed
+  idleLogInterval: ${REDIS_SCORING_IDLE_LOG_INTERVAL:-60s}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -443,6 +460,9 @@ s3Config:
   s3Url: ${S3_URL:-http://localhost:9001}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
+  # Description: Minimum size (bytes) for base64 strings to be considered attachments
+  # Default: 5000 (5KB) for local dev, 256000 (250KB) for production (set via STRIP_ATTACHMENTS_MIN_SIZE)
+  stripAttachmentsMinSize: ${STRIP_ATTACHMENTS_MIN_SIZE:-5000}
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -503,6 +523,9 @@ traceThreadConfig:
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
+  # Default: 60s
+  # Description: How often to log idle state when no messages are being processed
+  idleLogInterval: ${OPIK_REDIS_TRACE_THREAD_IDLE_LOG_INTERVAL:-60s}
   # Default: 3s
   # Description: The interval at which the close trace thread job will run to inactive threads
   closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-3s}
@@ -566,6 +589,9 @@ webhook:
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: ${WEBHOOK_LONG_POLLING_DURATION:-5s}
+  # Default: 60s
+  # Description: How often to log idle state when no messages are being processed
+  idleLogInterval: ${WEBHOOK_IDLE_LOG_INTERVAL:-60s}
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: ${WEBHOOK_MAX_RETRIES:-3}

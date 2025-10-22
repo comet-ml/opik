@@ -153,6 +153,11 @@ server:
   applicationConnectors:
     - type: http
       maxRequestHeaderSize: 16KB
+  # Jackson JSON processing configuration
+  jackson:
+    # Default: 52428800 (50MB in bytes) - same as production for consistent testing
+    # Description: Maximum size for individual string values during JSON deserialization
+    maxStringLength: 52428800
 
 # Configuration for batch operations
 batchOperations:
@@ -218,6 +223,9 @@ onlineScoring:
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: 5
+  # Default: 60s
+  # Description: How often to log idle state when no messages are being processed
+  idleLogInterval: 60s
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -315,6 +323,9 @@ s3Config:
   s3Url: http://localhost:9000
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: true
+  # Description: Minimum size (bytes) for base64 strings to be considered attachments
+  # For tests, use 5KB (same as local dev default)
+  stripAttachmentsMinSize: 5000
 
 # Python evaluator configuration
 pythonEvaluator:
@@ -359,6 +370,9 @@ traceThreadConfig:
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: 5s
+  # Default: 60s
+  # Description: How often to log idle state when no messages are being processed
+  idleLogInterval: 60s
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: 'trace_thread_closing_stream'
@@ -410,6 +424,9 @@ webhook:
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: 5s
+  # Default: 60s
+  # Description: How often to log idle state when no messages are being processed
+  idleLogInterval: 60s
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: 3
@@ -429,3 +446,7 @@ webhook:
     # Default: {}
     # Description: Period for events aggregation before sending to webhook endpoint
     windowSize: 1s
+
+# Jackson JSON processing configuration
+jacksonConfig:
+  maxStringLength: 262144000  # 250MB

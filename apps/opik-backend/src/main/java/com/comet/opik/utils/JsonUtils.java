@@ -2,9 +2,9 @@ package com.comet.opik.utils;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -12,7 +12,6 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import dev.langchain4j.model.openai.internal.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -21,8 +20,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.Collection;
 import java.util.Optional;
 
@@ -30,18 +27,69 @@ import java.util.Optional;
 @Slf4j
 public class JsonUtils {
 
-    public static final ObjectMapper MAPPER = new ObjectMapper()
-            .setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE)
-            .setSerializationInclusion(JsonInclude.Include.NON_NULL)
-            .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
-            .configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false)
-            .configure(SerializationFeature.INDENT_OUTPUT, false)
-            .configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, false)
-            .enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature())
-            .registerModule(new JavaTimeModule()
-                    .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
-                    .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
-                    .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
+    /**
+     * ObjectMapper for internal JSON processing.
+     * Initialized with minimal defaults (20MB) and reconfigured by OpikApplication
+     * during startup to match config.yml settings.
+     */
+    private static ObjectMapper MAPPER;
+
+    static {
+        // Initialize with minimal default (20MB - Jackson default) until OpikApplication configures it
+        MAPPER = createConfiguredMapper(20_000_000);
+        log.info("JsonUtils initialized with default maxStringLength: '20'MB");
+    }
+
+    /**
+     * Configures JsonUtils with the limit from config.yml.
+     * Called by OpikApplication during startup.
+     *
+     * @param maxStringLength Maximum string length in bytes
+     */
+    public static synchronized void configure(int maxStringLength) {
+        MAPPER = createConfiguredMapper(maxStringLength);
+        log.info("JsonUtils configured with maxStringLength: '{}' bytes ('{}'MB)",
+                maxStringLength, maxStringLength / 1024 / 1024);
+    }
+
+    /**
+     * Creates and configures an ObjectMapper with the specified limits.
+     *
+     * @param maxStringLength Maximum string length in bytes
+     * @return Configured ObjectMapper instance
+     */
+    private static ObjectMapper createConfiguredMapper(int maxStringLength) {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // Basic configuration matching Dropwizard defaults
+        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        mapper.configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
+        mapper.enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
+
+        // Register JavaTimeModule for proper date/time handling
+        mapper.registerModule(new JavaTimeModule());
+
+        // Configure stream read constraints
+        StreamReadConstraints readConstraints = StreamReadConstraints.builder()
+                .maxStringLength(maxStringLength)
+                .maxNestingDepth(1000)
+                .maxNumberLength(1000)
+                .build();
+        mapper.getFactory().setStreamReadConstraints(readConstraints);
+
+        return mapper;
+    }
+
+    /**
+     * Gets the shared ObjectMapper instance.
+     *
+     * @return The configured ObjectMapper
+     */
+    public static ObjectMapper getMapper() {
+        return MAPPER;
+    }
 
     public static JsonNode getJsonNodeFromString(@NonNull String value) {
         try {

@@ -4998,7 +4998,7 @@ class SpansResourceTest {
         void createSpanWithNonNumericNumbers() throws JsonProcessingException {
             var expectedSpan = podamFactory.manufacturePojo(Span.class);
             var span = (ObjectNode) JsonUtils.readTree(expectedSpan);
-            var input = JsonUtils.MAPPER.createObjectNode();
+            var input = JsonUtils.getMapper().createObjectNode();
             input.put("value", Double.POSITIVE_INFINITY);
             span.replace("input", input);
             var customObjectMapper = new ObjectMapper()
@@ -7723,5 +7723,72 @@ class SpansResourceTest {
         } while (currentSpanType.equals(spanType.orElse(null)));
 
         return currentSpanType;
+    }
+
+    @Nested
+    @DisplayName("Large Payload Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class LargePayloadTests {
+
+        @Test
+        @DisplayName("Create span with two 35MB base64 encoded videos - should succeed with attachment stripping")
+        void createSpan__whenTwoLargeVideoAttachments__thenSucceedWithStripping() throws Exception {
+            // Given: Create two 35MB video attachments (simulating large video uploads)
+            // 35MB raw * 4/3 (base64 overhead) = ~46.6MB base64 string each
+            // Total JSON payload: ~93.2MB (well under 100MB cloud / 250MB self-hosted limit)
+            int videoSizeBytes = 35 * 1024 * 1024; // 35MB each
+            String base64Video1 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes); // Using PNG for simplicity
+            String base64Video2 = AttachmentPayloadUtilsTest.createValidJpegBase64(videoSizeBytes);
+
+            // Create input JSON with first large video
+            String originalInputJson = String.format(
+                    "{\"message\": \"Processing video upload\", " +
+                            "\"video_data\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"session_id\": \"session456\"}",
+                    base64Video1);
+
+            // Create output JSON with second large video (result)
+            String originalOutputJson = String.format(
+                    "{\"result\": \"Video processed successfully\", " +
+                            "\"processed_video\": \"%s\", " +
+                            "\"duration_ms\": 5230}",
+                    base64Video2);
+
+            // Create span with PODAM factory following existing patterns
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree(originalOutputJson))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .feedbackScores(null)
+                    .build();
+
+            // When: Create the span
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Then: Verify span was created
+            assertThat(spanId).isNotNull();
+
+            // Verify attachments were stripped and replaced with references (async operation)
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
+                        assertThat(retrievedSpan).isNotNull();
+
+                        String inputString = retrievedSpan.input().toString();
+                        String outputString = retrievedSpan.output().toString();
+
+                        // Original base64 videos should be stripped
+                        assertThat(inputString).doesNotContain(base64Video1);
+                        assertThat(outputString).doesNotContain(base64Video2);
+
+                        // Should contain attachment references like [input-attachment-1-12345.png]
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
+                    });
+        }
     }
 }

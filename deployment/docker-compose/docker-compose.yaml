@@ -160,6 +160,11 @@ services:
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
       TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
       CORS: ${CORS:-false}
+      # Attachment stripping threshold (250KB for Docker deployments)
+      STRIP_ATTACHMENTS_MIN_SIZE: 256000
+      # JSON string deserialization limit (100MB for cloud deployments)
+      # Applies to both HTTP and internal processing
+      MAX_JSON_STRING_LENGTH: 104857600
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:
