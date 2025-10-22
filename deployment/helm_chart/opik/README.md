@@ -80,9 +80,9 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | minio | 15.0.7 |
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
-| https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.2.0 |
 
 ## Values
 
@@ -261,8 +261,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
-| component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
@@ -384,14 +384,12 @@ Call opik api on http://localhost:5173/api
 | standalone | bool | `true` |  |
 | tolerations | list | `[]` |  |
 | zookeeper.enabled | bool | `true` |  |
-| zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
-| zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |
-| zookeeper.image.repository | string | `"bitnamilegacy/zookeeper"` |  |
-| zookeeper.image.tag | string | `"3.9.3-debian-12-r16"` |  |
+| zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
+| zookeeper.image.repository | string | `"zookeeper"` |  |
+| zookeeper.image.tag | string | `"3.9.3"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
 | zookeeper.persistence.size | string | `"50Gi"` |  |
-| zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
 
 ----------------------------------------------
