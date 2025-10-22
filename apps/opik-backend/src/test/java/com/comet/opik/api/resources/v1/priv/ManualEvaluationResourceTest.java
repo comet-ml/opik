@@ -14,17 +14,24 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ManualEvaluationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
@@ -38,6 +45,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.Mockito;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
@@ -51,8 +59,12 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Manual Evaluation Resource Test")
@@ -63,6 +75,8 @@ class ManualEvaluationResourceTest {
     private static final String USER = "user-" + RandomStringUtils.randomAlphanumeric(10);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(10);
+
+    private static final String VALID_AI_MSG_TXT = "{\"Relevance\":{\"score\":5,\"reason\":\"The summary directly addresses the approach taken in the study by mentioning the systematic experimentation with varying data mixtures and the manipulation of proportions and sources.\"}}";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -85,7 +99,25 @@ class ManualEvaluationResourceTest {
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
         app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .disableModules(List.of(LlmModule.class))
+                        .modules(List.of(new AbstractModule() {
+                            @Override
+                            public void configure() {
+                                bind(LlmProviderFactory.class)
+                                        .toInstance(Mockito.mock(LlmProviderFactory.class, Mockito.RETURNS_DEEP_STUBS));
+                            }
+                        }))
+                        .customConfigs(List.of(
+                                new CustomConfig("pythonEvaluator.url",
+                                        wireMock.runtimeInfo().getHttpBaseUrl() + "/pythonBackendMock"),
+                                new CustomConfig("serviceToggles.pythonEvaluatorEnabled", "true"),
+                                new CustomConfig("serviceToggles.traceThreadPythonEvaluatorEnabled", "true")))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -132,8 +164,13 @@ class ManualEvaluationResourceTest {
         @MethodSource("com.comet.opik.api.resources.v1.priv.ManualEvaluationResourceTest#entityTypeProvider")
         @DisplayName("should return 202 Accepted when evaluation request is successful")
         void shouldReturn202AcceptedWhenEvaluationRequestIsSuccessful(String endpoint,
-                ManualEvaluationEntityType entityType) {
-            // Given
+                ManualEvaluationEntityType entityType, LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
@@ -180,8 +217,14 @@ class ManualEvaluationResourceTest {
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ManualEvaluationResourceTest#entityTypeProvider")
         @DisplayName("should handle multiple entities and rules")
-        void shouldHandleMultipleEntitiesAndRules(String endpoint, ManualEvaluationEntityType entityType) {
-            // Given
+        void shouldHandleMultipleEntitiesAndRules(String endpoint, ManualEvaluationEntityType entityType,
+                LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
@@ -331,8 +374,13 @@ class ManualEvaluationResourceTest {
 
         @Test
         @DisplayName("should handle trace evaluation with LLM_AS_JUDGE rule")
-        void shouldHandleTraceEvaluationWithLlmAsJudgeRule() {
-            // Given
+        void shouldHandleTraceEvaluationWithLlmAsJudgeRule(LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
@@ -368,8 +416,13 @@ class ManualEvaluationResourceTest {
 
         @Test
         @DisplayName("should handle thread evaluation with USER_DEFINED_METRIC_PYTHON rule")
-        void shouldHandleThreadEvaluationWithUserDefinedMetricPythonRule() {
-            // Given
+        void shouldHandleThreadEvaluationWithUserDefinedMetricPythonRule(LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response (not used but required for evaluator creation)
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
