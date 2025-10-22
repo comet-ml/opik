@@ -120,4 +120,10 @@ def to_info_dict(prompt: Prompt) -> Dict[str, Any]:
     if prompt.commit is not None:
         info_dict["commit"] = prompt.commit
 
+    if prompt.__internal_api__prompt_id__ is not None:
+        info_dict["prompt_id"] = prompt.__internal_api__prompt_id__
+
+    if prompt.__internal_api__version_id__ is not None:
+        info_dict["version_id"] = prompt.__internal_api__version_id__
+
     return info_dict
