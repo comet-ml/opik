@@ -41,7 +41,7 @@ jobs:
             echo "Skipping bot user: $EVENT_ACTOR"
             ASSIGN_USER=""
           else
-            gh api "/repos/${{ github.repository }}/collaborators/$EVENT_ACTOR" > /dev/null 2>&1
+            gh api /repos/${{ github.repository }}/collaborators/"$EVENT_ACTOR" > /dev/null 2>&1
             COLLABORATOR_STATUS=$?
 
             if [[ $COLLABORATOR_STATUS -ne 0 ]]; then
