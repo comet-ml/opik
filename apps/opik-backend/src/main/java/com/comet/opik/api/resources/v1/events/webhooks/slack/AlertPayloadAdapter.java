@@ -7,6 +7,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.NonNull;
@@ -76,8 +77,10 @@ public class AlertPayloadAdapter {
 
     public static Object webhookEventPayloadPerType(@NonNull WebhookEvent<Map<String, Object>> event) {
         return switch (event.getAlertType()) {
-            case GENERAL, PAGERDUTY ->
-                event.toBuilder().url(null).headers(null).secret(null).alertType(null).jsonPayload(null).build();
+            case GENERAL ->
+                event.toBuilder().url(null).headers(null).secret(null).alertType(null).jsonPayload(null)
+                        .alertMetadata(null).build();
+            case PAGERDUTY -> PagerDutyWebhookPayloadMapper.toPagerDutyPayload(event);
             case SLACK -> SlackWebhookPayloadMapper.toSlackPayload(event);
         };
     }
