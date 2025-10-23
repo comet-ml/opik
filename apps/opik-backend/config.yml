@@ -327,9 +327,6 @@ onlineScoring:
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
-  # Default: 60s
-  # Description: How often to log idle state when no messages are being processed
-  idleLogInterval: ${REDIS_SCORING_IDLE_LOG_INTERVAL:-60s}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -523,9 +520,6 @@ traceThreadConfig:
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: ${OPIK_REDIS_TRACE_THREAD_STREAM_NAME:-'trace_thread_closing_stream'}
-  # Default: 60s
-  # Description: How often to log idle state when no messages are being processed
-  idleLogInterval: ${OPIK_REDIS_TRACE_THREAD_IDLE_LOG_INTERVAL:-60s}
   # Default: 3s
   # Description: The interval at which the close trace thread job will run to inactive threads
   closeTraceThreadJobInterval: ${OPIK_CLOSE_TRACE_THREAD_JOB_INTERVAL:-3s}
@@ -589,9 +583,6 @@ webhook:
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: ${WEBHOOK_LONG_POLLING_DURATION:-5s}
-  # Default: 60s
-  # Description: How often to log idle state when no messages are being processed
-  idleLogInterval: ${WEBHOOK_IDLE_LOG_INTERVAL:-60s}
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: ${WEBHOOK_MAX_RETRIES:-3}
