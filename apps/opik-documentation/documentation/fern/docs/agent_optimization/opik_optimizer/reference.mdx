@@ -22,7 +22,6 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 - **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 - **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
 - **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
-- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
 - **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
@@ -604,8 +603,8 @@ optimize_prompt(
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
     max_trials: int = 10,
-    args: Any,
     mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
+    args: Any,
     kwargs: Any
 )
 ```
@@ -622,8 +621,8 @@ optimize_prompt(
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10" />
-<ParamField path="args" type="Any" />
 <ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool calling configuration (default: None)</ParamField>
+<ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
 ## GepaOptimizer
