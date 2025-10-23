@@ -4,6 +4,7 @@ import set from "lodash/set";
 import isEmpty from "lodash/isEmpty";
 import isString from "lodash/isString";
 import isNil from "lodash/isNil";
+import { WebhookIcon } from "lucide-react";
 
 import {
   ALERT_EVENT_TYPE,
@@ -14,6 +15,8 @@ import {
   Alert,
 } from "@/types/alerts";
 import { TriggerFormType } from "./schema";
+import SlackIcon from "@/icons/slack.svg?react";
+import PagerDutyIcon from "@/icons/pagerduty.svg?react";
 
 export interface TriggerConfig {
   title: string;
@@ -25,6 +28,12 @@ export const ALERT_TYPE_LABELS: Record<ALERT_TYPE, string> = {
   [ALERT_TYPE.general]: "General",
   [ALERT_TYPE.slack]: "Slack",
   [ALERT_TYPE.pagerduty]: "PagerDuty",
+};
+
+export const ALERT_TYPE_ICONS = {
+  [ALERT_TYPE.general]: WebhookIcon,
+  [ALERT_TYPE.slack]: SlackIcon,
+  [ALERT_TYPE.pagerduty]: PagerDutyIcon,
 };
 
 export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {

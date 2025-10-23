@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -32,7 +31,6 @@ import WebhookSettings from "./WebhookSettings";
 import EventTriggers from "./EventTriggers";
 import TestWebhookSection from "./TestWebhookSection";
 import {
-  ALERT_TYPE_LABELS,
   alertTriggersToFormTriggers,
   formTriggersToAlertTriggers,
 } from "./helpers";
@@ -282,71 +280,6 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
                     </FormItem>
                   )}
                 />
-
-                <FormField
-                  control={form.control}
-                  name="alertType"
-                  render={({ field, formState }) => {
-                    const validationErrors = get(formState.errors, [
-                      "alertType",
-                    ]);
-                    return (
-                      <FormItem>
-                        <Label>Type</Label>
-                        <FormControl>
-                          <SelectBox
-                            value={field.value}
-                            onChange={field.onChange}
-                            options={Object.values(ALERT_TYPE).map((type) => ({
-                              value: type,
-                              label: ALERT_TYPE_LABELS[type],
-                            }))}
-                            placeholder="Select type"
-                            className={cn({
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-
-                {form.watch("alertType") === ALERT_TYPE.pagerduty && (
-                  <FormField
-                    control={form.control}
-                    name="routingKey"
-                    render={({ field, formState }) => {
-                      const validationErrors = get(formState.errors, [
-                        "routingKey",
-                      ]);
-                      return (
-                        <FormItem>
-                          <Label>Routing Key</Label>
-                          <Description>
-                            PagerDuty routing key for an integration on a
-                            service or on a global ruleset
-                          </Description>
-                          <FormControl>
-                            <Input
-                              className={cn({
-                                "border-destructive": Boolean(
-                                  validationErrors?.message,
-                                ),
-                              })}
-                              placeholder="Enter routing key"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
-                )}
               </div>
 
               <Separator />
