@@ -6,6 +6,7 @@ import {
   ALERT_TYPE_ICONS,
   ALERT_TYPE_LABELS,
 } from "./AddEditAlertPage/helpers";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 const AlertTypeCell: React.FunctionComponent<CellContext<Alert, unknown>> = (
   context,
@@ -16,10 +17,15 @@ const AlertTypeCell: React.FunctionComponent<CellContext<Alert, unknown>> = (
   const label = ALERT_TYPE_LABELS[type];
 
   return (
-    <div className="flex items-center gap-2">
-      <Icon className="size-3 shrink-0" />
-      <span>{label}</span>
-    </div>
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+    >
+      <div className="flex items-center gap-1">
+        <Icon className="size-3 shrink-0 text-muted-slate" />
+        <span>{label}</span>
+      </div>
+    </CellWrapper>
   );
 };
 
