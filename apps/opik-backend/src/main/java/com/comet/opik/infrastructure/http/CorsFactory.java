@@ -7,8 +7,8 @@ import io.dropwizard.core.setup.Environment;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterRegistration;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.jetty.ee10.servlets.CrossOriginFilter;
 import org.eclipse.jetty.http.HttpMethod;
-import org.eclipse.jetty.servlets.CrossOriginFilter;
 
 import java.util.EnumSet;
 
