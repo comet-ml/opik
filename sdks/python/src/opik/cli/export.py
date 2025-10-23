@@ -234,7 +234,10 @@ def _export_traces(
                     error_msg = str(e)
                     if (
                         "Invalid value" in error_msg
-                        and "expected an string in double quotes" in error_msg
+                        and (
+                            "expected an string in double quotes" in error_msg
+                            or "expected a string in double quotes" in error_msg
+                        )
                     ):
                         console.print(
                             "[red]Error: Invalid filter format in export query.[/red]"
