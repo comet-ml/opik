@@ -83,30 +83,41 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
               </div>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-2">
+              <div className="space-y-2 space-x-1">
                 <SyntaxHighlighter
                   withSearch
                   data={promptContent as object}
                   search={search}
                 />
-                <div className="flex flex-col gap-2 text-xs text-muted-slate">
+                <div className="flex items-center justify-between text-xs text-muted-slate">
                   {promptId && (
-                    <div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        asChild
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                    >
+                      <Link
+                        to="/$workspaceName/prompts/$promptId"
+                        params={{ workspaceName, promptId }}
+                        className="inline-flex items-center"
                       >
-                        <Link
-                          to="/$workspaceName/prompts/$promptId"
-                          params={{ workspaceName, promptId }}
-                          className="inline-flex items-center gap-1"
-                        >
-                          View in Prompt library
-                        </Link>
-                      </Button>
-                    </div>
+                        View in Prompt library
+                      </Link>
+                    </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    asChild
+                  >
+                    <Link
+                      to="/$workspaceName/playground"
+                      params={{ workspaceName }}
+                      className="inline-flex items-center gap-1"
+                    >
+                      Use in Playground
+                      <ExternalLink className="size-3.5 shrink-0" />
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </AccordionContent>
