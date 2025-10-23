@@ -105,7 +105,7 @@ class TraceData:
 
             if key == "metadata":
                 self.metadata = data_helpers.merge_metadata(
-                    self.metadata, new_metadata=value, prompts=new_data.get("prompts")
+                    self.metadata, new_metadata=value
                 )
                 continue
             elif key == "output":
