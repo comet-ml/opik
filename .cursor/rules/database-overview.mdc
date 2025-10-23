@@ -1,0 +1,211 @@
+---
+alwaysApply: true
+---
+
+# Opik Database Architecture Overview
+
+> **Note**: This rule documents architectural patterns and decisions. For current schema details, always check:
+> - Migration files: `apps/opik-backend/src/main/resources/liquibase/`
+> - DAO interfaces: Search for `*DAO.java` files
+> - Use `codebase_search` to find actual implementations
+
+Opik uses a **dual-database architecture** with MySQL and ClickHouse, each serving distinct purposes.
+
+## Database Architecture
+
+### MySQL (State Database)
+**Purpose**: Application state, metadata, and configuration management
+
+**Database Name**: `${STATE_DB_DATABASE_NAME}` (default: `opik`)
+
+**Use Cases**:
+- User-facing configuration (projects, datasets, prompts)
+- Metadata and definitions (feedback definitions, automation rules)
+- Relational data requiring ACID transactions
+- Low-volume, high-consistency data
+- Webhook and alert configurations
+
+**Access Pattern**: 
+- **Technology**: JDBI3 (synchronous, SQL-based DAO interfaces)
+- **Transaction Management**: `TransactionTemplate` with WRITE/READ_ONLY configs
+- **Connection**: JDBC via MySQL Connector/J 9.3.0
+
+**Key Table Categories** (check migrations for complete list):
+- Configuration: projects, datasets, prompts, feedback_definitions
+- Automation: automation_rules, automation_rule_evaluators, alerts, webhooks
+- Credentials: ll_provider_api_keys
+- *Note: Additional tables may exist - check latest migrations*
+
+### ClickHouse (Analytics Database)
+**Purpose**: High-performance analytics and time-series data
+
+**Database Name**: `${ANALYTICS_DB_DATABASE_NAME}` (default: `opik`)
+
+**Use Cases**:
+- High-volume time-series data (traces, spans)
+- Analytics and aggregations
+- Feedback scores and experimental data
+- Fast read performance for analytics queries
+- Append-mostly workloads
+
+**Access Pattern**:
+- **Technology**: R2DBC (reactive, asynchronous)
+- **Transaction Management**: `TransactionTemplateAsync` with Mono/Flux reactive streams
+- **Connection**: R2DBC via ClickHouse driver 0.9.0
+- **Engine**: ReplacingMergeTree with version-based deduplication
+
+**Key Table Categories** (check migrations for complete list):
+- Telemetry: traces, spans, trace_threads
+- Evaluation: feedback_scores, experiments, experiment_items, dataset_items
+- Collaboration: comments, attachments
+- *Note: Additional tables may exist - check latest migrations*
+
+## Decision Matrix: Which Database to Use?
+
+### Use MySQL When:
+- ✅ Creating/updating configuration or metadata
+- ✅ Need ACID transactions
+- ✅ Relational integrity is critical
+- ✅ Low to medium volume data
+- ✅ User-facing CRUD operations
+- ✅ Complex JOINs across multiple entities
+- ✅ Examples: creating projects, managing prompts, storing API keys
+
+### Use ClickHouse When:
+- ✅ Storing telemetry or observability data
+- ✅ High-volume inserts (thousands/sec)
+- ✅ Time-series data with timestamps
+- ✅ Analytics queries (aggregations, GROUP BY)
+- ✅ Read-heavy workloads
+- ✅ Append-mostly data
+- ✅ Examples: traces, spans, feedback scores, experiment results
+
+## Configuration Patterns
+
+### MySQL Configuration
+Location: [config.yml](mdc:apps/opik-backend/config.yml)
+
+```yaml
+database:
+  url: ${STATE_DB_PROTOCOL:-jdbc:mysql://}${STATE_DB_URL:-localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true}
+  user: ${STATE_DB_USER:-opik}
+  password: ${STATE_DB_PASS:-opik}
+  driverClass: ${STATE_DB_DRIVER_CLASS:-com.mysql.cj.jdbc.Driver}
+```
+
+### ClickHouse Configuration
+Location: [config.yml](mdc:apps/opik-backend/config.yml)
+
+```yaml
+databaseAnalytics:
+  protocol: ${ANALYTICS_DB_PROTOCOL:-HTTP}
+  host: ${ANALYTICS_DB_HOST:-localhost}
+  port: ${ANALYTICS_DB_PORT:-8123}
+  username: ${ANALYTICS_DB_USERNAME:-opik}
+  password: ${ANALYTICS_DB_PASS:-opik}
+  databaseName: ${ANALYTICS_DB_DATABASE_NAME:-opik}
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3
+```
+
+## Transaction Management
+
+### MySQL Transactions (JDBI3)
+```java
+// Read-only transaction
+jdbi.inTransaction(TransactionIsolationLevel.READ_COMMITTED, handle -> {
+    return projectDAO.findById(id, workspaceId);
+});
+
+// Write transaction with TransactionTemplate
+transactionTemplate.execute(WRITE, (handle) -> {
+    ProjectDAO dao = handle.attach(ProjectDAO.class);
+    dao.save(workspaceId, project);
+    return project;
+});
+```
+
+### ClickHouse Async Operations (R2DBC)
+```java
+// Non-transactional read (ClickHouse doesn't support traditional transactions)
+return transactionTemplate.nonTransaction(READ_ONLY, connection -> {
+    return traceDAO.findById(id, connection);
+});
+
+// Batch insert
+return transactionTemplate.nonTransaction(WRITE, connection -> {
+    return traceDAO.batchInsert(traces, connection);
+});
+```
+
+## Health Checks
+
+Both databases have health check implementations:
+
+**MySQL Health Check**: [MysqlHealthyCheck.java](mdc:apps/opik-backend/src/main/java/com/comet/opik/infrastructure/db/MysqlHealthyCheck.java)
+```java
+jdbi.withHandle(handle -> {
+    handle.execute("SELECT 1");
+    return Result.healthy();
+});
+```
+
+**ClickHouse Health Check**: [ClickHouseHealthyCheck.java](mdc:apps/opik-backend/src/main/java/com/comet/opik/infrastructure/db/ClickHouseHealthyCheck.java)
+
+## Workspace Isolation Pattern
+
+**Critical**: Both databases enforce workspace isolation. Every query MUST include `workspace_id` filtering.
+
+```sql
+-- MySQL Example
+SELECT * FROM projects WHERE workspace_id = :workspaceId AND id = :id
+
+-- ClickHouse Example  
+SELECT * FROM traces WHERE workspace_id = :workspaceId AND project_id = :projectId
+```
+
+## Common Patterns
+
+### IDs
+- **Format**: UUID (CHAR(36) in MySQL, FixedString(36) in ClickHouse)
+- **Generation**: Use [IdGenerator](mdc:apps/opik-backend/src/main/java/com/comet/opik/domain/IdGenerator.java)
+
+### Timestamps
+- **MySQL**: `TIMESTAMP(6)` with microsecond precision
+- **ClickHouse**: `DateTime64(9, 'UTC')` with nanosecond precision
+- **Audit Fields**: `created_at`, `last_updated_at`, `created_by`, `last_updated_by`
+
+### Versioning (ClickHouse Only)
+- **Pattern**: ReplacingMergeTree engine with `last_updated_at` as version column
+- **Behavior**: Latest version of row (by ORDER BY key) with highest `last_updated_at` is retained
+
+## Migration Management
+
+**Tool**: Liquibase
+
+**MySQL Migrations**: [db-app-state/migrations/](mdc:apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/)
+
+**ClickHouse Migrations**: [db-app-analytics/migrations/](mdc:apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/)
+
+**Naming Convention**: `{sequence_number}_{description}.sql`
+- Example: `000027_add_dashboard_tables.sql`
+
+## Best Practices
+
+1. **Always include workspace_id** in WHERE clauses for multi-tenant isolation
+2. **Use JDBI DAOs for MySQL**, not raw JDBC
+3. **Use R2DBC reactive patterns for ClickHouse**, return Mono<T> or Flux<T>
+4. **Follow naming conventions** for tables, columns, constraints
+5. **Add proper indexes** on frequently queried columns
+6. **Use enum types** for categorical data
+7. **Store JSON** for flexible schema needs
+8. **Version ClickHouse data** with `last_updated_at`
+9. **Test migrations** with rollback statements
+
+## Related Rules
+
+- [MySQL Schema Patterns](mdc:.cursor/rules/mysql-schema-patterns.mdc)
+- [ClickHouse Schema Patterns](mdc:.cursor/rules/clickhouse-schema-patterns.mdc)
+- [JDBI DAO Patterns](mdc:.cursor/rules/jdbi-dao-patterns.mdc)
+- [R2DBC Reactive Patterns](mdc:.cursor/rules/r2dbc-reactive-patterns.mdc)
+- [Database Query Best Practices](mdc:.cursor/rules/database-query-best-practices.mdc)
+- [Database Migration Workflow](mdc:.cursor/rules/database-migration-workflow.mdc)
