@@ -112,22 +112,10 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         return <SelectValue placeholder="Select a provider" />;
       }
 
-<<<<<<< HEAD
-    return (
-      <div className="flex w-full items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="text-foreground" />
-          {label}
-        </div>
-      </div>
-    );
-  }, []);
-=======
       // Check if it's a custom provider ID
       const customProvider = configuredProvidersList?.find(
         (key) => key.id === value
       );
->>>>>>> 125aaabb5 (issue-3040 fix provider edit)
 
       if (customProvider) {
         const Icon = PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
