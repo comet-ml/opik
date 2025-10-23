@@ -51,7 +51,6 @@ type ManageAIProviderDialogProps = {
   onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
   configuredProvidersList?: ProviderKey[];
   defaultProvider?: PROVIDER_TYPE;
-  forceCreateMode?: boolean; // When true, always show create form even if provider exists
 };
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
@@ -62,7 +61,6 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onDeleteProvider,
   configuredProvidersList,
   defaultProvider,
-  forceCreateMode = false,
 }) => {
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [isAddingCustomProvider, setIsAddingCustomProvider] = useState(false);
@@ -94,8 +92,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   );
 
   const calculatedProviderKey = useMemo(() => {
-    // Don't auto-load existing provider in forceCreateMode or when adding custom provider
-    if (forceCreateMode || isAddingCustomProvider) {
+    // Don't auto-load existing provider when adding custom provider
+    if (isAddingCustomProvider) {
       return undefined;
     }
 
@@ -109,7 +107,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
     // Standard provider lookup
     return configuredProvidersList?.find((p) => provider === p.provider);
-  }, [configuredProvidersList, provider, forceCreateMode, isAddingCustomProvider]);
+  }, [configuredProvidersList, provider, isAddingCustomProvider]);
 
   const isConfiguredProvider = Boolean(calculatedProviderKey);
   const isEdit = Boolean(providerKey || calculatedProviderKey);
@@ -282,7 +280,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                       <Label>Provider</Label>
                       <FormControl>
                         <ProviderSelect
-                          disabled={Boolean(providerKey) || forceCreateMode}
+                          disabled={Boolean(providerKey)}
                           value={(field.value as string) || ""}
                           isAddingCustomProvider={isAddingCustomProvider}
                           onChange={(v) => {
