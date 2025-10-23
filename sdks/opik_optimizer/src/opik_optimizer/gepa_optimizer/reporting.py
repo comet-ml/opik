@@ -13,10 +13,10 @@ from rich.progress import (
     MofNCompleteColumn,
 )
 
-from ..reporting_utils import (
-    display_configuration,  # noqa: F401
-    display_header,  # noqa: F401
-    display_result,  # noqa: F401
+from ..reporting_utils import (  # noqa: F401
+    display_configuration,
+    display_header,
+    display_result,
     get_console,
     convert_tqdm_to_rich,
     suppress_opik_logs,
