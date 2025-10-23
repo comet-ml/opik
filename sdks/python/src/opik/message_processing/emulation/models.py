@@ -89,6 +89,24 @@ class SpanModel:
 
 
 @dataclasses.dataclass
+class ExperimentItemModel:
+    """
+    Represents an experiment item model that links a trace to a dataset item in an experiment.
+
+    Attributes:
+        id: Unique identifier for the experiment item.
+        experiment_id: The ID of the experiment this item belongs to.
+        trace_id: The ID of the trace associated with this experiment item.
+        dataset_item_id: The ID of the dataset item associated with this experiment item.
+    """
+
+    id: str
+    experiment_id: str
+    trace_id: str
+    dataset_item_id: str
+
+
+@dataclasses.dataclass
 class TraceModel:
     """
     Represents a trace model that encapsulates data about a trace, its related metadata,

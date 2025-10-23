@@ -234,6 +234,25 @@ class GuardrailBatchMessage(BaseMessage):
 
 
 @dataclasses.dataclass
+class ExperimentItemMessage(BaseMessage):
+    """
+    There is no handler for that in the message processor, it exists
+    only as an item of CreateExperimentItemsBatchMessage
+    """
+
+    id: str
+    experiment_id: str
+    trace_id: str
+    dataset_item_id: str
+
+
+@dataclasses.dataclass
+class CreateExperimentItemsBatchMessage(BaseMessage):
+    batch: List[ExperimentItemMessage]
+    supports_batching: bool = True
+
+
+@dataclasses.dataclass
 class CreateAttachmentMessage(BaseMessage):
     file_path: str
     file_name: str

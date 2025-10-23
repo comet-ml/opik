@@ -17,6 +17,7 @@ from ..rest_api.types import (
     feedback_score_batch_item,
     feedback_score_batch_item_thread,
     guardrail,
+    experiment_item,
 )
 
 
@@ -48,6 +49,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateSpansBatchMessage: self._process_create_spans_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
+            messages.CreateExperimentItemsBatchMessage: self._process_create_experiment_items_batch_message,  # type: ignore
         }
 
     def is_active(self) -> bool:
@@ -261,6 +263,31 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             batch.append(guardrail_batch_item_message)
 
         self._rest_client.guardrails.create_guardrails(guardrails=batch)
+
+    def _process_create_experiment_items_batch_message(
+        self,
+        message: messages.CreateExperimentItemsBatchMessage,
+    ) -> None:
+        experiment_items_batch = [
+            experiment_item.ExperimentItem(
+                id=item.id,
+                experiment_id=item.experiment_id,
+                dataset_item_id=item.dataset_item_id,
+                trace_id=item.trace_id,
+            )
+            for item in message.batch
+        ]
+
+        LOGGER.debug(
+            "Create experiment items batch request of size %d",
+            len(experiment_items_batch),
+        )
+        self._rest_client.experiments.create_experiment_items(
+            experiment_items=experiment_items_batch
+        )
+        LOGGER.debug(
+            "Sent experiment items batch of size %d", len(experiment_items_batch)
+        )
 
 
 def _generate_error_tracking_extra(

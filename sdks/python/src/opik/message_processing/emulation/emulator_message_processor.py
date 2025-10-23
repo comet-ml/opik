@@ -77,6 +77,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             self._span_to_feedback_scores: Dict[
                 str, List[models.FeedbackScoreModel]
             ] = collections.defaultdict(list)
+            self._experiment_items: List[models.ExperimentItemModel] = []
 
     def is_active(self) -> bool:
         with self._rlock:
@@ -351,6 +352,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             messages.AddSpanFeedbackScoresBatchMessage: self._handle_add_span_feedback_scores_batch_message,  # type: ignore
             messages.CreateSpansBatchMessage: self._handle_create_spans_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._handle_create_traces_batch_message,  # type: ignore
+            messages.CreateExperimentItemsBatchMessage: self._handle_create_experiment_items_batch_message,  # type: ignore
         }
 
     def _handle_create_trace_message(
@@ -538,6 +540,24 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             error_info=error_info,
         )
         self._save_trace(trace)
+
+    def _handle_create_experiment_items_batch_message(
+        self, message: messages.CreateExperimentItemsBatchMessage
+    ) -> None:
+        for experiment_item_message in message.batch:
+            experiment_item = models.ExperimentItemModel(
+                id=experiment_item_message.id,
+                experiment_id=experiment_item_message.experiment_id,
+                trace_id=experiment_item_message.trace_id,
+                dataset_item_id=experiment_item_message.dataset_item_id,
+            )
+            self._experiment_items.append(experiment_item)
+
+    @property
+    def experiment_items(self) -> List[models.ExperimentItemModel]:
+        """Returns the list of experiment items collected."""
+        with self._rlock:
+            return self._experiment_items
 
 
 def _observation_already_stored(

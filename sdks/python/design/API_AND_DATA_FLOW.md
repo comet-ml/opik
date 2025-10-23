@@ -57,7 +57,7 @@ Configuration is resolved in this order (highest to lowest):
 
 ```python
 # Create a trace
-trace_id = client.trace(
+trace = client.trace(
     name="my_operation",
     input={"query": "What is AI?"},
     metadata={"version": "1.0"},
@@ -65,9 +65,9 @@ trace_id = client.trace(
 )
 
 # Create a span (must be within trace context or provide trace_id)
-span_id = client.span(
+span = client.span(
     name="llm_call",
-    trace_id=trace_id,           # Required if no trace context
+    trace_id=trace.id,           # Required if no trace context
     parent_span_id=None,         # Optional: for nested spans
     input={"prompt": "..."},
     type="llm",                  # Types: "llm", "tool", "general"
@@ -77,7 +77,7 @@ span_id = client.span(
 
 # Update trace/span
 client.trace(
-    id=trace_id,
+    id=trace.id,
     output={"answer": "..."},
     metadata={"tokens": 150}
 )
@@ -85,7 +85,7 @@ client.trace(
 # Add feedback scores
 client.log_traces_feedback_scores(
     scores=[{
-        "id": trace_id,
+        "id": trace.id,
         "name": "accuracy",
         "value": 0.95,
         "reason": "Accurate response"
@@ -150,7 +150,7 @@ span_data = opik.get_current_span_data()
 opik.update_current_span(
     metadata={"key": "value"},
     tags=["important"],
-    usage={"completion_tokens": 100, "prompt_tokens": 50}
+    usage={"completion_tokens": 100, "prompt_tokens": 50, "total_tokens": 150}
 )
 
 opik.update_current_trace(
@@ -310,6 +310,7 @@ The Opik client provides two types of operations with different execution paths:
 | `span()` | Create/update span | None (fire-and-forget) |
 | `log_traces_feedback_scores()` | Add feedback to traces | None |
 | `log_spans_feedback_scores()` | Add feedback to spans | None |
+| `experiment.insert()` | Create experiment items | None |
 | Attachment uploads | Upload files to S3 | None |
 
 **Flow**: API → **Message** → **Streamer** → **Queue** → **Consumer** → REST Client → Backend
@@ -549,7 +550,7 @@ Let's follow a trace creation from user code to backend in detail.
 import opik
 
 client = opik.Opik(project_name="my_project")
-trace_id = client.trace(
+trace = client.trace(
     name="my_trace",
     input={"query": "test"},
     metadata={"version": "1.0"}
@@ -646,6 +647,7 @@ If batching is enabled, certain message types accumulate before sending.
 - `CreateTraceMessage` → batched into `CreateTraceBatchMessage`
 - `AddTraceFeedbackScoresBatchMessage` → already a batch message
 - `AddSpanFeedbackScoresBatchMessage` → already a batch message
+- `CreateExperimentItemsBatchMessage` → already a batch message
 
 **Messages that don't support batching** (sent individually):
 - `UpdateSpanMessage` - Updates sent immediately
@@ -981,6 +983,16 @@ class AddTraceFeedbackScoresBatchMessage(BaseMessage):
 
 class AddSpanFeedbackScoresBatchMessage(BaseMessage):
     feedback_scores: List[FeedbackScoreDict]
+
+# Experiment item messages
+class ExperimentItemMessage(BaseMessage):
+    id: str
+    experiment_id: str
+    trace_id: str
+    dataset_item_id: str
+
+class CreateExperimentItemsBatchMessage(BaseMessage):
+    batch: List[ExperimentItemMessage]
 ```
 
 ### Message Routing Logic
@@ -1593,7 +1605,7 @@ client = opik.Opik()  # No queue limit
 
 ```python
 # Non-blocking call
-trace_id = client.trace(...)  # Returns immediately (~1μs)
+trace = client.trace(...)  # Returns trace object immediately (~1μs)
 
 # Decorator overhead
 @opik.track

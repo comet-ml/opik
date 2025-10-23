@@ -4,8 +4,8 @@ from typing import List, Optional
 
 import opik.rest_api
 from opik.message_processing.batching import sequence_splitter
+from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import experiment_item as rest_experiment_item
 from opik.rest_api.types import experiment_public
 from . import experiment_item
 from .. import constants, helpers, rest_stream_parser
@@ -21,6 +21,7 @@ class Experiment:
         name: Optional[str],
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
+        streamer: streamer.Streamer,
         prompts: Optional[List[Prompt]] = None,
     ) -> None:
         self._id = id
@@ -28,6 +29,7 @@ class Experiment:
         self._dataset_name = dataset_name
         self._rest_client = rest_client
         self._prompts = prompts
+        self._streamer = streamer
 
     @property
     def id(self) -> str:
@@ -74,8 +76,8 @@ class Experiment:
         Returns:
             None
         """
-        rest_experiment_items = [
-            rest_experiment_item.ExperimentItem(
+        experiment_item_messages = [
+            messages.ExperimentItemMessage(
                 id=helpers.generate_id(),
                 experiment_id=self.id,
                 dataset_item_id=item.dataset_item_id,
@@ -84,16 +86,17 @@ class Experiment:
             for item in experiment_items_references
         ]
 
+        # Split into batches for the streamer
         batches = sequence_splitter.split_into_batches(
-            rest_experiment_items, max_length=constants.EXPERIMENT_ITEMS_MAX_BATCH_SIZE
+            experiment_item_messages,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         )
 
         for batch in batches:
-            LOGGER.debug("Sending experiment items batch: %s", batch)
-            self._rest_client.experiments.create_experiment_items(
-                experiment_items=batch,
+            create_experiment_items_batch_message = (
+                messages.CreateExperimentItemsBatchMessage(batch=batch)
             )
-            LOGGER.debug("Sent experiment items batch of size %d", len(batch))
+            self._streamer.put(create_experiment_items_batch_message)
 
     def get_items(
         self,
