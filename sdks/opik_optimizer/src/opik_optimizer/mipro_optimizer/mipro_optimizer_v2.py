@@ -608,13 +608,7 @@ class MIPROv2(Teleprompter):
 
         # Define the objective function
         def objective(trial):
-            nonlocal \
-                program, \
-                best_program, \
-                best_score, \
-                trial_logs, \
-                total_eval_calls, \
-                score_data
+            nonlocal best_program, best_score, trial_logs, total_eval_calls, score_data  # noqa: F824
 
             trial_num = trial.number + 1
             if minibatch:
