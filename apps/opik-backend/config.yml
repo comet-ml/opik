@@ -494,9 +494,9 @@ traceThreadConfig:
   # Default: 100
   # Description: Maximum number of messages returned within a Redis Stream get
   consumerBatchSize: ${OPIK_REDIS_TRACE_THREAD_CONSUMER_BATCH_SIZE:-100}
-  # Default: 200 milliseconds
+  # Default: 500ms
   # Description: How often the trace thread consumer will check Redis for new messages (in milliseconds)
-  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-200 milliseconds}
+  poolingInterval: ${OPIK_REDIS_TRACE_THREAD_POOLING_INTERVAL:-500ms}
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: ${OPIK_REDIS_TRACE_THREAD_LONG_POLLING_DURATION:-5s}
@@ -512,7 +512,7 @@ traceThreadConfig:
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: ${OPIK_CLOSE_TRACE_THREAD_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 1000
+  # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
 

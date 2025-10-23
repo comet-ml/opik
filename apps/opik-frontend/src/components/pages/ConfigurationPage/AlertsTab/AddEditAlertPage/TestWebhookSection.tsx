@@ -44,6 +44,11 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
     name: "triggers",
   });
 
+  const alertType = useWatch({
+    control: form.control,
+    name: "alertType",
+  });
+
   const triggerItems = useMemo(() => {
     if (!triggers?.length) return [];
 
@@ -196,6 +201,7 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
               <AccordionContent className="px-3">
                 <WebhookPayloadExample
                   eventType={item.eventType}
+                  alertType={alertType}
                   actionButton={
                     <Button
                       type="button"
