@@ -4,9 +4,9 @@ toc_max_heading_level: 4
 
 The export/import command-line functions enable you to:
 
-- **Export**: Export all traces, spans, datasets, prompts, and evaluation rules from a project to local JSON or CSV files
+- **Export**: Export all traces, spans, datasets, prompts, experiments, and evaluation rules from a project to local JSON or CSV files
 - **Import**: Import data from local JSON files into a project
-- **Migrate**: Move data between projects or environments
+- **Migrate**: Move data between projects or environments, including experiments
 - **Backup**: Create local backups of your project data
 
 ## `opik export WORKSPACE_OR_PROJECT`
@@ -20,7 +20,7 @@ Exports all trace data from the specified workspace or project to local files.
 - `--path, -p`: Directory to save exported data (default: `./`)
 - `--max-results`: Maximum number of items to export per data type (default: 1000)
 - `--filter`: Filter string using Opik Query Language (OQL) to narrow down the search
-- `--include`: Data types to include (traces, datasets, prompts)
+- `--include`: Data types to include (traces, datasets, prompts, experiments)
 - `--exclude`: Data types to exclude
 - `--all`: Include all data types
 - `--name`: Filter items by name using Python regex patterns
@@ -65,6 +65,8 @@ Imports trace data from local files to the specified workspace or project.
 - `--exclude`: Data types to exclude
 - `--all`: Include all data types
 - `--name`: Filter items by name using Python regex patterns
+- `--recreate-experiments`: Automatically recreate experiments after importing foundational data
+- `--debug`: Enable debug output to show detailed information about the import process
 
 **Examples:**
 ```bash
@@ -82,6 +84,12 @@ opik import ./backup_data my-workspace/my-target-project
 
 # Dry run to see what would be imported
 opik import ./my-data my-workspace/my-target-project --dry-run
+
+# Import all data including experiments
+opik import ./my-data my-workspace/my-target-project --all --recreate-experiments
+
+# Import with experiment recreation and filtering
+opik import ./my-data my-workspace/my-target-project --all --recreate-experiments --name "evaluation"
 ```
 
 ## File Format
@@ -93,11 +101,12 @@ The exported data is stored in JSON files with the following structure:
 ```
 OUTPUT_DIR/
 └── WORKSPACE/
-    └── PROJECT_NAME/
-        ├── trace_TRACE_ID_1.json
-        ├── trace_TRACE_ID_2.json
-        ├── dataset_DATASET_NAME.json
-        └── prompt_PROMPT_NAME.json
+    ├── PROJECT_NAME/
+    │   ├── trace_TRACE_ID_1.json
+    │   └── trace_TRACE_ID_2.json
+    ├── dataset_DATASET_NAME.json
+    ├── prompt_PROMPT_NAME.json
+    └── experiment_EXPERIMENT_NAME.json
 ```
 
 Each trace file contains:
@@ -160,6 +169,33 @@ Each evaluation rule file contains:
 }
 ```
 
+Each experiment file contains:
+```json
+{
+  "experiment": {
+    "id": "experiment-uuid",
+    "name": "experiment-name",
+    "dataset_name": "dataset-name",
+    "type": "regular",
+    "metadata": {...},
+    "created_at": "2024-01-01T00:00:00Z"
+  },
+  "items": [
+    {
+      "trace_id": "trace-uuid",
+      "dataset_item_id": "dataset-item-uuid",
+      "dataset_item_data": {...},
+      "feedback_scores": [...],
+      "trace_reference": {
+        "trace_id": "trace-uuid",
+        "note": "Full trace data not included to avoid duplication"
+      }
+    }
+  ],
+  "downloaded_at": "2024-01-01T00:00:00Z"
+}
+```
+
 ### CSV Format
 
 When using `--trace-format csv`, traces are exported as CSV files with flattened data structure. This format is ideal for:
@@ -198,7 +234,7 @@ trace-123,my-trace,2024-01-01T00:00:00Z,2024-01-01T00:01:00Z,thread-456,span-789
 opik export my-workspace/old-project --all --path ./migration_data
 
 # Import to new project (specify the workspace/project directory)
-opik import ./migration_data/my-workspace/old-project my-workspace/new-project --all
+opik import ./migration_data/my-workspace/old-project my-workspace/new-project --all --recreate-experiments
 ```
 
 ### 2. Data Backup
@@ -239,6 +275,18 @@ opik export my-workspace/my-project --trace-format csv --path ./analysis_data
 # Or use with pandas in Python:
 # import pandas as pd
 # df = pd.read_csv('./analysis_data/my-workspace/my-project/traces.csv')
+```
+
+### 7. Experiment Migration
+```bash
+# Export all data including experiments
+opik export my-workspace/source-project --all --path ./experiment_data
+
+# Import with experiment recreation
+opik import ./experiment_data/my-workspace/source-project my-workspace/target-project --all --recreate-experiments
+
+# Filter experiments by name during import
+opik import ./experiment_data/my-workspace/source-project my-workspace/target-project --all --recreate-experiments --name "evaluation"
 ```
 
 ## Error Handling
@@ -302,18 +350,19 @@ Here's a complete example of exporting and importing trace data:
 
 ### JSON Format Workflow
 ```bash
-# 1. Export traces from source project (JSON format)
-opik export my-workspace/my-source-project --path ./temp_data
+# 1. Export all data from source project (JSON format)
+opik export my-workspace/my-source-project --all --path ./temp_data
 
 # 2. Inspect the exported data
 ls ./temp_data/my-workspace/my-source-project/
+ls ./temp_data/my-workspace/
 cat ./temp_data/my-workspace/my-source-project/trace_*.json | head -20
 
 # 3. Dry run import to see what would be imported
-opik import ./temp_data my-workspace/my-target-project --dry-run
+opik import ./temp_data my-workspace/my-target-project --all --recreate-experiments --dry-run
 
-# 4. Actually import the traces
-opik import ./temp_data my-workspace/my-target-project
+# 4. Actually import all data including experiments
+opik import ./temp_data my-workspace/my-target-project --all --recreate-experiments
 
 # 5. Clean up temporary data
 rm -rf ./temp_data
@@ -340,4 +389,4 @@ print(df.columns.tolist())
 # (CSV format is primarily for analysis, not import)
 ```
 
-This workflow ensures you can safely migrate trace data between projects while maintaining data integrity and providing visibility into the process. The CSV format is particularly useful for data analysis and reporting.
+This workflow ensures you can safely migrate all data including experiments between projects while maintaining data integrity and providing visibility into the process. The CSV format is particularly useful for data analysis and reporting, while the JSON format preserves the complete structure needed for experiment recreation.

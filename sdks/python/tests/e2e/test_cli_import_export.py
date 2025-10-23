@@ -96,6 +96,54 @@ class TestCLIImportExport:
         )
         return prompt_name
 
+    def _create_test_experiment(
+        self, opik_client: opik.Opik, project_name: str, dataset_name: str
+    ) -> str:
+        """Create a test experiment."""
+        experiment_name = f"cli-test-experiment-{random_chars()}"
+
+        print(f"Creating experiment '{experiment_name}' with dataset '{dataset_name}'")
+
+        # Create an experiment
+        experiment = opik_client.create_experiment(
+            dataset_name=dataset_name,
+            name=experiment_name,
+            experiment_config={"model": "test-model", "version": "1.0"},
+        )
+
+        print(f"Created experiment with ID: {experiment.id}")
+
+        # Get traces from the project to link to the experiment
+        traces = opik_client.search_traces(project_name=project_name)
+        print(f"Found {len(traces)} traces in project {project_name}")
+
+        if traces:
+            # Get dataset items
+            dataset = opik_client.get_dataset(dataset_name)
+            dataset_items = dataset.get_items()
+            print(f"Found {len(dataset_items)} dataset items")
+
+            # Create experiment items linking traces to dataset items
+            experiment_items = []
+            for i, trace in enumerate(traces[:2]):  # Use up to 2 traces
+                if i < len(dataset_items):
+                    experiment_items.append(
+                        opik.ExperimentItemReferences(
+                            dataset_item_id=dataset_items[i]["id"],
+                            trace_id=trace.id,
+                        )
+                    )
+
+            if experiment_items:
+                print(f"Inserting {len(experiment_items)} experiment items")
+                experiment.insert(experiment_items)
+            else:
+                print("No experiment items to insert")
+        else:
+            print("No traces found to link to experiment")
+
+        return experiment_name
+
     def _run_cli_command(
         self, cmd: List[str], description: str = ""
     ) -> subprocess.CompletedProcess:
@@ -607,3 +655,135 @@ class TestCLIImportExport:
 
         result = self._run_cli_command(import_cmd, "Import from non-existent directory")
         assert result.returncode != 0, "Import from non-existent directory should fail"
+
+    def test_import_with_recreate_experiments_option(
+        self,
+        opik_client: opik.Opik,
+        source_project_name: str,
+        target_project_name: str,
+        test_data_dir: Path,
+    ):
+        """Test import with --recreate-experiments option."""
+        # Step 1: Prepare test data
+        self._create_test_traces(opik_client, source_project_name)
+        dataset_name = self._create_test_dataset(opik_client, source_project_name)
+        experiment_name = self._create_test_experiment(
+            opik_client, source_project_name, dataset_name
+        )
+
+        # Step 2: Export all data types
+        export_cmd = [
+            "export",
+            f"default/{source_project_name}",
+            "--path",
+            str(test_data_dir),
+            "--all",
+            "--max-results",
+            "10",
+        ]
+
+        result = self._run_cli_command(export_cmd, "Export all data types")
+        assert result.returncode == 0, f"Export failed: {result.stderr}"
+
+        # Verify experiment files were created
+        project_dir = test_data_dir / "default" / source_project_name
+        experiment_files = list(project_dir.glob("experiment_*.json"))
+        assert (
+            len(experiment_files) >= 1
+        ), f"Expected experiment files, found: {list(project_dir.glob('*'))}"
+
+        # Step 3: Import with --recreate-experiments flag
+        import_cmd = [
+            "import",
+            str(project_dir),
+            f"default/{target_project_name}",
+            "--all",
+            "--recreate-experiments",
+        ]
+
+        result = self._run_cli_command(import_cmd, "Import with recreate experiments")
+        assert (
+            result.returncode == 0
+        ), f"Import with recreate experiments failed: {result.stderr}"
+
+        # Verify the output mentions experiment recreation
+        assert (
+            "recreate" in result.stdout.lower() or "experiment" in result.stdout.lower()
+        )
+
+        # Step 4: Verify experiments were actually recreated
+        import time
+
+        time.sleep(2)  # Wait for data to be processed
+
+        # Check that experiments exist in the target project
+        experiments = opik_client.get_experiments_by_name(experiment_name)
+        assert (
+            len(experiments) >= 1
+        ), f"Expected to find recreated experiment '{experiment_name}'"
+
+        # Verify the recreated experiment has the correct properties
+        recreated_experiment = experiments[0]
+        assert recreated_experiment.name == experiment_name
+        assert recreated_experiment.dataset_name == dataset_name
+
+    def test_import_without_recreate_experiments_option(
+        self,
+        opik_client: opik.Opik,
+        source_project_name: str,
+        target_project_name: str,
+        test_data_dir: Path,
+    ):
+        """Test import without --recreate-experiments option (default behavior)."""
+        # Step 1: Prepare test data
+        self._create_test_traces(opik_client, source_project_name)
+        dataset_name = self._create_test_dataset(opik_client, source_project_name)
+        experiment_name = self._create_test_experiment(
+            opik_client, source_project_name, dataset_name
+        )
+
+        # Step 2: Export all data types
+        export_cmd = [
+            "export",
+            f"default/{source_project_name}",
+            "--path",
+            str(test_data_dir),
+            "--all",
+            "--max-results",
+            "10",
+        ]
+
+        result = self._run_cli_command(export_cmd, "Export all data types")
+        assert result.returncode == 0, f"Export failed: {result.stderr}"
+
+        # Step 3: Import without --recreate-experiments flag
+        project_dir = test_data_dir / "default" / source_project_name
+        import_cmd = [
+            "import",
+            str(project_dir),
+            f"default/{target_project_name}",
+            "--all",
+            # Note: no --recreate-experiments flag
+        ]
+
+        result = self._run_cli_command(
+            import_cmd, "Import without recreate experiments"
+        )
+        assert (
+            result.returncode == 0
+        ), f"Import without recreate experiments failed: {result.stderr}"
+
+        # Verify the output does not mention experiment recreation
+        assert "recreate" not in result.stdout.lower()
+
+        # Step 4: Verify experiments were NOT recreated (only original should exist)
+        import time
+
+        time.sleep(2)  # Wait for data to be processed
+
+        # Check that only the original experiment exists (not recreated)
+        experiments = opik_client.get_experiments_by_name(experiment_name)
+        # Should only find the original experiment, not a recreated one
+        assert (
+            len(experiments) == 1
+        ), f"Expected only original experiment, found {len(experiments)}"
