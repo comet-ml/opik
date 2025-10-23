@@ -1,8 +1,8 @@
 import argparse
 
 import benchmark_config
-import benchmark_runner
-import validation
+from local.runner import BenchmarkRunner
+from utils.validation import ask_for_input_confirmation
 
 DEFAULT_MAX_WORKERS: int = 3
 DEFAULT_SEED: int = 42
@@ -30,7 +30,7 @@ def run_benchmark(
         raise ValueError("models must be a list of strings")
 
     # To avoid running many benchmarks, confirm the user actions
-    validation.ask_for_input_confirmation(
+    ask_for_input_confirmation(
         demo_datasets=demo_datasets,
         optimizers=optimizers,
         test_mode=test_mode,
@@ -48,7 +48,7 @@ def run_benchmark(
     if models is None:
         models = benchmark_config.MODELS
 
-    runner = benchmark_runner.BenchmarkRunner(
+    runner = BenchmarkRunner(
         max_workers=max_workers,
         seed=seed,
         test_mode=test_mode,
