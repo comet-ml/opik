@@ -10,6 +10,7 @@ import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighl
 import get from "lodash/get";
 import { ExternalLink, FileTerminal, GitCommitVertical } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 
 type PromptInfoDict = {
@@ -88,17 +89,22 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                   data={promptContent as object}
                   search={search}
                 />
-                <div className="flex flex-col gap-2 border-t pt-2 text-xs text-muted-slate">
+                <div className="flex flex-col gap-2 text-xs text-muted-slate">
                   {promptId && (
                     <div>
-                      <Link
-                        to="/$workspaceName/prompts/$promptId"
-                        params={{ workspaceName, promptId }}
-                        className="inline-flex items-center gap-1 text-blue-600 transition-colors hover:text-blue-800"
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
                       >
-                        <ExternalLink className="size-3" />
-                        View in Prompt library
-                      </Link>
+                        <Link
+                          to="/$workspaceName/prompts/$promptId"
+                          params={{ workspaceName, promptId }}
+                          className="inline-flex items-center gap-1"
+                        >
+                          View in Prompt library
+                        </Link>
+                      </Button>
                     </div>
                   )}
                 </div>
