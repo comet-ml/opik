@@ -759,6 +759,7 @@ class BaseOptimizer(ABC):
                 raise Exception("Can't use n_samples and dataset_item_ids")
 
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
+            n_samples = min(n_samples, len(all_ids))
             dataset_item_ids = random.sample(all_ids, n_samples)
 
         score = task_evaluator.evaluate(

@@ -153,20 +153,27 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "min_examples": 2,
             "max_examples": 7,
             "n_threads": 4,
-            "n_trials": 10,
-            "n_samples": 100,
             "seed": 42,
+        },
+        optimize_params={
+            "max_trials": 10,
+            "n_samples": 100,
         },
     ),
     "meta_prompt": BenchmarkOptimizerConfig(
         class_name="MetaPromptOptimizer",
         params={
-            "max_rounds": 3,
-            "num_prompts_per_round": 4,
-            "temperature": 0.1,
-            "max_completion_tokens": 9000,
-            "num_threads": 5,
+            "prompts_per_round": 4,
+            "enable_context": True,
+            "n_threads": 5,
             "seed": 42,
+            "model_parameters": {
+                "temperature": 0.1,
+                "max_completion_tokens": 9000,
+            },
+        },
+        optimize_params={
+            "max_trials": 10,
         },
     ),
     "evolutionary_optimizer": BenchmarkOptimizerConfig(
