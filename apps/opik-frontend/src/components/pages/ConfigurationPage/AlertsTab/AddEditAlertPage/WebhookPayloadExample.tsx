@@ -1,37 +1,47 @@
 import React, { useMemo } from "react";
 import isString from "lodash/isString";
-import { ALERT_EVENT_TYPE, ALERT_TYPE } from "@/types/alerts";
+import { Alert, ALERT_EVENT_TYPE, ALERT_TYPE } from "@/types/alerts";
 import useWebhookExamplesQuery from "@/api/alerts/useWebhookExamplesQuery";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import Loader from "@/components/shared/Loader/Loader";
 import { safelyParseJSON } from "@/lib/utils";
+import { applyFieldReplacements } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
 
 type WebhookPayloadExampleProps = {
   eventType: ALERT_EVENT_TYPE;
   alertType?: ALERT_TYPE;
   actionButton?: React.ReactNode;
+  alert?: Partial<Alert>;
 };
 
 const WebhookPayloadExample: React.FunctionComponent<
   WebhookPayloadExampleProps
-> = ({ eventType, alertType, actionButton }) => {
+> = ({ eventType, alertType, actionButton, alert }) => {
   const { data: examples, isPending } = useWebhookExamplesQuery({
     alertType,
   });
 
-  const formattedPayload = useMemo(() => {
+  const payload = useMemo(() => {
     if (!examples || !examples.response_examples?.[eventType]) {
       return "";
     }
 
-    const payload = isString(examples.response_examples[eventType])
+    return isString(examples.response_examples[eventType])
       ? safelyParseJSON(examples.response_examples[eventType] as string)
       : examples.response_examples[eventType];
-
-    return JSON.stringify(payload, null, 2);
   }, [examples, eventType]);
+
+  const formattedPayload = useMemo(() => {
+    let p = payload;
+
+    if (alert && alertType) {
+      p = applyFieldReplacements(payload, alert, alertType);
+    }
+
+    return JSON.stringify(p, null, 2);
+  }, [alert, alertType, payload]);
 
   if (isPending) {
     return <Loader className="min-h-32" />;
