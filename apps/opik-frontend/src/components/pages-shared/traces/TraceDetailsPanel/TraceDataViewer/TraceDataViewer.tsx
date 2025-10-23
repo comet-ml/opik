@@ -85,7 +85,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     updateType: "replaceIn",
   });
 
-  const selectedTab = tab === "graph" && !hasSpanAgentGraph ? "input" : tab;
+  const selectedTab = 
+    (tab === "graph" && !hasSpanAgentGraph) || 
+    (tab === "prompts" && !hasPrompts) 
+      ? "input" 
+      : tab;
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
