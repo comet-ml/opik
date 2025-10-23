@@ -28,13 +28,13 @@ modal secret create llm-api-keys \
 modal deploy benchmarks/benchmark_worker.py
 ```
 
-**Submit benchmarks (then disconnect):**
+**Submit benchmarks:**
 ```bash
 # Test mode
-modal run --detach benchmarks/submit_benchmarks.py --test-mode
+python benchmarks/submit_benchmarks.py --test-mode
 
 # Custom configuration
-modal run --detach benchmarks/submit_benchmarks.py \
+python benchmarks/submit_benchmarks.py \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --models openai/gpt-4o-mini \
