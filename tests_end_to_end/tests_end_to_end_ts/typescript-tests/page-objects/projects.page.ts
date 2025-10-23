@@ -1,6 +1,5 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from './base.page';
-import { sleep } from '../helpers/wait-helpers';
 
 export class ProjectsPage extends BasePage {
   constructor(page: Page) {
@@ -32,20 +31,9 @@ export class ProjectsPage extends BasePage {
     projectName: string,
     timeout: number = 5000
   ): Promise<void> {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeout) {
-      try {
-        await this.checkProjectExists(projectName);
-        return;
-      } catch (error) {
-        await sleep(500);
-      }
-    }
-
-    throw new Error(
-      `Project ${projectName} not found in projects list within ${timeout}ms`
-    );
+    await expect(
+      this.page.getByRole('cell', { name: projectName, exact: true })
+    ).toBeVisible({ timeout });
   }
 
   async createNewProject(projectName: string): Promise<void> {

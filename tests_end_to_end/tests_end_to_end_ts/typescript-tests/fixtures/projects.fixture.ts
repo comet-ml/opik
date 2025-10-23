@@ -1,4 +1,3 @@
-import { Page } from '@playwright/test';
 import { test as base, BaseFixtures } from './base.fixture';
 import { ProjectsPage } from '../page-objects/projects.page';
 
@@ -40,16 +39,12 @@ export const test = base.extend<BaseFixtures & ProjectsFixtures>({
     await use(projectName);
 
     try {
-      await projectsPage.goto();
-      await projectsPage.searchProject(projectName);
-
-      try {
-        await projectsPage.checkProjectNotExists(projectName);
-      } catch {
+      const projectsToCleanup = await helperClient.findProject(projectName);
+      if (projectsToCleanup.length > 0) {
+        await projectsPage.goto();
         await projectsPage.deleteProjectByName(projectName);
+        await helperClient.waitForProjectDeleted(projectName);
       }
-
-      await helperClient.waitForProjectDeleted(projectName);
     } catch (error) {
       console.warn(`Failed to cleanup project ${projectName}:`, error);
     }
