@@ -157,6 +157,11 @@ This workflow will:
   - Examples: `[OPIK-2180] [DOCS] Add cursor git workflow rule`, `[OPIK-1234] [BE] Add create trace endpoint`
 - **Description**: Fill using the Opik PR template format from `/.github/pull_request_template.md`:
   ```markdown
+  ## Issues
+  # 🔗 https://github.com/comet-ml/opik/issues/{github_issue_number} <!-- the GitHub issue link, this PR resolves (e.g. `#1234`) -->
+  # 🔗 [{jira_issue}-{ticket_number}](https://comet-ml.atlassian.net/browse/{jira_issue}-{ticket_number}) <!-- The Jira ticket (e.g. `🔗 OPIK-1234` or `🔗 DEV-4242`) -->
+  # NA <!-- If no ticket, such as hotfixes etc. -->
+
   ## Details
   {implementation_summary_from_git_analysis}
   
@@ -164,12 +169,7 @@ This workflow will:
   <!-- Please check the type of changes made -->
   - [ ] User facing
   - [ ] Documentation update
-  
-  ## Issues
-  - Resolves # <!-- the GitHub issue this PR resolves (e.g. `#1234`) -->
-  - OPIK-{ticket_number} <!-- The Jira ticket (e.g. `OPIK-1234`) -->
-  - NA <!-- If no ticket, such as hotfixes etc. -->
-  
+    
   ## Testing
   {testing_scenarios_covered_by_tests_and_steps_to_reproduce}
   
@@ -177,9 +177,9 @@ This workflow will:
   {list_of_docs_updated_or_summary_of_new_configuration_introduced_or_links_to_web_documentation_reference_relevant_to_this_PR}
   ```
 - **Template Fields**:
+  - **Issues**: Link to Jira ticket (e.g., OPIK-2180) or GitHub issue, or "NA" for hotfixes. Have only 1 of the 3 (Pull request issue, can only be: OPIK/DEV-{jira_issue}, or {github_issue_number} or NA)
   - **Details**: Implementation summary from git analysis
   - **Change checklist**: Auto-check based on file types changed (user-facing for UI changes, documentation for docs)
-  - **Issues**: Link to Jira ticket (e.g., OPIK-2180) or GitHub issue, or "NA" for hotfixes
   - **Testing**: Extract from commit messages or set based on test files changed
   - **Documentation**: List docs updated or set "N/A" if no documentation changes
 

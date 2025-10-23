@@ -184,6 +184,11 @@ Note: Component type is optional but recommended for better categorization.
 ### **PR Description Template**
 Always follow the template from [pull_request_template.md](/.github/pull_request_template.md) for the PR description template.
 ```markdown
+## Issues
+  # 🔗 https://github.com/comet-ml/opik/issues/{github_issue_number} <!-- the GitHub issue link, this PR resolves (e.g. `#1234`) -->
+  # 🔗 [{jira_issue}-{ticket_number}](https://comet-ml.atlassian.net/browse/{jira_issue}-{ticket_number}) <!-- The Jira ticket (e.g. `🔗 OPIK-1234` or `🔗 DEV-4242`) -->
+  # NA <!-- If no ticket, such as hotfixes etc. -->
+
 ## Details
 What the change does, why it was made, and any design decisions
 
@@ -191,11 +196,6 @@ What the change does, why it was made, and any design decisions
 <!-- Please check the type of changes made -->
 - [ ] User facing
 - [ ] Documentation update
-
-## Issues
-- Resolves # <!-- the GitHub issue this PR resolves (e.g. `#1234`) -->
-- OPIK- <!-- The Jira ticket (e.g. `OPIK-1234`) -->
-- NA <!-- If no ticket, such as hotfixes etc. -->
 
 ## Testing
 Scenarios covered by tests and steps to reproduce

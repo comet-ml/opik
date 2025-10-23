@@ -63,11 +63,6 @@ jobs:
                 const endIndex = nextHeaderIndex !== -1 ? nextHeaderIndex : body.length;
                 return body.substring(startIndex + sectionTitle.length, endIndex).trim();
               };
-              
-              const detailsContent = getSectionContent("## Details");
-              if (detailsContent !== null && detailsContent.length === 0) {
-                  errors.push("❌ **Incomplete Details Section.** The `## Details` section cannot be empty.");
-              }
 
               const issuesContent = getSectionContent("## Issues");
               const issuesRegex = /(#\d+|OPIK-\d+|DEV-\d+)/;
@@ -76,6 +71,11 @@ jobs:
                  errors.push(
                    "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`), Jira ticket (`OPIK-xxxx`), or DEV ticket (`DEV-xxxx`) under the `## Issues` section."
                  );
+              }
+              
+              const detailsContent = getSectionContent("## Details");
+              if (detailsContent !== null && detailsContent.length === 0) {
+                  errors.push("❌ **Incomplete Details Section.** The `## Details` section cannot be empty.");
               }
             }
             
