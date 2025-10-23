@@ -6,6 +6,7 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -105,7 +106,12 @@ public class TraceFilterEvaluationService {
         if (jsonValue instanceof String str) {
             return str;
         }
-        return JsonUtils.writeValueAsString(jsonValue);
+        try {
+            return JsonUtils.getMapper().writeValueAsString(jsonValue);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to convert JSON value to string: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -119,9 +125,9 @@ public class TraceFilterEvaluationService {
         try {
             JsonNode node;
             if (jsonValue instanceof String str) {
-                node = JsonUtils.getJsonNodeFromString(str);
+                node = JsonUtils.getMapper().readTree(str);
             } else {
-                node = JsonUtils.valueToTree(jsonValue);
+                node = JsonUtils.getMapper().valueToTree(jsonValue);
             }
 
             JsonNode valueNode = node.get(key);
@@ -134,7 +140,7 @@ public class TraceFilterEvaluationService {
             } else if (valueNode.isNumber()) {
                 return valueNode.numberValue();
             } else {
-                return JsonUtils.treeToValue(valueNode, Object.class);
+                return JsonUtils.getMapper().treeToValue(valueNode, Object.class);
             }
         } catch (Exception e) {
             log.warn("Failed to extract nested value with key '{}': {}", key, e.getMessage());
