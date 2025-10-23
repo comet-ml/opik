@@ -18,6 +18,7 @@ type ProviderSelectProps = {
   configuredProvidersList?: ProviderKey[];
   hasError?: boolean;
   onAddCustomProvider?: () => void;
+  isAddingCustomProvider?: boolean;
 };
 
 // Helper function to get display name for custom providers
@@ -33,6 +34,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   configuredProvidersList,
   hasError,
   onAddCustomProvider,
+  isAddingCustomProvider,
 }) => {
   const options = useMemo(() => {
     const providerOptions: any[] = [];
@@ -93,6 +95,19 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
 
   const renderTrigger = useCallback(
     (value: string) => {
+      // When adding a new custom provider, show "Custom Provider" even if value is empty
+      if (isAddingCustomProvider && !value) {
+        const Icon = PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
+        return (
+          <div className="flex w-full items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Icon />
+              Custom Provider
+            </div>
+          </div>
+        );
+      }
+      
       if (!value) {
         return <SelectValue placeholder="Select a provider" />;
       }
@@ -145,7 +160,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         </div>
       );
     },
-    [configuredProvidersList]
+    [configuredProvidersList, isAddingCustomProvider]
   );
 
   const renderOption = useCallback((option: any) => {
