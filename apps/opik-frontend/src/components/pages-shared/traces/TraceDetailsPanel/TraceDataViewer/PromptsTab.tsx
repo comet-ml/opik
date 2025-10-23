@@ -90,24 +90,6 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     return (rawPrompts as RawPromptData[]).map(convertRawPromptToPromptWithLatestVersion);
   }, [rawPrompts]);
 
-  const hasPrompts = useMemo(() => {
-    return prompts.length > 0;
-  }, [prompts]);
-
-  if (!hasPrompts) {
-    return (
-      <div className="flex h-32 items-center justify-center text-muted-slate">
-        <div className="text-center">
-          <p className="comet-body-s">No prompts found in metadata</p>
-          <p className="comet-body-xs text-muted-slate">
-            Prompts will appear here when they are included in the trace or span
-            metadata
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const renderPrompts = () => {
     if (!prompts || prompts.length === 0) return null;
 
