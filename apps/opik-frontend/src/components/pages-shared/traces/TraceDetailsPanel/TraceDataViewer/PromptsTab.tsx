@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import get from "lodash/get";
-import { MessageSquareMore, ExternalLink } from "lucide-react";
+import { ExternalLink, FileTerminal, GitCommitVertical } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 
@@ -67,26 +67,17 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
           <AccordionItem key={index} value={`prompt-${index}`}>
             <AccordionTrigger>
               <div className="flex items-center gap-2">
-                <MessageSquareMore className="size-4 shrink-0 text-muted-slate" />
+                <FileTerminal className="size-4" />
                 <div className="flex flex-col items-start">
                   <div className="flex items-center gap-2">
-                    <span>{promptName}</span>
-                    {promptId && (
-                      <Link
-                        to="/$workspaceName/prompts/$promptId"
-                        params={{ workspaceName, promptId }}
-                        className="text-blue-600 transition-colors hover:text-blue-800"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="size-3" />
-                      </Link>
+                    <span>Prompt: {promptName}</span>
+                    {commitHash && (
+                    <div className="flex items-center">
+                      <GitCommitVertical className="size-3 text-muted-slate" />
+                      <span className="text-muted-slate">{commitHash.substring(0, 8)}</span>
+                    </div>
                     )}
                   </div>
-                  {commitHash && (
-                    <span className="font-mono text-xs text-muted-slate">
-                      {commitHash.substring(0, 8)}
-                    </span>
-                  )}
                 </div>
               </div>
             </AccordionTrigger>
@@ -106,7 +97,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                         className="inline-flex items-center gap-1 text-blue-600 transition-colors hover:text-blue-800"
                       >
                         <ExternalLink className="size-3" />
-                        View in Prompt Library
+                        View in Prompt library
                       </Link>
                     </div>
                   )}
