@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -18,6 +19,7 @@ import java.util.function.Consumer;
 public class CustomLlmProvider implements LlmProviderService {
     // assume that the provider is compatible with OpenAI API, so we use the OpenAiClient to interact with it
     private final @NonNull OpenAiClient openAiClient;
+    private final Map<String, String> configuration;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
@@ -50,13 +52,21 @@ public class CustomLlmProvider implements LlmProviderService {
         return LlmProviderLangChainMapper.INSTANCE.getCustomLlmErrorObject(throwable, log);
     }
 
-    private static ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
+    private ChatCompletionRequest cleanModelName(@NonNull ChatCompletionRequest request) {
         if (!CustomLlmModelNameChecker.isCustomLlmModel(request.model())) {
             return request;
         }
 
-        // Extract the actual model name (strips both "custom-llm/" and provider name if present)
-        String actualModelName = CustomLlmModelNameChecker.extractModelName(request.model());
+        // Extract provider_name from configuration (null for legacy providers)
+        String providerName = Optional.ofNullable(configuration)
+                .map(config -> config.get("provider_name"))
+                .orElse(null);
+
+        // Extract the actual model name using the provider name
+        String actualModelName = CustomLlmModelNameChecker.extractModelName(request.model(), providerName);
+
+        log.debug("Cleaned model name from '{}' to '{}' (providerName='{}')",
+                request.model(), actualModelName, providerName);
 
         return ChatCompletionRequest.builder()
                 .model(actualModelName)
