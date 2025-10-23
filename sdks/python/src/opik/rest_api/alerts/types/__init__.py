@@ -2,6 +2,6 @@
 
 # isort: skip_file
 
-from .types import GetWebhookExamplesRequestAlertType
+from .get_webhook_examples_request_alert_type import GetWebhookExamplesRequestAlertType
 
 __all__ = ["GetWebhookExamplesRequestAlertType"]

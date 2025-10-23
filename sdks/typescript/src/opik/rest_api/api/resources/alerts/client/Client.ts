@@ -509,22 +509,33 @@ export class Alerts {
     }
 
     /**
-     * Get webhook payload examples for all alert event types
+     * Get webhook payload examples for all alert event types, optionally filtered by alert type
      *
+     * @param {OpikApi.GetWebhookExamplesRequest} request
      * @param {Alerts.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
      *     await client.alerts.getWebhookExamples()
      */
     public getWebhookExamples(
+        request: OpikApi.GetWebhookExamplesRequest = {},
         requestOptions?: Alerts.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.WebhookExamples> {
-        return core.HttpResponsePromise.fromPromise(this.__getWebhookExamples(requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__getWebhookExamples(request, requestOptions));
     }
 
     private async __getWebhookExamples(
+        request: OpikApi.GetWebhookExamplesRequest = {},
         requestOptions?: Alerts.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.WebhookExamples>> {
+        const { alertType } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (alertType != null) {
+            _queryParams["alert_type"] = serializers.GetWebhookExamplesRequestAlertType.jsonOrThrow(alertType, {
+                unrecognizedObjectKeys: "strip",
+            });
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -545,6 +556,7 @@ export class Alerts {
                 ...requestOptions?.headers,
             },
             contentType: "application/json",
+            queryParameters: _queryParams,
             requestType: "json",
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
