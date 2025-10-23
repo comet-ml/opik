@@ -85,10 +85,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     updateType: "replaceIn",
   });
 
-  const selectedTab = 
-    (tab === "graph" && !hasSpanAgentGraph) || 
-    (tab === "prompts" && !hasPrompts) 
-      ? "input" 
+  const selectedTab =
+    (tab === "graph" && !hasSpanAgentGraph) ||
+    (tab === "prompts" && !hasPrompts)
+      ? "input"
       : tab;
 
   const isSpanInputOutputLoading =

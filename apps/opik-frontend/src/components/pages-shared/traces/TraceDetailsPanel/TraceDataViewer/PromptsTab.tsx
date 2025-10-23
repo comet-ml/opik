@@ -64,7 +64,8 @@ const CustomUseInPlaygroundButton: React.FC<{
   onClick?: () => void;
   children: React.ReactNode;
   className?: string;
-}> = ({ onClick, disabled, size, variant, ...props }) => { // eslint-disable-next-line @typescript-eslint/no-unused-vars
+}> = ({ onClick, disabled, size, variant: _variant, ...props }) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return (
     <Button
       variant="ghost" // eslint-disable-next-line @typescript-eslint/no-unused-vars
