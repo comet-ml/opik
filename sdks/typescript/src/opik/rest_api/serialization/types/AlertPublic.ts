@@ -5,6 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { AlertPublicAlertType } from "./AlertPublicAlertType";
 import { WebhookPublic } from "./WebhookPublic";
 import { AlertTriggerPublic } from "./AlertTriggerPublic";
 
@@ -13,6 +14,8 @@ export const AlertPublic: core.serialization.ObjectSchema<serializers.AlertPubli
         id: core.serialization.string().optional(),
         name: core.serialization.string().optional(),
         enabled: core.serialization.boolean().optional(),
+        alertType: core.serialization.property("alert_type", AlertPublicAlertType.optional()),
+        metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
         webhook: WebhookPublic,
         triggers: core.serialization.list(AlertTriggerPublic).optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -26,6 +29,8 @@ export declare namespace AlertPublic {
         id?: string | null;
         name?: string | null;
         enabled?: boolean | null;
+        alert_type?: AlertPublicAlertType.Raw | null;
+        metadata?: Record<string, string> | null;
         webhook: WebhookPublic.Raw;
         triggers?: AlertTriggerPublic.Raw[] | null;
         created_at?: string | null;

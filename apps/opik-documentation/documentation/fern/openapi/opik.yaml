@@ -331,8 +331,18 @@ paths:
       tags:
       - Alerts
       summary: Get webhook payload examples
-      description: Get webhook payload examples for all alert event types
+      description: "Get webhook payload examples for all alert event types, optionally\
+        \ filtered by alert type"
       operationId: getWebhookExamples
+      parameters:
+      - name: alert_type
+        in: query
+        schema:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
       responses:
         "200":
           description: Webhook examples
@@ -4762,6 +4772,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook"
         triggers:
@@ -4938,6 +4958,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Write"
         triggers:
@@ -5080,6 +5110,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Public"
         triggers:
@@ -5145,66 +5185,13 @@ components:
           type: string
         details:
           type: string
-    WebhookEventObject:
-      required:
-      - alert_id
-      - created_at
-      - event_type
-      - id
-      - payload
-      - url
-      - user_name
-      - workspace_id
-      type: object
-      properties:
-        id:
-          minLength: 1
-          type: string
-        event_type:
-          type: string
-          enum:
-          - trace:errors
-          - trace:feedback_score
-          - trace_thread:feedback_score
-          - prompt:created
-          - prompt:committed
-          - trace:guardrails_triggered
-          - prompt:deleted
-        alert_id:
-          type: string
-          format: uuid
-        workspace_id:
-          minLength: 1
-          type: string
-        user_name:
-          minLength: 1
-          type: string
-        payload:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-        max_retries:
-          maximum: 10
-          minimum: 1
-          type: integer
-          format: int32
-        url:
-          minLength: 1
-          type: string
-        secret:
-          type: string
-        headers:
-          type: object
-          additionalProperties:
-            type: string
     WebhookExamples:
       type: object
       properties:
         response_examples:
           type: object
           additionalProperties:
-            $ref: "#/components/schemas/WebhookEventObject"
+            type: object
     WebhookTestResult:
       type: object
       properties:
@@ -5217,7 +5204,7 @@ components:
           type: integer
           format: int32
         request_body:
-          $ref: "#/components/schemas/WebhookEventObject"
+          type: string
         error_message:
           type: string
     AnnotationQueueItemIds:

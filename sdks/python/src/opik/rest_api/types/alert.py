@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .alert_alert_type import AlertAlertType
 from .alert_trigger import AlertTrigger
 from .webhook import Webhook
 
@@ -13,6 +14,8 @@ class Alert(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     enabled: typing.Optional[bool] = None
+    alert_type: typing.Optional[AlertAlertType] = None
+    metadata: typing.Optional[typing.Dict[str, str]] = None
     webhook: Webhook
     triggers: typing.Optional[typing.List[AlertTrigger]] = None
     created_at: typing.Optional[dt.datetime] = None
