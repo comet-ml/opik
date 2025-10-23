@@ -7790,5 +7790,102 @@ class SpansResourceTest {
                         assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
                     });
         }
+
+        @Test
+        @DisplayName("Create span with attachment exceeding limit - should return 400 Bad Request")
+        void createSpan__whenSingleAttachmentExceedsLimit__thenReject() throws Exception {
+            // Given: Create a single attachment that exceeds the 250MB test limit
+            // In test environment: maxStringLength = 250MB (262,144,000 bytes)
+            // We'll create a 190MB raw attachment, which becomes ~253MB as base64 (190 * 4/3 = 253.3MB)
+            // This exceeds the 250MB limit and should be rejected during deserialization
+            int videoSizeBytes = 190 * 1024 * 1024; // 190MB raw -> ~253MB base64
+            String base64Video = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
+
+            // Create input JSON with the oversized video
+            String originalInputJson = String.format(
+                    "{\"message\": \"Processing large video\", " +
+                            "\"video_data\": \"%s\", " +
+                            "\"user_id\": \"user123\"}",
+                    base64Video);
+
+            // Create span with PODAM factory
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .feedbackScores(null)
+                    .build();
+
+            // When: Attempt to create the span
+            // Then: Should fail with 400 Bad Request
+            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE, 400)) {
+                // Assert error message mentions the limit
+                var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorResponse).isNotNull();
+                assertThat(errorResponse.getMessage())
+                        .containsIgnoringCase("String value length")
+                        .containsIgnoringCase("exceeds the maximum allowed")
+                        .containsIgnoringCase("StreamReadConstraints");
+            }
+        }
+
+        @Test
+        @DisplayName("Create span with multiple large attachments under individual limit - should succeed")
+        void createSpan__whenMultipleLargeAttachmentsUnderIndividualLimit__thenSucceed() throws Exception {
+            // Given: Create THREE 70MB attachments (each ~93MB as base64)
+            // Total payload: ~280MB, but each individual string is under 250MB limit
+            // This verifies the limit is per-string, not per total payload
+            int videoSizeBytes = 70 * 1024 * 1024; // 70MB each -> ~93MB base64 each
+            String base64Video1 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
+            String base64Video2 = AttachmentPayloadUtilsTest.createValidJpegBase64(videoSizeBytes);
+            String base64Video3 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
+
+            // Create JSONs with large videos
+            String originalInputJson = String.format(
+                    "{\"video1\": \"%s\", \"video2\": \"%s\"}",
+                    base64Video1, base64Video2);
+
+            String originalOutputJson = String.format(
+                    "{\"result_video\": \"%s\"}",
+                    base64Video3);
+
+            // Create span
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree(originalOutputJson))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .feedbackScores(null)
+                    .build();
+
+            // When: Create the span
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Then: Should succeed and attachments should be stripped
+            assertThat(spanId).isNotNull();
+
+            // Verify attachments were stripped
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
+                        assertThat(retrievedSpan).isNotNull();
+
+                        String inputString = retrievedSpan.input().toString();
+                        String outputString = retrievedSpan.output().toString();
+
+                        // All three videos should be stripped
+                        assertThat(inputString).doesNotContain(base64Video1);
+                        assertThat(inputString).doesNotContain(base64Video2);
+                        assertThat(outputString).doesNotContain(base64Video3);
+
+                        // Should have attachment references
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
+                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.png\\]");
+                    });
+        }
     }
 }

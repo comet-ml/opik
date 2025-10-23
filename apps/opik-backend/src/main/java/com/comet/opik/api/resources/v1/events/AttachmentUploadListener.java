@@ -39,19 +39,28 @@ public class AttachmentUploadListener {
     private static final AttributeKey<String> STATUS_KEY = AttributeKey.stringKey("status");
     private static final AttributeKey<String> MIME_CATEGORY_KEY = AttributeKey.stringKey("mime_category");
     private static final AttributeKey<String> MIME_SUBTYPE_KEY = AttributeKey.stringKey("mime_subtype");
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
 
     private static final LongCounter UPLOAD_PROCESSED = METER
             .counterBuilder("opik.attachments.upload.processed")
-            .setDescription("Number of attachment uploads processed (tagged by status, mime_category, mime_subtype)")
+            .setDescription(
+                    "Number of attachment uploads processed (tagged by status, mime_category, mime_subtype, workspace_id)")
             .build();
     private static final LongCounter UPLOAD_BYTES = METER
             .counterBuilder("opik.attachments.upload.bytes")
-            .setDescription("Bytes processed for attachment uploads (tagged by status, mime_category, mime_subtype)")
+            .setDescription(
+                    "Bytes processed for attachment uploads (tagged by status, mime_category, mime_subtype, workspace_id)")
             .build();
     private static final LongHistogram UPLOAD_DURATION = METER
             .histogramBuilder("opik.attachments.upload.duration.ms")
             .setDescription(
-                    "Duration of attachment uploads in milliseconds (tagged by status, mime_category, mime_subtype)")
+                    "Duration of attachment uploads in milliseconds (tagged by status, mime_category, mime_subtype, workspace_id)")
+            .ofLongs()
+            .build();
+    private static final LongHistogram UPLOAD_BYTES_DISTRIBUTION = METER
+            .histogramBuilder("opik.attachments.upload.bytes.distribution")
+            .setDescription(
+                    "Distribution of attachment upload sizes in bytes (tagged by status, mime_category, mime_subtype, workspace_id)")
             .ofLongs()
             .build();
 
@@ -100,16 +109,18 @@ public class AttachmentUploadListener {
             log.error("Failed to process attachment upload for file: '{}' (type: {}/{}) after {}ms",
                     event.fileName(), mimeCategory, mimeSubtype, System.currentTimeMillis() - startTime, e);
         } finally {
-            // Record metrics with status, mime_category, and mime_subtype tags
+            // Record metrics with status, mime_category, mime_subtype, and workspace_id tags
             Attributes attributes = Attributes.of(
                     STATUS_KEY, status,
                     MIME_CATEGORY_KEY, mimeCategory,
-                    MIME_SUBTYPE_KEY, mimeSubtype);
+                    MIME_SUBTYPE_KEY, mimeSubtype,
+                    WORKSPACE_ID_KEY, event.workspaceId());
 
             long duration = System.currentTimeMillis() - startTime;
             UPLOAD_PROCESSED.add(1, attributes);
             UPLOAD_DURATION.record(duration, attributes);
             UPLOAD_BYTES.add(estimatedBytes, attributes);
+            UPLOAD_BYTES_DISTRIBUTION.record(estimatedBytes, attributes);
         }
     }
 
