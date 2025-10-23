@@ -97,7 +97,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
   },
   {
     id: "number_of_messages",
-    label: "No. of messages",
+    label: "Message count",
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
