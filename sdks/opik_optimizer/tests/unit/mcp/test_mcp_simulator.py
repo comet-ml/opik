@@ -1,4 +1,5 @@
 from typing import Any
+from collections.abc import Mapping
 
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
 from opik_optimizer.mcp_utils.mcp import ToolSignature
@@ -54,6 +55,7 @@ def test_simulate_session_detects_argument_error() -> None:
     signature = _signature_for("doc_lookup")
 
     report = simulate_session({"doc_lookup": signature}, dataset_item)
+    assert report.failure_reason is not None
     assert report.failure_reason.startswith("invalid_arguments")
     assert report.score == 0.0
 
@@ -69,7 +71,7 @@ def test_simulate_session_with_custom_invoker_detects_wrong_tool() -> None:
 
     def bad_invoker(
         signature: ToolSignature,
-        arguments: dict[str, Any],
+        arguments: Mapping[str, Any],
         dataset_item: dict[str, Any],
     ) -> ToolCallResult:
         return ToolCallResult(

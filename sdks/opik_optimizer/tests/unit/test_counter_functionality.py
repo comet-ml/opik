@@ -35,6 +35,8 @@ class TestCounterFunctionality:
                 n_samples: int | None = None,
                 auto_continue: bool = False,
                 agent_class: type[Any] | None = None,
+                project_name: str = "Optimization",
+                *args: Any,
                 **kwargs: Any,
             ) -> Any:
                 pass

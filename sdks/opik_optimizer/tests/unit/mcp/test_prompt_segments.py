@@ -46,6 +46,7 @@ def test_extract_and_update_system_user_and_tool_segments() -> None:
 
     assert updated.system == updates["system"]
     assert updated.user == updates["user"]
+    assert updated.tools is not None
     assert updated.tools[0]["function"]["description"] == updates["tool:lookup"]
     # original prompt remains unchanged
     assert prompt.system == "You are a docs assistant."
@@ -70,6 +71,7 @@ def test_extract_and_update_message_segments() -> None:
     updates = {"message:1": "Hello there"}
     updated = apply_segment_updates(prompt, updates)
 
+    assert updated.messages is not None
     assert updated.messages[1]["content"] == "Hello there"
     assert updated.messages[0]["content"] == "You are concise."
     # ensure original messages untouched
