@@ -19,7 +19,6 @@ setup(
         "datasets",
         "deap>=1.4.3",
         "diskcache",
-        "dspy<3",
         "ujson",
         "hf_xet",
         "litellm",
