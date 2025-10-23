@@ -26,17 +26,17 @@ def _ensure_rest_api_call_respecting_rate_limit(
 ) -> Any:
     """
     Execute a REST API call with automatic retry on rate limit (429) errors.
-    
+
     This function handles HTTP 429 rate limit errors by waiting for the duration
     specified in the response headers and retrying the request. Regular retries
     for other errors are handled by the underlying rest client.
-    
+
     Args:
         rest_callable: A callable that performs the REST API call.
-        
+
     Returns:
         The result of the successful REST API call.
-        
+
     Raises:
         ApiError: If the error is not a 429 rate limit error.
     """
@@ -57,14 +57,14 @@ def _ensure_rest_api_call_respecting_rate_limit(
                         )
                         time.sleep(retry_after)
                         continue
-                
+
                 # Fallback: wait 1 second if no header available
                 LOGGER.info(
                     "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second"
                 )
                 time.sleep(1)
                 continue
-            
+
             # Re-raise if not a 429 error
             raise
 

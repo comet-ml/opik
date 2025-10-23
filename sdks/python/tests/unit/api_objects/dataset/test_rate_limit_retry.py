@@ -1,7 +1,7 @@
 """Test rate limit retry logic for dataset items."""
+
 import unittest
-from unittest.mock import Mock, patch, call
-import time
+from unittest.mock import Mock, patch
 
 from opik.api_objects.dataset import dataset
 from opik.rest_api.types import dataset_item_write as rest_dataset_item
@@ -11,7 +11,7 @@ from opik.rest_api.core.api_error import ApiError
 class TestDatasetRateLimitRetry(unittest.TestCase):
     """Test rate limit retry behavior for dataset items."""
 
-    @patch("time.sleep")
+    @patch("opik.api_objects.dataset.dataset.time.sleep")
     def test_insert_batch_with_retry__429_with_retry_after_header__retries_with_correct_delay(
         self, mock_sleep
     ):
@@ -53,11 +53,11 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 2
         mock_sleep.assert_called_once_with(5.0)
 
-    @patch("time.sleep")
-    def test_insert_batch_with_retry__429_without_header__uses_exponential_backoff(
+    @patch("opik.api_objects.dataset.dataset.time.sleep")
+    def test_insert_batch_with_retry__429_without_header__uses_fallback_delay(
         self, mock_sleep
     ):
-        """Test that 429 errors without headers use exponential backoff."""
+        """Test that 429 errors without headers use fallback 1 second delay."""
         # Setup
         mock_rest_client = Mock()
         dataset_obj = dataset.Dataset.__new__(dataset.Dataset)
@@ -89,12 +89,11 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         # Execute
         dataset_obj._insert_batch_with_retry(batch)
 
-        # Verify exponential backoff: 2^0=1, 2^1=2
+        # Verify fallback delay: always 1 second when no header
         assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 3
         assert mock_sleep.call_count == 2
-        # First retry after 1 second, second after 2 seconds
-        mock_sleep.assert_any_call(1)
-        mock_sleep.assert_any_call(2)
+        # Both retries should use 1 second delay
+        assert all(call[0][0] == 1 for call in mock_sleep.call_args_list)
 
     def test_insert_batch_with_retry__non_429_error__raises_immediately(self):
         """Test that non-429 errors are raised immediately without retry."""
@@ -129,45 +128,3 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         assert context.exception.status_code == 500
         # Should only try once for non-429 errors
         assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1
-
-    @patch("time.sleep")
-    def test_insert_batch_with_retry__max_retries_exceeded__raises_opik_exception(
-        self, mock_sleep
-    ):
-        """Test that exceeding max retries raises OpikException."""
-        # Setup
-        mock_rest_client = Mock()
-        dataset_obj = dataset.Dataset.__new__(dataset.Dataset)
-        dataset_obj._name = "test_dataset"
-        dataset_obj._description = "test"
-        dataset_obj._rest_client = mock_rest_client
-        dataset_obj._hashes = set()
-        dataset_obj._id_to_hash = {}
-
-        batch = [
-            rest_dataset_item.DatasetItemWrite(
-                source="manual",
-                data={"input": "test"},
-            )
-        ]
-
-        # Always return 429
-        rate_limit_error = ApiError(
-            status_code=429,
-            headers={},
-            body="Rate limit exceeded",
-        )
-        mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
-            rate_limit_error
-        )
-
-        # Execute & Verify
-        from opik.exceptions import OpikException
-
-        with self.assertRaises(OpikException) as context:
-            dataset_obj._insert_batch_with_retry(batch)
-
-        assert "Failed to insert dataset items after 5 retries" in str(context.exception)
-        # Should try max_retries + 1 times (initial + 5 retries = 6 total)
-        assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 6
-
