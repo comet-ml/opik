@@ -64,13 +64,13 @@ const CustomUseInPlaygroundButton: React.FC<{
   onClick?: () => void;
   children: React.ReactNode;
   className?: string;
-}> = ({ onClick, disabled, size, variant: _variant, ...props }) => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+}> = ({ onClick, disabled, size, variant, ...props }) => {
   return (
     <Button
-      variant="ghost" // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      variant="ghost"
       onClick={onClick}
-      size={size}
+      size="sm"
       disabled={disabled}
       className="inline-flex items-center gap-1"
       {...props}
