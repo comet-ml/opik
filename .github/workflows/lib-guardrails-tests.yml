@@ -31,7 +31,7 @@ jobs:
           "3.10",
           "3.11",
           "3.12",
-          # "3.13"  problems with guardrails installation 26.08.2025
+          "3.13"
         ]
 
     steps:

@@ -7,13 +7,13 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -24,10 +24,16 @@ public record Alert(
                 Alert.View.Public.class, Alert.View.Write.class}) UUID id,
 
         @JsonView({Alert.View.Public.class,
-                Alert.View.Write.class}) @NotBlank @Size(max = 255) String name,
+                Alert.View.Write.class}) @Size(max = 255) String name,
 
         @JsonView({Alert.View.Public.class,
                 Alert.View.Write.class}) @JsonProperty(defaultValue = "true") Boolean enabled,
+
+        @JsonView({Alert.View.Public.class,
+                Alert.View.Write.class}) AlertType alertType,
+
+        @JsonView({Alert.View.Public.class,
+                Alert.View.Write.class}) Map<String, String> metadata,
 
         @JsonView({
                 Alert.View.Public.class, Alert.View.Write.class}) @Valid @NotNull Webhook webhook,

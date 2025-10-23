@@ -6,8 +6,10 @@ import * as OpikApi from "../index";
 
 export interface AlertPublic {
     id?: string;
-    name: string;
+    name?: string;
     enabled?: boolean;
+    alertType?: OpikApi.AlertPublicAlertType;
+    metadata?: Record<string, string>;
     webhook: OpikApi.WebhookPublic;
     triggers?: OpikApi.AlertTriggerPublic[];
     createdAt?: Date;

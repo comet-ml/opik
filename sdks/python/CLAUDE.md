@@ -90,7 +90,7 @@ python -m pytest tests/unit/test_specific_file.py -v
 
 ## Important Notes
 - `rest_api/` is auto-generated from OpenAPI specs - never edit manually
-- Python 3.8+ supported with comprehensive CI testing
+- Python 3.9+ supported with comprehensive CI testing
 - Background message processing ensures non-blocking operations
 - Context management is critical for proper trace/span relationships
 - Integration patterns should be consistent across different libraries

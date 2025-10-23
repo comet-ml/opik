@@ -33,14 +33,19 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
     >
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
-          <MessageRenderer message={trace.input} attemptTextExtraction={true} />
+          <MessageRenderer
+            message={trace.input}
+            attemptTextExtraction={true}
+            extractionContext="input"
+          />
         </div>
       </div>
       <div key={`${trace.id}_output`} className="flex justify-start">
-        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground px-4 py-2">
+        <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-primary-foreground px-4 py-2 dark:bg-secondary">
           <MessageRenderer
             message={trace.output}
             attemptTextExtraction={true}
+            extractionContext="output"
           />
         </div>
       </div>

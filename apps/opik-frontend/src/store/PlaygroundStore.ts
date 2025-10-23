@@ -88,6 +88,7 @@ export type PlaygroundStore = {
   promptMap: Record<string, PlaygroundPromptType>;
   outputMap: PlaygroundOutputMap;
   datasetVariables: string[];
+  providerValidationTrigger: number;
 
   setPromptMap: (
     promptIds: string[],
@@ -106,6 +107,7 @@ export type PlaygroundStore = {
     changes: Partial<PlaygroundOutput>,
   ) => void;
   setDatasetVariables: (variables: string[]) => void;
+  triggerProviderValidation: () => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -115,6 +117,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       promptMap: {},
       outputMap: {},
       datasetVariables: [],
+      providerValidationTrigger: 0,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -217,6 +220,14 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      triggerProviderValidation: () => {
+        set((state) => {
+          return {
+            ...state,
+            providerValidationTrigger: state.providerValidationTrigger + 1,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -306,5 +317,11 @@ export const useDatasetVariables = () =>
 
 export const useSetDatasetVariables = () =>
   usePlaygroundStore((state) => state.setDatasetVariables);
+
+export const useProviderValidationTrigger = () =>
+  usePlaygroundStore((state) => state.providerValidationTrigger);
+
+export const useTriggerProviderValidation = () =>
+  usePlaygroundStore((state) => state.triggerProviderValidation);
 
 export default usePlaygroundStore;
