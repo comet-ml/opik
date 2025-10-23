@@ -389,7 +389,13 @@ def _create_dataset_item(dataset: Any, item_data: Dict[str, Any]) -> str:
         ):
             return item.get("id")
 
-    raise Exception("Failed to create dataset item")
+    dataset_name = getattr(dataset, "name", None)
+    raise Exception(
+        f"Failed to create dataset item. "
+        f"Input: {new_item.get('input')!r}, "
+        f"Expected Output: {new_item.get('expected_output')!r}"
+        + (f", Dataset: {dataset_name!r}" if dataset_name else "")
+    )
 
 
 def _handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
