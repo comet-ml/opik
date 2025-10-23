@@ -40,7 +40,7 @@ public class ExperimentResponseBuilder {
         return ExperimentGroupResponse.builder()
                 .content(contentMap)
                 .details(ExperimentGroupResponse.GroupDetails.builder()
-                        .groupsSorting(buildSortedGroups(groupItems, enrichInfoHolder, groups))
+                        .groupsDetails(buildSortedGroups(groupItems, enrichInfoHolder, groups))
                         .build())
                 .build();
     }
@@ -275,7 +275,7 @@ public class ExperimentResponseBuilder {
         };
     }
 
-    private List<List<String>> buildSortedGroups(List<ExperimentGroupItem> groupItems,
+    private List<ExperimentGroupResponse.GroupDetail> buildSortedGroups(List<ExperimentGroupItem> groupItems,
             ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
         List<ArrayList<ExperimentGroupWithTime>> groupsWithTime = IntStream.range(0, groups.size())
                 .mapToObj(i -> new ArrayList<ExperimentGroupWithTime>())
@@ -301,11 +301,15 @@ public class ExperimentResponseBuilder {
         });
 
         return groupsWithTime.stream()
-                .map(groupList -> groupList.stream()
-                        .sorted((a, b) -> b.lastCreatedExperimentAt().compareTo(a.lastCreatedExperimentAt()))
-                        .map(ExperimentGroupWithTime::name)
-                        .distinct()
-                        .toList())
+                .map(groupList -> ExperimentGroupResponse.GroupDetail.builder()
+                        .groupSorting(
+                                groupList.stream()
+                                        .sorted((a, b) -> b.lastCreatedExperimentAt()
+                                                .compareTo(a.lastCreatedExperimentAt()))
+                                        .map(ExperimentGroupWithTime::name)
+                                        .distinct()
+                                        .toList())
+                        .build())
                 .toList();
     }
 }

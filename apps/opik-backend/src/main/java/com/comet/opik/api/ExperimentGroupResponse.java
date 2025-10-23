@@ -25,6 +25,12 @@ public record ExperimentGroupResponse(Map<String, GroupContent> content,
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record GroupDetails(List<List<String>> groupsSorting) {
+    public record GroupDetails(List<GroupDetail> groupsDetails) {
+    }
+
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record GroupDetail(List<String> groupSorting) {
     }
 }
