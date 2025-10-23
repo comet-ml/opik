@@ -19,10 +19,6 @@ public class JacksonConfig {
      * Maximum size (in bytes) for individual string values during JSON deserialization.
      * Applies to BOTH HTTP requests and internal JSON processing for consistency.
      *
-     * Java default: 20MB (Jackson's default)
-     * Config default: 250MB for self-hosted (set in config.yml)
-     * Cloud: 100MB (set in Dockerfile via MAX_JSON_STRING_LENGTH environment variable)
-     *
      * This ensures that if HTTP layer accepts a payload, internal processing can handle it.
      * Attachment stripping happens asynchronously after initial ingestion.
      */

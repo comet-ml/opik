@@ -190,15 +190,11 @@ server:
 # Jackson JSON processing configuration
 # Controls limits for JSON deserialization to prevent memory exhaustion
 jacksonConfig:
-  # Default: 262144000 (250MB in bytes) for self-hosted installations
-  # Description: Maximum size for individual string values during JSON deserialization.
-  #   This limit prevents memory exhaustion from extremely large base64-encoded attachments
-  #   before they can be stripped and stored separately in S3/MinIO.
-  #   - Cloud deployments: 100MB (set via MAX_JSON_STRING_LENGTH in docker-compose.yaml)
-  #   - Self-hosted: 250MB default (can be increased via MAX_JSON_STRING_LENGTH environment variable)
-  #   Note: This applies to individual string fields, not total payload size.
-  #   Example: A JSON with 3x 40MB strings will work, but a single 60MB string will fail.
-  #   This configuration is used by both HTTP layer and internal JSON processing for consistency.
+  # Default: 262144000 (250MB) for self-hosted installations (Cloud default is 100MB via MAX_JSON_STRING_LENGTH in docker-compose.yaml)
+  # Description: Maximum size for individual string values during JSON deserialization. 
+  #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
+  #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
+  #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: ${MAX_JSON_STRING_LENGTH:-262144000}
 
 # Configuration for batch operations

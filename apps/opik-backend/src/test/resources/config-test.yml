@@ -153,11 +153,6 @@ server:
   applicationConnectors:
     - type: http
       maxRequestHeaderSize: 16KB
-  # Jackson JSON processing configuration
-  jackson:
-    # Default: 52428800 (50MB in bytes) - same as production for consistent testing
-    # Description: Maximum size for individual string values during JSON deserialization
-    maxStringLength: 52428800
 
 # Configuration for batch operations
 batchOperations:

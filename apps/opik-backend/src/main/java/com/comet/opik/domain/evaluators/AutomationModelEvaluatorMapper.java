@@ -66,13 +66,21 @@ interface AutomationModelEvaluatorMapper {
         if (StringUtils.isBlank(filtersJson)) {
             return List.of();
         }
-        return JsonUtils.readValue(filtersJson, TraceFilter.LIST_TYPE_REFERENCE);
+        try {
+            return JsonUtils.readValue(filtersJson, TraceFilter.LIST_TYPE_REFERENCE);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse filters JSON", e);
+        }
     }
 
     default String map(List<TraceFilter> filters) {
         if (filters == null || filters.isEmpty()) {
             return null;
         }
-        return JsonUtils.writeValueAsString(filters);
+        try {
+            return JsonUtils.writeValueAsString(filters);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize filters to JSON", e);
+        }
     }
 }
