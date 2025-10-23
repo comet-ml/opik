@@ -17,6 +17,10 @@ from opik.api_objects.experiment import Experiment
 
 console = Console()
 
+# Constants for export command
+FALLBACK_PAGE_SIZE = 10  # Smaller page size for error recovery
+MAX_EXPERIMENT_ITEMS_PER_FETCH = 1000  # Maximum items to fetch per experiment
+
 
 def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
     """Check if a name matches the given regex pattern."""
@@ -232,12 +236,9 @@ def _export_traces(
                 except Exception as e:
                     # Check if it's an OQL parsing error and provide user-friendly message
                     error_msg = str(e)
-                    if (
-                        "Invalid value" in error_msg
-                        and (
-                            "expected an string in double quotes" in error_msg
-                            or "expected a string in double quotes" in error_msg
-                        )
+                    if "Invalid value" in error_msg and (
+                        "expected an string in double quotes" in error_msg
+                        or "expected a string in double quotes" in error_msg
                     ):
                         console.print(
                             "[red]Error: Invalid filter format in export query.[/red]"
@@ -561,11 +562,9 @@ def _export_experiments(
                     console.print(f"[blue]Full error: {api_error}[/blue]")
                 # Try to get experiments with a smaller page size to avoid the problematic ones
                 try:
-                    experiments_response = (
-                        client.rest_client.experiments.find_experiments(
-                            page=1,
-                            size=10,  # Smaller page size
-                        )
+                    experiments_response = client.rest_client.experiments.find_experiments(
+                        page=1,
+                        size=FALLBACK_PAGE_SIZE,  # Smaller page size for error recovery
                     )
                     experiments = experiments_response.content or []
                 except Exception:
@@ -649,7 +648,7 @@ def _export_experiments(
 
                 # Get experiment items
                 experiment_items = experiment_obj.get_items(
-                    max_results=1000, truncate=False
+                    max_results=MAX_EXPERIMENT_ITEMS_PER_FETCH, truncate=False
                 )
 
                 # Create comprehensive experiment data structure
@@ -722,7 +721,7 @@ def _export_experiments(
                             # Get the trace for this item
                             trace = client.search_traces(
                                 project_name=experiment.dataset_name,  # Using dataset name as project context
-                                trace_id=item.trace_id,
+                                filter_string=f'id = "{item.trace_id}"',
                                 max_results=1,
                                 truncate=False,
                             )
