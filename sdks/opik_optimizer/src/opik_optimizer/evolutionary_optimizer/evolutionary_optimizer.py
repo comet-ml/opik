@@ -304,6 +304,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> Any:
         individual = creator.Individual(prompt_candidate.get_messages())
         setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
+        setattr(individual, "function_map", prompt_candidate.function_map)
         return individual
 
     def _update_individual_with_prompt(
@@ -311,6 +312,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> Any:
         individual[:] = prompt_candidate.get_messages()
         setattr(individual, "tools", copy.deepcopy(prompt_candidate.tools))
+        setattr(individual, "function_map", prompt_candidate.function_map)
         return individual
 
     def _get_adaptive_mutation_rate(self) -> float:
@@ -401,15 +403,17 @@ class EvolutionaryOptimizer(BaseOptimizer):
         else:
             elites = tools.selBest(population, self.elitism_size)
 
-        seed_prompt = (
-            chat_prompt.ChatPrompt(
-                messages=max(elites, key=lambda x: x.fitness.values[0]),
-                tools=best_prompt_so_far.tools,
-                function_map=best_prompt_so_far.function_map,
+        if elites:
+            best_elite = max(elites, key=lambda x: x.fitness.values[0])
+            seed_prompt = chat_prompt.ChatPrompt(
+                messages=best_elite,
+                tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
+                function_map=getattr(
+                    best_elite, "function_map", best_prompt_so_far.function_map
+                ),
             )
-            if elites
-            else best_prompt_so_far
-        )
+        else:
+            seed_prompt = best_prompt_so_far
 
         prompt_variants = self._initialize_population(seed_prompt)
         new_pop = [self._create_individual_from_prompt(p) for p in prompt_variants]
@@ -583,7 +587,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
             def _deap_evaluate_individual_fitness(
                 messages: list[dict[str, str]],
-            ) -> tuple[float, float]:
+            ) -> tuple[float, ...]:
                 primary_fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -602,7 +606,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             # Single-objective
             def _deap_evaluate_individual_fitness(
                 messages: list[dict[str, str]],
-            ) -> tuple[float, float]:
+            ) -> tuple[float, ...]:
                 fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -614,7 +618,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     verbose=0,
                     **evaluation_kwargs,
                 )
-                return (fitness_score, 0.0)
+                return (fitness_score,)
 
         self.toolbox.register("evaluate", _deap_evaluate_individual_fitness)
 
@@ -704,8 +708,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 best_primary_score_overall = current_best_for_primary.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
                     messages=current_best_for_primary,
-                    tools=prompt.tools,
-                    function_map=prompt.function_map,
+                    tools=getattr(current_best_for_primary, "tools", prompt.tools),
+                    function_map=getattr(
+                        current_best_for_primary, "function_map", prompt.function_map
+                    ),
                 )
             else:
                 # Single-objective
@@ -713,8 +719,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 best_primary_score_overall = current_best_on_front.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
                     messages=current_best_on_front,
-                    tools=prompt.tools,
-                    function_map=prompt.function_map,
+                    tools=getattr(current_best_on_front, "tools", prompt.tools),
+                    function_map=getattr(
+                        current_best_on_front, "function_map", prompt.function_map
+                    ),
                 )
 
             if self.enable_moo:
@@ -847,8 +855,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 best_overall_solution = sorted_hof[0]
                 final_best_prompt = chat_prompt.ChatPrompt(
                     messages=best_overall_solution,
-                    tools=prompt.tools,
-                    function_map=prompt.function_map,
+                    tools=getattr(best_overall_solution, "tools", prompt.tools),
+                    function_map=getattr(
+                        best_overall_solution, "function_map", prompt.function_map
+                    ),
                 )
                 final_primary_score = best_overall_solution.fitness.values[0]
                 final_length = best_overall_solution.fitness.values[1]

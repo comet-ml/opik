@@ -222,18 +222,20 @@ class PopulationOps:
         else:
             elites = tools.selBest(population, self.elitism_size)
 
-        seed_prompt = (
-            chat_prompt.ChatPrompt(
-                messages=max(elites, key=lambda x: x.fitness.values[0]),
-                tools=best_prompt_so_far.tools,
-                function_map=best_prompt_so_far.function_map,
+        if elites:
+            best_elite = max(elites, key=lambda x: x.fitness.values[0])
+            seed_prompt = chat_prompt.ChatPrompt(
+                messages=best_elite,
+                tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
+                function_map=getattr(
+                    best_elite, "function_map", best_prompt_so_far.function_map
+                ),
             )
-            if elites
-            else best_prompt_so_far
-        )
+        else:
+            seed_prompt = best_prompt_so_far
 
         prompt_variants = self._initialize_population(seed_prompt)
-        new_pop = [creator.Individual(p.get_messages()) for p in prompt_variants]
+        new_pop = [self._create_individual_from_prompt(p) for p in prompt_variants]  # type: ignore[attr-defined]
 
         for ind, fit in zip(new_pop, map(self.toolbox.evaluate, new_pop)):
             ind.fitness.values = fit
