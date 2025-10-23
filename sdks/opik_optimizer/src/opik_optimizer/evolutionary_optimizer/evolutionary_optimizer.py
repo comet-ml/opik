@@ -516,8 +516,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         max_trials: int = 10,
-        *args: Any,
         mcp_config: MCPExecutionConfig | None = None,
+        *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
         """

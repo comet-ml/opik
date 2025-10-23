@@ -363,11 +363,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
-        *args: Any,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
+        *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
         """

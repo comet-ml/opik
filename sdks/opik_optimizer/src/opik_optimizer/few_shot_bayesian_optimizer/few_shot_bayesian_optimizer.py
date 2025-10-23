@@ -451,8 +451,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
-        *args: Any,
         max_trials: int = 10,
+        *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
