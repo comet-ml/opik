@@ -19,6 +19,9 @@ from opik.api_objects.trace.migration import prepare_traces_and_spans_for_copy
 
 console = Console()
 
+# Constants for import command
+DEFAULT_PROJECT_NAME = "default"
+
 
 def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
     """Check if a name matches the given regex pattern."""
@@ -344,7 +347,7 @@ def _find_trace_by_id(
     try:
         traces = client.search_traces(
             project_name=project_name,
-            trace_id=trace_id,
+            filter_string=f'id = "{trace_id}"',
             max_results=1,
             truncate=False,
         )
@@ -841,7 +844,7 @@ def import_data(
                     if debug:
                         console.print("[blue]Recreating experiments...[/blue]")
                     experiments_recreated = _recreate_experiments(
-                        client, project_dir, "default", dry_run, name
+                        client, project_dir, DEFAULT_PROJECT_NAME, dry_run, name
                     )
                     total_imported += experiments_recreated
 
