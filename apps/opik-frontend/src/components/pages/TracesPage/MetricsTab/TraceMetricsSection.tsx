@@ -262,7 +262,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             traceFilters={processedTracesFilters}
           />
         </div>
-        <div>
+        <div className="md:col-span-2">
           <MetricContainerChart
             chartId="duration_chart"
             key="duration_chart"
