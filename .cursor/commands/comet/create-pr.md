@@ -177,7 +177,7 @@ This workflow will:
   {list_of_docs_updated_or_summary_of_new_configuration_introduced_or_links_to_web_documentation_reference_relevant_to_this_PR}
   ```
 - **Template Fields**:
-  - **Issues**: Link to Jira ticket (e.g., OPIK-2180) or GitHub issue, or "NA" for hotfixes. Have only 1 of the 3 (Pull request issue, can only be: OPIK/DEV-{jira_issue}, or {github_issue_number} or NA)
+  - **Issues**: Link to exactly one of: Jira ticket (OPIK-xxxx or DEV-xxxx), GitHub issue (#xxxx), or NA for hotfixes without tickets.
   - **Details**: Implementation summary from git analysis
   - **Change checklist**: Auto-check based on file types changed (user-facing for UI changes, documentation for docs)
   - **Testing**: Extract from commit messages or set based on test files changed
