@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
@@ -24,6 +24,7 @@ import TagList from "../TagList/TagList";
 import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
 import AgentGraphTab from "./AgentGraphTab";
+import PromptsTab from "./PromptsTab";
 import { formatDuration, formatDate } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
@@ -72,6 +73,13 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
+
+  const hasPrompts = useMemo(() => {
+    const prompts = get(data.metadata, "opik_prompts", null);
+    if (!prompts) return false;
+    if (Array.isArray(prompts)) return (prompts as unknown[]).length > 0;
+    return false; // opik_prompts should always be an array
+  }, [data.metadata]);
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
@@ -244,6 +252,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             <TabsTrigger variant="underline" value="metadata">
               Metadata
             </TabsTrigger>
+            {hasPrompts && (
+              <TabsTrigger variant="underline" value="prompts">
+                Prompts
+              </TabsTrigger>
+            )}
             {hasSpanAgentGraph && (
               <TabsTrigger variant="underline" value="graph">
                 Agent graph
@@ -270,6 +283,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <TabsContent value="metadata">
             <MetadataTab data={data} search={search} />
           </TabsContent>
+          {hasPrompts && (
+            <TabsContent value="prompts">
+              <PromptsTab data={data} search={search} />
+            </TabsContent>
+          )}
           {hasSpanAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />
