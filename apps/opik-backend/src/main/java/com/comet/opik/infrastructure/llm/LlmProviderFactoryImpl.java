@@ -159,24 +159,17 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
             return false;
         }
 
-        // Strip "custom-llm/" prefix
-        if (!model.startsWith(CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX)) {
+        // Validate that this is a custom LLM model
+        if (!CustomLlmModelNameChecker.isCustomLlmModel(model)) {
             return false;
         }
-        String modelWithoutCustomPrefix = model.substring(CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX.length());
 
-        // For new format providers, also strip the provider name prefix
+        // Extract the actual model name
         String extractedModelName;
-        if (providerApiKey.providerName() != null) {
-            // New format: strip "provider-name/" prefix
-            String providerPrefix = providerApiKey.providerName() + "/";
-            if (!modelWithoutCustomPrefix.startsWith(providerPrefix)) {
-                return false; // Model doesn't belong to this provider
-            }
-            extractedModelName = modelWithoutCustomPrefix.substring(providerPrefix.length());
-        } else {
-            // Legacy format: use the model name as-is after stripping "custom-llm/"
-            extractedModelName = modelWithoutCustomPrefix;
+        try {
+            extractedModelName = CustomLlmModelNameChecker.extractModelName(model, providerApiKey.providerName());
+        } catch (IllegalArgumentException e) {
+            return false;
         }
 
         // Check if this model is in the configured models list
