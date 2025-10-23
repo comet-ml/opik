@@ -8,6 +8,8 @@ export interface AlertWrite {
     id?: string;
     name?: string;
     enabled?: boolean;
+    alertType?: OpikApi.AlertWriteAlertType;
+    metadata?: Record<string, string>;
     webhook: OpikApi.WebhookWrite;
     triggers?: OpikApi.AlertTriggerWrite[];
 }

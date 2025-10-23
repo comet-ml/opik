@@ -4,14 +4,13 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .webhook_event_object import WebhookEventObject
 from .webhook_test_result_status import WebhookTestResultStatus
 
 
 class WebhookTestResult(UniversalBaseModel):
     status: typing.Optional[WebhookTestResultStatus] = None
     status_code: typing.Optional[int] = None
-    request_body: typing.Optional[WebhookEventObject] = None
+    request_body: typing.Optional[str] = None
     error_message: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:

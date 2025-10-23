@@ -8,6 +8,8 @@ export interface Alert {
     id?: string;
     name?: string;
     enabled?: boolean;
+    alertType?: OpikApi.AlertAlertType;
+    metadata?: Record<string, string>;
     webhook: OpikApi.Webhook;
     triggers?: OpikApi.AlertTrigger[];
     createdAt?: Date;

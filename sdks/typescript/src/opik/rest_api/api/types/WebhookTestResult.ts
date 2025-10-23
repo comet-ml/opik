@@ -7,6 +7,6 @@ import * as OpikApi from "../index";
 export interface WebhookTestResult {
     status?: OpikApi.WebhookTestResultStatus;
     statusCode?: number;
-    requestBody?: OpikApi.WebhookEventObject;
+    requestBody?: string;
     errorMessage?: string;
 }

@@ -5,7 +5,6 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { WebhookEventObject } from "./WebhookEventObject";
 
 export const WebhookExamples: core.serialization.ObjectSchema<
     serializers.WebhookExamples.Raw,
@@ -13,12 +12,17 @@ export const WebhookExamples: core.serialization.ObjectSchema<
 > = core.serialization.object({
     responseExamples: core.serialization.property(
         "response_examples",
-        core.serialization.record(core.serialization.string(), WebhookEventObject).optional(),
+        core.serialization
+            .record(
+                core.serialization.string(),
+                core.serialization.record(core.serialization.string(), core.serialization.unknown()),
+            )
+            .optional(),
     ),
 });
 
 export declare namespace WebhookExamples {
     export interface Raw {
-        response_examples?: Record<string, WebhookEventObject.Raw> | null;
+        response_examples?: Record<string, Record<string, unknown>> | null;
     }
 }

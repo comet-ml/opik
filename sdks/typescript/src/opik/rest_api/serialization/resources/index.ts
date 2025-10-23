@@ -1,3 +1,5 @@
+export * as alerts from "./alerts";
+export * from "./alerts/types";
 export * as attachments from "./attachments";
 export * from "./attachments/types";
 export * as datasets from "./datasets";
