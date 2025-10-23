@@ -6,6 +6,7 @@ from .. import task_evaluator
 from ..optimization_config import mappers, chat_prompt
 from ..mcp_utils.mcp_workflow import MCPExecutionConfig
 import opik
+from opik import opik_context
 import copy
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -15,7 +16,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 class EvaluationOps:
     if TYPE_CHECKING:
         agent_class: type[Any]
-        num_threads: int
+        n_threads: int
 
     def _evaluate_prompt(
         self,
@@ -79,6 +80,16 @@ class EvaluationOps:
 
             if mcp_execution_config is None:
                 model_output = agent.invoke(messages)
+
+                # Add tags to trace for optimization tracking
+                if (
+                    hasattr(self, "current_optimization_id")
+                    and self.current_optimization_id
+                ):
+                    opik_context.update_current_trace(
+                        tags=[self.current_optimization_id, "Evaluation"]
+                    )
+
                 return {mappers.EVALUATED_LLM_TASK_OUTPUT: model_output}
 
             coordinator = mcp_execution_config.coordinator
@@ -119,6 +130,15 @@ class EvaluationOps:
             else:
                 final_response = raw_model_output
 
+            # Add tags to trace for optimization tracking
+            if (
+                hasattr(self, "current_optimization_id")
+                and self.current_optimization_id
+            ):
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
+
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: final_response.strip()}
 
         score = task_evaluator.evaluate(
@@ -126,8 +146,8 @@ class EvaluationOps:
             dataset_item_ids=dataset_item_ids,
             metric=metric,
             evaluated_task=llm_task,
-            num_threads=self.num_threads,
-            project_name=experiment_config.get("project_name"),
+            num_threads=self.n_threads,
+            project_name=optimizer.project_name,
             n_samples=n_samples if dataset_item_ids is None else None,
             experiment_config=experiment_config,
             optimization_id=optimization_id,

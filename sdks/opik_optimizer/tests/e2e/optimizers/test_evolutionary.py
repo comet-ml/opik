@@ -28,8 +28,7 @@ def test_evolutionary_optimizer() -> None:
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = EvolutionaryOptimizer(
         model="openai/gpt-4o",
-        temperature=0.1,
-        max_tokens=500000,
+        model_parameters={"temperature": 0.1, "max_tokens": 500000},
         infer_output_style=True,
         population_size=2,
         num_generations=2,

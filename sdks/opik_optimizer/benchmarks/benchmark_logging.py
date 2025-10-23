@@ -85,6 +85,7 @@ class BenchmarkLogger:
         self.run_id = run_id
         self.tasks_status: dict[Any, Any] = {}
         self.result_panels: list[Panel] = []
+        self.completed_tasks_count = {"Success": 0, "Failed": 0}
 
     def _calculate_percentage_change(
         self, initial: float | None, final: float | None, metric_name: str
@@ -165,6 +166,15 @@ class BenchmarkLogger:
             "status": status,
         }
 
+    def remove_active_task_status(
+        self, future: Any, final_status: str | None = None
+    ) -> None:
+        if future in self.tasks_status:
+            # Track completed tasks before removing
+            if final_status in ("Success", "Failed"):
+                self.completed_tasks_count[final_status] += 1
+            del self.tasks_status[future]
+
     def _generate_live_display_message(self) -> Group:
         active_list = []
         for status_info in self.tasks_status.values():
@@ -194,12 +204,8 @@ class BenchmarkLogger:
         nb_active_tasks = len(
             [x for x in self.tasks_status.values() if x["status"] == "Running"]
         )
-        nb_success_tasks = len(
-            [x for x in self.tasks_status.values() if x["status"] == "Success"]
-        )
-        nb_failed_tasks = len(
-            [x for x in self.tasks_status.values() if x["status"] == "Failed"]
-        )
+        nb_success_tasks = self.completed_tasks_count["Success"]
+        nb_failed_tasks = self.completed_tasks_count["Failed"]
         summary_line = Text(
             f"Run: {self.run_id} | Tasks: {nb_success_tasks + nb_failed_tasks}/{self.total_tasks} | Success: {nb_success_tasks} | Failed: {nb_failed_tasks} | Active: {nb_active_tasks}",
             style="dim",

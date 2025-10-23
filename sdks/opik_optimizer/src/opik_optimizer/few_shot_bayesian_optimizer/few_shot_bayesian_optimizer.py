@@ -1,6 +1,5 @@
 from typing import Any
 from collections.abc import Callable
-import warnings
 
 import copy
 import json
@@ -8,13 +7,11 @@ import logging
 import random
 from datetime import datetime
 
-import litellm
 import optuna
 import optuna.samplers
 
 import opik
-from opik import Dataset
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from opik import Dataset, opik_context
 from pydantic import BaseModel
 
 from opik_optimizer import base_optimizer
@@ -64,47 +61,39 @@ class FewShotPromptTemplate(BaseModel):
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     """
-    The Few-Shot Bayesian Optimizer can be used to add few-shot examples to prompts. This algorithm
-    employes a two stage pipeline:
+    Few-Shot Bayesian Optimizer that adds few-shot examples to prompts using Bayesian optimization.
 
-    1. We generate a few-shot prompt template that is inserted can be inserted into the prompt
-       provided
-    2. We use Bayesian Optimization to determine the best examples to include in the prompt.
+    This algorithm employs a two-stage pipeline:
 
-    This algorithm is best used when you have a well defined task and would like to guide the LLM
-    by providing some examples.
+    1. Generate a few-shot prompt template that can be inserted into the prompt
+    2. Use Bayesian Optimization to determine the best examples to include in the prompt
+
+    This algorithm is best used when you have a well-defined task and would like to guide the LLM
+    by providing examples. It automatically finds the optimal number and selection of examples.
+
+    Args:
+        model: LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)
+        model_parameters: Optional dict of LiteLLM parameters for optimizer's internal LLM calls.
+            Common params: temperature, max_tokens, max_completion_tokens, top_p.
+            See: https://docs.litellm.ai/docs/completion/input
+        min_examples: Minimum number of examples to include in the prompt
+        max_examples: Maximum number of examples to include in the prompt
+        n_threads: Number of threads for parallel evaluation
+        verbose: Controls internal logging/progress bars (0=off, 1=on)
+        seed: Random seed for reproducibility
     """
 
     def __init__(
         self,
-        model: str,
+        model: str = "gpt-4o",
+        model_parameters: dict[str, Any] | None = None,
         min_examples: int = 2,
         max_examples: int = 8,
-        seed: int = 42,
         n_threads: int = 8,
         verbose: int = 1,
-        **model_kwargs: Any,
+        seed: int = 42,
     ) -> None:
-        """
-        Args:
-            model: The model to used to evaluate the prompt
-            min_examples: Minimum number of examples to include
-            max_examples: Maximum number of examples to include
-            seed: Random seed for reproducibility
-            n_threads: Number of threads for parallel evaluation
-            verbose: Controls internal logging/progress bars (0=off, 1=on).
-            **model_kwargs: Additional model parameters
-        """
-        if "project_name" in model_kwargs:
-            warnings.warn(
-                "The 'project_name' parameter in optimizer constructor is deprecated. "
-                "Set project_name in the ChatPrompt instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            del model_kwargs["project_name"]
-
-        super().__init__(model, verbose, **model_kwargs)
+        super().__init__(model, verbose, seed=seed, model_parameters=model_parameters)
         self.min_examples = min_examples
         self.max_examples = max_examples
         self.seed = seed
@@ -123,49 +112,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "min_examples": self.min_examples,
             "max_examples": self.max_examples,
         }
-
-    @_throttle.rate_limited(_limiter)
-    def _call_model(
-        self,
-        model: str,
-        messages: list[dict[str, str]],
-        seed: int,
-        model_kwargs: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Args:
-            model: The model to use for the call
-            messages: List of message dictionaries with 'role' and 'content' keys
-            seed: Random seed for reproducibility
-            model_kwargs: Additional model parameters
-
-        Returns:
-            Dict containing the model's response
-        """
-        self.increment_llm_counter()
-
-        current_model_kwargs = self.model_kwargs.copy()
-        current_model_kwargs.update(model_kwargs)
-
-        filtered_call_kwargs = current_model_kwargs.copy()
-        filtered_call_kwargs.pop("n_trials", None)
-        filtered_call_kwargs.pop("n_samples", None)
-        filtered_call_kwargs.pop("n_iterations", None)
-        filtered_call_kwargs.pop("min_examples", None)
-        filtered_call_kwargs.pop("max_examples", None)
-
-        final_params_for_litellm = (
-            opik_litellm_monitor.try_add_opik_monitoring_to_params(filtered_call_kwargs)
-        )
-
-        response = litellm.completion(
-            model=self.model,
-            messages=messages,
-            seed=seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-        return response
 
     def _split_dataset(
         self, dataset: list[dict[str, Any]], train_ratio: float
@@ -230,18 +176,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         ]
 
         logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
-        response = self._call_model(model, messages, self.seed, self.model_kwargs)
-        logger.debug(f"fewshot_prompt_template - LLM response: {response}")
+        response_content = self._call_model(messages, model=model, seed=self.seed)
+        logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
 
         try:
-            res = utils.json_to_dict(response["choices"][0]["message"]["content"])
+            res = utils.json_to_dict(response_content)
             return FewShotPromptTemplate(
                 message_list_with_placeholder=res["message_list_with_placeholder"],
                 example_template=res["example_template"],
             )
         except Exception as e:
             logger.error(
-                f"Failed to compute few-shot prompt template: {e} - response: {response}"
+                f"Failed to compute few-shot prompt template: {e} - response: {response_content}"
             )
             raise
 
@@ -361,7 +307,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     metric=metric,
                     evaluated_task=llm_task,
                     num_threads=self.n_threads,
-                    project_name=self.agent_class.project_name,
+                    project_name=self.project_name,
                     experiment_config=trial_config,
                     optimization_id=optimization_id,
                     verbose=self.verbose,
@@ -486,7 +432,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "stopped_early": False,
                 "metric_name": metric.__name__,
                 "model": self.model,
-                "temperature": self.model_kwargs.get("temperature"),
+                "temperature": self.model_parameters.get("temperature"),
             },
             history=optuna_history_processed,
             llm_calls=self.llm_call_counter,
@@ -504,6 +450,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_samples: int | None = None,
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
+        project_name: str = "Optimization",
+        max_trials: int = 10,
+        *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
         """
@@ -512,23 +461,21 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
             experiment_config: Optional configuration for the experiment, useful to log additional metadata
+            max_trials: Number of trials for Bayesian Optimization (default: 10)
             n_samples: Optional number of items to test in the dataset
             auto_continue: Whether to auto-continue optimization
             agent_class: Optional agent class to use
-            **kwargs: Additional parameters including:
-                n_trials (int): Number of trials for Bayesian Optimization (default: 10)
-                mcp_config (MCPExecutionConfig | None): MCP tool calling configuration (default: None)
+            project_name: Opik project name for logging traces (default: "Optimization")
 
         Returns:
             OptimizationResult: Result of the optimization
         """
         # Use base class validation and setup methods
-        self.validate_optimization_inputs(prompt, dataset, metric)
-        self.configure_prompt_model(prompt)
-        self.agent_class = self.setup_agent_class(prompt, agent_class)
+        self._validate_optimization_inputs(prompt, dataset, metric)
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
-        # Extract n_trials from kwargs for backward compatibility
-        n_trials = kwargs.get("n_trials", 10)
+        # Set project name from parameter
+        self.project_name = project_name
 
         optimization = None
         try:
@@ -537,18 +484,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 objective_name=metric.__name__,
                 metadata={"optimizer": self.__class__.__name__},
             )
-            optimization_run_id = optimization.id
+            self.current_optimization_id = optimization.id
         except Exception:
             logger.warning(
                 "Opik server does not support optimizations. Please upgrade opik."
             )
             optimization = None
-            optimization_run_id = None
+            self.current_optimization_id = None
 
         # Start experiment reporting
         reporting.display_header(
             algorithm=self.__class__.__name__,
-            optimization_id=optimization_run_id,
+            optimization_id=self.current_optimization_id,
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
@@ -557,7 +504,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "metric": metric.__name__,
-                "n_trials": n_trials,
+                "max_trials": max_trials,
                 "n_samples": n_samples,
             },
             verbose=self.verbose,
@@ -605,11 +552,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             baseline_score=baseline_score,
             optimization_id=optimization.id if optimization is not None else None,
             experiment_config=experiment_config,
-            n_trials=n_trials,
+            n_trials=max_trials,
             n_samples=n_samples,
         )
         if optimization:
-            self.update_optimization(optimization, status="completed")
+            self._update_optimization(optimization, status="completed")
 
         utils.enable_experiment_reporting()
         return result
@@ -643,6 +590,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 raise Exception("Can't use n_samples and dataset_item_ids")
 
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
+            n_samples = min(n_samples, len(all_ids))
             dataset_item_ids = random.sample(all_ids, n_samples)
 
         configuration_updates = self._drop_none(
@@ -708,6 +656,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     )
 
             result = agent.invoke(messages, seed=self.seed)
+
+            # Add tags to trace for optimization tracking
+            if self.current_optimization_id:
+                opik_context.update_current_trace(
+                    tags=[self.current_optimization_id, "Evaluation"]
+                )
 
             return {mappers.EVALUATED_LLM_TASK_OUTPUT: result}
 

@@ -4,11 +4,19 @@ from typing import Any
 from rich.table import Table
 from rich.text import Text
 from rich.panel import Panel
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TimeRemainingColumn,
+    MofNCompleteColumn,
+)
 
-from ..reporting_utils import (
-    display_configuration,  # noqa: F401
-    display_header,  # noqa: F401
-    display_result,  # noqa: F401
+from ..reporting_utils import (  # noqa: F401
+    display_configuration,
+    display_header,
+    display_result,
     get_console,
     convert_tqdm_to_rich,
     suppress_opik_logs,
@@ -18,16 +26,38 @@ console = get_console()
 
 
 class RichGEPAOptimizerLogger:
-    """Adapter for GEPA's logger that provides concise Rich output."""
+    """Adapter for GEPA's logger that provides concise Rich output with progress tracking."""
 
     SUPPRESS_PREFIXES = (
         "Linear pareto front program index",
         "New program candidate index",
     )
 
-    def __init__(self, optimizer: Any, verbose: int = 1) -> None:
+    # Additional messages to suppress (too technical for users)
+    SUPPRESS_KEYWORDS = (
+        "Individual valset scores for new program",
+        "New valset pareto front scores",
+        "Updated valset pareto front programs",
+        "Best program as per aggregate score on train_val",
+        "Best program as per aggregate score on valset",
+        "New program is on the linear pareto front",
+        "Full train_val score for new program",
+    )
+
+    def __init__(
+        self,
+        optimizer: Any,
+        verbose: int = 1,
+        progress: Progress | None = None,
+        task_id: Any | None = None,
+        max_trials: int = 10,
+    ) -> None:
         self.optimizer = optimizer
         self.verbose = verbose
+        self.progress = progress
+        self.task_id = task_id
+        self.max_trials = max_trials
+        self.current_iteration = 0
 
     def log(self, message: str) -> None:
         if self.verbose < 1:
@@ -43,30 +73,117 @@ class RichGEPAOptimizerLogger:
 
         first = lines[0]
 
+        # Track iteration changes and add separation
         if first.startswith("Iteration "):
             colon = first.find(":")
             head = first[:colon] if colon != -1 else first
             parts = head.split()
             if len(parts) >= 2 and parts[1].isdigit():
                 try:
-                    self.optimizer._gepa_current_iteration = int(parts[1])  # type: ignore[attr-defined]
+                    iteration = int(parts[1])
+
+                    # Add separator when starting a new iteration (except iteration 0)
+                    if iteration > 0 and iteration != self.current_iteration:
+                        console.print("│")
+
+                    self.optimizer._gepa_current_iteration = iteration  # type: ignore[attr-defined]
+                    self.current_iteration = iteration
+
+                    # Update progress bar
+                    if self.progress and self.task_id is not None:
+                        self.progress.update(self.task_id, completed=iteration)
+
+                    # Add explanatory text for iteration start
+                    if "Base program full valset score" in first:
+                        # Extract score
+                        score_match = first.split(":")[-1].strip()
+                        console.print(
+                            f"│ Baseline evaluation: {score_match}", style="bold"
+                        )
+                        return
+                    elif "Selected program" in first:
+                        # Extract program number and score
+                        parts_info = first.split(":")
+                        if "Selected program" in parts_info[1]:
+                            program_info = parts_info[1].strip()
+                            score_info = (
+                                parts_info[2].strip() if len(parts_info) > 2 else ""
+                            )
+                            console.print(
+                                f"│ Trial {iteration}: {program_info}, score: {score_info}",
+                                style="bold cyan",
+                            )
+                        else:
+                            console.print(f"│ Trial {iteration}", style="bold cyan")
+                        console.print("│ ├─ Testing new prompt variant...")
+                        return
                 except Exception:
                     pass
 
-        if "Proposed new text" in first and "system_prompt:" in first:
-            _, _, rest = first.partition("system_prompt:")
-            snippet = rest.strip()
-            if len(snippet) > 120:
-                snippet = snippet[:120] + "…"
-            first = "Proposed new text · system_prompt: " + snippet
-        elif len(first) > 160:
-            first = first[:160] + "…"
+        # Check if this message should be suppressed
+        for keyword in self.SUPPRESS_KEYWORDS:
+            if keyword in first:
+                return
 
         for prefix in self.SUPPRESS_PREFIXES:
             if prefix in first:
                 return
 
-        console.print(f"│ {first}")
+        # Format proposed prompts
+        if "Proposed new text" in first and "system_prompt:" in first:
+            _, _, rest = first.partition("system_prompt:")
+            snippet = rest.strip()
+            if len(snippet) > 100:
+                snippet = snippet[:100] + "…"
+            console.print(f"│ │  Proposed: {snippet}", style="dim")
+            return
+
+        # Format subsample evaluation results
+        if "New subsample score" in first and "is not better than" in first:
+            console.print("│ └─ Rejected - no improvement", style="dim yellow")
+            console.print("│")  # Add spacing after rejected trials
+            return
+
+        if "New subsample score" in first and "is better than" in first:
+            console.print("│ ├─ Promising! Running full validation...", style="green")
+            return
+
+        # Format final validation score
+        if "Full valset score for new program" in first:
+            # Extract score
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                console.print(f"│ ├─ Validation complete: {score}", style="bold green")
+            else:
+                console.print("│ ├─ Validation complete", style="green")
+            return
+
+        # Format best score updates
+        if (
+            "Best valset aggregate score so far" in first
+            or "Best score on valset" in first
+        ):
+            # Extract score
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                console.print(f"│ └─ New best: {score} ✓", style="bold green")
+                console.print("│")  # Add spacing after successful trials
+            return
+
+        # Suppress redundant "Iteration X:" prefix from detailed messages
+        if first.startswith(f"Iteration {self.current_iteration}:"):
+            # Remove the iteration prefix for cleaner output
+            first = first.split(":", 1)[1].strip() if ":" in first else first
+
+        # Truncate very long messages
+        if len(first) > 160:
+            first = first[:160] + "…"
+
+        # Default: print with standard prefix only if not already handled
+        if first:
+            console.print(f"│ {first}", style="dim")
 
 
 @contextmanager
@@ -85,20 +202,45 @@ def baseline_evaluation(verbose: int = 1) -> Any:
 
 
 @contextmanager
-def start_gepa_optimization(verbose: int = 1) -> Any:
+def start_gepa_optimization(verbose: int = 1, max_trials: int = 10) -> Any:
     if verbose >= 1:
         console.print("> Starting GEPA optimization")
 
     class Reporter:
+        progress: Progress | None = None
+        task_id: Any | None = None
+
         def info(self, message: str) -> None:
             if verbose >= 1:
                 console.print(f"│   {message}")
 
-    try:
-        yield Reporter()
-    finally:
-        if verbose >= 1:
-            console.print("")
+    with suppress_opik_logs():
+        try:
+            # Create Rich progress bar
+            if verbose >= 1:
+                Reporter.progress = Progress(
+                    SpinnerColumn(),
+                    TextColumn("[bold blue]{task.description}"),
+                    BarColumn(),
+                    MofNCompleteColumn(),
+                    TextColumn("•"),
+                    TimeRemainingColumn(),
+                    console=console,
+                    transient=True,  # Make progress bar disappear when done
+                )
+                Reporter.progress.start()
+                Reporter.task_id = Reporter.progress.add_task(
+                    "GEPA Optimization", total=max_trials
+                )
+
+            yield Reporter()
+        finally:
+            if verbose >= 1:
+                if Reporter.progress and Reporter.task_id is not None:
+                    # Mark as complete before stopping
+                    Reporter.progress.update(Reporter.task_id, completed=max_trials)
+                    Reporter.progress.stop()
+                console.print("")
 
 
 def display_candidate_scores(

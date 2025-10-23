@@ -97,7 +97,7 @@ All optimizers inherit from `BaseOptimizer` and support these common parameters:
 
 **Specific Parameters:**
 - **`reasoning_model`** (str): Model used for root cause analysis and prompt improvement (e.g., "openai/gpt-4o")
-- **`num_threads`** (int, default: 12): Number of parallel evaluation threads
+- **`n_threads`** (int, default: 12): Number of parallel evaluation threads
 - **`max_parallel_batches`** (int, default: 5): Maximum number of batches analyzed in parallel
 - **`batch_size`** (int, default: 25): Number of test cases per batch for root cause analysis
 - **`seed`** (int, default: 42): Random seed for reproducibility
@@ -126,9 +126,9 @@ All optimizers inherit from `BaseOptimizer` and support these common parameters:
 **Specific Parameters:**
 - **`auto`** (Literal["light", "medium", "heavy"], default: "light"): Optimization intensity level
   - `"light"`: Fast optimization with minimal exploration
-  - `"medium"`: Balanced optimization with moderate exploration  
+  - `"medium"`: Balanced optimization with moderate exploration
   - `"heavy"`: Thorough optimization with extensive exploration
-- **`num_threads`** (int, default: 6): Number of parallel threads for evaluation
+- **`n_threads`** (int, default: 6): Number of parallel threads for evaluation
 - **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
 
 **Use Cases:**

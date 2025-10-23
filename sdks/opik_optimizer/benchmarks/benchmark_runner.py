@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import traceback
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime
 
 import benchmark_checkpoint
@@ -66,7 +66,10 @@ def run_optimization(
 
             # Run optimization
             optimization_results = optimizer.optimize_prompt(
-                prompt=initial_prompt, dataset=dataset, metric=dataset_config.metrics[0]
+                prompt=initial_prompt,
+                dataset=dataset,
+                metric=dataset_config.metrics[0],
+                **optimizer_config.optimize_params,
             )
             optimized_prompt = chat_prompt.ChatPrompt(
                 messages=optimization_results.prompt
@@ -187,7 +190,8 @@ class BenchmarkRunner:
             live.update(self.benchmark_logger._generate_live_display_message())
 
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-                futures = []
+                # Submit all tasks and map futures to metadata
+                future_to_info = {}
 
                 for dataset_name in demo_datasets:
                     for optimizer_name in optimizers:
@@ -216,7 +220,7 @@ class BenchmarkRunner:
                                 if task_id in completed_tasks:
                                     continue
 
-                            # Schedule the task
+                            # Submit the task
                             future = executor.submit(
                                 run_optimization,
                                 task_id=task_id,
@@ -224,19 +228,16 @@ class BenchmarkRunner:
                                 optimizer_name=optimizer_name,
                                 model_name=model_name,
                                 test_mode=self.test_mode,
-                                checkpoint_folder=checkpoint_folder,
-                            )
-                            futures.append(
-                                (
-                                    task_id,
-                                    future,
-                                    dataset_name,
-                                    optimizer_name,
-                                    model_name,
-                                )
                             )
 
-                            # Update the checkpoint manager
+                            future_to_info[future] = (
+                                task_id,
+                                dataset_name,
+                                optimizer_name,
+                                model_name,
+                            )
+
+                            # Mark as Pending
                             checkpoint_manager.update_task_result(
                                 TaskResult(
                                     id=task_id,
@@ -247,8 +248,6 @@ class BenchmarkRunner:
                                     timestamp_start=time.time(),
                                 )
                             )
-
-                            # Update the logging
                             self.benchmark_logger.update_active_task_status(
                                 future=future,
                                 dataset_name=dataset_name,
@@ -260,100 +259,122 @@ class BenchmarkRunner:
                                 self.benchmark_logger._generate_live_display_message()
                             )
 
-                completed_futures: list[str] = []
-                while True:
-                    try:
-                        for future_info in futures:
+                # Process completions as they happen
+                running_futures: set[Future[TaskResult]] = set()
+                completed_futures: set[Future[TaskResult]] = set()
+
+                def update_running_tasks() -> None:
+                    """Check for and mark newly running tasks"""
+                    # Only mark up to max_workers tasks as running
+                    slots_available = self.max_workers - len(running_futures)
+                    if slots_available <= 0:
+                        return
+
+                    current_running = [
+                        f
+                        for f in future_to_info
+                        if f.running()
+                        and f not in running_futures
+                        and f not in completed_futures
+                    ]
+                    # Limit to available slots to prevent race conditions
+                    for running_future in current_running[:slots_available]:
+                        (
+                            tid,
+                            dn,
+                            on,
+                            mn,
+                        ) = future_to_info[running_future]
+                        running_futures.add(running_future)
+                        checkpoint_manager.update_task_result(
+                            TaskResult(
+                                id=tid,
+                                dataset_name=dn,
+                                optimizer_name=on,
+                                model_name=mn,
+                                status="Running",
+                                timestamp_start=time.time(),
+                            )
+                        )
+                        self.benchmark_logger.update_active_task_status(
+                            future=running_future,
+                            dataset_name=dn,
+                            optimizer_name=on,
+                            model_name=mn,
+                            status="Running",
+                        )
+                        live.update(
+                            self.benchmark_logger._generate_live_display_message()
+                        )
+
+                try:
+                    pending_futures = set(future_to_info.keys())
+
+                    while pending_futures:
+                        # Update running tasks display
+                        update_running_tasks()
+
+                        # Wait for at least one task to complete (with timeout for UI updates)
+                        done, pending_futures = wait(
+                            pending_futures, timeout=1.0, return_when=FIRST_COMPLETED
+                        )
+
+                        # Process all completed tasks
+                        for future in done:
                             (
                                 task_id,
-                                future,
                                 dataset_name,
                                 optimizer_name,
                                 model_name,
-                            ) = future_info
-                            # If the task has not completed and is now running, mark it as Running.
-                            if not future.done() and future.running():
-                                # Update the checkpoint manager
-                                checkpoint_manager.update_task_result(
-                                    TaskResult(
-                                        id=task_id,
-                                        dataset_name=dataset_name,
-                                        optimizer_name=optimizer_name,
-                                        model_name=model_name,
-                                        status="Running",
-                                        timestamp_start=time.time(),
-                                    )
-                                )
+                            ) = future_to_info[future]
+                            completed_futures.add(future)
+                            running_futures.discard(future)  # Remove from running set
 
-                                # Update the logging
+                            try:
+                                result = future.result()
+                                task_results.append(result)
+                                checkpoint_manager.update_task_result(result)
                                 self.benchmark_logger.update_active_task_status(
                                     future=future,
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
-                                    status="Running",
+                                    status=result.status,
                                 )
-                            elif future.done():
-                                if task_id in completed_futures:
-                                    continue
-                                try:
-                                    result = future.result()
-                                    task_results.append(result)
-                                    completed_futures.append(task_id)
-
-                                    # Update the checkpoint manager
-                                    checkpoint_manager.update_task_result(result)
-
-                                    # Update the logging
-                                    self.benchmark_logger.update_active_task_status(
-                                        future=future,
-                                        dataset_name=dataset_name,
-                                        optimizer_name=optimizer_name,
-                                        model_name=model_name,
-                                        status=result.status,
-                                    )
-                                except Exception:
-                                    result = TaskResult(
-                                        id=f"{dataset_name}_{optimizer_name}_{model_name}",
-                                        dataset_name=dataset_name,
-                                        optimizer_name=optimizer_name,
-                                        model_name=model_name,
-                                        status="Failed",
-                                        timestamp_start=time.time(),
-                                        initial_prompt=None,
-                                        error_message=traceback.format_exc(),
-                                    )
-                                    completed_futures.append(task_id)
-
-                                    # Update the checkpoint manager
-                                    checkpoint_manager.update_task_result(result)
-
-                                    # Update the logging
-                                    self.benchmark_logger.update_active_task_status(
-                                        future=future,
-                                        dataset_name=dataset_name,
-                                        optimizer_name=optimizer_name,
-                                        model_name=model_name,
-                                        status="Failed",
-                                    )
-
-                                self.benchmark_logger.add_result_panel(
+                            except Exception:
+                                result = TaskResult(
+                                    id=task_id,
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
-                                    task_detail_data=result,
+                                    model_name=model_name,
+                                    status="Failed",
+                                    timestamp_start=time.time(),
+                                    initial_prompt=None,
+                                    error_message=traceback.format_exc(),
                                 )
+                                checkpoint_manager.update_task_result(result)
+                                self.benchmark_logger.update_active_task_status(
+                                    future=future,
+                                    dataset_name=dataset_name,
+                                    optimizer_name=optimizer_name,
+                                    model_name=model_name,
+                                    status="Failed",
+                                )
+
+                            self.benchmark_logger.add_result_panel(
+                                dataset_name=dataset_name,
+                                optimizer_name=optimizer_name,
+                                task_detail_data=result,
+                            )
+                            self.benchmark_logger.remove_active_task_status(
+                                future, final_status=result.status
+                            )
                             live.update(
                                 self.benchmark_logger._generate_live_display_message()
                             )
-                    except KeyboardInterrupt:
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        sys.exit(1)
-
-                    if all(future.done() for _, future, _, _, _ in futures) and len(
-                        completed_futures
-                    ) == len(futures):
-                        break
-                    time.sleep(50)
+                except KeyboardInterrupt:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    sys.exit(1)
 
         total_duration = time.time() - start_time
         self.benchmark_logger.print_benchmark_footer(
