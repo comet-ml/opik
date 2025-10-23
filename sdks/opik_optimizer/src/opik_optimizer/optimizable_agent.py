@@ -135,15 +135,6 @@ class OptimizableAgent:
                         arguments = json.loads(tool_call["function"]["arguments"])
 
                         tool_func = self.prompt.function_map.get(tool_name)
-                        if tool_func is None:
-                            print("tool_name", tool_name)
-                            print("arguments", arguments)
-                            print("function_map", self.prompt.function_map)
-                            print("tool_func is None")
-                            raise ValueError(
-                                f"Tool function {tool_name} not found in function map"
-                            )
-
                         try:
                             tool_result = (
                                 tool_func(**arguments)
