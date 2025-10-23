@@ -218,9 +218,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const handleAddCustomProvider = useCallback(() => {
     setIsAddingCustomProvider(true);
-    // Set provider value without resetting other fields
-    // This allows the form to properly track changes to providerName, url, and models
-    form.setValue("provider", PROVIDER_TYPE.CUSTOM, { shouldDirty: true, shouldTouch: true });
+    // Clear the provider field so it doesn't show the previously selected provider
+    form.setValue("provider", "", { shouldValidate: false });
+    // Clear other fields too
+    form.setValue("url", "");
+    form.setValue("providerName", "");
+    form.setValue("models", "");
+    form.setValue("location", "");
   }, [form]);
   
   // Reset isAddingCustomProvider when dialog closes
@@ -278,9 +282,13 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                       <Label>Provider</Label>
                       <FormControl>
                         <ProviderSelect
-                          disabled={Boolean(providerKey) || forceCreateMode || isAddingCustomProvider}
+                          disabled={Boolean(providerKey) || forceCreateMode}
                           value={(field.value as string) || ""}
+                          isAddingCustomProvider={isAddingCustomProvider}
                           onChange={(v) => {
+                            // Reset isAddingCustomProvider when user manually selects a provider
+                            setIsAddingCustomProvider(false);
+                            
                             // Check if it's a custom provider ID
                             const customProvider = configuredProvidersList?.find(
                               (c) => c.id === v
