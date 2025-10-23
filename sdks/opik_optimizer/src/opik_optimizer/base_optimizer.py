@@ -637,7 +637,7 @@ class BaseOptimizer(ABC):
             base_config = self._deep_merge_dicts(base_config, additional_metadata)
 
         if experiment_config:
-            base_config = self._deep_merge_dicts(base_config, experiment_config)
+            base_config = self._deep_merge_dicts(experiment_config, base_config)
 
         return self._drop_none(base_config)
 

@@ -515,6 +515,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        max_trials: int = 10,
         *args: Any,
         mcp_config: MCPExecutionConfig | None = None,
         **kwargs: Any,
@@ -576,6 +577,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
         # Step 1. Step variables and define fitness function
         self._reset_counters()  # Reset counters for run
+        trials_used = [0]  # Use list for closure mutability
         self._history: list[OptimizationRound] = []
         self._current_generation = 0
         self._best_fitness_history = []
@@ -588,6 +590,15 @@ class EvolutionaryOptimizer(BaseOptimizer):
             def _deap_evaluate_individual_fitness(
                 messages: list[dict[str, str]],
             ) -> tuple[float, ...]:
+                # Check if we've hit the limit
+                if trials_used[0] >= max_trials:
+                    logger.debug(
+                        f"Skipping evaluation - max_trials ({max_trials}) reached"
+                    )
+                    return (-float("inf"), float("inf"))  # Worst possible fitness
+
+                trials_used[0] += 1
+
                 primary_fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -607,6 +618,15 @@ class EvolutionaryOptimizer(BaseOptimizer):
             def _deap_evaluate_individual_fitness(
                 messages: list[dict[str, str]],
             ) -> tuple[float, ...]:
+                # Check if we've hit the limit
+                if trials_used[0] >= max_trials:
+                    logger.debug(
+                        f"Skipping evaluation - max_trials ({max_trials}) reached"
+                    )
+                    return (-float("inf"),)  # Worst possible fitness
+
+                trials_used[0] += 1
+
                 fitness_score: float = self._evaluate_prompt(
                     prompt,
                     messages,  # type: ignore
@@ -636,6 +656,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 else float(len(json.dumps(prompt.get_messages())))
             )
 
+            trials_used[0] = 0
             best_primary_score_overall = initial_primary_score
             best_prompt_overall = prompt
             report_baseline_performance.set_score(initial_primary_score)
@@ -756,6 +777,13 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose
         ) as report_evolutionary_algo:
             for generation_idx in range(1, self.num_generations + 1):
+                # Check if we've exhausted our evaluation budget
+                if trials_used[0] >= max_trials:
+                    logger.info(
+                        f"Stopping optimization: max_trials ({max_trials}) reached after {generation_idx - 1} generations"
+                    )
+                    break
+
                 report_evolutionary_algo.start_gen(generation_idx, self.num_generations)
 
                 curr_best_score = self._population_best_score(deap_population)
@@ -926,6 +954,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
 
         logger.info(f"Total LLM calls during optimization: {self.llm_call_counter}")
+        logger.info(f"Total prompt evaluations: {trials_used[0]}")
         if opik_optimization_run:
             try:
                 opik_optimization_run.update(status="completed")
@@ -963,6 +992,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "infer_output_style_requested": self.infer_output_style,
                 "final_effective_output_style_guidance": effective_output_style_guidance,
                 "infer_output_style": self.infer_output_style,
+                "trials_used": trials_used[0],
             }
         )
 

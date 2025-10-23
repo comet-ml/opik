@@ -364,7 +364,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         *args: Any,
-        max_trials: int = 12,
+        max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
@@ -389,12 +389,12 @@ class MetaPromptOptimizer(BaseOptimizer):
             n_samples: Number of dataset items to use per evaluation. If None, uses full dataset.
                 Lower values speed up optimization but may be less reliable.
             auto_continue: If True, optimizer may continue beyond max_trials if improvements
-                are still being found. Default: False
+                are still being found.
             agent_class: Custom agent class for prompt execution. If None, uses default
                 LiteLLM-based agent. Must inherit from OptimizableAgent.
             project_name: Opik project name for logging traces and experiments. Default: "Optimization"
             max_trials: Maximum total number of prompts to evaluate across all rounds.
-                Optimizer stops when this limit is reached. Default: 12
+                Optimizer stops when this limit is reached.
             mcp_config: Optional MCP (Model Context Protocol) execution configuration for
                 prompts that use external tools. Enables tool-calling workflows. Default: None
             candidate_generator: Optional custom function to generate candidate prompts.
@@ -426,7 +426,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt=prompt,
                 dataset=dataset,
                 metric=accuracy_metric,
-                max_trials=12
+                max_trials=10
             )
 
             print(f"Best score: {result.best_score}")
@@ -555,7 +555,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             dataset=dataset,
             metric=metric,
             experiment_config=experiment_config,
-            max_trials=12,
+            max_trials=10,
             n_samples=n_samples,
             auto_continue=auto_continue,
             mcp_config=mcp_config,
@@ -626,8 +626,9 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         reporting.display_optimization_start_message(verbose=self.verbose)
 
-        # Calculate number of rounds based on max_trials and prompts_per_round
-        estimated_rounds = max(1, max_trials // self.prompts_per_round)
+        # Calculate the maximum number of rounds, we will stop early if we hit the
+        # max_trials limit
+        estimated_rounds = max(1, max_trials // self.prompts_per_round + 1)
 
         with reporting.display_round_progress(
             estimated_rounds, verbose=self.verbose
@@ -690,6 +691,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             )
 
                             eval_report.set_final_score(best_score, prompt_score)
+                            trials_used += 1
                         except Exception:
                             logger.warning("Failed evaluating agent; continuing...")
                             prompt_score = 0
@@ -727,7 +729,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_prompt = best_candidate_this_round
 
                 # Increment counters
-                trials_used += len(candidate_prompts)
                 round_num += 1
 
         if tool_panel_style and getattr(best_prompt, "tools", None):

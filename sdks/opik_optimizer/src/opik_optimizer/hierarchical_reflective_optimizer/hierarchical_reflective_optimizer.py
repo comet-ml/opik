@@ -86,6 +86,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
         self.convergence_threshold = convergence_threshold
+        self._should_stop_optimization = False  # Flag to exit all loops
 
         # Initialize hierarchical analyzer
         self._hierarchical_analyzer = HierarchicalRootCauseAnalyzer(
@@ -409,6 +410,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         # Reset counters at the start of optimization
         self._reset_counters()
+        self._should_stop_optimization = False  # Reset stop flag
 
         # Setup agent class
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -473,14 +475,16 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         previous_iteration_score = initial_score
         trials_used = 0
 
-        for iteration in range(1, max_trials + 1):
-            logger.info(f"Starting iteration {iteration}/{max_trials}")
+        while trials_used < max_trials:
+            iteration += 1
+            logger.info(
+                f"Starting iteration {iteration} (trials: {trials_used}/{max_trials})"
+            )
 
-            # Check if we've reached the trial limit
-            if trials_used >= max_trials:
+            # Check if we should stop (flag set by inner loops)
+            if self._should_stop_optimization:
                 logger.info(
-                    f"Reached max_trials limit ({max_trials}). "
-                    f"Stopping after {iteration - 1} iterations and {trials_used} trials."
+                    f"Stopping optimization: reached max_trials limit ({max_trials})."
                 )
                 break
 
@@ -533,6 +537,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                                 f"Reached max_trials limit ({max_trials}) during failure mode '{root_cause.name}'. "
                                 f"Stopping optimization."
                             )
+                            self._should_stop_optimization = True
                             break
 
                         # Generate and evaluate improvement (this is 1 trial)
@@ -574,8 +579,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                                 f"No improvement after {attempt} attempts for '{root_cause.name}'"
                             )
 
-                    # Break out of failure mode loop if we've hit trial limit
-                    if trials_used >= max_trials:
+                    # Break out of failure mode loop if flag is set
+                    if self._should_stop_optimization:
                         break
 
                     # Check if final result is an improvement
