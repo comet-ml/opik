@@ -815,7 +815,7 @@ class Opik:
         )
 
         experiments = dataset_rest_operations.get_dataset_experiments(
-            self._rest_client, dataset_id, max_results
+            self._rest_client, dataset_id, max_results, streamer=self._streamer
         )
 
         return experiments
@@ -927,6 +927,7 @@ class Opik:
             name=name,
             dataset_name=dataset_name,
             rest_client=self._rest_client,
+            streamer=self._streamer,
             prompts=checked_prompts,
         )
 
@@ -954,7 +955,7 @@ class Opik:
             name=name,
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
-            # TODO: add prompt if exists
+            streamer=self._streamer,
         )
 
     def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
@@ -975,9 +976,10 @@ class Opik:
         for public_experiment in experiments_public:
             experiment_ = experiment.Experiment(
                 id=public_experiment.id,
-                dataset_name=public_experiment.dataset_name,
                 name=name,
+                dataset_name=public_experiment.dataset_name,
                 rest_client=self._rest_client,
+                streamer=self._streamer,
             )
             result.append(experiment_)
 
@@ -1009,7 +1011,7 @@ class Opik:
             name=experiment_public.name,
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
-            # TODO: add prompt if exists
+            streamer=self._streamer,
         )
 
     def end(self, timeout: Optional[int] = None) -> None:
