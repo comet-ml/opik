@@ -1,3 +1,5 @@
+export * as alerts from "./alerts";
+export * from "./alerts/types";
 export * as attachments from "./attachments";
 export * from "./attachments/types";
 export * as datasets from "./datasets";
@@ -17,7 +19,6 @@ export * from "./prompts/types";
 export * as spans from "./spans";
 export * from "./spans/types";
 export * as systemUsage from "./systemUsage";
-export * as alerts from "./alerts";
 export * as annotationQueues from "./annotationQueues";
 export * as check from "./check";
 export * as automationRuleEvaluators from "./automationRuleEvaluators";

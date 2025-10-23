@@ -17,9 +17,11 @@ from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.alert_page_public import AlertPagePublic
 from ..types.alert_public import AlertPublic
 from ..types.alert_trigger_write import AlertTriggerWrite
+from ..types.alert_write_alert_type import AlertWriteAlertType
 from ..types.webhook_examples import WebhookExamples
 from ..types.webhook_test_result import WebhookTestResult
 from ..types.webhook_write import WebhookWrite
+from .types.get_webhook_examples_request_alert_type import GetWebhookExamplesRequestAlertType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -92,6 +94,8 @@ class RawAlertsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -107,6 +111,10 @@ class RawAlertsClient:
         name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -124,6 +132,8 @@ class RawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -283,6 +293,8 @@ class RawAlertsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -301,6 +313,10 @@ class RawAlertsClient:
 
         enabled : typing.Optional[bool]
 
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
         request_options : typing.Optional[RequestOptions]
@@ -317,6 +333,8 @@ class RawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -372,13 +390,18 @@ class RawAlertsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_webhook_examples(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        alert_type: typing.Optional[GetWebhookExamplesRequestAlertType] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[WebhookExamples]:
         """
-        Get webhook payload examples for all alert event types
+        Get webhook payload examples for all alert event types, optionally filtered by alert type
 
         Parameters
         ----------
+        alert_type : typing.Optional[GetWebhookExamplesRequestAlertType]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -390,6 +413,9 @@ class RawAlertsClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/alerts/webhooks/examples",
             method="GET",
+            params={
+                "alert_type": alert_type,
+            },
             request_options=request_options,
         )
         try:
@@ -414,6 +440,8 @@ class RawAlertsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[WebhookTestResult]:
@@ -429,6 +457,10 @@ class RawAlertsClient:
         name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -447,6 +479,8 @@ class RawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -554,6 +588,8 @@ class AsyncRawAlertsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -569,6 +605,10 @@ class AsyncRawAlertsClient:
         name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -586,6 +626,8 @@ class AsyncRawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -745,6 +787,8 @@ class AsyncRawAlertsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -763,6 +807,10 @@ class AsyncRawAlertsClient:
 
         enabled : typing.Optional[bool]
 
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
         request_options : typing.Optional[RequestOptions]
@@ -779,6 +827,8 @@ class AsyncRawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -834,13 +884,18 @@ class AsyncRawAlertsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_webhook_examples(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        alert_type: typing.Optional[GetWebhookExamplesRequestAlertType] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[WebhookExamples]:
         """
-        Get webhook payload examples for all alert event types
+        Get webhook payload examples for all alert event types, optionally filtered by alert type
 
         Parameters
         ----------
+        alert_type : typing.Optional[GetWebhookExamplesRequestAlertType]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -852,6 +907,9 @@ class AsyncRawAlertsClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/alerts/webhooks/examples",
             method="GET",
+            params={
+                "alert_type": alert_type,
+            },
             request_options=request_options,
         )
         try:
@@ -876,6 +934,8 @@ class AsyncRawAlertsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[WebhookTestResult]:
@@ -891,6 +951,10 @@ class AsyncRawAlertsClient:
         name : typing.Optional[str]
 
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -909,6 +973,8 @@ class AsyncRawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),

@@ -76,6 +76,9 @@ class CorsEnabledE2ETest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getHeaders()).containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
+
+        var exposeHeaders = response.getHeaderString("Access-Control-Expose-Headers");
+        assertThat(exposeHeaders).isNotNull().contains(HttpHeaders.LOCATION);
     }
 
     @Test
