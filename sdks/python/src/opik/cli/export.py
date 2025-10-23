@@ -6,13 +6,14 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
+from opik.api_objects.experiment import Experiment
 
 console = Console()
 
@@ -131,7 +132,7 @@ def _export_data_type(
     Helper function to export a specific data type.
 
     Args:
-        data_type: Type of data to export ("traces", "datasets", "prompts")
+        data_type: Type of data to export ("traces", "datasets", "prompts", "experiments")
         client: Opik client instance
         output_dir: Directory to save exported data
         max_results: Maximum number of items to export
@@ -154,6 +155,10 @@ def _export_data_type(
         if debug:
             console.print("[blue]Downloading prompts...[/blue]")
         return _export_prompts(client, output_dir, max_results, name_pattern)
+    elif data_type == "experiments":
+        if debug:
+            console.print("[blue]Downloading experiments...[/blue]")
+        return _export_experiments(client, output_dir, max_results, name_pattern, debug)
     else:
         console.print(f"[red]Unknown data type: {data_type}[/red]")
         return 0
@@ -167,6 +172,7 @@ def _export_traces(
     filter: Optional[str],
     name_pattern: Optional[str] = None,
     trace_format: str = "json",
+    debug: bool = False,
 ) -> int:
     """Download traces and their spans with pagination support for large projects."""
     console.print(
@@ -200,7 +206,11 @@ def _export_traces(
                 pagination_filter = filter or ""
                 if last_trace_time:
                     # Add timestamp filter to continue from where we left off
-                    time_filter = f"start_time < '{last_trace_time.isoformat()}'"
+                    # Format timestamp properly for OQL (use double quotes and ensure UTC format)
+                    timestamp = last_trace_time.isoformat()
+                    if timestamp.endswith("+00:00"):
+                        timestamp = timestamp.replace("+00:00", "Z")
+                    time_filter = f'start_time < "{timestamp}"'
                     if pagination_filter:
                         pagination_filter = f"({pagination_filter}) AND {time_filter}"
                     else:
@@ -220,7 +230,22 @@ def _export_traces(
                         f"[blue]DEBUG: Found {len(traces) if traces else 0} traces[/blue]"
                     )
                 except Exception as e:
-                    console.print(f"[red]Error searching traces: {e}[/red]")
+                    # Check if it's an OQL parsing error and provide user-friendly message
+                    error_msg = str(e)
+                    if (
+                        "Invalid value" in error_msg
+                        and "expected an string in double quotes" in error_msg
+                    ):
+                        console.print(
+                            "[red]Error: Invalid filter format in export query.[/red]"
+                        )
+                        console.print(
+                            "[yellow]This appears to be an internal query parsing issue. Please try the export again.[/yellow]"
+                        )
+                        if debug:
+                            console.print(f"[blue]Technical details: {e}[/blue]")
+                    else:
+                        console.print(f"[red]Error searching traces: {e}[/red]")
                     break
 
                 if not traces:
@@ -494,6 +519,265 @@ def _export_prompts(
         return 0
 
 
+def _export_experiments(
+    client: opik.Opik,
+    output_dir: Path,
+    max_results: int,
+    name_pattern: Optional[str] = None,
+    debug: bool = False,
+    include_traces: bool = True,
+) -> int:
+    """
+    Export experiments with their items, dataset items, and feedback scores.
+
+    Args:
+        include_traces: Whether to include full trace data. If False, only includes trace IDs.
+                      This helps avoid duplication when traces are exported separately.
+    """
+    try:
+        # Get all experiments using the REST client
+        try:
+            experiments_response = client.rest_client.experiments.find_experiments(
+                page=1,
+                size=max_results,
+            )
+            experiments = experiments_response.content or []
+        except Exception as api_error:
+            # Handle Pydantic validation errors from malformed API responses
+            if "validation errors" in str(api_error) and "dataset_name" in str(
+                api_error
+            ):
+                console.print(
+                    "[yellow]Warning: Some experiments have missing required fields (dataset_name). Skipping invalid experiments and continuing with valid ones.[/yellow]"
+                )
+                if debug:
+                    console.print(f"[blue]Full error: {api_error}[/blue]")
+                # Try to get experiments with a smaller page size to avoid the problematic ones
+                try:
+                    experiments_response = (
+                        client.rest_client.experiments.find_experiments(
+                            page=1,
+                            size=10,  # Smaller page size
+                        )
+                    )
+                    experiments = experiments_response.content or []
+                except Exception:
+                    # If that also fails, return empty list
+                    experiments = []
+            else:
+                # Re-raise other API errors
+                raise api_error
+
+        if not experiments:
+            console.print("[yellow]No experiments found in the workspace.[/yellow]")
+            return 0
+
+        # Filter out experiments with missing required fields to avoid validation errors
+        valid_experiments = []
+        skipped_count = 0
+
+        for experiment in experiments:
+            # Check if experiment has required fields
+            if (
+                not hasattr(experiment, "dataset_name")
+                or experiment.dataset_name is None
+                or experiment.dataset_name == ""
+            ):
+                if debug:
+                    console.print(
+                        f"[yellow]Skipping experiment {experiment.id or experiment.name or 'unnamed'}: missing dataset_name[/yellow]"
+                    )
+                skipped_count += 1
+                continue
+            valid_experiments.append(experiment)
+
+        if skipped_count > 0:
+            console.print(
+                f"[yellow]Skipped {skipped_count} experiments with missing required fields[/yellow]"
+            )
+
+        experiments = valid_experiments
+
+        if not experiments:
+            console.print(
+                "[yellow]No valid experiments found after filtering.[/yellow]"
+            )
+            return 0
+
+        # Filter experiments by name pattern if specified
+        if name_pattern:
+            original_count = len(experiments)
+            experiments = [
+                experiment
+                for experiment in experiments
+                if _matches_name_pattern(experiment.name or "", name_pattern)
+            ]
+            if len(experiments) < original_count:
+                console.print(
+                    f"[blue]Filtered to {len(experiments)} experiments matching pattern '{name_pattern}'[/blue]"
+                )
+
+        if not experiments:
+            console.print(
+                "[yellow]No experiments found matching the name pattern.[/yellow]"
+            )
+            return 0
+
+        exported_count = 0
+        for experiment in experiments:
+            try:
+                if debug:
+                    console.print(
+                        f"[blue]Processing experiment: {experiment.name or experiment.id}[/blue]"
+                    )
+
+                # Create experiment object to get items
+                experiment_obj = Experiment(
+                    id=experiment.id,
+                    name=experiment.name,
+                    dataset_name=experiment.dataset_name,
+                    rest_client=client.rest_client,
+                    streamer=client._streamer,
+                )
+
+                # Get experiment items
+                experiment_items = experiment_obj.get_items(
+                    max_results=1000, truncate=False
+                )
+
+                # Create comprehensive experiment data structure
+                experiment_data: Dict[str, Any] = {
+                    "experiment": {
+                        "id": experiment.id,
+                        "name": experiment.name,
+                        "dataset_name": experiment.dataset_name,
+                        "dataset_id": experiment.dataset_id,
+                        "metadata": experiment.metadata,
+                        "type": experiment.type,
+                        "optimization_id": experiment.optimization_id,
+                        "feedback_scores": [
+                            score.model_dump()
+                            for score in (experiment.feedback_scores or [])
+                        ],
+                        "comments": [
+                            comment.model_dump()
+                            for comment in (experiment.comments or [])
+                        ],
+                        "trace_count": experiment.trace_count,
+                        "created_at": (
+                            experiment.created_at.isoformat()
+                            if experiment.created_at
+                            else None
+                        ),
+                        "duration": (
+                            experiment.duration.model_dump()
+                            if experiment.duration
+                            else None
+                        ),
+                        "total_estimated_cost": experiment.total_estimated_cost,
+                        "total_estimated_cost_avg": experiment.total_estimated_cost_avg,
+                        "usage": experiment.usage,
+                        "last_updated_at": (
+                            experiment.last_updated_at.isoformat()
+                            if experiment.last_updated_at
+                            else None
+                        ),
+                        "created_by": experiment.created_by,
+                        "last_updated_by": experiment.last_updated_by,
+                        "status": experiment.status,
+                        "prompt_version": (
+                            experiment.prompt_version.model_dump()
+                            if experiment.prompt_version
+                            else None
+                        ),
+                        "prompt_versions": [
+                            pv.model_dump() for pv in (experiment.prompt_versions or [])
+                        ],
+                    },
+                    "items": [],
+                    "downloaded_at": datetime.now().isoformat(),
+                }
+
+                # Process each experiment item
+                for item in experiment_items:
+                    try:
+                        item_data = {
+                            "item_id": item.id,
+                            "dataset_item_id": item.dataset_item_id,
+                            "trace_id": item.trace_id,
+                            "dataset_item_data": item.dataset_item_data,
+                            "evaluation_task_output": item.evaluation_task_output,
+                            "feedback_scores": item.feedback_scores,
+                        }
+
+                        # Only include full trace data if requested
+                        if include_traces:
+                            # Get the trace for this item
+                            trace = client.search_traces(
+                                project_name=experiment.dataset_name,  # Using dataset name as project context
+                                trace_id=item.trace_id,
+                                max_results=1,
+                                truncate=False,
+                            )
+
+                            # Get spans for the trace
+                            spans = []
+                            if trace:
+                                spans = client.search_spans(
+                                    project_name=experiment.dataset_name,
+                                    trace_id=item.trace_id,
+                                    max_results=1000,
+                                    truncate=False,
+                                )
+
+                            item_data.update(
+                                {
+                                    "trace": trace[0].model_dump() if trace else None,
+                                    "spans": [span.model_dump() for span in spans],
+                                }
+                            )
+                        else:
+                            # Just include trace reference
+                            item_data["trace_reference"] = {
+                                "trace_id": item.trace_id,
+                                "note": "Full trace data not included to avoid duplication. Use --include traces to export traces separately.",
+                            }
+
+                        experiment_data["items"].append(item_data)
+
+                    except Exception as e:
+                        if debug:
+                            console.print(
+                                f"[yellow]Warning: Could not process item {item.id}: {e}[/yellow]"
+                            )
+                        continue
+
+                # Save experiment data to file
+                experiment_file = (
+                    output_dir / f"experiment_{experiment.name or experiment.id}.json"
+                )
+                with open(experiment_file, "w", encoding="utf-8") as f:
+                    json.dump(experiment_data, f, indent=2, default=str)
+
+                exported_count += 1
+                if debug:
+                    console.print(
+                        f"[green]Exported experiment: {experiment.name or experiment.id} with {len(experiment_data['items'])} items[/green]"
+                    )
+
+            except Exception as e:
+                console.print(
+                    f"[red]Error exporting experiment {experiment.name or experiment.id}: {e}[/red]"
+                )
+                continue
+
+        return exported_count
+
+    except Exception as e:
+        console.print(f"[red]Error exporting experiments: {e}[/red]")
+        return 0
+
+
 @click.command(name="export")
 @click.argument("workspace_or_project", type=str)
 @click.option(
@@ -517,25 +801,29 @@ def _export_prompts(
 @click.option(
     "--all",
     is_flag=True,
-    help="Include all data types (traces, datasets, prompts).",
+    help="Include all data types (traces, datasets, prompts, experiments).",
 )
 @click.option(
     "--include",
-    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
+    type=click.Choice(
+        ["traces", "datasets", "prompts", "experiments"], case_sensitive=False
+    ),
     multiple=True,
     default=["traces"],
     help="Data types to include in download. Can be specified multiple times. Defaults to traces only.",
 )
 @click.option(
     "--exclude",
-    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
+    type=click.Choice(
+        ["traces", "datasets", "prompts", "experiments"], case_sensitive=False
+    ),
     multiple=True,
     help="Data types to exclude from download. Can be specified multiple times.",
 )
 @click.option(
     "--name",
     type=str,
-    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, or prompt names.",
+    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, prompt names, or experiment names.",
 )
 @click.option(
     "--debug",
@@ -613,7 +901,7 @@ def export(
         # Determine which data types to download
         if all:
             # If --all is specified, include all data types
-            include_set = {"traces", "datasets", "prompts"}
+            include_set = {"traces", "datasets", "prompts", "experiments"}
         else:
             include_set = set(item.lower() for item in include)
 
@@ -644,7 +932,9 @@ def export(
 
             # Note about workspace vs project-specific data
             project_specific = [dt for dt in data_types if dt in ["traces"]]
-            workspace_data = [dt for dt in data_types if dt in ["datasets", "prompts"]]
+            workspace_data = [
+                dt for dt in data_types if dt in ["datasets", "prompts", "experiments"]
+            ]
 
             if project_specific and workspace_data:
                 console.print(
@@ -653,6 +943,12 @@ def export(
             elif workspace_data:
                 console.print(
                     f"[yellow]Note: {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
+                )
+
+            # Inform about deduplication if both traces and experiments are being exported
+            if "traces" in data_types and "experiments" in data_types:
+                console.print(
+                    "[blue]Note: Both traces and experiments are being exported. Experiment files will contain trace references only to avoid duplication.[/blue]"
                 )
 
             # Download each data type
@@ -674,6 +970,7 @@ def export(
                     filter,
                     name,
                     trace_format,
+                    debug,
                 )
                 if debug:
                     console.print(
@@ -681,12 +978,24 @@ def export(
                     )
                 total_exported += traces_exported
 
-            # Download datasets and prompts (workspace-level data, but export to project directory for consistency)
-            for data_type in ["datasets", "prompts"]:
+            # Download datasets, prompts, and experiments (workspace-level data, but export to project directory for consistency)
+            for data_type in ["datasets", "prompts", "experiments"]:
                 if data_type in data_types:
-                    exported_count = _export_data_type(
-                        data_type, client, project_dir, max_results, name, debug
-                    )
+                    if data_type == "experiments":
+                        # Check if traces are also being exported to avoid duplication
+                        include_traces_in_experiments = "traces" not in data_types
+                        exported_count = _export_experiments(
+                            client,
+                            project_dir,
+                            max_results,
+                            name,
+                            debug,
+                            include_traces_in_experiments,
+                        )
+                    else:
+                        exported_count = _export_data_type(
+                            data_type, client, project_dir, max_results, name, debug
+                        )
                     total_exported += exported_count
 
             console.print(
@@ -719,7 +1028,9 @@ def export(
                 # Note about workspace vs project-specific data
                 project_specific = [dt for dt in data_types if dt in ["traces"]]
                 workspace_data = [
-                    dt for dt in data_types if dt in ["datasets", "prompts"]
+                    dt
+                    for dt in data_types
+                    if dt in ["datasets", "prompts", "experiments"]
                 ]
 
                 if project_specific and workspace_data:
@@ -731,18 +1042,41 @@ def export(
                         f"[yellow]Note: {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
                     )
 
+                # Inform about deduplication if both traces and experiments are being exported
+                if "traces" in data_types and "experiments" in data_types:
+                    console.print(
+                        "[blue]Note: Both traces and experiments are being exported. Experiment files will contain trace references only to avoid duplication.[/blue]"
+                    )
+
                 total_exported = 0
 
                 # Download workspace-level data once (datasets, experiments, prompts)
                 workspace_dir = output_path / workspace
                 workspace_dir.mkdir(parents=True, exist_ok=True)
 
-                # Download datasets and prompts (workspace-level data)
-                for data_type in ["datasets", "prompts"]:
+                # Download datasets, prompts, and experiments (workspace-level data)
+                for data_type in ["datasets", "prompts", "experiments"]:
                     if data_type in data_types:
-                        exported_count = _export_data_type(
-                            data_type, client, workspace_dir, max_results, name, debug
-                        )
+                        if data_type == "experiments":
+                            # Check if traces are also being exported to avoid duplication
+                            include_traces_in_experiments = "traces" not in data_types
+                            exported_count = _export_experiments(
+                                client,
+                                workspace_dir,
+                                max_results,
+                                name,
+                                debug,
+                                include_traces_in_experiments,
+                            )
+                        else:
+                            exported_count = _export_data_type(
+                                data_type,
+                                client,
+                                workspace_dir,
+                                max_results,
+                                name,
+                                debug,
+                            )
                         total_exported += exported_count
 
                 # Download traces from each project
@@ -766,6 +1100,7 @@ def export(
                             filter,
                             name,
                             trace_format,
+                            debug,
                         )
                         total_exported += traces_exported
 

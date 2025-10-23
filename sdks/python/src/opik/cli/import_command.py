@@ -5,7 +5,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 from rich.console import Console
@@ -326,6 +326,271 @@ def _import_prompts(
     return imported_count
 
 
+def _find_experiment_files(data_dir: Path) -> List[Path]:
+    """Find all experiment JSON files in the directory."""
+    return list(data_dir.glob("experiment_*.json"))
+
+
+def _load_experiment_data(experiment_file: Path) -> Dict[str, Any]:
+    """Load experiment data from JSON file."""
+    with open(experiment_file, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _find_trace_by_id(
+    client: opik.Opik, trace_id: str, project_name: str
+) -> Optional[Any]:
+    """Find a trace by ID in the specified project."""
+    try:
+        traces = client.search_traces(
+            project_name=project_name,
+            trace_id=trace_id,
+            max_results=1,
+            truncate=False,
+        )
+        return traces[0] if traces else None
+    except Exception:
+        return None
+
+
+def _find_dataset_item_by_content(
+    dataset: Any, expected_content: Dict[str, Any]
+) -> Optional[str]:
+    """Find a dataset item by matching its content."""
+    try:
+        items = dataset.get_items()
+        for item in items:
+            # Compare key fields for matching
+            if item.get("input") == expected_content.get("input") and item.get(
+                "expected_output"
+            ) == expected_content.get("expected_output"):
+                return item.get("id")
+    except Exception:
+        pass
+    return None
+
+
+def _create_dataset_item(dataset: Any, item_data: Dict[str, Any]) -> str:
+    """Create a dataset item and return its ID."""
+    new_item = {
+        "input": item_data.get("input"),
+        "expected_output": item_data.get("expected_output"),
+        "metadata": item_data.get("metadata"),
+    }
+
+    dataset.insert([new_item])
+
+    # Find the newly created item
+    items = dataset.get_items()
+    for item in items:
+        if (
+            item.get("input") == new_item["input"]
+            and item.get("expected_output") == new_item["expected_output"]
+        ):
+            return item.get("id")
+
+    raise Exception("Failed to create dataset item")
+
+
+def _handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
+    """Handle trace references from deduplicated exports."""
+    trace_reference = item_data.get("trace_reference")
+    if trace_reference:
+        trace_id = trace_reference.get("trace_id")
+        console.print(f"[blue]Using trace reference: {trace_id}[/blue]")
+        return trace_id
+
+    # Fall back to direct trace_id
+    return item_data.get("trace_id")
+
+
+def _recreate_experiment(
+    client: opik.Opik,
+    experiment_data: Dict[str, Any],
+    project_name: str,
+    dry_run: bool = False,
+) -> bool:
+    """Recreate a single experiment from exported data."""
+    experiment_info = experiment_data["experiment"]
+    items_data = experiment_data["items"]
+
+    experiment_name = (
+        experiment_info.get("name") or f"recreated-{experiment_info['id']}"
+    )
+    dataset_name = experiment_info["dataset_name"]
+
+    console.print(f"[blue]Recreating experiment: {experiment_name}[/blue]")
+
+    if dry_run:
+        console.print(
+            f"[yellow]Would create experiment '{experiment_name}' with {len(items_data)} items[/yellow]"
+        )
+        return True
+
+    try:
+        # Get or create the dataset
+        try:
+            dataset = client.get_dataset(dataset_name)
+        except ApiError as e:
+            if e.status_code == 404:
+                console.print(
+                    f"[yellow]Dataset '{dataset_name}' not found, creating it...[/yellow]"
+                )
+                dataset = client.create_dataset(
+                    name=dataset_name,
+                    description=f"Recreated dataset for experiment {experiment_name}",
+                )
+            else:
+                raise
+
+        # Create the experiment
+        experiment = client.create_experiment(
+            dataset_name=dataset_name,
+            name=experiment_name,
+            experiment_config=experiment_info.get("metadata"),
+            type=experiment_info.get("type", "regular"),
+        )
+
+        # Process experiment items
+        experiment_items = []
+        successful_items = 0
+        skipped_items = 0
+
+        for item_data in items_data:
+            # Handle trace reference (from deduplicated exports)
+            trace_id = _handle_trace_reference(item_data)
+            if not trace_id:
+                console.print(
+                    "[yellow]Warning: No trace ID found, skipping item[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+            # Find the trace
+            trace = _find_trace_by_id(client, trace_id, project_name)
+            if not trace:
+                console.print(
+                    f"[yellow]Warning: Trace {trace_id} not found, skipping item[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+            # Handle dataset item
+            dataset_item_data = item_data.get("dataset_item_data", {})
+            if not dataset_item_data:
+                console.print(
+                    "[yellow]Warning: No dataset item data, skipping item[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+            try:
+                # Find or create dataset item
+                dataset_item_id = _find_dataset_item_by_content(
+                    dataset, dataset_item_data
+                )
+                if not dataset_item_id:
+                    dataset_item_id = _create_dataset_item(dataset, dataset_item_data)
+
+                # Create experiment item reference
+                experiment_items.append(
+                    opik.ExperimentItemReferences(
+                        dataset_item_id=dataset_item_id,
+                        trace_id=trace_id,
+                    )
+                )
+                successful_items += 1
+
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Failed to handle dataset item: {e}[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+        # Insert experiment items
+        if experiment_items:
+            experiment.insert(experiment_items)
+            console.print(
+                f"[green]Created experiment '{experiment_name}' with {successful_items} items[/green]"
+            )
+            if skipped_items > 0:
+                console.print(
+                    f"[yellow]Skipped {skipped_items} items due to missing data[/yellow]"
+                )
+        else:
+            console.print(
+                f"[yellow]No valid items found for experiment '{experiment_name}'[/yellow]"
+            )
+
+        return True
+
+    except Exception as e:
+        console.print(
+            f"[red]Error recreating experiment '{experiment_name}': {e}[/red]"
+        )
+        return False
+
+
+def _recreate_experiments(
+    client: opik.Opik,
+    project_dir: Path,
+    project_name: str,
+    dry_run: bool = False,
+    name_pattern: Optional[str] = None,
+) -> int:
+    """Recreate experiments from JSON files."""
+    experiment_files = _find_experiment_files(project_dir)
+
+    if not experiment_files:
+        console.print(f"[yellow]No experiment files found in {project_dir}[/yellow]")
+        return 0
+
+    console.print(f"[green]Found {len(experiment_files)} experiment files[/green]")
+
+    # Filter experiments by name pattern if specified
+    if name_pattern:
+        filtered_files = []
+        for exp_file in experiment_files:
+            try:
+                exp_data = _load_experiment_data(exp_file)
+                exp_name = exp_data.get("experiment", {}).get("name", "")
+                if exp_name and _matches_name_pattern(exp_name, name_pattern):
+                    filtered_files.append(exp_file)
+            except Exception:
+                continue
+
+        if filtered_files:
+            console.print(
+                f"[blue]Filtered to {len(filtered_files)} experiments matching pattern '{name_pattern}'[/blue]"
+            )
+            experiment_files = filtered_files
+        else:
+            console.print(
+                f"[yellow]No experiments found matching pattern '{name_pattern}'[/yellow]"
+            )
+            return 0
+
+    successful = 0
+    failed = 0
+
+    for experiment_file in experiment_files:
+        try:
+            experiment_data = _load_experiment_data(experiment_file)
+
+            if _recreate_experiment(client, experiment_data, project_name, dry_run):
+                successful += 1
+            else:
+                failed += 1
+
+        except Exception as e:
+            console.print(f"[red]Error processing {experiment_file.name}: {e}[/red]")
+            failed += 1
+            continue
+
+    return successful
+
+
 @click.command(name="import")
 @click.argument(
     "workspace_folder",
@@ -365,6 +630,11 @@ def _import_prompts(
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
+@click.option(
+    "--recreate-experiments",
+    is_flag=True,
+    help="Automatically recreate experiments after importing foundational data. Requires experiment JSON files to be present.",
+)
 def import_data(
     workspace_folder: str,
     workspace_name: str,
@@ -374,6 +644,7 @@ def import_data(
     exclude: tuple,
     name: Optional[str],
     debug: bool,
+    recreate_experiments: bool,
 ) -> None:
     """
     Upload data from local files to a workspace or workspace/project.
@@ -504,6 +775,15 @@ def import_data(
                 prompts_imported = _import_prompts(client, project_dir, dry_run, name)
                 total_imported += prompts_imported
 
+            # Recreate experiments if requested
+            if recreate_experiments:
+                if debug:
+                    console.print("[blue]Recreating experiments...[/blue]")
+                experiments_recreated = _recreate_experiments(
+                    client, project_dir, project_name, dry_run, name
+                )
+                total_imported += experiments_recreated
+
             if dry_run:
                 console.print(
                     f"[green]Dry run complete: Would import {total_imported} items[/green]"
@@ -549,6 +829,15 @@ def import_data(
                         client, project_dir, dry_run, name
                     )
                     total_imported += prompts_imported
+
+                # Recreate experiments if requested
+                if recreate_experiments:
+                    if debug:
+                        console.print("[blue]Recreating experiments...[/blue]")
+                    experiments_recreated = _recreate_experiments(
+                        client, project_dir, "default", dry_run, name
+                    )
+                    total_imported += experiments_recreated
 
                 # Note: Traces are project-specific and should be imported to a specific project
                 # rather than being uploaded to all projects in a workspace
