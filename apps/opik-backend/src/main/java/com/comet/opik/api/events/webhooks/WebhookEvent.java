@@ -38,6 +38,8 @@ public class WebhookEvent<T> {
 
     @NotNull private String alertName;
 
+    @NotNull Map<String, String> alertMetadata;
+
     @NotBlank private String workspaceId;
 
     @NotBlank private String userName;
