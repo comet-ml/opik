@@ -229,7 +229,7 @@ const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
         />
       </div>
       <div
-        className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
         style={{ "--chart-height": "230px" } as React.CSSProperties}
       >
         <div>

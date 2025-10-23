@@ -72,7 +72,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
   }
 
   return (
-    <div className="px-6">
+    <div className="px-6 pb-6">
       <div className="flex items-center justify-between">
         <Button
           variant="outline"
