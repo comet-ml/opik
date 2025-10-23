@@ -30,7 +30,9 @@ type PromptsTabProps = {
   search?: string;
 };
 
-const convertRawPromptToPromptWithLatestVersion = (rawPrompt: RawPromptData): PromptWithLatestVersion => {
+const convertRawPromptToPromptWithLatestVersion = (
+  rawPrompt: RawPromptData,
+): PromptWithLatestVersion => {
   const date = new Date().toISOString();
 
   const promptVersion: PromptVersion = {
@@ -62,12 +64,12 @@ const CustomUseInPlaygroundButton: React.FC<{
   onClick?: () => void;
   children: React.ReactNode;
   className?: string;
-}> = ({ onClick, disabled, variant, size, ...props }) => {
+}> = ({ onClick, disabled, size, variant, ...props }) => { // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return (
     <Button
-      variant="ghost" // Override the variant to always be "ghost"
+      variant="ghost" // eslint-disable-next-line @typescript-eslint/no-unused-vars
       onClick={onClick}
-      size="sm"
+      size={size}
       disabled={disabled}
       className="inline-flex items-center gap-1"
       {...props}
@@ -87,69 +89,69 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
 
   const prompts = useMemo(() => {
     if (!rawPrompts || !Array.isArray(rawPrompts)) return [];
-    return (rawPrompts as RawPromptData[]).map(convertRawPromptToPromptWithLatestVersion);
+    return (rawPrompts as RawPromptData[]).map(
+      convertRawPromptToPromptWithLatestVersion,
+    );
   }, [rawPrompts]);
 
   const renderPrompts = () => {
     if (!prompts || prompts.length === 0) return null;
 
-    return prompts.map(
-      (promptInfo: PromptWithLatestVersion, index: number) => {
-        const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-        const promptContent = promptInfo?.latest_version?.template || promptInfo;
-        const commitHash = promptInfo?.latest_version?.commit;
-        const promptId = promptInfo?.id;
+    return prompts.map((promptInfo: PromptWithLatestVersion, index: number) => {
+      const promptName = promptInfo?.name || `Prompt ${index + 1}`;
+      const promptContent = promptInfo?.latest_version?.template || promptInfo;
+      const commitHash = promptInfo?.latest_version?.commit;
+      const promptId = promptInfo?.id;
 
-        return (
-          <AccordionItem key={index} value={`prompt-${index}`}>
-            <AccordionTrigger>
-              <div className="flex items-center gap-2">
-                <FileTerminal className="size-4" />
-                <div className="flex flex-col items-start">
-                  <div className="flex items-center gap-2">
-                    <span>Prompt: {promptName}</span>
-                    {commitHash && (
-                      <div className="flex items-center">
-                        <GitCommitVertical className="size-3 text-muted-slate" />
-                        <span className="text-muted-slate">
-                          {commitHash.substring(0, 8)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-2 space-x-1">
-                <SyntaxHighlighter
-                  withSearch
-                  data={promptContent as object}
-                  search={search}
-                />
-                <div className="flex items-center justify-between text-xs text-muted-slate">
-                  {promptId && (
-                    <Button variant="outline" size="sm" asChild>
-                      <Link
-                        to="/$workspaceName/prompts/$promptId"
-                        params={{ workspaceName, promptId }}
-                        className="inline-flex items-center"
-                      >
-                        View in Prompt library
-                      </Link>
-                    </Button>
+      return (
+        <AccordionItem key={index} value={`prompt-${index}`}>
+          <AccordionTrigger>
+            <div className="flex items-center gap-2">
+              <FileTerminal className="size-4" />
+              <div className="flex flex-col items-start">
+                <div className="flex items-center gap-2">
+                  <span>Prompt: {promptName}</span>
+                  {commitHash && (
+                    <div className="flex items-center">
+                      <GitCommitVertical className="size-3 text-muted-slate" />
+                      <span className="text-muted-slate">
+                        {commitHash.substring(0, 8)}
+                      </span>
+                    </div>
                   )}
-                  <TryInPlaygroundButton
-                    prompt={promptInfo}
-                    ButtonComponent={CustomUseInPlaygroundButton}
-                  />
                 </div>
               </div>
-            </AccordionContent>
-          </AccordionItem>
-        );
-      },
-    );
+            </div>
+          </AccordionTrigger>
+          <AccordionContent>
+            <div className="space-x-1 space-y-2">
+              <SyntaxHighlighter
+                withSearch
+                data={promptContent as object}
+                search={search}
+              />
+              <div className="flex items-center justify-between text-xs text-muted-slate">
+                {promptId && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link
+                      to="/$workspaceName/prompts/$promptId"
+                      params={{ workspaceName, promptId }}
+                      className="inline-flex items-center"
+                    >
+                      View in Prompt library
+                    </Link>
+                  </Button>
+                )}
+                <TryInPlaygroundButton
+                  prompt={promptInfo}
+                  ButtonComponent={CustomUseInPlaygroundButton}
+                />
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      );
+    });
   };
 
   return (
