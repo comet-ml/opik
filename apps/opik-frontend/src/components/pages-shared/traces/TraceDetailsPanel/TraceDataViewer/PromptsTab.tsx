@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
+import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import {
   Accordion,
   AccordionContent,
@@ -12,13 +13,16 @@ import { ExternalLink, FileTerminal, GitCommitVertical } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
+import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
 
-type PromptInfoDict = {
+type RawPromptData = {
+  id: string;
   name: string;
-  prompt: string;
-  commit?: string;
-  prompt_id?: string;
-  version_id?: string;
+  version: {
+    commit: string;
+    id: string;
+    template: string;
+  };
 };
 
 type PromptsTabProps = {
@@ -26,17 +30,68 @@ type PromptsTabProps = {
   search?: string;
 };
 
+const convertRawPromptToPromptWithLatestVersion = (rawPrompt: RawPromptData): PromptWithLatestVersion => {
+  const date = new Date().toISOString();
+
+  const promptVersion: PromptVersion = {
+    id: rawPrompt.version.id,
+    template: rawPrompt.version.template,
+    metadata: {},
+    commit: rawPrompt.version.commit,
+    prompt_id: rawPrompt.id,
+    created_at: date, // We don't have this in raw data, using current time
+  };
+
+  return {
+    id: rawPrompt.id,
+    name: rawPrompt.name,
+    description: "", // We don't have this in raw data
+    last_updated_at: date, // We don't have this in raw data
+    created_at: date, // We don't have this in raw data
+    version_count: 1, // Assuming single version
+    tags: [], // We don't have this in raw data
+    latest_version: promptVersion,
+  };
+};
+
+// Custom Button component that matches the "Use in Playground" styling
+const CustomUseInPlaygroundButton: React.FC<{
+  variant?: string;
+  size?: string;
+  disabled?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+  className?: string;
+}> = ({ onClick, disabled, variant, size, ...props }) => {
+  return (
+    <Button
+      variant="ghost" // Override the variant to always be "ghost"
+      onClick={onClick}
+      size="sm"
+      disabled={disabled}
+      className="inline-flex items-center gap-1"
+      {...props}
+    >
+      Use in Playground
+      <ExternalLink className="size-3.5 shrink-0" />
+    </Button>
+  );
+};
+
 const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   data,
   search,
 }) => {
-  const prompts = get(data.metadata, "opik_prompts", null);
+  const rawPrompts = get(data.metadata, "opik_prompts", null);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
+  const prompts = useMemo(() => {
+    if (!rawPrompts || !Array.isArray(rawPrompts)) return [];
+    return (rawPrompts as RawPromptData[]).map(convertRawPromptToPromptWithLatestVersion);
+  }, [rawPrompts]);
+
   const hasPrompts = useMemo(() => {
-    if (!prompts) return false;
-    if (Array.isArray(prompts)) return (prompts as PromptInfoDict[]).length > 0;
-    return false; // opik_prompts should always be an array
+    return prompts.length > 0;
   }, [prompts]);
 
   if (!hasPrompts) {
@@ -54,15 +109,14 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   }
 
   const renderPrompts = () => {
-    if (!prompts || !Array.isArray(prompts)) return null;
+    if (!prompts || prompts.length === 0) return null;
 
-    return (prompts as PromptInfoDict[]).map(
-      (promptInfo: PromptInfoDict, index: number) => {
-        // Handle PromptInfoDict structure: {name, prompt, commit?, prompt_id?}
+    return prompts.map(
+      (promptInfo: PromptWithLatestVersion, index: number) => {
         const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-        const promptContent = promptInfo?.prompt || promptInfo;
-        const commitHash = promptInfo?.commit;
-        const promptId = promptInfo?.prompt_id;
+        const promptContent = promptInfo?.latest_version?.template || promptInfo;
+        const commitHash = promptInfo?.latest_version?.commit;
+        const promptId = promptInfo?.id;
 
         return (
           <AccordionItem key={index} value={`prompt-${index}`}>
@@ -73,10 +127,12 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                   <div className="flex items-center gap-2">
                     <span>Prompt: {promptName}</span>
                     {commitHash && (
-                    <div className="flex items-center">
-                      <GitCommitVertical className="size-3 text-muted-slate" />
-                      <span className="text-muted-slate">{commitHash.substring(0, 8)}</span>
-                    </div>
+                      <div className="flex items-center">
+                        <GitCommitVertical className="size-3 text-muted-slate" />
+                        <span className="text-muted-slate">
+                          {commitHash.substring(0, 8)}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -91,11 +147,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                 />
                 <div className="flex items-center justify-between text-xs text-muted-slate">
                   {promptId && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                    >
+                    <Button variant="outline" size="sm" asChild>
                       <Link
                         to="/$workspaceName/prompts/$promptId"
                         params={{ workspaceName, promptId }}
@@ -105,19 +157,10 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                       </Link>
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    asChild
-                  >
-                    <Link
-                      to="/$workspaceName/playground"
-                      params={{ workspaceName }}
-                      className="inline-flex items-center gap-1"
-                    >
-                      Use in Playground
-                      <ExternalLink className="size-3.5 shrink-0" />
-                    </Link>
-                  </Button>
+                  <TryInPlaygroundButton
+                    prompt={promptInfo}
+                    ButtonComponent={CustomUseInPlaygroundButton}
+                  />
                 </div>
               </div>
             </AccordionContent>
