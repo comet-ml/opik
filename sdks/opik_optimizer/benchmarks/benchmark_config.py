@@ -44,15 +44,18 @@ class BenchmarkExperimentConfig(BaseModel):
     metrics: list[str]
 
 
-def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
-    result = LevenshteinRatio().score(
-        reference=dataset_item["answer"], output=llm_output
-    )
-    return ScoreResult(
-        name="levenshtein_ratio",
-        value=result.value,
-        reason=f"Compared `{dataset_item['answer']}` and `{llm_output}` and got `{result.value}`.",
-    )
+def create_levenshtein_ratio_metric(reference_col: str) -> Callable:
+    def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
+        result = LevenshteinRatio().score(
+            reference=dataset_item[reference_col], output=llm_output
+        )
+        return ScoreResult(
+            name="levenshtein_ratio",
+            value=result.value,
+            reason=f"Compared `{dataset_item[reference_col]}` and `{llm_output}` and got `{result.value}`.",
+        )
+
+    return levenshtein_ratio
 
 
 def equals(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -76,19 +79,29 @@ def create_answer_relevance_metric(name_input_col: str) -> Callable:
     return answer_relevance
 
 
-def create_context_precision(name_input_col: str) -> Callable:
+def create_context_precision(
+    name_input_col: str, expected_output_col: str, context_col: str
+) -> Callable:
     def context_precision(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         return ContextPrecision().score(
-            input=dataset_item[name_input_col], output=llm_output
+            input=dataset_item[name_input_col],
+            output=llm_output,
+            expected_output=dataset_item[expected_output_col],
+            context=[dataset_item[context_col]],
         )
 
     return context_precision
 
 
-def create_context_recall(name_input_col: str) -> Callable:
+def create_context_recall(
+    name_input_col: str, expected_output_col: str, context_col: str
+) -> Callable:
     def context_recall(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         return ContextRecall().score(
-            input=dataset_item[name_input_col], output=llm_output
+            input=dataset_item[name_input_col],
+            output=llm_output,
+            expected_output=dataset_item[expected_output_col],
+            context=[dataset_item[context_col]],
         )
 
     return context_recall
@@ -100,7 +113,9 @@ def hallucination(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
 
 DATASET_CONFIG = {
     "gsm8k": BenchmarkDatasetConfig(
-        name="gsm8k", display_name="GSM8K", metrics=[levenshtein_ratio]
+        name="gsm8k",
+        display_name="GSM8K",
+        metrics=[create_levenshtein_ratio_metric("answer")],
     ),
     "ragbench_sentence_relevance": BenchmarkDatasetConfig(
         name="ragbench_sentence_relevance",
@@ -121,15 +136,15 @@ DATASET_CONFIG = {
     "rag_hallucinations": BenchmarkDatasetConfig(
         name="rag_hallucinations",
         display_name="RAG Hallucinations",
-        metrics=[hallucination, create_context_precision("question")],
+        metrics=[
+            hallucination,
+            create_context_precision("question", "answer", "context"),
+        ],
     ),
     "hotpot_300": BenchmarkDatasetConfig(
         name="hotpot_300",
         display_name="HotpotQA",
-        metrics=[
-            create_answer_relevance_metric("question"),
-            create_context_precision("question"),
-        ],
+        metrics=[create_answer_relevance_metric("question")],
     ),
     "ai2_arc": BenchmarkDatasetConfig(
         name="ai2_arc", display_name="ARC", metrics=[equals]
@@ -142,7 +157,7 @@ DATASET_CONFIG = {
     "cnn_dailymail": BenchmarkDatasetConfig(
         name="cnn_dailymail",
         display_name="CNN/Daily Mail",
-        metrics=[levenshtein_ratio, create_context_recall("article")],
+        metrics=[create_levenshtein_ratio_metric("highlights")],
     ),
 }
 
@@ -156,7 +171,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "seed": 42,
         },
         optimize_params={
-            "max_trials": 10,
+            "max_trials": 30,
             "n_samples": 100,
         },
     ),
@@ -173,7 +188,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             },
         },
         optimize_params={
-            "max_trials": 10,
+            "max_trials": 30,
         },
     ),
     "evolutionary_optimizer": BenchmarkOptimizerConfig(
@@ -191,6 +206,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "infer_output_style": True,
         },
         optimize_params={
+            "max_trials": 30,
             "population_size": 10,
             "num_generations": 4,
         },
@@ -203,6 +219,9 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "batch_size": 25,
             "convergence_threshold": 0.01,
             "seed": 42,
+        },
+        optimize_params={
+            "max_trials": 30,
         },
     ),
 }
