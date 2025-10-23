@@ -223,9 +223,6 @@ onlineScoring:
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: 5
-  # Default: 60s
-  # Description: How often to log idle state when no messages are being processed
-  idleLogInterval: 60s
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -370,9 +367,6 @@ traceThreadConfig:
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: 5s
-  # Default: 60s
-  # Description: How often to log idle state when no messages are being processed
-  idleLogInterval: 60s
   # Default: trace_thread_closing_stream
   # Description: The name of the Redis Stream used for trace thread closing
   streamName: 'trace_thread_closing_stream'
@@ -424,9 +418,6 @@ webhook:
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: 5s
-  # Default: 60s
-  # Description: How often to log idle state when no messages are being processed
-  idleLogInterval: 60s
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: 3

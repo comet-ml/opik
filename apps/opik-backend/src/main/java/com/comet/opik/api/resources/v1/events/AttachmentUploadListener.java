@@ -112,9 +112,9 @@ public class AttachmentUploadListener {
             // Record metrics with status, mime_category, mime_subtype, and workspace_id tags
             Attributes attributes = Attributes.of(
                     STATUS_KEY, status,
+                    WORKSPACE_ID_KEY, event.workspaceId(),
                     MIME_CATEGORY_KEY, mimeCategory,
-                    MIME_SUBTYPE_KEY, mimeSubtype,
-                    WORKSPACE_ID_KEY, event.workspaceId());
+                    MIME_SUBTYPE_KEY, mimeSubtype);
 
             long duration = System.currentTimeMillis() - startTime;
             UPLOAD_PROCESSED.add(1, attributes);

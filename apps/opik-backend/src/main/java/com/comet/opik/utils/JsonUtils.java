@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import dev.langchain4j.model.openai.internal.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Optional;
 
@@ -54,6 +57,7 @@ public class JsonUtils {
 
     /**
      * Creates and configures an ObjectMapper with the specified limits.
+     * This configuration matches the Dropwizard ObjectMapper setup in OpikApplication.
      *
      * @param maxStringLength Maximum string length in bytes
      * @return Configured ObjectMapper instance
@@ -69,7 +73,10 @@ public class JsonUtils {
         mapper.enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
 
         // Register JavaTimeModule for proper date/time handling
-        mapper.registerModule(new JavaTimeModule());
+        mapper.registerModule(new JavaTimeModule()
+                .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
+                .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
+                .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
         // Configure stream read constraints
         StreamReadConstraints readConstraints = StreamReadConstraints.builder()
@@ -89,6 +96,63 @@ public class JsonUtils {
      */
     public static ObjectMapper getMapper() {
         return MAPPER;
+    }
+
+    /**
+     * Creates a new empty ObjectNode.
+     *
+     * @return A new ObjectNode instance
+     */
+    public static com.fasterxml.jackson.databind.node.ObjectNode createObjectNode() {
+        return MAPPER.createObjectNode();
+    }
+
+    /**
+     * Creates a new empty ArrayNode.
+     *
+     * @return A new ArrayNode instance
+     */
+    public static com.fasterxml.jackson.databind.node.ArrayNode createArrayNode() {
+        return MAPPER.createArrayNode();
+    }
+
+    /**
+     * Converts a Java object to a JsonNode.
+     *
+     * @param value The Java object to convert
+     * @return The JsonNode representation
+     */
+    public static JsonNode valueToTree(@NonNull Object value) {
+        return MAPPER.valueToTree(value);
+    }
+
+    /**
+     * Converts a JsonNode to a Java object of the specified type.
+     *
+     * @param node The JsonNode to convert
+     * @param valueType The target class type
+     * @return The converted Java object
+     */
+    public static <T> T treeToValue(@NonNull JsonNode node, @NonNull Class<T> valueType) {
+        try {
+            return MAPPER.treeToValue(node, valueType);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Serializes a value to a byte array.
+     *
+     * @param value The value to serialize
+     * @return The serialized byte array
+     */
+    public static byte[] writeValueAsBytes(@NonNull Object value) {
+        try {
+            return MAPPER.writeValueAsBytes(value);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     public static JsonNode getJsonNodeFromString(@NonNull String value) {
@@ -149,6 +213,14 @@ public class JsonUtils {
     public <T> T readValue(@NonNull InputStream inputStream, @NonNull TypeReference<T> valueTypeRef) {
         try {
             return MAPPER.readValue(inputStream, valueTypeRef);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    public <T> T readValue(@NonNull byte[] content, @NonNull Class<T> valueTypeRef) {
+        try {
+            return MAPPER.readValue(content, valueTypeRef);
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }

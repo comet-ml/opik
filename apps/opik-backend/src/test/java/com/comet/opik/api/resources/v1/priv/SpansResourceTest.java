@@ -4998,7 +4998,7 @@ class SpansResourceTest {
         void createSpanWithNonNumericNumbers() throws JsonProcessingException {
             var expectedSpan = podamFactory.manufacturePojo(Span.class);
             var span = (ObjectNode) JsonUtils.readTree(expectedSpan);
-            var input = JsonUtils.getMapper().createObjectNode();
+            var input = JsonUtils.createObjectNode();
             input.put("value", Double.POSITIVE_INFINITY);
             span.replace("input", input);
             var customObjectMapper = new ObjectMapper()

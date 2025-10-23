@@ -419,7 +419,7 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithMetadataField() {
             // Given
-            ObjectNode metadata = JsonUtils.getMapper().createObjectNode();
+            ObjectNode metadata = JsonUtils.createObjectNode();
             metadata.put("environment", "production");
             metadata.put("version", "1.0.0");
 
@@ -443,7 +443,7 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithInputField() {
             // Given
-            ObjectNode input = JsonUtils.getMapper().createObjectNode();
+            ObjectNode input = JsonUtils.createObjectNode();
             input.put("query", "What is AI?");
             input.put("context", "machine learning");
 
@@ -467,7 +467,7 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithMetadataDirectKey() {
             // Given
-            ObjectNode metadata = JsonUtils.getMapper().createObjectNode();
+            ObjectNode metadata = JsonUtils.createObjectNode();
             metadata.put("model", "gpt-4");
             metadata.put("temperature", "0.7");
 
@@ -612,14 +612,14 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesAllFiltersWithComplexTrace() {
             // Given
-            ObjectNode input = JsonUtils.getMapper().createObjectNode();
+            ObjectNode input = JsonUtils.createObjectNode();
             input.put("query", "What is machine learning?");
             input.put("context", "AI and technology");
 
-            ObjectNode output = JsonUtils.getMapper().createObjectNode();
+            ObjectNode output = JsonUtils.createObjectNode();
             output.put("answer", "Machine learning is a subset of AI");
 
-            ObjectNode metadata = JsonUtils.getMapper().createObjectNode();
+            ObjectNode metadata = JsonUtils.createObjectNode();
             metadata.put("model", "gpt-4");
             metadata.put("temperature", "0.7");
 

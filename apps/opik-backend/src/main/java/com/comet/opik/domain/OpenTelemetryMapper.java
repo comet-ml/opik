@@ -82,9 +82,9 @@ public class OpenTelemetryMapper {
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName) {
         Map<String, Integer> usage = new HashMap<>();
-        ObjectNode input = JsonUtils.getMapper().createObjectNode();
-        ObjectNode output = JsonUtils.getMapper().createObjectNode();
-        ObjectNode metadata = JsonUtils.getMapper().createObjectNode();
+        ObjectNode input = JsonUtils.createObjectNode();
+        ObjectNode output = JsonUtils.createObjectNode();
+        ObjectNode metadata = JsonUtils.createObjectNode();
 
         if (StringUtils.isNotEmpty(integrationName)) {
             metadata.put("integration", integrationName);
@@ -177,7 +177,7 @@ public class OpenTelemetryMapper {
             case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
             case BOOL_VALUE -> node.put(key, value.getBoolValue());
             case ARRAY_VALUE -> {
-                var array = JsonUtils.getMapper().createArrayNode();
+                var array = JsonUtils.createArrayNode();
                 value.getArrayValue().getValuesList().forEach(val -> array.add(val.getStringValue()));
                 node.set(key, array);
             }
