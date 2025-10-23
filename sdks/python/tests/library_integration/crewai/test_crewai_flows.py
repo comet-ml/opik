@@ -112,6 +112,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 tags=["litellm"],
                                 type="llm",
                                 usage=ANY_DICT,
+                                total_cost=ANY_BUT_NONE,
                                 spans=[],
                             )
                         ],
@@ -146,6 +147,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 tags=["litellm"],
                                 type="llm",
                                 usage=ANY_DICT,
+                                total_cost=ANY_BUT_NONE,
                                 spans=[],
                             )
                         ],

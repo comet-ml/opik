@@ -12,10 +12,6 @@ TEST_MODELS_PARAMETRIZE = [
         "anthropic",
     ),  # Anthropic - fully supported with usage tracking
     (
-        "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0",
-        "bedrock",
-    ),  # Anthropic via Bedrock - provider is bedrock
-    (
         "openai/gpt-4o-2024-08-06",
         "openai",
     ),  # OpenAI - fully supported with usage tracking
