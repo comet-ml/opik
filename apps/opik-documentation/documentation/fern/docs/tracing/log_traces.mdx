@@ -1,6 +1,7 @@
 <Tip>
-  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart) guide that
-  will walk you through the process of logging your first LLM call.
+  If you are just getting started with Opik, we recommend first checking out the
+  [Quickstart](/quickstart) guide that will walk you through the process of
+  logging your first LLM call.
 </Tip>
 
 LLM applications are complex systems that do more than just call an LLM API, they will often involve retrieval, pre-processing and post-processing steps.
@@ -17,8 +18,9 @@ Opik supports agent observability using our [Typescript SDK](/reference/typescri
 and our [REST API](/reference/rest-api/overview).
 
 <Tip>
-  We recommend starting with one of our integrations to get started quickly, you can find a full list of our
-  integrations in the [integrations overview](/integrations/overview) page.
+  We recommend starting with one of our integrations to get started quickly, you
+  can find a full list of our integrations in the [integrations
+  overview](/integrations/overview) page.
 </Tip>
 
 We won't be covering how to track chat conversations in this guide, you can learn more about this in the
@@ -79,8 +81,9 @@ Opik SDK.
 </Tabs>
 
 <Tip>
-  Opik is open-source and can be hosted locally using Docker, please refer to the [self-hosting
-  guide](/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account on
+  Opik is open-source and can be hosted locally using Docker, please refer to
+  the [self-hosting guide](/self-host/overview) to get started. Alternatively,
+  you can use our hosted platform by creating an account on
   [Comet](https://www.comet.com/signup?from=llm).
 </Tip>
 
@@ -365,6 +368,7 @@ Once you have installed and configured the Opik SDK, you can start using it to t
 
     Once the integration is complete, simply run your application and you will start seeing traces
     in your Opik dashboard.
+
   </Tab>
   <Tab title="Other" value="other" language="other">
     Opik has more than 30 integrations with the most popular frameworks and libraries, you can find
@@ -382,8 +386,9 @@ Once you have installed and configured the Opik SDK, you can start using it to t
 </Tabs>
 
 <Tip>
-  Opik has more than 40 integrations with the majority of the popular frameworks and libraries. You can find a full list
-  of integrations in the integrations [overview page](/integrations/overview).
+  Opik has more than 40 integrations with the majority of the popular frameworks
+  and libraries. You can find a full list of integrations in the integrations
+  [overview page](/integrations/overview).
 </Tip>
 
 If you would like more control over the logging process, you can use the low-level SDKs to log
@@ -758,19 +763,19 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 
         with opik.start_as_current_trace("chatbot-conversation", project_name="chatbot") as trace:
             trace.input = {"user_message": "Help me with Python"}
-            
+
             # First span: Process user input
             with opik.start_as_current_span("process-input", type="general") as span:
                 span.input = {"raw_input": "Help me with Python"}
                 span.output = {"processed_input": "Python programming help request"}
-            
+
             # Second span: Generate response
             with opik.start_as_current_span("generate-response", type="llm") as span:
                 span.input = {"prompt": "Python programming help request"}
                 span.output = {"response": "I'd be happy to help with Python!"}
                 span.model = "gpt-4"
                 span.provider = "openai"
-            
+
             trace.output = {"final_response": "I'd be happy to help with Python!"}
         ```
 
@@ -810,7 +815,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
             trace.input = {"updated": "data"}
             trace.tags = ["updated-tag", "new-tag"]
             trace.metadata = {"custom": "metadata"}
-            
+
             # The final trace will use the updated values
         ```
 
@@ -833,6 +838,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
         ```
 
     </Tab>
+
 </Tabs>
 
 #### Best Practices
@@ -848,7 +854,6 @@ If you are using the low-level SDKs, you can use the context managers to log tra
 5. **Use project organization**: Organize your traces by project to keep your Opik dashboard clean and organized.
 
 6. **Consider performance**: Use `flush=True` only when immediate data availability is required, as it can slow down your application by triggering a synchronous, immediate data upload.
-
 
 ### Logging to a specific project
 
