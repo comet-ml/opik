@@ -82,6 +82,7 @@ const EVALUATOR_MODEL_MAP: Record<EVALUATOR_MODEL, ModelData> = {
 
 interface MetricOption extends DropdownOption<EVALUATOR_MODEL> {
   docLink: string;
+  docHash?: string;
 }
 
 const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
@@ -89,31 +90,36 @@ const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
     value: EVALUATOR_MODEL.equals,
     label: "Equals",
     description: "Checks if the output exactly matches the text.",
-    docLink: "/evaluation/metrics/heuristic_metrics#equals",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#equals",
   },
   {
     value: EVALUATOR_MODEL.regex_match,
     label: "Regex match",
     description: "Verifies pattern conformity using regex.",
-    docLink: "/evaluation/metrics/heuristic_metrics#regexmatch",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#regexmatch",
   },
   {
     value: EVALUATOR_MODEL.contains,
     label: "Contains",
     description: "Identifies presence of a substring.",
-    docLink: "/evaluation/metrics/heuristic_metrics#contains",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#contains",
   },
   {
     value: EVALUATOR_MODEL.isJSON,
     label: "isJson",
     description: "Validates JSON format compliance.",
-    docLink: "/evaluation/metrics/heuristic_metrics#isjson",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#isjson",
   },
   {
     value: EVALUATOR_MODEL.levenshtein,
     label: "Levenshtein",
     description: "Calculates text similarity via edit distance.",
-    docLink: "/evaluation/metrics/heuristic_metrics#levenshteinratio",
+    docLink: "/evaluation/metrics/heuristic_metrics",
+    docHash: "#levenshteinratio",
   },
 ];
 
@@ -311,6 +317,7 @@ eval_results = evaluate(
                   <ExplainerDescription
                     description={m.description || ""}
                     docLink={m.docLink}
+                    docHash={m.docHash}
                   />
                 </div>
               </div>
