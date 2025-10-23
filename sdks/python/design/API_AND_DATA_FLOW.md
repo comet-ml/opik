@@ -310,6 +310,7 @@ The Opik client provides two types of operations with different execution paths:
 | `span()` | Create/update span | None (fire-and-forget) |
 | `log_traces_feedback_scores()` | Add feedback to traces | None |
 | `log_spans_feedback_scores()` | Add feedback to spans | None |
+| `experiment.insert()` | Create experiment items | None |
 | Attachment uploads | Upload files to S3 | None |
 
 **Flow**: API → **Message** → **Streamer** → **Queue** → **Consumer** → REST Client → Backend
@@ -646,6 +647,7 @@ If batching is enabled, certain message types accumulate before sending.
 - `CreateTraceMessage` → batched into `CreateTraceBatchMessage`
 - `AddTraceFeedbackScoresBatchMessage` → already a batch message
 - `AddSpanFeedbackScoresBatchMessage` → already a batch message
+- `CreateExperimentItemsBatchMessage` → already a batch message
 
 **Messages that don't support batching** (sent individually):
 - `UpdateSpanMessage` - Updates sent immediately
@@ -981,6 +983,16 @@ class AddTraceFeedbackScoresBatchMessage(BaseMessage):
 
 class AddSpanFeedbackScoresBatchMessage(BaseMessage):
     feedback_scores: List[FeedbackScoreDict]
+
+# Experiment item messages
+class ExperimentItemMessage(BaseMessage):
+    id: str
+    experiment_id: str
+    trace_id: str
+    dataset_item_id: str
+
+class CreateExperimentItemsBatchMessage(BaseMessage):
+    batch: List[ExperimentItemMessage]
 ```
 
 ### Message Routing Logic
