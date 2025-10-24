@@ -125,11 +125,10 @@ You can associate prompts with your traces and spans using the `opik_context` mo
             name="system-prompt",
             prompt="You are a helpful assistant that provides accurate and concise answers."
         )
-        
-        user_prompt = opik.Prompt(
-            name="user-prompt", 
-            prompt="Answer the following question: {{question}}"
-        )
+
+        # Get prompt from the Prompt library
+        client = opik.Opik()
+        user_prompt = client.get_prompt(name="user-prompt")
 
         @opik.track
         def process_user_query(question: str) -> str:
@@ -172,7 +171,7 @@ You can associate prompts with your traces and spans using the `opik_context` mo
             return "Positive"  # example result
         ```
     </Tab>
-    <Tab value="Mixed usage" title="Mixed usage">
+    <Tab value="Combined usage" title="Combined usage">
         ```python
         import opik
         from opik.opik_context import update_current_trace, update_current_span
@@ -228,6 +227,8 @@ You can view the prompts associated with a trace or span in the Opik UI:
 <Frame>
     <img src="/img/prompt_engineering/prompt_opik_context_update.png" />
 </Frame>
+
+Further details on using prompts from the Prompt library are provided in the following sections.
 
 ### Downloading your prompts
 
