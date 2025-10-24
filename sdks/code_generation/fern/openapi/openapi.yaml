@@ -58,6 +58,8 @@ tags:
   description: Guardrails related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: Manual Evaluation
+  description: Manual evaluation resources for traces and threads
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -2255,6 +2257,70 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/threads:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate threads
+      description: Manually trigger evaluation rules on selected threads. Bypasses
+        sampling and enqueues all specified threads for evaluation.
+      operationId: evaluateThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/traces:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate traces
+      description: Manually trigger evaluation rules on selected traces. Bypasses
+        sampling and enqueues all specified traces for evaluation.
+      operationId: evaluateTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
           content:
             application/json:
               schema:
@@ -9614,6 +9680,60 @@ components:
             type: string
         base_url:
           type: string
+    ManualEvaluationResponse:
+      type: object
+      properties:
+        entities_queued:
+          type: integer
+          description: Number of entities queued for evaluation
+          format: int32
+          example: 5
+        rules_applied:
+          type: integer
+          description: Number of rules that will be applied
+          format: int32
+          example: 2
+    ManualEvaluationRequest:
+      required:
+      - entity_ids
+      - entity_type
+      - project_id
+      - rule_ids
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        entity_ids:
+          minItems: 1
+          type: array
+          description: List of entity IDs (trace IDs or thread IDs) to evaluate
+          example:
+          - 550e8400-e29b-41d4-a716-446655440000
+          - 550e8400-e29b-41d4-a716-446655440001
+          items:
+            type: string
+            description: List of entity IDs (trace IDs or thread IDs) to evaluate
+            format: uuid
+        rule_ids:
+          minItems: 1
+          type: array
+          description: List of automation rule IDs to apply
+          example:
+          - 660e8400-e29b-41d4-a716-446655440000
+          items:
+            type: string
+            description: List of automation rule IDs to apply
+            format: uuid
+        entity_type:
+          type: string
+          description: Type of entity to evaluate (trace or thread)
+          example: trace
+          enum:
+          - trace
+          - thread
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
     Optimization:
