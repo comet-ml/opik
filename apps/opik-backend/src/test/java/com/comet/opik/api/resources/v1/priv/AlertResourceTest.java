@@ -1693,9 +1693,9 @@ class AlertResourceTest {
 
         private void verifySlackBlockStructure(SlackWebhookPayload slackPayload, int expectedEventCount,
                 String expectedEventType, List<String> expectedDetailsContains) {
-            // Verify blocks structure
+            // Verify blocks structure (3-4 blocks: header, summary, details, optional fallback)
             assertThat(slackPayload.blocks()).isNotNull();
-            assertThat(slackPayload.blocks()).hasSize(3);
+            assertThat(slackPayload.blocks()).hasSizeBetween(3, 4);
 
             // Verify header block
             SlackBlock headerBlock = slackPayload.blocks().get(0);
@@ -1713,7 +1713,7 @@ class AlertResourceTest {
             assertThat(summaryContent).contains("*" + expectedEventCount + "*");
             assertThat(summaryContent).contains(expectedEventType);
 
-            // Verify details block
+            // Verify details block (mainText)
             SlackBlock detailsBlock = slackPayload.blocks().get(2);
             assertThat(detailsBlock.type()).isEqualTo("section");
             assertThat(detailsBlock.text()).isNotNull();
@@ -1724,6 +1724,18 @@ class AlertResourceTest {
             // Verify expected strings in details
             for (String expectedString : expectedDetailsContains) {
                 assertThat(details).contains(expectedString);
+            }
+
+            // Verify optional fallback block if present (when text was truncated)
+            if (slackPayload.blocks().size() == 4) {
+                SlackBlock fallbackBlock = slackPayload.blocks().get(3);
+                assertThat(fallbackBlock.type()).isEqualTo("section");
+                assertThat(fallbackBlock.text()).isNotNull();
+                assertThat(fallbackBlock.text().type()).isEqualTo("mrkdwn");
+                String fallbackText = fallbackBlock.text().text();
+                assertThat(fallbackText).isNotNull();
+                assertThat(fallbackText).contains("Overall");
+                assertThat(fallbackText).contains("you could check them here");
             }
         }
 
@@ -1766,9 +1778,12 @@ class AlertResourceTest {
                     .build();
             var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
 
+            // Construct expected URL
+            String expectedUrl = String.format("http://localhost:5173/%s/prompts/%s", mock.getRight(), promptId);
+
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Prompt Created",
-                    List.of("*Prompt IDs:*", promptId.toString()));
+                    List.of("*Prompts Created:*\n", expectedUrl));
         }
 
         @ParameterizedTest
@@ -1806,7 +1821,7 @@ class AlertResourceTest {
 
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Prompt Deleted",
-                    List.of("*Prompt IDs:*", promptId1.toString(), promptId2.toString()));
+                    List.of("*Deleted Prompt IDs:*", promptId1.toString(), promptId2.toString()));
         }
 
         @ParameterizedTest
@@ -1828,9 +1843,13 @@ class AlertResourceTest {
             var expectedPromptVersion = promptResourceClient.createPromptVersion(expectedPrompt, mock.getLeft(),
                     mock.getRight());
 
+            // Construct expected URL
+            String expectedUrl = String.format("http://localhost:5173/%s/prompts/%s?activeVersionId=%s",
+                    mock.getRight(), expectedPromptVersion.promptId(), expectedPromptVersion.id());
+
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Prompt Committed",
-                    List.of(expectedPromptVersion.promptId().toString(), expectedPromptVersion.commit()));
+                    List.of("*Prompts Committed:*\n", expectedUrl));
         }
 
         @ParameterizedTest
@@ -1842,7 +1861,7 @@ class AlertResourceTest {
 
             // Create a project
             String projectName = RandomStringUtils.randomAlphabetic(10);
-            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
             // Create alert with webhook
             var alert = createAlertForEvent(AlertTrigger.builder()
@@ -1864,10 +1883,14 @@ class AlertResourceTest {
 
             traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
 
-            // Verify webhook payload based on alert type
+            // Construct expected URLs
             var expectedDetails = new ArrayList<String>();
-            expectedDetails.add("*Trace IDs:*");
-            tracesWithErrors.forEach(trace -> expectedDetails.add(trace.id().toString()));
+            expectedDetails.add("*Traces with Errors:*\n");
+            tracesWithErrors.forEach(trace -> {
+                String expectedUrl = String.format("http://localhost:5173/%s/projects/%s/traces?trace=%s",
+                        mock.getRight(), projectId, trace.id());
+                expectedDetails.add(expectedUrl);
+            });
             verifyPayload(alertType, 1, "Trace Errors", expectedDetails);
         }
 
@@ -1880,7 +1903,7 @@ class AlertResourceTest {
 
             // Create a project
             String projectName = RandomStringUtils.randomAlphabetic(10);
-            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
             // Create alert with webhook
             var alert = createAlertForEvent(AlertTrigger.builder()
@@ -1901,9 +1924,18 @@ class AlertResourceTest {
                     .build();
             traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
 
+            // Construct expected URL
+            String expectedUrl = String.format(
+                    "http://localhost:5173/%s/projects/%s/traces?trace=%s&traceTab=feedback_scores",
+                    mock.getRight(), projectId, trace.id());
+
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Trace Feedback Score",
-                    List.of(trace.id().toString(), feedbackScore.name()));
+                    List.of("*Traces Feedback Scores:*\n",
+                            "Trace Score",
+                            feedbackScore.name(),
+                            String.format("%.2f", feedbackScore.value()),
+                            expectedUrl));
         }
 
         @ParameterizedTest
@@ -1963,9 +1995,18 @@ class AlertResourceTest {
 
             traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
 
+            // Construct expected URL
+            String expectedUrl = String.format(
+                    "http://localhost:5173/%s/projects/%s/traces?type=threads&thread=%s&threadTab=feedback_scores",
+                    mock.getRight(), projectId, thread.id());
+
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Thread Feedback Score",
-                    List.of(thread.id().toString(), feedbackScore.name()));
+                    List.of("*Threads Feedback Scores:*\n",
+                            "Thread Score",
+                            feedbackScore.name(),
+                            String.format("%.2f", feedbackScore.value()),
+                            expectedUrl));
         }
 
         @ParameterizedTest
@@ -1977,7 +2018,7 @@ class AlertResourceTest {
 
             // Create a project
             String projectName = RandomStringUtils.randomAlphabetic(10);
-            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
             // Create alert with webhook
             var alert = createAlertForEvent(AlertTrigger.builder()
@@ -2000,14 +2041,19 @@ class AlertResourceTest {
                             .entityId(trace.id())
                             .secondaryId(UUID.randomUUID())
                             .projectName(projectName)
+                            .projectId(projectId)
                             .result(GuardrailResult.FAILED)
                             .build())
                     .toList();
             guardrailsResourceClient.addBatch(guardrails, mock.getLeft(), mock.getRight());
 
+            // Construct expected URL
+            String expectedUrl = String.format("http://localhost:5173/%s/projects/%s/traces?trace=%s",
+                    mock.getRight(), projectId, trace.id());
+
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Guardrail Triggered",
-                    List.of("*Trace IDs:*", trace.id().toString()));
+                    List.of("*Traces with Guardrails Triggered:*\n", expectedUrl));
         }
     }
 
