@@ -17,6 +17,7 @@ import {
 import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
 import { Experiment } from "@/experiment/Experiment";
+import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
 import { parseNdjsonStreamToArray } from "@/utils/stream";
@@ -285,6 +286,7 @@ export class OpikClient {
    * @param datasetName The name of the dataset to associate with the experiment
    * @param name Optional name for the experiment (if not provided, a generated name will be used)
    * @param experimentConfig Optional experiment configuration parameters
+   * @param prompts Optional array of Prompt objects to link with the experiment
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
    * @returns The created Experiment object
@@ -293,12 +295,14 @@ export class OpikClient {
     datasetName,
     name,
     experimentConfig,
+    prompts,
     type = ExperimentType.Regular,
     optimizationId,
   }: {
     datasetName: string;
     name?: string;
     experimentConfig?: Record<string, unknown>;
+    prompts?: Prompt[];
     type?: ExperimentType;
     optimizationId?: string;
   }): Promise<Experiment> => {
@@ -308,15 +312,22 @@ export class OpikClient {
       throw new Error("Dataset name is required to create an experiment");
     }
 
+    // Process prompts and build metadata
+    const [metadata, promptVersions] = buildMetadataAndPromptVersions(
+      experimentConfig,
+      prompts
+    );
+
     const id = generateId();
-    const experiment = new Experiment({ id, name, datasetName }, this);
+    const experiment = new Experiment({ id, name, datasetName, prompts }, this);
 
     try {
       this.api.experiments.createExperiment({
         id,
         datasetName,
         name,
-        metadata: experimentConfig,
+        metadata,
+        promptVersions,
         type,
         optimizationId,
       });

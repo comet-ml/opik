@@ -10,6 +10,7 @@ import { EvaluationEngine } from "./engine/EvaluationEngine";
 import { OpikSingleton } from "@/client/SingletonClient";
 import { DatasetItemData } from "../dataset/DatasetItem";
 import { OpikClient } from "@/client/Client";
+import type { Prompt } from "@/prompt/Prompt";
 
 export interface EvaluateOptions<T = Record<string, unknown>> {
   /** The dataset to evaluate against, containing inputs and expected outputs */
@@ -29,6 +30,9 @@ export interface EvaluateOptions<T = Record<string, unknown>> {
 
   /** Optional configuration settings for the experiment as key-value pairs */
   experimentConfig?: Record<string, unknown>;
+
+  /** Optional array of Prompt objects to link with the experiment for tracking */
+  prompts?: Prompt[];
 
   /** Optional number of samples to evaluate from the dataset (defaults to all if not specified) */
   nbSamples?: number;
@@ -65,6 +69,7 @@ export async function evaluate<T = Record<string, unknown>>(
     name: options.experimentName,
     datasetName: options.dataset.name,
     experimentConfig: options.experimentConfig,
+    prompts: options.prompts,
   });
 
   try {

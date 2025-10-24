@@ -11,11 +11,13 @@ import { logger } from "@/utils/logger";
 import { serialization } from "@/rest_api";
 import { getExperimentUrlById } from "@/utils/url";
 import { DEFAULT_CONFIG } from "@/config/Config";
+import type { Prompt } from "@/prompt/Prompt";
 
 export interface ExperimentData {
   id?: string;
   name?: string;
   datasetName: string;
+  prompts?: Prompt[];
 }
 
 /**
@@ -23,20 +25,51 @@ export interface ExperimentData {
  */
 export class Experiment {
   public readonly id: string;
-  public readonly name?: string;
+  private _name?: string;
   public readonly datasetName: string;
+  public readonly prompts?: Prompt[];
 
   /**
    * Creates a new Experiment instance.
    * This should not be created directly, use static factory methods instead.
    */
   constructor(
-    { id, name, datasetName }: ExperimentData,
+    { id, name, datasetName, prompts }: ExperimentData,
     private opik: OpikClient
   ) {
     this.id = id || generateId();
-    this.name = name;
+    this._name = name;
     this.datasetName = datasetName;
+    this.prompts = prompts;
+  }
+
+  /**
+   * Gets the experiment name. If not provided during construction,
+   * lazy-loads it from the backend API.
+   */
+  get name(): string | undefined {
+    return this._name;
+  }
+
+  /**
+   * Async method to ensure the name is loaded from backend if needed.
+   * Call this method before accessing name if you need to ensure it's loaded.
+   */
+  async ensureNameLoaded(): Promise<string> {
+    if (this._name !== undefined) {
+      return this._name;
+    }
+
+    const experimentData = await this.opik.api.experiments.getExperimentById(
+      this.id
+    );
+    this._name = experimentData.name;
+
+    if (!this._name) {
+      throw new Error("Experiment name is not loaded");
+    }
+
+    return this._name;
   }
 
   /**

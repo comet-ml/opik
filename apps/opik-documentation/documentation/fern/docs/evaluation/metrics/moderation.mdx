@@ -8,21 +8,36 @@ The Moderation metric allows you to evaluate the appropriateness of the LLM's re
 
 You can use the `Moderation` metric as follows:
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import Moderation
 
 metric = Moderation()
 
 metric.score(
-    output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage."
+output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage."
 )
-```
 
-Asynchronous scoring is also supported with the `ascore` scoring method.
+````
+
+```typescript title="TypeScript" language="typescript"
+import { Moderation } from 'opik';
+
+const metric = new Moderation();
+
+await metric.score({
+    output: "The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage."
+});
+````
+
+</CodeBlocks>
+
+Asynchronous scoring is also supported with the `ascore` method in Python and `score` method in TypeScript (which is always async).
 
 <Tip>
-  The moderation score is a float between `0` and `1`. A score of `0` indicates that the content was deemed safe, a
-  score of `1` indicates that the content was deemed unsafe.
+  The moderation score is a float between `0` and `1`. A score of `0` indicates
+  that the content was deemed safe, a score of `1` indicates that the content
+  was deemed unsafe.
 </Tip>
 
 ## Moderation Prompt

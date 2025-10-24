@@ -99,7 +99,11 @@ export class EvaluationEngine<T = Record<string, unknown>> {
           endTime: new Date(),
         });
       } catch (error) {
-        logger.error(`Error processing dataset item: ${datasetItem.id}`);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        logger.error(
+          `Error processing dataset item: ${datasetItem.id} - ${errorMessage}`
+        );
 
         if (error instanceof Error) {
           this.rootTrace.update({
@@ -196,19 +200,20 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const { scoringInputs } = testCase;
 
     for (const metric of this.scoringMetrics) {
-      validateRequiredArguments(metric, scoringInputs);
-
       logger.debug(`Calculating score for metric ${metric.name}`);
 
       try {
+        validateRequiredArguments(metric, scoringInputs);
         const metricResults = await metric.score(scoringInputs);
         const resultArray = Array.isArray(metricResults)
           ? metricResults
           : [metricResults];
 
         scoreResults.push(...resultArray);
-      } catch {
-        logger.error(`Metric ${metric.name} failed to calculate score`);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        logger.error(`Metric ${metric.name} failed: ${errorMessage}`);
       }
 
       logger.debug(`Finished calculating score for metric ${metric.name}`);

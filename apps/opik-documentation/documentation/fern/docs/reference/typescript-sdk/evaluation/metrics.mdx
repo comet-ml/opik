@@ -40,7 +40,7 @@ Each metric must implement the `score` method, which:
 Opik supports different types of metrics:
 
 1. **Heuristic metrics**: Simple rule-based evaluations (e.g., exact match, contains, regex match)
-2. **Model-based metrics**: Evaluations powered by AI models (coming soon)
+2. **LLM Judge metrics**: AI-powered evaluations that use language models to assess output quality
 
 ## Built-in Metrics
 
@@ -232,3 +232,450 @@ When creating custom metrics:
    ```
 
 3. **Normalize scores** to a consistent range (typically 0.0-1.0) for easier comparison with other metrics
+
+## LLM Judge Metrics
+
+LLM Judge metrics use language models to evaluate the quality of LLM outputs. These metrics provide more nuanced evaluation than simple heuristic checks.
+
+### AnswerRelevance
+
+Evaluates how relevant the output is to the input question:
+
+```typescript
+import { AnswerRelevance } from "opik";
+
+// Using default model (gpt-4o)
+const metric = new AnswerRelevance();
+
+// With custom model ID
+const metricWithModel = new AnswerRelevance({
+  model: "claude-3-5-sonnet-latest",
+});
+
+// With LanguageModel instance
+import { openai } from "@ai-sdk/openai";
+const customModel = openai("gpt-4o");
+const metricWithCustomModel = new AnswerRelevance({ model: customModel });
+
+// Usage
+const score = await metric.score({
+  input: "What is the capital of France?",
+  output: "The capital of France is Paris.",
+  context: ["France is a country in Western Europe."], // Optional
+});
+
+console.log(score.value); // 0.0 to 1.0
+console.log(score.reason); // Explanation of the score
+```
+
+#### Parameters
+
+- `input` (required): The question or prompt
+- `output` (required): The model's response to evaluate
+- `context` (optional): Additional context for evaluation
+
+#### Score Range
+
+- **1.0**: Perfect relevance - output directly addresses the input
+- **0.5**: Partial relevance - output is somewhat related but incomplete
+- **0.0**: No relevance - output doesn't address the input
+
+### Hallucination
+
+Detects whether the output contains hallucinated or unfaithful information:
+
+```typescript
+import { Hallucination } from "opik";
+
+const metric = new Hallucination();
+
+// Without context - checks against general knowledge
+const score1 = await metric.score({
+  input: "What is the capital of France?",
+  output:
+    "The capital of France is Paris. It is famous for its iconic Eiffel Tower.",
+});
+
+// With context - checks faithfulness to provided context
+const score2 = await metric.score({
+  input: "What is the capital of France?",
+  output:
+    "The capital of France is Paris. It is famous for its iconic Eiffel Tower.",
+  context: [
+    "France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.",
+  ],
+});
+
+console.log(score2.value); // 1.0 = hallucination detected, 0.0 = no hallucination
+console.log(score2.reason); // Array of reasons for the score
+```
+
+#### Parameters
+
+- `input` (required): The original question or prompt
+- `output` (required): The model's response to evaluate
+- `context` (optional): Reference information to check against
+
+#### Score Values
+
+- **0.0**: No hallucination - output is faithful to context/facts
+- **1.0**: Hallucination detected - output contains false or unsupported information
+
+### Moderation
+
+Checks if the output contains harmful, inappropriate, or unsafe content:
+
+```typescript
+import { Moderation } from "opik";
+
+const metric = new Moderation();
+
+const score = await metric.score({
+  input: "Tell me about safety guidelines",
+  output: "Here are some safety guidelines...",
+});
+
+console.log(score.value); // 1.0 = harmful content detected, 0.0 = safe
+console.log(score.reason); // Explanation of moderation decision
+```
+
+#### Parameters
+
+- `input` (required): The original prompt
+- `output` (required): The model's response to evaluate
+
+#### Score Values
+
+- **0.0**: Safe - no harmful content detected
+- **1.0**: Harmful - inappropriate or unsafe content detected
+
+### Usefulness
+
+Evaluates how useful the output is in addressing the input:
+
+```typescript
+import { Usefulness } from "opik";
+
+const metric = new Usefulness();
+
+const score = await metric.score({
+  input: "How do I reset my password?",
+  output:
+    "To reset your password, click 'Forgot Password' on the login page, enter your email, and follow the instructions sent to your inbox.",
+});
+
+console.log(score.value); // 0.0 to 1.0
+console.log(score.reason); // Explanation of usefulness score
+```
+
+#### Parameters
+
+- `input` (required): The question or request
+- `output` (required): The model's response to evaluate
+
+#### Score Range
+
+- **1.0**: Very useful - comprehensive and actionable
+- **0.5**: Somewhat useful - partially helpful
+- **0.0**: Not useful - doesn't help address the input
+
+## Configuring LLM Judge Metrics
+
+### Model Configuration
+
+All LLM Judge metrics accept a `model` parameter in their constructor:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { google } from "@ai-sdk/google";
+import { Hallucination } from "opik";
+
+// Using model ID string
+const metric1 = new Hallucination({ model: "gpt-4o" });
+const metric2 = new Hallucination({ model: "claude-3-5-sonnet-latest" });
+const metric3 = new Hallucination({ model: "gemini-2.0-flash" });
+
+// Using LanguageModel instance
+const customModel = openai("gpt-4o");
+const metric4 = new Hallucination({ model: customModel });
+```
+
+### Async Scoring
+
+All LLM Judge metrics support asynchronous scoring:
+
+```typescript
+import { AnswerRelevance } from "opik";
+
+const metric = new AnswerRelevance();
+
+// Async/await
+const score = await metric.score({
+  input: "What is TypeScript?",
+  output: "TypeScript is a typed superset of JavaScript.",
+});
+
+// Promise chain
+metric
+  .score({
+    input: "What is TypeScript?",
+    output: "TypeScript is a typed superset of JavaScript.",
+  })
+  .then((score) => console.log(score.value));
+```
+
+### Combining Multiple LLM Judge Metrics
+
+Use multiple metrics together for comprehensive evaluation:
+
+```typescript
+import { AnswerRelevance, Hallucination, Moderation, Usefulness } from "opik";
+import { evaluate } from "opik";
+
+await evaluate({
+  dataset: myDataset,
+  task: myTask,
+  scoringMetrics: [
+    new AnswerRelevance(),
+    new Hallucination(),
+    new Moderation(),
+    new Usefulness(),
+  ],
+});
+```
+
+### Custom Model for Each Metric
+
+Different metrics can use different models:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { AnswerRelevance, Hallucination } from "opik";
+
+// Use GPT-4o for answer relevance
+const relevanceMetric = new AnswerRelevance({
+  model: openai("gpt-4o"),
+});
+
+// Use Claude for hallucination detection
+const hallucinationMetric = new Hallucination({
+  model: anthropic("claude-3-5-sonnet-latest"),
+});
+
+await evaluate({
+  dataset: myDataset,
+  task: myTask,
+  scoringMetrics: [relevanceMetric, hallucinationMetric],
+});
+```
+
+## LLM Judge Metric Best Practices
+
+### 1. Use Model ID Strings for Simplicity
+
+For most use cases, use model ID strings directly:
+
+```typescript
+import { Hallucination } from "opik";
+
+const metric = new Hallucination({ model: "gpt-4o" });
+```
+
+The Opik SDK handles model configuration internally for optimal evaluation performance.
+
+### 2. Provide Context When Available
+
+Context improves evaluation accuracy:
+
+```typescript
+// Better: With context
+await metric.score({
+  input: "What is the capital?",
+  output: "The capital is Paris.",
+  context: ["France is a country in Europe. Its capital is Paris."],
+});
+
+// OK: Without context (relies on general knowledge)
+await metric.score({
+  input: "What is the capital of France?",
+  output: "The capital is Paris.",
+});
+```
+
+### 3. Choose Appropriate Models
+
+Match model capabilities to metric requirements:
+
+```typescript
+// Complex reasoning: Use GPT-4o or Claude Sonnet
+const complexMetric = new AnswerRelevance({ model: "gpt-4o" });
+
+// Simple checks: Use faster, cheaper models
+const simpleMetric = new Moderation({ model: "gpt-4o-mini" });
+```
+
+### 4. Handle Errors Gracefully
+
+LLM calls can fail - handle errors appropriately:
+
+```typescript
+try {
+  const score = await metric.score({
+    input: "What is TypeScript?",
+    output: "TypeScript is a typed superset of JavaScript.",
+  });
+  console.log(score);
+} catch (error) {
+  console.error("Metric evaluation failed:", error);
+  // Implement fallback or retry logic
+}
+```
+
+### 5. Batch Evaluations
+
+Use the evaluate function for efficient batch processing:
+
+```typescript
+// More efficient for multiple items
+await evaluate({
+  dataset: myDataset,
+  task: myTask,
+  scoringMetrics: [new Hallucination()],
+  scoringWorkers: 5, // Parallel scoring
+});
+
+// Less efficient for batch processing
+for (const item of datasetItems) {
+  await metric.score(item); // Sequential scoring
+}
+```
+
+## Score Interpretation
+
+### Understanding LLM Judge Scores
+
+LLM Judge metrics return structured scores with:
+
+```typescript
+interface EvaluationScoreResult {
+  name: string; // Metric name
+  value: number; // Numerical score (0.0-1.0 typically)
+  reason: string | string[]; // Explanation for the score
+}
+```
+
+### Example Score Results
+
+```typescript
+// AnswerRelevance
+{
+  name: "answer_relevance",
+  value: 0.95,
+  reason: "The answer directly addresses the question with accurate information"
+}
+
+// Hallucination
+{
+  name: "hallucination",
+  value: 0.0,
+  reason: ["All information is supported by the context", "No contradictions found"]
+}
+
+// Moderation
+{
+  name: "moderation",
+  value: 0.0,
+  reason: "Content is safe and appropriate"
+}
+```
+
+## Generation Parameters
+
+### Configuring Temperature, Seed, and MaxTokens
+
+All LLM Judge metrics support generation parameters in their constructor:
+
+```typescript
+import { Hallucination, AnswerRelevance } from "opik";
+
+// Configure generation parameters
+const metric = new Hallucination({
+  model: "gpt-4o",
+  temperature: 0.3, // Lower = more deterministic
+  seed: 42, // For reproducible outputs
+  maxTokens: 1000, // Maximum response length
+});
+
+// Different settings for different metrics
+const relevanceMetric = new AnswerRelevance({
+  model: "claude-3-5-sonnet-latest",
+  temperature: 0.7, // Higher = more creative
+  seed: 12345,
+});
+
+// Use the metrics
+const score = await metric.score({
+  input: "What is the capital of France?",
+  output: "The capital of France is Paris.",
+  context: ["France is a country in Western Europe."],
+});
+```
+
+### Advanced Model Settings
+
+For provider-specific advanced parameters, use `modelSettings`:
+
+```typescript
+import { Hallucination } from "opik";
+
+const metric = new Hallucination({
+  model: "gpt-4o",
+  temperature: 0.5,
+  modelSettings: {
+    topP: 0.9, // Nucleus sampling
+    topK: 50, // Top-K sampling
+    presencePenalty: 0.1, // Reduce repetition
+    frequencyPenalty: 0.2, // Reduce phrase repetition
+    stopSequences: ["END"], // Custom stop sequences
+  },
+});
+```
+
+For provider-specific options not exposed through `modelSettings`, use `LanguageModel` instances:
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { google } from "@ai-sdk/google";
+
+// OpenAI with structured outputs
+const openaiModel = openai("gpt-4o", {
+  structuredOutputs: true,
+});
+
+// Anthropic with cache control
+const anthropicModel = anthropic("claude-3-5-sonnet-latest", {
+  cacheControl: true,
+});
+
+// Google Gemini with specific configuration
+const googleModel = google("gemini-2.0-flash");
+
+const metric1 = new Hallucination({ model: openaiModel });
+const metric2 = new Hallucination({ model: anthropicModel });
+const metric3 = new Hallucination({ model: googleModel });
+```
+
+See [Vercel AI SDK Provider Documentation](https://sdk.vercel.ai/providers) for provider-specific options:
+
+- [OpenAI Provider Options](https://sdk.vercel.ai/providers/ai-sdk-providers/openai)
+- [Anthropic Provider Options](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic)
+- [Google Provider Options](https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai)
+
+## See Also
+
+- [Models](/reference/typescript-sdk/evaluation/models) - Configuring language models for metrics
+- [evaluate Function](/reference/typescript-sdk/evaluation/evaluate) - Using metrics in evaluations
+- [evaluatePrompt Function](/reference/typescript-sdk/evaluation/evaluatePrompt) - Using metrics with prompt evaluation

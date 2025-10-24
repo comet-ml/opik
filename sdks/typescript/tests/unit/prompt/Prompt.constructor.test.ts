@@ -104,7 +104,7 @@ describe("Prompt - Constructor & Properties", () => {
     it("should handle unicode and special characters", () => {
       const prompt = new Prompt(
         {
-          promptId: "test-prompt-id",
+          ...basicPromptData,
           name: "unicode-prompt-日本語",
           prompt: 'Hello "{{name}}"! 你好\n{{greeting}}\t🎉',
           commit: "abc123",
