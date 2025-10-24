@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Trace, Span } from "@/types/traces";
+import { Trace, Span, Thread } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import {
   Dialog,
@@ -13,10 +13,11 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import useTraceUpdateMutation from "@/api/traces/useTraceUpdateMutation";
 import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
+import useThreadBatchUpdateMutation from "@/api/traces/useThreadBatchUpdateMutation";
 import useAppStore from "@/store/AppStore";
 
 type AddTagDialogProps = {
-  rows: Array<Trace | Span>;
+  rows: Array<Trace | Span | Thread>;
   open: boolean | number;
   setOpen: (open: boolean | number) => void;
   projectId: string;
@@ -37,6 +38,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
   const [newTag, setNewTag] = useState<string>("");
   const traceUpdateMutation = useTraceUpdateMutation();
   const spanUpdateMutation = useSpanUpdateMutation();
+  const threadBatchUpdateMutation = useThreadBatchUpdateMutation();
   const MAX_ENTITIES = 10;
 
   const handleClose = () => {
@@ -46,6 +48,39 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
 
   const handleAddTag = () => {
     if (!newTag) return;
+
+    if (type === TRACE_DATA_TYPE.threads) {
+      const threadRows = rows as Thread[];
+      const threadModelIds = threadRows.map((row) => row.id);
+
+      const allTags = new Set<string>();
+      threadRows.forEach((row) => {
+        (row.tags || []).forEach((tag) => allTags.add(tag));
+      });
+      allTags.add(newTag);
+
+      threadBatchUpdateMutation
+        .mutateAsync({
+          threadModelIds,
+          tags: Array.from(allTags),
+        })
+        .then(() => {
+          toast({
+            title: "Success",
+            description: `Tag "${newTag}" added to ${rows.length} selected threads`,
+          });
+
+          if (onSuccess) {
+            onSuccess();
+          }
+
+          handleClose();
+        })
+        .catch(() => {
+          // Error handling is already done by the mutation hook
+        });
+      return;
+    }
 
     const promises: Promise<unknown>[] = [];
 
@@ -114,7 +149,11 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
         <DialogHeader>
           <DialogTitle>
             Add tag to {rows.length}{" "}
-            {type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+            {type === TRACE_DATA_TYPE.traces
+              ? "traces"
+              : type === TRACE_DATA_TYPE.threads
+                ? "threads"
+                : "spans"}
           </DialogTitle>
         </DialogHeader>
         {rows.length > MAX_ENTITIES && (
