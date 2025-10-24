@@ -160,6 +160,10 @@ class BaseTrackDecorator(abc.ABC):
         So these spans can't be parents for other spans. This is usually the case LLM API calls
         with `stream=True`.
         """
+        # Idempotency: skip re-decoration if already tracked
+        if hasattr(func, "opik_tracked") and func.opik_tracked:  # type: ignore
+            return func
+
         if inspect.isgeneratorfunction(func):
             return self._tracked_sync_generator(func=func, track_options=track_options)
 

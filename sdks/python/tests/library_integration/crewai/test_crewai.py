@@ -126,6 +126,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         tags=["litellm"],
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        total_cost=ANY_BUT_NONE,
                                         spans=[],
                                     )
                                 ],
@@ -173,6 +174,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         tags=["litellm"],
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        total_cost=ANY_BUT_NONE,
                                         spans=[],
                                     )
                                 ],

@@ -1,8 +1,9 @@
 from typing import Optional
 
 import crewai
+import litellm
 
-import opik.integrations.litellm
+from opik.integrations.litellm import track_completion
 from . import crewai_decorator, flow_patchers
 
 __IS_TRACKING_ENABLED = False
@@ -24,6 +25,7 @@ def track_crewai(
         project_name: The name of the project to associate with the tracking.
     """
     global __IS_TRACKING_ENABLED
+
     if __IS_TRACKING_ENABLED:
         return
     __IS_TRACKING_ENABLED = True
@@ -39,9 +41,17 @@ def track_crewai(
     crewai.Agent.execute_task = crewai_wrapper(crewai.Agent.execute_task)
     crewai.Task.execute_sync = crewai_wrapper(crewai.Task.execute_sync)
 
-    opik.integrations.litellm.track_litellm()
+    # Patch LiteLLM functions used by CrewAI
+    _patch_litellm_completion(project_name=project_name)
 
     flow_patchers.patch_flow_init(project_name=project_name)
     flow_patchers.patch_flow_kickoff_async(project_name=project_name)
 
     return None
+
+
+def _patch_litellm_completion(project_name: Optional[str] = None) -> None:
+    litellm.completion = track_completion(project_name=project_name)(litellm.completion)
+    litellm.acompletion = track_completion(project_name=project_name)(
+        litellm.acompletion
+    )

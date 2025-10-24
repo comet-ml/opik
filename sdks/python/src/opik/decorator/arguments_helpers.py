@@ -34,6 +34,7 @@ class EndSpanParameters(BaseArguments):
     model: Optional[str] = None
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
+    total_cost: Optional[float] = None
 
 
 @dataclasses.dataclass
