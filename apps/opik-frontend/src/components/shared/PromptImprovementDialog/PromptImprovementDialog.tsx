@@ -23,6 +23,7 @@ import { Description } from "@/components/ui/description";
 import { Separator } from "@/components/ui/separator";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import usePromptImprovement from "@/hooks/usePromptImprovement";
+import useProgressSimulation from "@/hooks/useProgressSimulation";
 import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import { parseContentWithImages, combineContentWithImages } from "@/lib/llm";
@@ -32,6 +33,16 @@ import {
   codeMirrorPromptTheme,
   mustachePlugin,
 } from "@/constants/codeMirrorPlugins";
+import { cn } from "@/lib/utils";
+
+const PROMPT_IMPROVEMENT_PROGRESS_MESSAGES = [
+  "Analyzing your instructions...",
+  "Defining the prompt structure...",
+  "Scoping the role and perspective...",
+  "Applying best practices...",
+  "Synthesizing the full prompt...",
+  "Polishing the output...",
+];
 
 interface PromptImprovementDialogProps {
   open: boolean;
@@ -60,10 +71,17 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditorFocused, setIsEditorFocused] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
 
   const { improvePrompt, generatePrompt } = usePromptImprovement({
     workspaceName,
+  });
+
+  const { message: progressMessage } = useProgressSimulation({
+    messages: PROMPT_IMPROVEMENT_PROGRESS_MESSAGES,
+    isPending: isLoading && !generatedPrompt,
+    intervalMs: 2000,
   });
 
   const { text: originalPromptText, images: originalImages } = useMemo(
@@ -81,6 +99,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
       setGeneratedPrompt("");
       setError(null);
       setIsLoading(false);
+      setIsEditorFocused(false);
     }
   }, [open, originalImages]);
 
@@ -197,7 +216,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
 
   const instructionsPlaceholder = isGenerateMode
     ? "What do you want your AI to do?"
-    : "What do you want to improve (tone, length, etc.)?";
+    : "What do you want to improve (e.g., tone, length)";
 
   const modelDisplayName = useMemo(() => {
     if (!model) return "not configured";
@@ -227,8 +246,8 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
     <div className="flex flex-col gap-2">
       <div className="comet-body-accented">{label}</div>
       <Description>
-        This is your generated prompt, created using the selected model (
-        {modelDisplayName}) and its defined parameters.
+        This is your generated prompt, created with the selected model (
+        {modelDisplayName}) and parameters. It&apos;s editable.
       </Description>
     </div>
   );
@@ -253,17 +272,29 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
           )}
 
           {isLoadingEmpty && (
-            <div className="absolute inset-0 flex items-center justify-center rounded-md border">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-md border">
               <Loader2 className="size-6 animate-spin text-primary" />
+              {progressMessage && (
+                <div className="comet-body-s text-muted-slate">
+                  {progressMessage}
+                </div>
+              )}
             </div>
           )}
 
           {(isStreaming || isEditable) && (
-            <div className="rounded-md border px-3 py-2">
+            <div
+              className={cn(
+                "rounded-md border px-3 py-2 transition-colors min-h-[320px]",
+                isEditorFocused && isEditable && "border-primary",
+              )}
+            >
               <CodeMirror
                 onCreateEditor={(view) => {
                   editorViewRef.current = view;
                 }}
+                onFocus={() => setIsEditorFocused(true)}
+                onBlur={() => setIsEditorFocused(false)}
                 theme={codeMirrorPromptTheme}
                 value={generatedPrompt}
                 onChange={(value) => setGeneratedPrompt(value)}
@@ -326,7 +357,7 @@ const PromptImprovementDialog: React.FC<PromptImprovementDialogProps> = ({
         </div>
         {renderRightSectionTitle("Improved prompt")}
         <div className="flex flex-col gap-2">
-          <div className="comet-code h-[120px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-primary-foreground p-3 text-light-slate">
+          <div className="comet-code h-[120px] overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-light-slate">
             {originalPromptText}
           </div>
           <div className="mt-1 flex flex-col">
