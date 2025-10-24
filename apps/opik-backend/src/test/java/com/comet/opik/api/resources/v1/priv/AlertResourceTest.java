@@ -103,7 +103,6 @@ import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
-import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -136,6 +135,10 @@ class AlertResourceTest {
     private static final String[] TRIGGER_CONFIG_IGNORED_FIELDS = new String[]{
             "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
+
+    public static final String[] PROMPT_TRIGGER_PAYLOAD_IGNORED_FIELDS = {"latestVersion", "template", "metadata",
+            "changeDescription",
+            "type", "createdAt", "lastUpdatedAt", "versionCount"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -1096,7 +1099,7 @@ class AlertResourceTest {
             assertThat(prompt)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withIgnoredFields(PROMPT_TRIGGER_PAYLOAD_IGNORED_FIELDS)
                                     .withComparatorForType(
                                             PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
@@ -1140,7 +1143,7 @@ class AlertResourceTest {
             assertThat(prompts.getFirst())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withIgnoredFields(PROMPT_TRIGGER_PAYLOAD_IGNORED_FIELDS)
                                     .withComparatorForType(
                                             PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)

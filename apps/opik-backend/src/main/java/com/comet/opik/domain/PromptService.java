@@ -126,7 +126,7 @@ class PromptServiceImpl implements PromptService {
                 .userName(userName)
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
-                .payload(createdPrompt)
+                .payload(newPrompt)
                 .build());
 
         return createdPrompt;
