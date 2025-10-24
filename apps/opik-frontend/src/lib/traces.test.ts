@@ -151,10 +151,16 @@ describe("prettifyMessage", () => {
     };
     const result = prettifyMessage(message);
     expect(result).toEqual({
-      message: "AI response 2",
+      message: expect.stringContaining("<details open>"),
       prettified: true,
       renderType: "text",
     });
+    expect(result.message).toContain("User question");
+    expect(result.message).toContain("AI response 1");
+    expect(result.message).toContain("Follow-up question");
+    expect(result.message).toContain("AI response 2");
+    expect(result.message).toContain("<summary><strong>Human</strong></summary>");
+    expect(result.message).toContain("<summary><strong>Ai</strong></summary>");
   });
 
   it("uses default input type when config is not provided", () => {
@@ -285,10 +291,17 @@ describe("prettifyMessage", () => {
     };
     const result = prettifyMessage(message);
     expect(result).toEqual({
-      message: "User message 1\n\n  ----------------- \n\nUser message 2",
+      message: expect.stringContaining("<details open>"),
       prettified: true,
       renderType: "text",
     });
+    expect(result.message).toContain("System message");
+    expect(result.message).toContain("User message 1");
+    expect(result.message).toContain("Assistant message");
+    expect(result.message).toContain("User message 2");
+    expect(result.message).toContain("<summary><strong>System</strong></summary>");
+    expect(result.message).toContain("<summary><strong>User</strong></summary>");
+    expect(result.message).toContain("<summary><strong>Assistant</strong></summary>");
   });
 
   it("handles OpenAI Agents output message with multiple assistant outputs", () => {
@@ -309,11 +322,69 @@ describe("prettifyMessage", () => {
     };
     const result = prettifyMessage(message);
     expect(result).toEqual({
-      message:
-        "Assistant response 1\n\n  ----------------- \n\nAssistant response 2",
+      message: expect.stringContaining("<details open>"),
       prettified: true,
       renderType: "text",
     });
+    expect(result.message).toContain("Assistant response 1");
+    expect(result.message).toContain("User message");
+    expect(result.message).toContain("Assistant response 2");
+    expect(result.message).toContain("<summary><strong>Assistant</strong></summary>");
+    expect(result.message).toContain("<summary><strong>User</strong></summary>");
+  });
+
+  it("maintains backward compatibility for single message arrays", () => {
+    const message = { messages: [{ content: "Single response" }] };
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message: "Single response",
+      prettified: true,
+      renderType: "text",
+    });
+  });
+
+  it("displays single LangGraph message without collapsible sections", () => {
+    const message = {
+      messages: [{ type: "ai", content: "Single AI response" }],
+    };
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message: "Single AI response",
+      prettified: true,
+      renderType: "text",
+    });
+  });
+
+  it("displays tool call messages collapsed by default", () => {
+    const message = {
+      messages: [
+        { role: "user", content: "Use the calculator" },
+        { role: "tool", content: "Calculator result: 42" },
+      ],
+    };
+    const result = prettifyMessage(message);
+    // Check that user message is expanded
+    expect(result.message).toContain("<details open>");
+    expect(result.message).toContain("<summary><strong>User</strong></summary>");
+    // Check that tool message is collapsed (no 'open' attribute)
+    expect(result.message).toMatch(/<details>\s*<summary><strong>Tool<\/strong><\/summary>/);
+    expect(result.message).toContain("Calculator result: 42");
+  });
+
+  it("displays tool_execution_result messages collapsed by default", () => {
+    const message = {
+      messages: [
+        { role: "user", content: "Use the calculator" },
+        { role: "tool_execution_result", content: "Calculation completed" },
+      ],
+    };
+    const result = prettifyMessage(message);
+    // Check that user message is expanded
+    expect(result.message).toContain("<details open>");
+    expect(result.message).toContain("<summary><strong>User</strong></summary>");
+    // Check that tool_execution_result message is collapsed (no 'open' attribute)
+    expect(result.message).toMatch(/<details>\s*<summary><strong>Tool_execution_result<\/strong><\/summary>/);
+    expect(result.message).toContain("Calculation completed");
   });
 
   it("handles Demo project blocks structure with text content", () => {
