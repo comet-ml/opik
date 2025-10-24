@@ -775,6 +775,9 @@ navigation:
           - page: Evaluate your LLM Application
             path: docs/opik-university/3_evaluation/3.4-evaluation-evaluate-llm-application.mdx
             slug: evaluate-llm-app
+          - page: No-code LLM Evaluation Workflow
+            path: docs/opik-university/3_evaluation/3.5-evaluation-ui-workflow.mdx
+            slug: evaluation-ui-workflow
       - section: Prompt Engineering
         slug: /prompt-engineering
         contents:
