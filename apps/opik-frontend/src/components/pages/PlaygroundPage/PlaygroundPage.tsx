@@ -10,8 +10,6 @@ import ResizablePromptContainer from "@/components/pages/PlaygroundPage/Resizabl
 import SetupProviderDialog from "@/components/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 import { useTriggerProviderValidation } from "@/store/PlaygroundStore";
 
-const LEGACY_PLAYGROUND_PROMPTS_KEY = "playground-prompts-state";
-
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
@@ -50,12 +48,6 @@ const PlaygroundPage = () => {
   const handleProviderAdded = useCallback(() => {
     triggerProviderValidation();
   }, [triggerProviderValidation]);
-
-  // @todo: remove later
-  // this field is not used anymore
-  useEffect(() => {
-    localStorage.removeItem(LEGACY_PLAYGROUND_PROMPTS_KEY);
-  }, []);
 
   if (isPendingProviderKeys) {
     return <Loader />;
