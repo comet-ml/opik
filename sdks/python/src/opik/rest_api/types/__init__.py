@@ -273,6 +273,9 @@ from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteTy
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
+from .manual_evaluation_request import ManualEvaluationRequest
+from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
+from .manual_evaluation_response import ManualEvaluationResponse
 from .message import Message
 from .multipart_upload_part import MultipartUploadPart
 from .numerical_feedback_definition import NumericalFeedbackDefinition
@@ -663,6 +666,9 @@ __all__ = [
     "LogItem",
     "LogItemLevel",
     "LogPage",
+    "ManualEvaluationRequest",
+    "ManualEvaluationRequestEntityType",
+    "ManualEvaluationResponse",
     "Message",
     "MultipartUploadPart",
     "NumericalFeedbackDefinition",
