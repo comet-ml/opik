@@ -278,7 +278,6 @@ const PlaygroundPrompt = ({
         hint={hintMessage}
         hidePromptActions={false}
         improvePromptConfig={{
-          enabled: true,
           model,
           provider,
           configs,

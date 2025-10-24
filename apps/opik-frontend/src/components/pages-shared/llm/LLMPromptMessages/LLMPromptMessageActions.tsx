@@ -20,14 +20,13 @@ import usePromptById from "@/api/prompts/usePromptById";
 import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
-import PromptImprovementWizard from "@/components/shared/PromptImprovementWizard/PromptImprovementWizard";
+import PromptImprovementDialog from "@/components/shared/PromptImprovementDialog/PromptImprovementDialog";
 import { LLMPromptConfigsType, PROVIDER_TYPE } from "@/types/providers";
 import { useToast } from "@/components/ui/use-toast";
 
 type ConfirmType = "load" | "reset" | "save";
 
 export interface ImprovePromptConfig {
-  enabled: boolean;
   model: string;
   provider: PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
@@ -74,8 +73,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   );
 
   const hasContent = Boolean(content?.trim());
-  const showGenerateButton = improvePromptConfig?.enabled && !hasContent;
-  const showImproveButton = improvePromptConfig?.enabled && hasContent;
+  const showGenerateButton = improvePromptConfig && !hasContent;
+  const showImproveButton = improvePromptConfig && hasContent;
   const hasModel = Boolean(improvePromptConfig?.model?.trim());
   const isPromptButtonDisabled = !hasModel;
   const promptButtonTooltip = !hasModel
@@ -92,7 +91,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   useEffect(() => {
     if (
       message.autoImprove &&
-      improvePromptConfig?.enabled &&
+      improvePromptConfig &&
       promptId && // Only trigger for message loaded from prompt library
       hasContent // Only trigger if there's content to improve
     ) {
@@ -118,7 +117,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     }
   }, [
     message.autoImprove,
-    improvePromptConfig?.enabled,
+    improvePromptConfig,
     promptId,
     hasContent,
     hasModel,
@@ -327,7 +326,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         />
       </div>
       {improvePromptConfig && (
-        <PromptImprovementWizard
+        <PromptImprovementDialog
           open={showImproveWizard}
           setOpen={setShowImproveWizard}
           id={message.id}
