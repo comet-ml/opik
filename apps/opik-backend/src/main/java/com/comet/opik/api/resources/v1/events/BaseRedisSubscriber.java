@@ -11,6 +11,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
+import org.redisson.api.AutoClaimResult;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.StreamMessageId;
@@ -84,7 +85,6 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongCounter unexpectedErrors;
     private final LongCounter pendingMessagesClaimed;
     private final LongHistogram claimProcessingTime;
-    private final LongCounter deadLetterQueueMessages;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription;
@@ -164,10 +164,6 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .setDescription("Time taken for claiming pending messages")
                 .setUnit("ms")
                 .ofLongs()
-                .build();
-        this.deadLetterQueueMessages = meter
-                .counterBuilder("%s_%s_dead_letter_queue_messages".formatted(metricNamespace, metricsBaseName))
-                .setDescription("Number of messages sent to dead letter queue after max retries")
                 .build();
     }
 
@@ -311,7 +307,6 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .bufferTimeout(config.getConsumerBatchSize(), config.getPoolingInterval().toJavaDuration().dividedBy(3))
                 .filter(CollectionUtils::isNotEmpty)
                 .flatMap(this::postProcessSuccessMessages)
-                .flatMap(this::postProcessDeadLetterMessages)
                 .flatMap(this::postProcessFailureMessages)
                 // Unexpected errors handling: interval is dropped, but processing continues
                 .onErrorContinue((throwable, object) -> {
@@ -378,7 +373,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 config.getConsumerBatchSize())
                 .subscribeOn(consumerScheduler)
                 .filter(Objects::nonNull)
-                .map(autoClaimResult -> autoClaimResult.getMessages())
+                .map(AutoClaimResult::getMessages)
                 .doOnSuccess(claimedMessages -> {
                     if (!claimedMessages.isEmpty()) {
                         pendingMessagesClaimed.add(claimedMessages.size());
@@ -431,18 +426,6 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .thenReturn(processingResults);
     }
 
-    private Mono<List<ProcessingResult>> postProcessDeadLetterMessages(List<ProcessingResult> processingResults) {
-        // Dead letter messages have already been ack'd and removed in handleDeadLetter
-        // Just log them here for visibility
-        var deadLetterMessages = processingResults.stream()
-                .filter(processingResult -> processingResult.status() == MessageStatus.DEAD_LETTER)
-                .toList();
-        if (!deadLetterMessages.isEmpty()) {
-            log.warn("Processed '{}' dead letter messages", deadLetterMessages.size());
-        }
-        return Mono.just(processingResults);
-    }
-
     private Mono<List<ProcessingResult>> postProcessFailureMessages(List<ProcessingResult> processingResults) {
         var failures = processingResults.stream()
                 .filter(processingResult -> processingResult.status() == MessageStatus.FAILURE)
@@ -490,32 +473,6 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      */
     protected abstract Mono<Void> processEvent(M message);
 
-    private Mono<ProcessingResult> handleDeadLetter(StreamMessageId messageId, Map<String, M> messageData) {
-        deadLetterQueueMessages.add(1);
-
-        // Log full message details for debugging
-        log.error("Message '{}' moved to DLQ after '{}' failed attempts: {}",
-                messageId, config.getMaxRetryAttempts(), messageData);
-
-        // Ack and remove from stream
-        return stream.ack(config.getConsumerGroupName(), messageId)
-                .subscribeOn(consumerScheduler)
-                .then(stream.remove(messageId)
-                        .subscribeOn(consumerScheduler))
-                .thenReturn(ProcessingResult.builder()
-                        .messageId(messageId)
-                        .status(MessageStatus.DEAD_LETTER)
-                        .build())
-                .onErrorResume(throwable -> {
-                    log.error("Error handling dead letter for message '{}'", messageId, throwable);
-                    return Mono.just(ProcessingResult.builder()
-                            .messageId(messageId)
-                            .status(MessageStatus.DEAD_LETTER)
-                            .error(throwable)
-                            .build());
-                });
-    }
-
     /**
      * Redis Streams messageId are in the format <millisecondsTime>-<sequenceNumber>
      *
@@ -539,6 +496,5 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private enum MessageStatus {
         SUCCESS,
         FAILURE,
-        DEAD_LETTER
     }
 }
