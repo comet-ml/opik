@@ -323,12 +323,20 @@ onlineScoring:
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
   consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals (global default)
+  claimIntervalRatio: ${REDIS_SCORING_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming (global default)
+  pendingMessageDuration: ${REDIS_SCORING_PENDING_MESSAGE_DURATION:-10m}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
   ## poolingInterval: (optional, but highly recommended) per stream pooling interval, overrides global value
   ## longPollingDuration: (optional, but highly recommended) per stream long polling duration, overrides global value
   ## consumerBatchSize: (optional, but highly recommended) per stream batch size, overrides global value
+  ## claimIntervalRatio: (optional) per stream claim interval ratio, overrides global value
+  ## pendingMessageDuration: (optional) per stream pending message duration, overrides global value
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
@@ -538,6 +546,12 @@ traceThreadConfig:
   # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: ${OPIK_CLOSE_TRACE_THREAD_MAX_ITEM_PER_RUN:-2000}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${OPIK_REDIS_TRACE_THREAD_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${OPIK_REDIS_TRACE_THREAD_PENDING_MESSAGE_DURATION:-10m}
 
 # Job timeout configuration
 jobTimeout:
@@ -604,6 +618,12 @@ webhook:
   # Default: 5s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: ${WEBHOOK_CONNECTION_TIMEOUT:-5s}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${WEBHOOK_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${WEBHOOK_PENDING_MESSAGE_DURATION:-10m}
   debouncing:
     # Default: true
     # Description: Whether or not webhook event debouncing is enabled
