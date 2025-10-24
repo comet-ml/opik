@@ -34,15 +34,12 @@ public class OnlineScoringConfig {
     @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
     private Duration longPollingDuration;
 
-    @Valid @JsonProperty
-    @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration pendingMessageTimeout;
+    @JsonProperty
+    @Min(10) private int claimIntervalRatio;
 
     @Valid @JsonProperty
-    @Min(1) private Integer claimIntervalTicks;
-
-    @Valid @JsonProperty
-    @Min(1) private Integer maxRetryAttempts;
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration pendingMessageDuration;
 
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
@@ -70,14 +67,11 @@ public class OnlineScoringConfig {
         @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
         private Duration longPollingDuration;
 
+        @JsonProperty
+        @Min(10) private Integer claimIntervalRatio;
+
         @Valid @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-        private Duration pendingMessageTimeout;
-
-        @Valid @JsonProperty
-        @Min(1) private Integer claimIntervalTicks;
-
-        @Valid @JsonProperty
-        @Min(1) private Integer maxRetryAttempts;
+        private Duration pendingMessageDuration;
     }
 }

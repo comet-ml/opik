@@ -32,7 +32,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This is the Base Redis Subscriber, for all particular implementations to extend. It listens to a Redis stream.
@@ -64,6 +64,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      */
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final AtomicLong readCount = new AtomicLong();
+
     private final StreamConfiguration config;
     private final RedissonReactiveClient redisson;
 
@@ -77,21 +79,21 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private final LongHistogram messageQueueDelay;
     private final LongCounter messageProcessingErrors;
     private final LongCounter backpressureDropCounter;
+    private final LongCounter claimErrors;
+    private final LongHistogram claimTime;
+    private final DoubleGauge claimSize;
     private final LongCounter readErrors;
     private final LongHistogram readTime;
     private final DoubleGauge readSize;
     private final LongCounter ackAndRemoveErrors;
     private final LongHistogram ackAndRemoveProcessingTime;
     private final LongCounter unexpectedErrors;
-    private final LongCounter pendingMessagesClaimed;
-    private final LongHistogram claimProcessingTime;
 
     private volatile RStreamReactive<String, M> stream;
     private volatile Disposable streamSubscription;
     private volatile Scheduler timerScheduler;
     private volatile Scheduler consumerScheduler;
     private volatile Scheduler workersScheduler;
-    private final AtomicInteger pollingTickCounter = new AtomicInteger(0);
 
     protected BaseRedisSubscriber(
             @NonNull StreamConfiguration config,
@@ -127,6 +129,20 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .counterBuilder("%s_%s_backpressure_drops_total".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Total number of events dropped due to backpressure")
                 .build();
+        this.claimErrors = meter
+                .counterBuilder("%s_%s_claim_errors".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Errors when auto claiming from Redis stream")
+                .build();
+        this.claimTime = meter
+                .histogramBuilder("%s_%s_claim_time".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Time taken for Redis auto claim call")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+        this.claimSize = meter
+                .gaugeBuilder("%s_%s_claim_size".formatted(metricNamespace, metricsBaseName))
+                .setDescription("Number of pending messages claimed by Redis auto claim call")
+                .build();
         this.readErrors = meter
                 .counterBuilder("%s_%s_read_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Errors when reading from Redis stream")
@@ -139,7 +155,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .build();
         this.readSize = meter
                 .gaugeBuilder("%s_%s_read_size".formatted(metricNamespace, metricsBaseName))
-                .setDescription("Number of messages returned for Redis group read calls")
+                .setDescription("Number of messages returned by Redis group read calls")
                 .build();
         this.ackAndRemoveErrors = meter
                 .counterBuilder("%s_%s_ack_and_remove_errors".formatted(metricNamespace, metricsBaseName))
@@ -154,16 +170,6 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.unexpectedErrors = meter
                 .counterBuilder("%s_%s_unexpected_errors".formatted(metricNamespace, metricsBaseName))
                 .setDescription("Unexpected errors caught")
-                .build();
-        this.pendingMessagesClaimed = meter
-                .counterBuilder("%s_%s_pending_messages_claimed".formatted(metricNamespace, metricsBaseName))
-                .setDescription("Number of pending messages claimed from Redis stream")
-                .build();
-        this.claimProcessingTime = meter
-                .histogramBuilder("%s_%s_claim_processing_time".formatted(metricNamespace, metricsBaseName))
-                .setDescription("Time taken for claiming pending messages")
-                .setUnit("ms")
-                .ofLongs()
                 .build();
     }
 
@@ -291,10 +297,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                             "Backpressure drop detected: Unable to keep up with polling intervals. Polling interval tick dropped (sequence number: '{}').",
                             i);
                 })
-                // ConcatMap ensures one readGroup/claim at a time
+                // ConcatMap ensures one readGroup/autoClaim at a time
                 .concatMap(i -> {
-                    int currentTick = pollingTickCounter.incrementAndGet();
-                    if (currentTick % config.getClaimIntervalTicks() == 0) {
+                    // Using our own counter to track real reads as ticks (i) might be dropped on backpressure
+                    if (readCount.incrementAndGet() % config.getClaimIntervalRatio() == 0) {
                         return claimPendingMessages();
                     } else {
                         return readMessages();
@@ -319,6 +325,30 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .subscribe();
     }
 
+    private Mono<Map<StreamMessageId, Map<String, M>>> claimPendingMessages() {
+        var startMillis = System.currentTimeMillis();
+        return stream.autoClaim(config.getConsumerGroupName(),
+                consumerId,
+                config.getPendingMessageDuration().toJavaDuration().toMillis(),
+                TimeUnit.MILLISECONDS,
+                StreamMessageId.MIN, // Start from the beginning of pending list
+                config.getConsumerBatchSize())
+                .subscribeOn(consumerScheduler)
+                .filter(Objects::nonNull)
+                .map(AutoClaimResult::getMessages)
+                .filter(Objects::nonNull)
+                .doOnSuccess(claimedMessages -> {
+                    claimSize.set(claimedMessages.size());
+                    log.debug("Successfully auto claimed from stream, size '{}'", claimedMessages.size());
+                })
+                .onErrorResume(throwable -> {
+                    claimErrors.add(1);
+                    log.error("Error claiming pending messages", throwable);
+                    return Mono.just(Map.of());
+                })
+                .doFinally(signalType -> claimTime.record(System.currentTimeMillis() - startMillis));
+    }
+
     private Mono<Map<StreamMessageId, Map<String, M>>> readMessages() {
         var startMillis = System.currentTimeMillis();
         var streamReadGroupArgs = StreamReadGroupArgs.neverDelivered()
@@ -333,59 +363,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 })
                 .onErrorResume(throwable -> {
                     readErrors.add(1);
-                    log.error("Error reading from Redis stream, size '{}'", config.getConsumerBatchSize(), throwable);
+                    log.error("Error reading from Redis stream", throwable);
                     return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> readTime.record(System.currentTimeMillis() - startMillis));
-    }
-
-    /**
-     * Claims and reads pending messages from the Redis stream.
-     * <p>
-     * This method is called periodically (every N polling intervals as configured by
-     * {@link StreamConfiguration#getClaimIntervalTicks()}) to reprocess messages that were
-     * delivered but not acknowledged, typically due to consumer crashes or failures.
-     * <p>
-     * Uses {@code XAUTOCLAIM} command to automatically claim pending messages from ANY consumer
-     * in the consumer group that have been idle longer than the configured timeout. This ensures
-     * that messages from crashed consumers are reclaimed and reprocessed.
-     * <p>
-     * <b>Future enhancements:</b>
-     * <ul>
-     *   <li>Implement delivery count tracking using Redis pending entries</li>
-     *   <li>Add dead letter queue (DLQ) handling for messages exceeding max retry attempts</li>
-     *   <li>Track and use the next start ID from AutoClaimResult for efficient scanning</li>
-     * </ul>
-     *
-     * @return a Mono emitting a map of claimed messages
-     */
-    private Mono<Map<StreamMessageId, Map<String, M>>> claimPendingMessages() {
-        var startMillis = System.currentTimeMillis();
-        var minIdleTime = config.getPendingMessageTimeout().toJavaDuration();
-
-        // Use XAUTOCLAIM to claim orphaned pending messages from any consumer in the group
-        return stream.autoClaim(
-                config.getConsumerGroupName(),
-                consumerId,
-                minIdleTime.toMillis(),
-                TimeUnit.MILLISECONDS,
-                StreamMessageId.MIN, // Start from the beginning of pending list
-                config.getConsumerBatchSize())
-                .subscribeOn(consumerScheduler)
-                .filter(Objects::nonNull)
-                .map(AutoClaimResult::getMessages)
-                .doOnSuccess(claimedMessages -> {
-                    if (!claimedMessages.isEmpty()) {
-                        pendingMessagesClaimed.add(claimedMessages.size());
-                        log.info("Claimed '{}' orphaned pending messages older than '{}'",
-                                claimedMessages.size(), minIdleTime);
-                    }
-                })
-                .onErrorResume(throwable -> {
-                    log.error("Error claiming pending messages", throwable);
-                    return Mono.just(Map.of());
-                })
-                .doFinally(signalType -> claimProcessingTime.record(System.currentTimeMillis() - startMillis));
     }
 
     private Mono<ProcessingResult> processMessage(Map.Entry<StreamMessageId, Map<String, M>> entry) {
