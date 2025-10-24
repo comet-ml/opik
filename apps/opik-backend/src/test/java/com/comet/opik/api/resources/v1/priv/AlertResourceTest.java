@@ -14,7 +14,6 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
@@ -2098,7 +2097,8 @@ class AlertResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .visibilityMode(null)
-                            .build()).toList();
+                            .build())
+                    .toList();
 
             traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
 
