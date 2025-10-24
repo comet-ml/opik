@@ -409,7 +409,8 @@ webhook:
   poolingInterval: 1s
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
-  longPollingDuration: 5s
+  # Note: In tests, set this <= poolingInterval to avoid backpressure drops
+  longPollingDuration: 500ms
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: 3
