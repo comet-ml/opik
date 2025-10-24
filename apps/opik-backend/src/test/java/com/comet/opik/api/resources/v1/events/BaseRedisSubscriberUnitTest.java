@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.AutoClaimResult;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.StreamMessageId;
@@ -67,6 +68,192 @@ class BaseRedisSubscriberUnitTest {
     @AfterEach
     void tearDown() {
         subscribers.forEach(BaseRedisSubscriber::stop);
+    }
+
+    @Nested
+    class PendingMessageClaimerTests {
+
+        @BeforeEach
+        void setUpStreamListener() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+        }
+
+        @Test
+        void shouldHandleClaimErrors() {
+            var claimAttempts = new AtomicInteger(0);
+            var readAttempts = new AtomicInteger(0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+
+            // Mock autoClaim to fail, readGroup to succeed
+            when(stream.autoClaim(eq(CONFIG.getConsumerGroupName()), anyString(), any(Long.class),
+                    any(TimeUnit.class), any(StreamMessageId.class), any(Integer.class)))
+                    .thenAnswer(invocation -> {
+                        claimAttempts.incrementAndGet();
+                        return Mono.error(new RuntimeException("Redis autoClaim error"));
+                    });
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        readAttempts.incrementAndGet();
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                        podamFactory.manufacturePojo(String.class))));
+                    });
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Should continue processing after claim errors
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        // Verify claim attempts occurred
+                        assertThat(claimAttempts.get()).isGreaterThan(0);
+                        // Verify read attempts continued after claim failures
+                        assertThat(readAttempts.get()).isGreaterThan(claimAttempts.get());
+                        // Verify successful message processing from reads
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
+        }
+
+        @Test
+        void shouldHandleEmptyClaimResults() {
+            var claimAttempts = new AtomicInteger(0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+
+            // Mock autoClaim to return empty results, readGroup to succeed
+            when(stream.autoClaim(eq(CONFIG.getConsumerGroupName()), anyString(), any(Long.class),
+                    any(TimeUnit.class), any(StreamMessageId.class), any(Integer.class)))
+                    .thenAnswer(invocation -> {
+                        claimAttempts.incrementAndGet();
+                        @SuppressWarnings("unchecked")
+                        AutoClaimResult<String, String> mockResult = org.mockito.Mockito.mock(AutoClaimResult.class);
+                        when(mockResult.getMessages()).thenReturn(Map.of());
+                        return Mono.just(mockResult);
+                    });
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Should continue processing normally with empty claim results
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(claimAttempts.get()).isGreaterThan(0);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
+        }
+
+        @Test
+        void shouldHandleNullClaimResult() {
+            var claimAttempts = new AtomicInteger(0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+
+            // Mock autoClaim to return null
+            when(stream.autoClaim(eq(CONFIG.getConsumerGroupName()), anyString(), any(Long.class),
+                    any(TimeUnit.class), any(StreamMessageId.class), any(Integer.class)))
+                    .thenAnswer(invocation -> {
+                        claimAttempts.incrementAndGet();
+                        return Mono.just(null);
+                    });
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Should handle null claim results gracefully
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(claimAttempts.get()).isGreaterThan(0);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
+        }
+
+        @Test
+        void shouldProcessClaimedMessages() {
+            var claimAttempts = new AtomicInteger(0);
+            var processedMessages = new CopyOnWriteArrayList<String>();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient,
+                    message -> {
+                        processedMessages.add(message);
+                        return Mono.empty();
+                    }));
+
+            // Mock autoClaim to return messages
+            var claimedMessage = podamFactory.manufacturePojo(String.class);
+            when(stream.autoClaim(eq(CONFIG.getConsumerGroupName()), anyString(), any(Long.class),
+                    any(TimeUnit.class), any(StreamMessageId.class), any(Integer.class)))
+                    .thenAnswer(invocation -> {
+                        claimAttempts.incrementAndGet();
+                        @SuppressWarnings("unchecked")
+                        AutoClaimResult<String, String> mockResult = org.mockito.Mockito.mock(AutoClaimResult.class);
+                        when(mockResult.getMessages()).thenReturn(
+                                Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                                        Map.of(TestStreamConfiguration.PAYLOAD_FIELD, claimedMessage)));
+                        return Mono.just(mockResult);
+                    });
+            // Mock readGroup to return empty on subsequent calls
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenReturn(Mono.just(Map.of()));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Verify claimed messages are processed
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(claimAttempts.get()).isGreaterThan(0);
+                        assertThat(processedMessages).contains(claimedMessage);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(0);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
+        }
+
+        @Test
+        void shouldInterleaveClaimAndReadOperations() {
+            var claimAttempts = new AtomicInteger(0);
+            var readAttempts = new AtomicInteger(0);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+
+            // Mock autoClaim to return empty
+            when(stream.autoClaim(eq(CONFIG.getConsumerGroupName()), anyString(), any(Long.class),
+                    any(TimeUnit.class), any(StreamMessageId.class), any(Integer.class)))
+                    .thenAnswer(invocation -> {
+                        claimAttempts.incrementAndGet();
+                        @SuppressWarnings("unchecked")
+                        AutoClaimResult<String, String> mockResult = org.mockito.Mockito.mock(AutoClaimResult.class);
+                        when(mockResult.getMessages()).thenReturn(Map.of());
+                        return Mono.just(mockResult);
+                    });
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        readAttempts.incrementAndGet();
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                        podamFactory.manufacturePojo(String.class))));
+                    });
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Verify both claim and read operations occur with proper ratio
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(claimAttempts.get()).isGreaterThan(0);
+                        assertThat(readAttempts.get()).isGreaterThan(claimAttempts.get());
+                        // Verify claim interval ratio is respected (approximately)
+                        var expectedRatio = CONFIG.getClaimIntervalRatio();
+                        var actualRatio = (claimAttempts.get() + readAttempts.get()) / claimAttempts.get();
+                        assertThat(actualRatio).isGreaterThanOrEqualTo(expectedRatio - 1);
+                    });
+        }
     }
 
     @Nested
