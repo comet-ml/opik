@@ -224,7 +224,9 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
         <div className="space-y-1">
           <div className="text-xs font-medium opacity-75">Breakdown:</div>
           <pre className="whitespace-pre font-mono text-xs opacity-75">
-            {JSON.stringify(node.data.usage, null, 2)}
+            {Object.entries(node.data.usage)
+              .map(([key, value]) => `"${key}": ${value}`)
+              .join(",\n")}
           </pre>
         </div>
       </div>
