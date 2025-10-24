@@ -38,7 +38,7 @@ public class TestStreamConfiguration implements StreamConfiguration {
     private int claimIntervalRatio = 10;
 
     @Builder.Default
-    private Duration pendingMessageDuration = Duration.minutes(10);
+    private Duration pendingMessageDuration = Duration.minutes(2);
 
     @Builder.Default
     private Codec codec = OnlineScoringCodecs.JAVA.getCodec();
