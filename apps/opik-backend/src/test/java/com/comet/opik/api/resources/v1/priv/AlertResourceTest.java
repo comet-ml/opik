@@ -14,6 +14,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookTestResult;
 import com.comet.opik.api.error.ErrorMessage;
@@ -101,6 +102,8 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.traces.TraceAssertions.IGNORED_FIELDS_TRACES;
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
+import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
+import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.priv.PromptResourceTest.PROMPT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
@@ -1613,6 +1616,8 @@ class AlertResourceTest {
         private static final String WEBHOOK_PATH = "/webhook";
         private String webhookUrl;
         private static final String ALERT_NAME = "Test Webhook Alert";
+        private static final String BASE_URL = "http://localhost:5555";
+        private static final String TEST_ROUTING_KEY = "routingKeyForTest";
 
         @BeforeAll
         void setUpAll() {
@@ -1658,6 +1663,9 @@ class AlertResourceTest {
                     .alertType(alertType)
                     .triggers(List.of(alertTrigger))
                     .enabled(true)
+                    .metadata(Map.of(
+                            BASE_URL_METADATA_KEY, BASE_URL,
+                            ROUTING_KEY_METADATA_KEY, TEST_ROUTING_KEY))
                     .build();
         }
 
@@ -1693,9 +1701,9 @@ class AlertResourceTest {
 
         private void verifySlackBlockStructure(SlackWebhookPayload slackPayload, int expectedEventCount,
                 String expectedEventType, List<String> expectedDetailsContains) {
-            // Verify blocks structure (3-4 blocks: header, summary, details, optional fallback)
+            // Verify blocks structure (3 blocks: header, summary, details)
             assertThat(slackPayload.blocks()).isNotNull();
-            assertThat(slackPayload.blocks()).hasSizeBetween(3, 4);
+            assertThat(slackPayload.blocks()).hasSize(3);
 
             // Verify header block
             SlackBlock headerBlock = slackPayload.blocks().get(0);
@@ -1725,24 +1733,34 @@ class AlertResourceTest {
             for (String expectedString : expectedDetailsContains) {
                 assertThat(details).contains(expectedString);
             }
+        }
 
-            // Verify optional fallback block if present (when text was truncated)
-            if (slackPayload.blocks().size() == 4) {
-                SlackBlock fallbackBlock = slackPayload.blocks().get(3);
-                assertThat(fallbackBlock.type()).isEqualTo("section");
-                assertThat(fallbackBlock.text()).isNotNull();
-                assertThat(fallbackBlock.text().type()).isEqualTo("mrkdwn");
-                String fallbackText = fallbackBlock.text().text();
-                assertThat(fallbackText).isNotNull();
-                assertThat(fallbackText).contains("Overall");
-                assertThat(fallbackText).contains("you could check them here");
-            }
+        private void verifySlackBlockStructureWithFallback(SlackWebhookPayload slackPayload, String fallbackText) {
+            // Verify last 4th block, structure (4 blocks: header, summary, details, fallback)
+            assertThat(slackPayload.blocks()).isNotNull();
+            assertThat(slackPayload.blocks()).hasSize(4);
+
+            // Verify details block (truncated mainText)
+            SlackBlock detailsBlock = slackPayload.blocks().get(2);
+            assertThat(detailsBlock.type()).isEqualTo("section");
+            assertThat(detailsBlock.text()).isNotNull();
+            assertThat(detailsBlock.text().type()).isEqualTo("mrkdwn");
+            String details = detailsBlock.text().text();
+            assertThat(details).isNotNull();
+            assertThat(details.length()).isLessThanOrEqualTo(3000);
+
+            // Verify fallback block (when text was truncated)
+            SlackBlock fallbackBlock = slackPayload.blocks().get(3);
+            assertThat(fallbackBlock.type()).isEqualTo("section");
+            assertThat(fallbackBlock.text()).isNotNull();
+            assertThat(fallbackBlock.text().type()).isEqualTo("mrkdwn");
+            assertThat(fallbackBlock.text().text()).isEqualTo(fallbackText);
         }
 
         private void verifyPagerDutyPayloadStructure(PagerDutyWebhookPayload pagerDutyPayload) {
             // Verify payload structure
             assertThat(pagerDutyPayload).isNotNull();
-            assertThat(pagerDutyPayload.routingKey()).isNotNull();
+            assertThat(pagerDutyPayload.routingKey()).isEqualTo(TEST_ROUTING_KEY);
             assertThat(pagerDutyPayload.eventAction()).isEqualTo("trigger");
             assertThat(pagerDutyPayload.dedupKey()).isNotNull();
 
@@ -1779,7 +1797,7 @@ class AlertResourceTest {
             var promptId = promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
 
             // Construct expected URL
-            String expectedUrl = String.format("http://localhost:5173/%s/prompts/%s", mock.getRight(), promptId);
+            String expectedUrl = String.format(BASE_URL + "/%s/prompts/%s", mock.getRight(), promptId);
 
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Prompt Created",
@@ -1844,7 +1862,7 @@ class AlertResourceTest {
                     mock.getRight());
 
             // Construct expected URL
-            String expectedUrl = String.format("http://localhost:5173/%s/prompts/%s?activeVersionId=%s",
+            String expectedUrl = String.format(BASE_URL + "/%s/prompts/%s?activeVersionId=%s",
                     mock.getRight(), expectedPromptVersion.promptId(), expectedPromptVersion.id());
 
             // Verify webhook payload based on alert type
@@ -1887,7 +1905,7 @@ class AlertResourceTest {
             var expectedDetails = new ArrayList<String>();
             expectedDetails.add("*Traces with Errors:*\n");
             tracesWithErrors.forEach(trace -> {
-                String expectedUrl = String.format("http://localhost:5173/%s/projects/%s/traces?trace=%s",
+                String expectedUrl = String.format(BASE_URL + "/%s/projects/%s/traces?trace=%s",
                         mock.getRight(), projectId, trace.id());
                 expectedDetails.add(expectedUrl);
             });
@@ -1926,7 +1944,7 @@ class AlertResourceTest {
 
             // Construct expected URL
             String expectedUrl = String.format(
-                    "http://localhost:5173/%s/projects/%s/traces?trace=%s&traceTab=feedback_scores",
+                    BASE_URL + "/%s/projects/%s/traces?trace=%s&traceTab=feedback_scores",
                     mock.getRight(), projectId, trace.id());
 
             // Verify webhook payload based on alert type
@@ -1997,7 +2015,7 @@ class AlertResourceTest {
 
             // Construct expected URL
             String expectedUrl = String.format(
-                    "http://localhost:5173/%s/projects/%s/traces?type=threads&thread=%s&threadTab=feedback_scores",
+                    BASE_URL + "/%s/projects/%s/traces?type=threads&thread=%s&threadTab=feedback_scores",
                     mock.getRight(), projectId, thread.id());
 
             // Verify webhook payload based on alert type
@@ -2048,12 +2066,279 @@ class AlertResourceTest {
             guardrailsResourceClient.addBatch(guardrails, mock.getLeft(), mock.getRight());
 
             // Construct expected URL
-            String expectedUrl = String.format("http://localhost:5173/%s/projects/%s/traces?trace=%s",
+            String expectedUrl = String.format(BASE_URL + "/%s/projects/%s/traces?trace=%s",
                     mock.getRight(), projectId, trace.id());
 
             // Verify webhook payload based on alert type
             verifyPayload(alertType, 1, "Guardrail Triggered",
                     List.of("*Traces with Guardrails Triggered:*\n", expectedUrl));
+        }
+
+        @Test
+        @DisplayName("Success: should send webhook with fallback block when trace errors exceed Slack text limit")
+        void testTraceErrorsEventWithFallback() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with webhook for Slack only
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_ERRORS)
+                    .build(), AlertType.SLACK);
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create many traces with errors to exceed Slack's 3000 character limit
+            // Each trace URL is ~150 characters, so we need ~20 traces to exceed the limit
+            List<Trace> tracesWithErrors = IntStream.range(0, 25)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .visibilityMode(null)
+                            .build()).toList();
+
+            traceResourceClient.batchCreateTraces(tracesWithErrors, mock.getLeft(), mock.getRight());
+
+            // Verify webhook was called
+            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
+
+            String url = BASE_URL + "/" + mock.getRight() + "/projects";
+            String fallbackText = String.format("Overall %d Traces with errors created, you could check them here: %s",
+                    tracesWithErrors.size(), url);
+
+            // Verify Slack payload has fallback block due to text truncation
+            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
+        }
+
+        @Test
+        @DisplayName("Success: should send webhook with fallback block when guardrails exceed Slack text limit")
+        void testGuardrailsTriggeredEventWithFallback() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with webhook for Slack only
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                    .build(), AlertType.SLACK);
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create guardrails for each trace
+            List<Guardrail> guardrails = IntStream.range(0, 25)
+                    .mapToObj(i -> {
+                        Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                                .projectName(projectName)
+                                .usage(null)
+                                .visibilityMode(null)
+                                .build();
+                        traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+                        return factory.manufacturePojo(Guardrail.class).toBuilder()
+                                .entityId(trace.id())
+                                .secondaryId(UUID.randomUUID())
+                                .projectName(projectName)
+                                .projectId(projectId)
+                                .result(GuardrailResult.FAILED)
+                                .build();
+                    }).toList();
+
+            guardrailsResourceClient.addBatch(guardrails, mock.getLeft(), mock.getRight());
+
+            // Verify webhook was called
+            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
+
+            String url = BASE_URL + "/" + mock.getRight() + "/projects";
+            String fallbackText = String.format(
+                    "Overall %d Traces with Guardrails Triggered created, you could check them here: %s",
+                    guardrails.size(), url);
+
+            // Verify Slack payload has fallback block due to text truncation
+            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
+        }
+
+        @Test
+        @DisplayName("Success: should send webhook with fallback block when prompts created exceed Slack text limit")
+        void testPromptCreatedEventWithFallback() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with webhook for Slack only
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_CREATED)
+                    .build(), AlertType.SLACK);
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create many prompts to exceed Slack's 3000 character limit
+            // Each prompt URL is ~120 characters, so we need ~25 prompts to exceed the limit
+            int promptsCnt = 30;
+            for (int i = 0; i < promptsCnt; i++) {
+                var prompt = factory.manufacturePojo(Prompt.class)
+                        .toBuilder()
+                        .versionCount(0L)
+                        .createdBy(USER)
+                        .lastUpdatedBy(USER)
+                        .build();
+                promptResourceClient.createPrompt(prompt, mock.getLeft(), mock.getRight());
+            }
+
+            // Verify webhook was called
+            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
+
+            // Verify Slack payload has fallback block due to text truncation
+            String url = BASE_URL + "/" + mock.getRight() + "/prompts";
+            String fallbackText = String.format("Overall %d Prompts created, you could check them here: %s",
+                    promptsCnt, url);
+            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
+        }
+
+        @Test
+        @DisplayName("Success: should send webhook with fallback block when prompt commits exceed Slack text limit")
+        void testPromptCommittedEventWithFallback() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create alert with webhook for Slack only
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_COMMITTED)
+                    .build(), AlertType.SLACK);
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create many prompt commits to exceed Slack's 3000 character limit
+            // Each commit URL is ~140 characters, so we need ~25 commits to exceed the limit
+            int commitsCnt = 30;
+            for (int i = 0; i < commitsCnt; i++) {
+                var prompt = factory.manufacturePojo(Prompt.class);
+                promptResourceClient.createPromptVersion(prompt, mock.getLeft(), mock.getRight());
+            }
+
+            // Verify webhook was called
+            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
+
+            // Verify Slack payload has fallback block due to text truncation
+            String url = BASE_URL + "/" + mock.getRight() + "/prompts";
+            String fallbackText = String.format("Overall %d Prompts commits created, you could check them here: %s",
+                    commitsCnt, url);
+            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
+        }
+
+        @Test
+        @DisplayName("Success: should send webhook with fallback block when trace feedback scores exceed Slack text limit")
+        void testTraceFeedbackScoreEventWithFallback() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            String projectName = RandomStringUtils.randomAlphabetic(10);
+            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create alert with webhook for Slack only
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .build(), AlertType.SLACK);
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create many traces with feedback scores to exceed Slack's 3000 character limit
+            // Each feedback score line is ~180 characters, so we need ~17 scores to exceed the limit
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            int scoresCnt = 25;
+            IntStream.range(0, scoresCnt).forEach(i -> {
+                FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                        .source(ScoreSource.SDK)
+                        .build();
+                traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
+            });
+
+            // Verify webhook was called
+            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
+
+            // Verify Slack payload has fallback block due to text truncation
+            String url = BASE_URL + "/" + mock.getRight() + "/projects";
+            String fallbackText = String.format(
+                    "Overall %d Traces Feedback Scores created, you could check them here: %s",
+                    scoresCnt, url);
+            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
+        }
+
+        @Test
+        @DisplayName("Success: should send webhook with fallback block when thread feedback scores exceed Slack text limit")
+        void testThreadFeedbackScoreEventWithFallback() {
+            // Given
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, mock.getLeft(), mock.getRight());
+
+            // Create alert with webhook for Slack only
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
+                    .build(), AlertType.SLACK);
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create many threads with feedback scores to exceed Slack's 3000 character limit
+            // Each feedback score line is ~190 characters, so we need ~16 scores to exceed the limit
+            int scoresCnt = 25;
+
+            var threadId = UUID.randomUUID().toString();
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .threadId(threadId)
+                    .projectName(project.name())
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Wait for the thread to be created and close it
+            Awaitility.await().untilAsserted(() -> {
+                var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(),
+                        mock.getRight());
+                assertThat(thread.threadModelId()).isNotNull();
+
+                traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
+                        mock.getRight());
+
+                IntStream.range(0, scoresCnt).forEach(i -> {
+                    // Create feedback score for the thread
+                    FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                            .source(ScoreSource.SDK)
+                            .build();
+
+                    var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
+                            .threadId(thread.id())
+                            .projectName(project.name())
+                            .name(feedbackScore.name())
+                            .value(feedbackScore.value())
+                            .reason(feedbackScore.reason())
+                            .source(feedbackScore.source())
+                            .build();
+
+                    traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(),
+                            mock.getRight());
+                });
+            });
+
+            // Verify webhook was called
+            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
+
+            // Verify Slack payload has fallback block due to text truncation
+            String url = BASE_URL + "/" + mock.getRight() + "/projects";
+            String fallbackText = String.format(
+                    "Overall %d Threads Feedback Scores created, you could check them here: %s",
+                    scoresCnt, url);
+            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
     }
 
