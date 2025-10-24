@@ -21,7 +21,10 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_DURATION_ID,
 } from "@/types/shared";
-import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
+import {
+  EXPERIMENT_ITEM_OUTPUT_PREFIX,
+  EXPERIMENT_ITEM_DATASET_PREFIX,
+} from "@/constants/experiments";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Separator } from "@/components/ui/separator";
@@ -37,6 +40,7 @@ const processNestedExportColumn = (
   item: ExperimentItem,
   column: string,
   accumulator: Record<string, unknown>,
+  rowData: object,
   prefix: string = "",
 ) => {
   const keys = column.split(".");
@@ -61,6 +65,14 @@ const processNestedExportColumn = (
       keys,
       "-",
     );
+
+    return;
+  }
+
+  // Handle dataset columns with "data." prefix
+  if (prefixColumnKey === EXPERIMENT_ITEM_DATASET_PREFIX) {
+    const fieldName = column.replace(`${prefixColumnKey}.`, "");
+    accumulator[`${prefix}dataset.${fieldName}`] = get(rowData, fieldName, "-");
 
     return;
   }
@@ -115,7 +127,12 @@ const CompareExperimentsActionsPanel: React.FC<
           );
 
           if (isDatasetColumn) {
-            accumulator[`dataset.${column}`] = get(row.data, column, "-");
+            // Handle dataset columns with "data." prefix
+            const fieldName =
+              prefix === EXPERIMENT_ITEM_DATASET_PREFIX
+                ? column.replace(`${EXPERIMENT_ITEM_DATASET_PREFIX}.`, "")
+                : column;
+            accumulator[`dataset.${fieldName}`] = get(row.data, fieldName, "-");
 
             return accumulator;
           }
@@ -123,11 +140,17 @@ const CompareExperimentsActionsPanel: React.FC<
           if (isCompare) {
             (row.experiment_items ?? []).forEach((item) => {
               const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
-              processNestedExportColumn(item, column, accumulator, prefix);
+              processNestedExportColumn(
+                item,
+                column,
+                accumulator,
+                row.data,
+                prefix,
+              );
             });
           } else {
             const item = row.experiment_items?.[0];
-            processNestedExportColumn(item, column, accumulator);
+            processNestedExportColumn(item, column, accumulator, row.data);
           }
 
           return accumulator;

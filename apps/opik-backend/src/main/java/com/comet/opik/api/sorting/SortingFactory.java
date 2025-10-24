@@ -27,8 +27,27 @@ public abstract class SortingFactory {
             throw new BadRequestException(ERR_INVALID_SORTING_PARAM_TEMPLATE.formatted(queryParam), exception);
         }
 
+        // Hook for subclasses to process fields after deserialization
+        sorting = processFields(sorting);
+
         validateFields(sorting);
 
+        return sorting;
+    }
+
+    /**
+     * Hook method for subclasses to process/transform sorting fields after deserialization.
+     * Default implementation returns fields unchanged.
+     *
+     * @param sorting the sorting fields after JSON deserialization
+     * @return processed sorting fields
+     */
+    protected List<SortingField> processFields(@NonNull List<SortingField> sorting) {
+        return sorting;
+    }
+
+    protected List<SortingField> validateAndReturn(@NonNull List<SortingField> sorting) {
+        validateFields(sorting);
         return sorting;
     }
 
