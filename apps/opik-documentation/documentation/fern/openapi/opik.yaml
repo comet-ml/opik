@@ -58,6 +58,8 @@ tags:
   description: Guardrails related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: Manual Evaluation
+  description: Manual evaluation resources for traces and threads
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -331,8 +333,18 @@ paths:
       tags:
       - Alerts
       summary: Get webhook payload examples
-      description: Get webhook payload examples for all alert event types
+      description: "Get webhook payload examples for all alert event types, optionally\
+        \ filtered by alert type"
       operationId: getWebhookExamples
+      parameters:
+      - name: alert_type
+        in: query
+        schema:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
       responses:
         "200":
           description: Webhook examples
@@ -2245,6 +2257,70 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/threads:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate threads
+      description: Manually trigger evaluation rules on selected threads. Bypasses
+        sampling and enqueues all specified threads for evaluation.
+      operationId: evaluateThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/traces:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate traces
+      description: Manually trigger evaluation rules on selected traces. Bypasses
+        sampling and enqueues all specified traces for evaluation.
+      operationId: evaluateTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
           content:
             application/json:
               schema:
@@ -4762,6 +4838,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook"
         triggers:
@@ -4938,6 +5024,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Write"
         triggers:
@@ -5080,6 +5176,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Public"
         triggers:
@@ -5145,66 +5251,13 @@ components:
           type: string
         details:
           type: string
-    WebhookEventObject:
-      required:
-      - alert_id
-      - created_at
-      - event_type
-      - id
-      - payload
-      - url
-      - user_name
-      - workspace_id
-      type: object
-      properties:
-        id:
-          minLength: 1
-          type: string
-        event_type:
-          type: string
-          enum:
-          - trace:errors
-          - trace:feedback_score
-          - trace_thread:feedback_score
-          - prompt:created
-          - prompt:committed
-          - trace:guardrails_triggered
-          - prompt:deleted
-        alert_id:
-          type: string
-          format: uuid
-        workspace_id:
-          minLength: 1
-          type: string
-        user_name:
-          minLength: 1
-          type: string
-        payload:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-        max_retries:
-          maximum: 10
-          minimum: 1
-          type: integer
-          format: int32
-        url:
-          minLength: 1
-          type: string
-        secret:
-          type: string
-        headers:
-          type: object
-          additionalProperties:
-            type: string
     WebhookExamples:
       type: object
       properties:
         response_examples:
           type: object
           additionalProperties:
-            $ref: "#/components/schemas/WebhookEventObject"
+            type: object
     WebhookTestResult:
       type: object
       properties:
@@ -5217,7 +5270,7 @@ components:
           type: integer
           format: int32
         request_body:
-          $ref: "#/components/schemas/WebhookEventObject"
+          type: string
         error_message:
           type: string
     AnnotationQueueItemIds:
@@ -9627,6 +9680,60 @@ components:
             type: string
         base_url:
           type: string
+    ManualEvaluationResponse:
+      type: object
+      properties:
+        entities_queued:
+          type: integer
+          description: Number of entities queued for evaluation
+          format: int32
+          example: 5
+        rules_applied:
+          type: integer
+          description: Number of rules that will be applied
+          format: int32
+          example: 2
+    ManualEvaluationRequest:
+      required:
+      - entity_ids
+      - entity_type
+      - project_id
+      - rule_ids
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        entity_ids:
+          minItems: 1
+          type: array
+          description: List of entity IDs (trace IDs or thread IDs) to evaluate
+          example:
+          - 550e8400-e29b-41d4-a716-446655440000
+          - 550e8400-e29b-41d4-a716-446655440001
+          items:
+            type: string
+            description: List of entity IDs (trace IDs or thread IDs) to evaluate
+            format: uuid
+        rule_ids:
+          minItems: 1
+          type: array
+          description: List of automation rule IDs to apply
+          example:
+          - 660e8400-e29b-41d4-a716-446655440000
+          items:
+            type: string
+            description: List of automation rule IDs to apply
+            format: uuid
+        entity_type:
+          type: string
+          description: Type of entity to evaluate (trace or thread)
+          example: trace
+          enum:
+          - trace
+          - thread
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
     Optimization:

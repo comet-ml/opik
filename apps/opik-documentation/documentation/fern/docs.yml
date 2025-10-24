@@ -128,9 +128,16 @@ navigation:
           - page: Cost tracking
             path: docs/tracing/cost_tracking.mdx
             slug: cost_tracking
-          - page: Export data
-            path: docs/tracing/export_data.mdx
-            slug: export_data
+          - section: Manage data
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Export by SDK, REST, and UI
+                path: docs/tracing/export_data.mdx
+                slug: export_data
+              - page: Import/Export by command line
+                path: docs/tracing/import_export_commands.mdx
+                slug: import_export_commands
           - page: Opik Assist
             path: docs/tracing/opik_assist.mdx
             slug: opik_assist
@@ -219,6 +226,9 @@ navigation:
               - page: Custom conversation metric
                 path: docs/evaluation/metrics/custom_conversation_metric.mdx
                 slug: custom_conversation_metric
+              - page: Task span metrics
+                path: docs/evaluation/metrics/task_span_metrics.mdx
+                slug: task_span_metrics
           - section: Tutorials
             skip-slug: true
             collapsed: true
@@ -573,37 +583,29 @@ navigation:
             slug: opentelemetry
   - tab: agent-optimization
     layout:
-      - page: Opik Agent Optimizer
-        icon: fa-regular fa-house
-        path: docs/agent_optimization/overview.mdx
-        slug: overview
-      - section: Opik Agent Optimizer Guide
+      - section: Overview
         slug: /opik_optimizer
         contents:
-          - page: Optimizer Quickstart
-            icon: fa-regular fa-bolt
-            path: docs/agent_optimization/opik_optimizer/quickstart.mdx
-            slug: quickstart
+          - page: Opik Agent Optimizer
+            icon: fa-regular fa-house
+            path: docs/agent_optimization/overview.mdx
+            slug: overview
           - page: Optimizer Concepts
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
-          - page: Datasets for Optimization
-            icon: fa-regular fa-database
-            path: docs/agent_optimization/opik_optimizer/datasets.mdx
-            slug: datasets
-          - page: Models for Optimization
-            icon: fa-regular fa-rocket
-            path: docs/agent_optimization/opik_optimizer/models.mdx
-            slug: models
+          - page: Multi-Metric Optimization
+            icon: fa-regular fa-chart-line
+            path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx
+            slug: multi_metric_optimization
+          - page: FAQ
+            icon: fa-regular fa-question
+            path: docs/agent_optimization/opik_optimizer/faq.mdx
+            slug: faq
           - page: API Reference
             icon: fa-regular fa-square-terminal
             path: docs/agent_optimization/opik_optimizer/reference.mdx
             slug: reference
-          - page: Optimizer & SDK FAQ
-            icon: fa-regular fa-question
-            path: docs/agent_optimization/opik_optimizer/faq.mdx
-            slug: faq
       - section: Optimization Algorithms
         slug: /algorithms
         contents:
@@ -623,10 +625,6 @@ navigation:
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
             slug: hierarchical_reflective_optimizer
-          - page: MIPRO Optimizer
-            icon: fa-regular fa-puzzle-piece
-            path: docs/agent_optimization/algorithms/mipro_optimizer.mdx
-            slug: mipro_optimizer
           - page: GEPA Optimizer
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/gepa_optimizer.mdx
@@ -635,17 +633,6 @@ navigation:
             icon: fa-regular fa-tools
             path: docs/agent_optimization/algorithms/tool_optimization.mdx
             slug: tool_optimization
-      - section: Optimization Best Practices
-        slug: /best_practices
-        contents:
-          - page: Prompt Engineering
-            icon: fa-regular fa-book
-            path: docs/agent_optimization/best_practices/prompt_engineering.mdx
-            slug: prompt_engineering
-          - page: Multi-Metric Optimization
-            icon: fa-regular fa-chart-line
-            path: docs/agent_optimization/best_practices/multi_metric_optimization.mdx
-            slug: multi_metric_optimization
       - section: Example Projects and Cookbooks
         slug: /optimizer-cookbooks
         contents:
@@ -857,6 +844,9 @@ redirects:
     permanent: true
   - source: "docs/agent_optimization/opik_optimizer/litellm_support"
     destination: "/docs/agent_optimization/opik_optimizer/models"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/algorithms/mipro_optimizer"
+    destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   # Integration redirects - from /tracing/integrations/ to /integrations/ (clean URLs)
   - source: "/docs/opik/tracing/integrations/overview"
@@ -1124,4 +1114,17 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/dynamic_tracing_control"
     destination: "/docs/opik/tracing/log_traces#disabling-the-logging-process"
+    permanent: true
+  # Agent optimization restructuring redirects
+  - source: "/docs/opik/agent_optimization/opik_optimizer/quickstart"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/datasets"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/opik_optimizer/models"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
+    destination: "/docs/opik/agent_optimization/overview"
     permanent: true

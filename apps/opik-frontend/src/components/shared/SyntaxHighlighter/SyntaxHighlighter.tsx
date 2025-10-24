@@ -9,8 +9,10 @@ import {
   useSyntaxHighlighterCode,
   useSyntaxHighlighterOptions,
 } from "@/components/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
+import { useScrollRestoration } from "@/components/shared/SyntaxHighlighter/hooks/useScrollRestoration";
 import CodeMirrorHighlighter from "@/components/shared/SyntaxHighlighter/CodeMirrorHighlighter";
 import MarkdownHighlighter from "@/components/shared/SyntaxHighlighter/MarkdownHighlighter";
+import { ExpandedState, OnChangeFn } from "@tanstack/react-table";
 
 export type SyntaxHighlighterProps = {
   data: object;
@@ -18,6 +20,13 @@ export type SyntaxHighlighterProps = {
   preserveKey?: string;
   search?: string;
   withSearch?: boolean;
+  controlledExpanded?: ExpandedState;
+  onExpandedChange?: (
+    updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+  ) => void;
+  scrollPosition?: number;
+  onScrollPositionChange?: OnChangeFn<number>;
+  maxHeight?: string;
 };
 
 const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
@@ -26,6 +35,11 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   preserveKey,
   search: searchValue,
   withSearch,
+  controlledExpanded,
+  onExpandedChange,
+  scrollPosition,
+  onScrollPositionChange,
+  maxHeight,
 }) => {
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
@@ -37,6 +51,13 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     code.canBePrettified,
   );
   const [localSearchValue, setLocalSearchValue] = useState<string>("");
+
+  // Scroll management hook
+  const { scrollRef, handleScroll } = useScrollRestoration({
+    data,
+    scrollPosition,
+    onScrollPositionChange,
+  });
 
   const handleModeChange = (newMode: string) => {
     setMode(newMode as MODE_TYPE);
@@ -82,6 +103,11 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
         modeSelector={modeSelector}
         copyButton={copyButton}
         withSearch={withSearch}
+        controlledExpanded={controlledExpanded}
+        onExpandedChange={onExpandedChange}
+        scrollRef={scrollRef}
+        onScroll={handleScroll}
+        maxHeight={maxHeight}
       />
     );
   }
@@ -95,6 +121,9 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
       modeSelector={modeSelector}
       copyButton={copyButton}
       withSearch={withSearch}
+      scrollRef={scrollRef}
+      onScroll={handleScroll}
+      maxHeight={maxHeight}
     />
   );
 };

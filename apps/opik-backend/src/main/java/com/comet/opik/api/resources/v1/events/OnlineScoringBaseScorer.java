@@ -58,16 +58,12 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
             @NonNull String metricsBaseName) {
         super(OnlineScoringStreamConfigurationAdapter.create(config, type),
                 redisson,
-                metricsBaseName,
-                OnlineScoringConfig.PAYLOAD_FIELD);
+                OnlineScoringConfig.PAYLOAD_FIELD,
+                ONLINE_SCORING_NAMESPACE,
+                metricsBaseName);
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
         this.type = type;
-    }
-
-    @Override
-    protected String getMetricNamespace() {
-        return ONLINE_SCORING_NAMESPACE;
     }
 
     @Override
