@@ -74,34 +74,18 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
     }
 
     @Override
-    public Duration getPendingMessageTimeout() {
-        // Use stream-specific value if present, otherwise fall back to global value with default of 10 minutes
-        return streamConfig.getPendingMessageTimeout() != null
-                ? streamConfig.getPendingMessageTimeout()
-                : (onlineScoringConfig.getPendingMessageTimeout() != null
-                        ? onlineScoringConfig.getPendingMessageTimeout()
-                        : Duration.minutes(10));
+    public int getClaimIntervalRatio() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getClaimIntervalRatio() != null
+                ? streamConfig.getClaimIntervalRatio()
+                : onlineScoringConfig.getClaimIntervalRatio();
     }
 
     @Override
-    public int getClaimIntervalTicks() {
-        // Use stream-specific value if present, otherwise fall back to global value with default of 10
-        Integer streamValue = streamConfig.getClaimIntervalTicks();
-        if (streamValue != null) {
-            return streamValue;
-        }
-        Integer globalValue = onlineScoringConfig.getClaimIntervalTicks();
-        return globalValue != null ? globalValue : 10;
-    }
-
-    @Override
-    public int getMaxRetryAttempts() {
-        // Use stream-specific value if present, otherwise fall back to global value with default of 3
-        Integer streamValue = streamConfig.getMaxRetryAttempts();
-        if (streamValue != null) {
-            return streamValue;
-        }
-        Integer globalValue = onlineScoringConfig.getMaxRetryAttempts();
-        return globalValue != null ? globalValue : 3;
+    public Duration getPendingMessageDuration() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getPendingMessageDuration() != null
+                ? streamConfig.getPendingMessageDuration()
+                : onlineScoringConfig.getPendingMessageDuration();
     }
 }
