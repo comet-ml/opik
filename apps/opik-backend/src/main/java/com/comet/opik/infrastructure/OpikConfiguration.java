@@ -94,4 +94,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @JsonProperty
     private QueuesConfig queues = new QueuesConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JacksonConfig jacksonConfig = new JacksonConfig();
 }

@@ -158,12 +158,8 @@ class OnlineScoringEngineTest {
     private final String unquoted;
 
     {
-        try {
-            String jsonEncodedPrompt = JsonUtils.MAPPER.writeValueAsString(TRACE_THREAD_PROMPT);
-            unquoted = jsonEncodedPrompt.substring(1, jsonEncodedPrompt.length() - 1);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+        String jsonEncodedPrompt = JsonUtils.writeValueAsString(TRACE_THREAD_PROMPT);
+        unquoted = jsonEncodedPrompt.substring(1, jsonEncodedPrompt.length() - 1);
     }
 
     private final String TEST_TRACE_THREAD_EVALUATOR = """
@@ -297,7 +293,7 @@ class OnlineScoringEngineTest {
     void testRedisProducerAndConsumerBaseFlow(OnlineScoringSampler onlineScoringSampler) throws Exception {
         var projectId = projectResourceClient.createProject(PROJECT_NAME, API_KEY, WORKSPACE_NAME);
 
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
         var evaluator = createRule(projectId, evaluatorCode); // Let's make sure all traces are expected to be scored
 
@@ -349,7 +345,7 @@ class OnlineScoringEngineTest {
 
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
         var evaluator = createRule(projectId, evaluatorCode);
 
@@ -392,8 +388,8 @@ class OnlineScoringEngineTest {
                 .projectName(PROJECT_NAME)
                 .projectId(projectId)
                 .createdBy(USER_NAME)
-                .input(JsonUtils.MAPPER.readTree(INPUT))
-                .output(JsonUtils.MAPPER.readTree(OUTPUT)).build();
+                .input(JsonUtils.getJsonNodeFromString(INPUT))
+                .output(JsonUtils.getJsonNodeFromString(OUTPUT)).build();
     }
 
     private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {
@@ -410,7 +406,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("parse variable mapping into a usable one")
     void testVariableMapping() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var variableMappings = OnlineScoringEngine.toVariableMapping(evaluatorCode.variables());
 
         assertThat(variableMappings).hasSize(6);
@@ -454,7 +450,7 @@ class OnlineScoringEngineTest {
     @MethodSource
     @DisplayName("render message templates with a trace")
     void testRenderTemplate(String evaluator) throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(evaluator, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(evaluator, LlmAsJudgeCode.class);
         var traceId = generator.generate();
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId);
@@ -477,7 +473,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("render message templates with a trace thread")
     void testRenderTemplateWithTraceThread() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
         var traceId = generator.generate();
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId).toBuilder()
@@ -501,7 +497,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("prepare trace thread LLM request with tool-calling strategy")
     void testPrepareTraceThreadLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate()).toBuilder()
                 .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
                 .build();
@@ -517,7 +513,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("prepare LLM request with tool-calling strategy")
     void testPrepareLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new ToolCallingStrategy());
@@ -530,7 +526,7 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("prepare LLM request with instruction strategy")
     void testPrepareLlmRequestWithInstructionStrategy() throws JsonProcessingException {
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareLlmRequest(
@@ -645,7 +641,7 @@ class OnlineScoringEngineTest {
                 .projectName(PROJECT_NAME)
                 .projectId(UUID.randomUUID())
                 .createdBy(USER_NAME)
-                .input(JsonUtils.MAPPER.readTree(jsonBody))
+                .input(JsonUtils.getJsonNodeFromString(jsonBody))
                 .build();
 
         // Render a message using the variable

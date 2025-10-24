@@ -29,9 +29,11 @@ import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
 import com.comet.opik.utils.StrictDurationDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -105,6 +107,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         // Resources
         var jersey = environment.jersey();
 
+        // Configure ObjectMapper with standard settings
         environment.getObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
         // Naming strategy, this is the default for all objects serving as a fallback.
         // However, it does not apply to OpenAPI documentation.
@@ -117,6 +120,18 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .addDeserializer(BigDecimal.class, JsonBigDecimalDeserializer.INSTANCE)
                         .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                         .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
+
+        // Get the configured limit from config.yml
+        int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
+
+        // Configure Dropwizard ObjectMapper (HTTP layer)
+        StreamReadConstraints readConstraints = StreamReadConstraints.builder()
+                .maxStringLength(maxStringLength)
+                .build();
+        environment.getObjectMapper().getFactory().setStreamReadConstraints(readConstraints);
+
+        // Configure JsonUtils ObjectMapper (internal processing) with SAME limit
+        JsonUtils.configure(maxStringLength);
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 

@@ -55,7 +55,7 @@ class BaseRedisSubscriberTest {
         redissonConfig.useSingleServer()
                 .setAddress(redis.getRedisURI())
                 .setDatabase(0);
-        redissonConfig.setCodec(new JsonJacksonCodec(JsonUtils.MAPPER));
+        redissonConfig.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
         redissonClient = Redisson.create(redissonConfig).reactive();
 
         config = TestStreamConfiguration.create();

@@ -24,7 +24,7 @@ public class TraceThreadConfig implements StreamConfiguration {
     public static final String PAYLOAD_FIELD = "message";
 
     private static final CompositeCodec CODEC = new CompositeCodec(new LZ4CodecV2(),
-            new JsonJacksonCodec(JsonUtils.MAPPER));
+            new JsonJacksonCodec(JsonUtils.getMapper()));
 
     @Valid @JsonProperty
     private boolean enabled = true;
