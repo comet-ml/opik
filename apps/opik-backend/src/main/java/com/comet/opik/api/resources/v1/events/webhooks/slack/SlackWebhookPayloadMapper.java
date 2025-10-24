@@ -74,10 +74,11 @@ public class SlackWebhookPayloadMapper {
 
     private static List<SlackBlock> createDetailsBlocks(@NonNull WebhookEvent<Map<String, Object>> event) {
         List<?> metadata = (List<?>) event.getPayload().getOrDefault("metadata", List.of());
-        String workspaceName = event.getWorkspaceName();
 
-        String baseUrl = event.getAlertMetadata().getOrDefault(BASE_URL_METADATA_KEY, DEFAULT_BASE_URL) + "/"
-                + event.getWorkspaceName();
+        var metadataUrl = event.getAlertMetadata().getOrDefault(BASE_URL_METADATA_KEY, DEFAULT_BASE_URL);
+        metadataUrl = metadataUrl.endsWith("/") ? metadataUrl : metadataUrl + "/";
+
+        String baseUrl = metadataUrl + event.getWorkspaceName();
 
         DetailsBuildResult result = switch (event.getEventType()) {
             case PROMPT_CREATED -> buildPromptCreatedDetails(metadata, baseUrl);
