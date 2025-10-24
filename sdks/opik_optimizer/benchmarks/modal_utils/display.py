@@ -100,7 +100,7 @@ def generate_results_display(
 
     metadata = results["metadata"]
     tasks = results["tasks"]
-
+    print(results)
     # Compute summary
     summary = compute_summary(metadata, tasks, results.get("call_ids", []))
 
@@ -138,6 +138,47 @@ def generate_results_display(
 
     if summary["completed_tasks"] > 0:
         content_parts.append(f"  Success rate:    {summary['success_rate']:.1%}")
+
+    # All tasks list with status and logs links
+    content_parts.append("\n[bold cyan]All Tasks[/bold cyan]")
+
+    # Get workspace and worker_app_id for URL construction
+    workspace = metadata.get("workspace")
+
+    # Create a map of task_id to call_id
+    call_ids = results.get("call_ids", [])
+    task_to_call_id = {cid["task_id"]: cid["call_id"] for cid in call_ids}
+
+    # Get all expected task IDs from call_ids
+    all_task_ids = [cid["task_id"] for cid in call_ids]
+
+    # Map completed tasks
+    completed_task_ids = {task["id"]: task for task in tasks}
+
+    for task_id in all_task_ids:
+        call_id = task_to_call_id.get(task_id)
+
+        # Determine status
+        if task_id in completed_task_ids:
+            task_data = completed_task_ids[task_id]
+            status = task_data.get("status", "Unknown")
+            if status == "Success":
+                status_display = "[green]✓ Success[/green]"
+            elif status == "Failed":
+                status_display = "[red]✗ Failed[/red]"
+            else:
+                status_display = f"[yellow]{status}[/yellow]"
+        else:
+            status_display = "[yellow]⏳ Pending[/yellow]"
+
+        # Build logs URL if possible
+        if call_id and workspace:
+            logs_url = f"https://modal.com/apps/{workspace}/main/deployed/opik-optimizer-benchmarks?&&activeTab=logs&fcId={call_id}"
+            content_parts.append(
+                f"  • {task_id}: {status_display} - [link={logs_url}][cyan]View logs[/cyan][/link]"
+            )
+        else:
+            content_parts.append(f"  • {task_id}: {status_display}")
 
     # Detailed metrics
     if detailed and tasks:

@@ -26,6 +26,7 @@ image = (
     .add_local_dir(
         local_path=os.path.dirname(os.path.abspath(__file__)),
         remote_path="/root/benchmarks",
+        ignore=["__pycache__", ".venv", "benchmark_results"],
     )
 )
 

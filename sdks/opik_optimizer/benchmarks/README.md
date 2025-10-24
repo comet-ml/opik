@@ -10,7 +10,7 @@ Run benchmarks on your local machine:
 
 ```bash
 # Single dataset, single optimizer (test mode)
-python run.py \
+python run_benchmark.py \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
@@ -18,7 +18,7 @@ python run.py \
   --max-concurrent 1
 
 # Multiple datasets and optimizers
-python run.py \
+python run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --max-concurrent 4
@@ -45,15 +45,15 @@ modal secret create llm-api-keys \
 # 1. Deploy the worker (one time, or when code changes)
 modal deploy benchmark_worker.py
 
-# 2. Submit benchmark tasks
-python run.py --modal \
+# 2. Submit benchmark tasks (note the --modal flag)
+python run_benchmark.py --modal \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
   --test-mode \
   --max-concurrent 1
 
-# 3. Check results
+# 3. Check results (with clickable logs links)
 modal run check_results.py --list-runs
 modal run check_results.py --run-id <RUN_ID>
 modal run check_results.py --run-id <RUN_ID> --watch --detailed
@@ -63,9 +63,11 @@ modal run check_results.py --run-id <RUN_ID> --watch --detailed
 
 ### Parameters
 
+All parameters work for both local and Modal execution:
+
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `--modal` | Run on Modal cloud instead of locally | `false` |
+| `--modal` | Run on Modal cloud (omit for local execution) | `false` |
 | `--demo-datasets` | Dataset names (e.g., `gsm8k`, `hotpot_300`) | All datasets |
 | `--optimizers` | Optimizer names (e.g., `few_shot`, `meta_prompt`) | All optimizers |
 | `--models` | Model names (e.g., `openai/gpt-4o-mini`) | All configured models |
@@ -98,29 +100,29 @@ modal run check_results.py --run-id <RUN_ID> --watch --detailed
 
 ```bash
 # Quick local test (1 task, ~5 minutes)
-python run.py \
+python run_benchmark.py \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --test-mode \
   --max-concurrent 1
 
 # Full local benchmark (multiple tasks)
-python run.py \
+python run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 ai2_arc \
   --optimizers few_shot meta_prompt \
   --max-concurrent 4
 
 # Modal cloud execution (high concurrency)
-python run.py --modal \
+python run_benchmark.py --modal \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt evolutionary_optimizer \
   --max-concurrent 10
 
 # Resume interrupted run
-python run.py --modal --resume-run-id run_20250423_153045
+python run_benchmark.py --modal --resume-run-id run_20250423_153045
 
 # Retry only failed tasks
-python run.py --modal --retry-failed-run-id run_20250423_153045
+python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
 ```
 
 ## Results
@@ -187,6 +189,16 @@ modal deploy benchmark_worker.py
 ```
 
 This updates the deployed worker with your latest code changes.
+
+## File Structure
+
+- **`run_benchmark.py`** - Main unified entry point (use with `--modal` flag for cloud)
+- **`run_benchmark_local.py`** - Local execution logic
+- **`run_benchmark_modal.py`** - Modal submission logic
+- **`benchmark_worker.py`** - Modal worker (deploy with `modal deploy`)
+- **`check_results.py`** - View Modal results with clickable logs links
+- **`benchmark_config.py`** - Dataset and optimizer configurations
+- **`benchmark_task.py`** - Core task execution logic
 
 ## Notes
 

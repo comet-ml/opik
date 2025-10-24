@@ -138,6 +138,18 @@ def submit_benchmark_tasks(
         print("  modal deploy benchmarks/benchmark_worker.py")
         sys.exit(1)
 
+    # Get workspace from Modal config
+    workspace = None
+    try:
+        from modal.config import config_profiles
+
+        profiles = config_profiles()
+        if profiles:
+            # Get the first profile name (profiles is dict_keys object)
+            workspace = list(profiles)[0]
+    except Exception:
+        pass
+
     # Update worker's max_containers to control concurrency
     print(f"⚙️  Configuring worker for {max_concurrent} concurrent tasks...")
     try:
@@ -205,6 +217,7 @@ def submit_benchmark_tasks(
         test_mode=test_mode,
         max_concurrent=max_concurrent,
         total_tasks=len(all_tasks),
+        workspace=workspace,
     )
 
     # Submit all tasks asynchronously
@@ -294,6 +307,7 @@ def _save_run_metadata(
     test_mode: bool,
     total_tasks: int,
     max_concurrent: int = 5,
+    workspace: str | None = None,
 ) -> None:
     """Save run metadata to Modal Volume."""
     # We need to save this from within a Modal function context
@@ -309,6 +323,7 @@ def _save_run_metadata(
             "max_concurrent": max_concurrent,
             "total_tasks": total_tasks,
             "timestamp": datetime.now().isoformat(),
+            "workspace": workspace,
         },
     )
 
@@ -424,7 +439,13 @@ Examples:
 
     args = parser.parse_args()
 
-    print(
-        "\n⚠️  Note: Run this script with 'modal run --detach' to disconnect after submission:"
+    submit_benchmark_tasks(
+        demo_datasets=args.demo_datasets,
+        optimizers=args.optimizers,
+        models=args.models,
+        seed=args.seed,
+        test_mode=args.test_mode,
+        max_concurrent=args.max_concurrent,
+        retry_failed_run_id=args.retry_failed_run_id,
+        resume_run_id=args.resume_run_id,
     )
-    print(f"   modal run --detach {__file__} {' '.join(sys.argv[1:])}\n")
