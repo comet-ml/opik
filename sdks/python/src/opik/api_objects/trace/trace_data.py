@@ -96,7 +96,7 @@ class TraceData:
             if value is None:
                 continue
 
-            if key not in self.__dict__:
+            if key not in self.__dict__ and key != "prompts":
                 LOGGER.debug(
                     "An attempt to update span with parameter name it doesn't have: %s",
                     key,
@@ -119,6 +119,11 @@ class TraceData:
                 continue
             elif key == "tags":
                 self.tags = data_helpers.merge_tags(self.tags, new_tags=value)
+                continue
+            elif key == "prompts":
+                self.metadata = data_helpers.merge_metadata(
+                    self.metadata, new_metadata=new_data.get("metadata"), prompts=value
+                )
                 continue
 
             self.__dict__[key] = value
