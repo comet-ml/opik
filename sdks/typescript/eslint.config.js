@@ -12,6 +12,7 @@ export default [
       "src/opik/integrations/opik-langchain/**",
       "src/opik/integrations/opik-openai/**",
       "src/opik/integrations/opik-gemini/**",
+      "src/opik/integrations/opik-vercel/**",
       "src/opik/configure/**",
     ],
   },
