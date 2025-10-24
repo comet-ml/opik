@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -350,36 +351,39 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * {@link StreamConfiguration#getClaimIntervalTicks()}) to reprocess messages that were
      * delivered but not acknowledged, typically due to consumer crashes or failures.
      * <p>
-     * Current implementation uses {@link StreamReadGroupArgs#greaterThan(StreamMessageId)}
-     * to read pending messages. This approach will claim messages that are in the pending
-     * list for this consumer group.
+     * Uses {@code XAUTOCLAIM} command to automatically claim pending messages from ANY consumer
+     * in the consumer group that have been idle longer than the configured timeout. This ensures
+     * that messages from crashed consumers are reclaimed and reprocessed.
      * <p>
      * <b>Future enhancements:</b>
      * <ul>
      *   <li>Implement delivery count tracking using Redis pending entries</li>
      *   <li>Add dead letter queue (DLQ) handling for messages exceeding max retry attempts</li>
-     *   <li>Use idle time threshold from {@link StreamConfiguration#getPendingMessageTimeout()}</li>
-     *   <li>Implement proper claim strategies (fastClaim/autoClaim) when available in reactive API</li>
+     *   <li>Track and use the next start ID from AutoClaimResult for efficient scanning</li>
      * </ul>
      *
      * @return a Mono emitting a map of claimed messages
      */
     private Mono<Map<StreamMessageId, Map<String, M>>> claimPendingMessages() {
         var startMillis = System.currentTimeMillis();
+        var minIdleTime = config.getPendingMessageTimeout().toJavaDuration();
 
-        // Read pending messages using readGroup with pending message ID range
-        // This will automatically claim messages for this consumer
-        var streamReadGroupArgs = StreamReadGroupArgs.greaterThan(StreamMessageId.MIN)
-                .count(config.getConsumerBatchSize())
-                .timeout(config.getLongPollingDuration().toJavaDuration());
-
-        return stream.readGroup(config.getConsumerGroupName(), consumerId, streamReadGroupArgs)
+        // Use XAUTOCLAIM to claim orphaned pending messages from any consumer in the group
+        return stream.autoClaim(
+                config.getConsumerGroupName(),
+                consumerId,
+                minIdleTime.toMillis(),
+                TimeUnit.MILLISECONDS,
+                StreamMessageId.MIN, // Start from the beginning of pending list
+                config.getConsumerBatchSize())
                 .subscribeOn(consumerScheduler)
                 .filter(Objects::nonNull)
+                .map(autoClaimResult -> autoClaimResult.getMessages())
                 .doOnSuccess(claimedMessages -> {
                     if (!claimedMessages.isEmpty()) {
                         pendingMessagesClaimed.add(claimedMessages.size());
-                        log.info("Claimed '{}' pending messages", claimedMessages.size());
+                        log.info("Claimed '{}' orphaned pending messages older than '{}'",
+                                claimedMessages.size(), minIdleTime);
                     }
                 })
                 .onErrorResume(throwable -> {
