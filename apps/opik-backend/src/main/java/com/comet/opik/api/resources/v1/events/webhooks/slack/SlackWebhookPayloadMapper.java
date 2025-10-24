@@ -122,7 +122,7 @@ public class SlackWebhookPayloadMapper {
                 .toList();
 
         String mainText = "*Prompts Created:*\n" + String.join("\n", promptLinks);
-        String fallbackText = String.format("Overall %d Prompts created, you could check them here: %s",
+        String fallbackText = String.format("Overall %d Prompts created, you could check them here: <%s|View All>",
                 promptLinks.size(), baseUrl + "/prompts");
 
         return checkSlackTextLimit(mainText, "*Prompts Created:*\n", promptLinks,
@@ -155,7 +155,8 @@ public class SlackWebhookPayloadMapper {
                 .toList();
 
         String mainText = "*Prompts Committed:*\n" + String.join("\n", commits);
-        String fallbackText = String.format("Overall %d Prompts commits created, you could check them here: %s",
+        String fallbackText = String.format(
+                "Overall %d Prompts commits created, you could check them here: <%s|View All>",
                 commits.size(), baseUrl + "/prompts");
 
         return checkSlackTextLimit(mainText, "*Prompts Committed:*\n", commits, fallbackText);
@@ -179,7 +180,8 @@ public class SlackWebhookPayloadMapper {
                 .toList();
 
         String mainText = "*Traces with Errors:*\n" + String.join("\n", traceLinks);
-        String fallbackText = String.format("Overall %d Traces with errors created, you could check them here: %s",
+        String fallbackText = String.format(
+                "Overall %d Traces with errors created, you could check them here: <%s|View All>",
                 traceLinks.size(), baseUrl + "/projects");
 
         return checkSlackTextLimit(mainText, "*Traces with Errors:*\n", traceLinks, fallbackText);
@@ -198,7 +200,8 @@ public class SlackWebhookPayloadMapper {
                 .toList();
 
         String mainText = "*Traces Feedback Scores:*\n" + String.join("\n", scoreLinks);
-        String fallbackText = String.format("Overall %d Traces Feedback Scores created, you could check them here: %s",
+        String fallbackText = String.format(
+                "Overall %d Traces Feedback Scores created, you could check them here: <%s|View All>",
                 scoreLinks.size(), baseUrl + "/projects");
 
         return checkSlackTextLimit(mainText, "*Traces Feedback Scores:*\n", scoreLinks, fallbackText);
@@ -217,7 +220,8 @@ public class SlackWebhookPayloadMapper {
                 .toList();
 
         String mainText = "*Threads Feedback Scores:*\n" + String.join("\n", scoreLinks);
-        String fallbackText = String.format("Overall %d Threads Feedback Scores created, you could check them here: %s",
+        String fallbackText = String.format(
+                "Overall %d Threads Feedback Scores created, you could check them here: <%s|View All>",
                 scoreLinks.size(), baseUrl + "/projects");
 
         return checkSlackTextLimit(mainText, "*Threads Feedback Scores:*\n", scoreLinks, fallbackText);
@@ -242,7 +246,7 @@ public class SlackWebhookPayloadMapper {
 
         String mainText = "*Traces with Guardrails Triggered:*\n" + String.join("\n", guardrailLinks);
         String fallbackText = String.format(
-                "Overall %d Traces with Guardrails Triggered created, you could check them here: %s",
+                "Overall %d Traces with Guardrails Triggered created, you could check them here: <%s|View All>",
                 guardrailLinks.size(), baseUrl + "/projects");
 
         return checkSlackTextLimit(mainText, "*Traces with Guardrails Triggered:*\n", guardrailLinks, fallbackText);
@@ -291,7 +295,7 @@ public class SlackWebhookPayloadMapper {
      */
     private static String buildPromptLink(@NonNull UUID promptId, @NonNull String baseUrl) {
         String url = String.format("%s/prompts/%s", baseUrl, promptId);
-        return String.format("<Prompt `%s`| %s>", promptId, url);
+        return String.format("Prompt `%s` | <%s|View>", promptId, url);
     }
 
     /**
@@ -300,7 +304,7 @@ public class SlackWebhookPayloadMapper {
     private static String buildPromptCommitLink(@NonNull UUID promptId, @NonNull UUID commitId,
             @NonNull String baseUrl) {
         String url = String.format("%s/prompts/%s?activeVersionId=%s", baseUrl, promptId, commitId);
-        return String.format("<Prompt `%s`> (version `%s`) | %s", promptId, commitId, url);
+        return String.format("Prompt `%s` (version `%s`) | <%s|View>", promptId, commitId, url);
     }
 
     /**
@@ -310,7 +314,7 @@ public class SlackWebhookPayloadMapper {
             @NonNull String baseUrl) {
         String url = String.format("%s/projects/%s/traces?trace=%s",
                 baseUrl, projectId, traceId);
-        return String.format("<Trace `%s` | %s>", traceId, url);
+        return String.format("Trace `%s` | <%s|View>", traceId, url);
     }
 
     /**
@@ -321,7 +325,7 @@ public class SlackWebhookPayloadMapper {
 
         String url = String.format("%s/projects/%s/traces?trace=%s&traceTab=feedback_scores",
                 baseUrl, fs.projectId(), fs.id());
-        return String.format("Trace Score  *%s* = %.2f, reason: %s | %s",
+        return String.format("Trace Score  *%s* = %.2f, reason: %s | <%s|View>",
                 fs.name(), fs.value(), fs.reason() != null ? fs.reason() : "N/A", url);
     }
 
@@ -332,7 +336,7 @@ public class SlackWebhookPayloadMapper {
             @NonNull String baseUrl) {
         String url = String.format("%s/projects/%s/traces?type=threads&thread=%s&threadTab=feedback_scores",
                 baseUrl, fs.projectId(), fs.threadId());
-        return String.format("Thread Score  *%s* = %.2f, reason: %s | %s",
+        return String.format("Thread Score  *%s* = %.2f, reason: %s | <%s|View>",
                 fs.name(), fs.value(), fs.reason() != null ? fs.reason() : "N/A", url);
     }
 }
