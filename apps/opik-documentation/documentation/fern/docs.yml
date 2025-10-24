@@ -251,6 +251,9 @@ navigation:
           - page: Prompt Playground
             path: docs/prompt_engineering/playground.mdx
             slug: playground
+          - page: Prompt Generator and Improver
+            path: docs/prompt_engineering/improve.mdx
+            slug: improve
           - page: Opik's MCP server
             path: docs/prompt_engineering/mcp_server.mdx
             slug: mcp_server

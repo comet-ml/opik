@@ -17,6 +17,7 @@ import LLMPromptMessage from "@/components/pages-shared/llm/LLMPromptMessages/LL
 import { Button } from "@/components/ui/button";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { DropdownOption } from "@/types/shared";
+import { ImprovePromptConfig } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 
 interface MessageValidationError {
   content?: {
@@ -33,6 +34,7 @@ interface LLMPromptMessagesProps {
   onAddMessage: () => void;
   hint?: string;
   disableImages?: boolean;
+  improvePromptConfig?: ImprovePromptConfig;
 }
 
 const LLMPromptMessages = ({
@@ -44,6 +46,7 @@ const LLMPromptMessages = ({
   onAddMessage,
   hint = "",
   disableImages = false,
+  improvePromptConfig,
 }: LLMPromptMessagesProps) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -133,6 +136,7 @@ const LLMPromptMessages = ({
                 }
                 message={message}
                 disableImages={disableImages}
+                improvePromptConfig={improvePromptConfig}
               />
             ))}
           </div>

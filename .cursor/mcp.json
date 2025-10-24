@@ -26,6 +26,10 @@
       "command": "npx @playwright/mcp@latest",
       "env": {},
       "args": []
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"]
     }
   }
 }

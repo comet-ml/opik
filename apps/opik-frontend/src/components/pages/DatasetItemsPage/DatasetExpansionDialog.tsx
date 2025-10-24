@@ -34,7 +34,14 @@ import useAppStore from "@/store/AppStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import useProgressSimulation from "./useProgressSimulation";
+import useProgressSimulation from "@/hooks/useProgressSimulation";
+
+const DATASET_EXPANSION_PROGRESS_MESSAGES = [
+  "Initializing AI generation...",
+  "Analyzing dataset patterns...",
+  "Generating synthetic samples...",
+  "Finalizing generated data...",
+];
 import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
@@ -124,7 +131,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
     progress: generationProgress,
     message: progressMessage,
     complete,
-  } = useProgressSimulation(isPending);
+  } = useProgressSimulation({
+    messages: DATASET_EXPANSION_PROGRESS_MESSAGES,
+    isPending,
+  });
 
   const { data: sampleData, isLoading: isAnalyzing } = useDatasetItemsList(
     {
