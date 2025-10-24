@@ -11,6 +11,7 @@ import {
 import { Span, Trace, Thread } from "@/types/traces";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
+import { useResponsiveToolbar } from "@/contexts/ResponsiveToolbarContext";
 
 export type AddToDropdownProps = {
   getDataForExport: () => Promise<Array<Trace | Span | Thread>>;
@@ -27,6 +28,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
+  const { hasSpace } = useResponsiveToolbar();
 
   const isThread = dataType === "threads";
   const isSpan = dataType === "spans";
@@ -56,9 +58,13 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = ({
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={disabled}>
-            Add to
-            <ChevronDown className="ml-2 size-4" />
+          <Button
+            variant="outline"
+            size={hasSpace ? "sm" : "icon-sm"}
+            disabled={disabled}
+          >
+            {hasSpace && "Add to"}
+            <ChevronDown className={hasSpace ? "ml-2 size-4" : "size-4"} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">

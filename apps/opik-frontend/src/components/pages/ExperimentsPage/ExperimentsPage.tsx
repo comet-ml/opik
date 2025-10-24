@@ -12,6 +12,8 @@ import {
 import get from "lodash/get";
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
+import { ResponsiveToolbarProvider } from "@/contexts/ResponsiveToolbarContext";
+import { ResponsiveButton } from "@/components/ui/ResponsiveButton";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -399,6 +401,31 @@ const ExperimentsPage: React.FC = () => {
     [setGroupLimit],
   );
 
+  const toolbarElements = useMemo(
+    () => [
+      { name: "SEARCH", size: 320, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "FILTERS", size: 40, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "GROUPS", size: 40, visible: true },
+      { name: "GAP_BETWEEN", size: 32, visible: true },
+      { name: "COMPARE", size: 110, visible: selectedRows.length > 0 },
+      { name: "EXPLAINER", size: 24, visible: selectedRows.length > 0 },
+      { name: "SEPARATOR", size: 25, visible: selectedRows.length > 0 },
+      { name: "GAP", size: 8, visible: selectedRows.length > 0 },
+      { name: "DELETE", size: 40, visible: selectedRows.length > 0 },
+      { name: "GAP", size: 8, visible: selectedRows.length > 0 },
+      { name: "SEPARATOR", size: 25, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "REFRESH", size: 40, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "COLUMNS", size: 40, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "CREATE_EXPERIMENT", size: 200, visible: true },
+    ],
+    [selectedRows.length],
+  );
+
   const chartsData = useMemo(() => {
     const groupsMap: Record<string, ChartData> = {};
 
@@ -543,61 +570,63 @@ const ExperimentsPage: React.FC = () => {
         </PageBodyStickyContainer>
       )}
       <PageBodyStickyContainer
-        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        className="pb-6 pt-4"
         direction="bidirectional"
         limitWidth
       >
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_AND_GROUP_COLUMNS}
-            config={filtersAndGroupsConfig as never}
-            filters={filters}
-            onChange={setFilters}
-          />
-          <GroupsButton
-            columns={FILTER_AND_GROUP_COLUMNS}
-            config={filtersAndGroupsConfig as never}
-            groups={groups}
-            onChange={setGroups}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <ExperimentsActionsPanel experiments={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh experiments list">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => refetch()}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-            sections={columnSections}
-          ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new experiment
-          </Button>
-        </div>
+        <ResponsiveToolbarProvider elements={toolbarElements}>
+          <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTER_AND_GROUP_COLUMNS}
+                config={filtersAndGroupsConfig as never}
+                filters={filters}
+                onChange={setFilters}
+              />
+              <GroupsButton
+                columns={FILTER_AND_GROUP_COLUMNS}
+                config={filtersAndGroupsConfig as never}
+                groups={groups}
+                onChange={setGroups}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <ExperimentsActionsPanel experiments={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+              <TooltipWrapper content="Refresh experiments list">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="shrink-0"
+                  onClick={() => refetch()}
+                >
+                  <RotateCw />
+                </Button>
+              </TooltipWrapper>
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+                sections={columnSections}
+              ></ColumnsButton>
+              <ResponsiveButton
+                text="Create new experiment"
+                icon={<Info />}
+                variant="outline"
+                onClick={handleNewExperimentClick}
+              />
+            </div>
+          </div>
+        </ResponsiveToolbarProvider>
       </PageBodyStickyContainer>
       <DataTable
         columns={columns}

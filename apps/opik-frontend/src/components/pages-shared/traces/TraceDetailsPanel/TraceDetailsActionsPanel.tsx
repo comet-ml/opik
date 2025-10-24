@@ -43,7 +43,10 @@ import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
 import ExpandableSearchInput from "@/components/shared/ExpandableSearchInput/ExpandableSearchInput";
-import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import {
+  ResponsiveToolbarProvider,
+  useResponsiveToolbar,
+} from "@/contexts/ResponsiveToolbarContext";
 import { TREE_FILTER_COLUMNS } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -78,7 +81,7 @@ type TraceDetailsActionsPanelProps = {
   setActiveSection: (v: DetailsActionSectionValue) => void;
 };
 
-const TraceDetailsActionsPanel: React.FunctionComponent<
+const TraceDetailsActionsPanelInner: React.FunctionComponent<
   TraceDetailsActionsPanelProps
 > = ({
   projectId,
@@ -99,7 +102,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   setActiveSection,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
-  const [isSmall, setIsSmall] = useState<boolean>(false);
+  const { hasSpace } = useResponsiveToolbar();
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -109,32 +112,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
-
-  const hasThread = Boolean(setThreadId && threadId);
-
-  const minPanelWidth = useMemo(() => {
-    const elements = [
-      { name: "SEPARATOR", size: 25, visible: hasThread },
-      { name: "GO_TO_THREAD", size: 110, visible: hasThread },
-      { name: "PADDING", size: 24, visible: true },
-      { name: "FILTER", size: 60, visible: true },
-      { name: "SEPARATOR", size: 25, visible: true },
-      { name: "INSPECT_TRACE", size: 166, visible: isAIInspectorEnabled },
-      { name: "AGENT_GRAPH", size: 166, visible: hasAgentGraph },
-      {
-        name: "SEPARATOR",
-        size: 25,
-        visible: isAIInspectorEnabled || hasAgentGraph,
-      },
-      { name: "MORE", size: 32, visible: true },
-    ];
-
-    return elements.reduce((acc, e) => acc + (e.visible ? e.size : 0), 0);
-  }, [hasAgentGraph, hasThread, isAIInspectorEnabled]);
-
-  const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
-    setIsSmall(node.clientWidth < minPanelWidth + SEARCH_SPACE_RESERVATION);
-  });
 
   const handleTraceDelete = useCallback(() => {
     onClose();
@@ -290,17 +267,17 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   );
 
   return (
-    <div ref={ref} className="flex flex-auto items-center justify-between">
+    <div className="flex flex-auto items-center justify-between">
       {setThreadId && threadId ? (
         <div className="flex items-center">
           <Separator orientation="vertical" className="mx-3 h-4" />
           <TooltipWrapper content="Go to thread">
             <Button
               variant="outline"
-              size={isSmall ? "icon-sm" : "sm"}
+              size={hasSpace ? "sm" : "icon-sm"}
               onClick={() => setThreadId(threadId)}
             >
-              {isSmall ? <MessagesSquare /> : "Go to thread"}
+              {hasSpace ? "Go to thread" : <MessagesSquare />}
             </Button>
           </TooltipWrapper>
         </div>
@@ -333,13 +310,13 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           <TooltipWrapper content="Debug your trace with AI assistance (OpikAssist)">
             <Button
               variant="default"
-              size={isSmall ? "icon-sm" : "sm"}
+              size={hasSpace ? "sm" : "icon-sm"}
               onClick={() =>
                 setActiveSection(DetailsActionSection.AIAssistants)
               }
             >
               <Sparkles className="size-3.5 shrink-0" />
-              {isSmall ? null : <span className="ml-1.5">Debug with AI</span>}
+              {hasSpace && <span className="ml-1.5">Debug with AI</span>}
             </Button>
           </TooltipWrapper>
         )}
@@ -349,7 +326,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           >
             <Button
               variant="default"
-              size={isSmall ? "icon-sm" : "sm"}
+              size={hasSpace ? "sm" : "icon-sm"}
               onClick={() => setGraph(!graph)}
             >
               {graph ? (
@@ -357,7 +334,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               ) : (
                 <Network className="size-3.5 shrink-0" />
               )}
-              {isSmall ? null : (
+              {hasSpace && (
                 <span className="ml-1.5">
                   {graph ? "Hide agent graph" : "Show agent graph"}
                 </span>
@@ -431,6 +408,44 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
         />
       </div>
     </div>
+  );
+};
+
+const TraceDetailsActionsPanel: React.FunctionComponent<
+  TraceDetailsActionsPanelProps
+> = (props) => {
+  const { hasAgentGraph } = props;
+  const hasThread = Boolean(props.setThreadId && props.threadId);
+  const isAIInspectorEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
+  );
+
+  const toolbarElements = useMemo(
+    () => [
+      { name: "SEPARATOR", size: 25, visible: hasThread },
+      { name: "GO_TO_THREAD", size: 110, visible: hasThread },
+      { name: "PADDING", size: 24, visible: true },
+      { name: "FILTER", size: 60, visible: true },
+      { name: "SEPARATOR", size: 25, visible: true },
+      { name: "INSPECT_TRACE", size: 166, visible: isAIInspectorEnabled },
+      { name: "AGENT_GRAPH", size: 166, visible: hasAgentGraph },
+      {
+        name: "SEPARATOR",
+        size: 25,
+        visible: isAIInspectorEnabled || hasAgentGraph,
+      },
+      { name: "MORE", size: 32, visible: true },
+    ],
+    [hasAgentGraph, hasThread, isAIInspectorEnabled],
+  );
+
+  return (
+    <ResponsiveToolbarProvider
+      elements={toolbarElements}
+      extraSpace={SEARCH_SPACE_RESERVATION}
+    >
+      <TraceDetailsActionsPanelInner {...props} />
+    </ResponsiveToolbarProvider>
   );
 };
 

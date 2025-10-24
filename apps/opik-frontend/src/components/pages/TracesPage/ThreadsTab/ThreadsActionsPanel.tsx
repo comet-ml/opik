@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import { Trash } from "lucide-react";
 import get from "lodash/get";
 import first from "lodash/first";
@@ -12,6 +12,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
+import { ResponsiveToolbarProvider } from "@/contexts/ResponsiveToolbarContext";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -35,6 +36,17 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+
+  const toolbarElements = useMemo(
+    () => [
+      { name: "ADD_TO", size: 90, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "EXPORT", size: 40, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "DELETE", size: 40, visible: true },
+    ],
+    [],
+  );
 
   const deleteThreadsHandler = useCallback(() => {
     mutate({
@@ -78,42 +90,44 @@ const ThreadsActionsPanel: React.FunctionComponent<
   );
 
   return (
-    <div className="flex items-center gap-2">
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={open === 2}
-        setOpen={setOpen}
-        onConfirm={deleteThreadsHandler}
-        title="Delete threads"
-        description="Deleting threads will also remove all linked traces and their data. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete threads"
-        confirmButtonVariant="destructive"
-      />
-      <AddToDropdown
-        getDataForExport={getDataForExport}
-        selectedRows={selectedRows}
-        disabled={disabled}
-        dataType="threads"
-      />
-      <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
-        getData={mapRowData}
-        generateFileName={generateFileName}
-      />
-      <TooltipWrapper content="Delete">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={() => {
-            setOpen(2);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
+    <ResponsiveToolbarProvider elements={toolbarElements}>
+      <div className="flex items-center gap-2">
+        <ConfirmDialog
+          key={`delete-${resetKeyRef.current}`}
+          open={open === 2}
+          setOpen={setOpen}
+          onConfirm={deleteThreadsHandler}
+          title="Delete threads"
+          description="Deleting threads will also remove all linked traces and their data. This action cannot be undone. Are you sure you want to continue?"
+          confirmText="Delete threads"
+          confirmButtonVariant="destructive"
+        />
+        <AddToDropdown
+          getDataForExport={getDataForExport}
+          selectedRows={selectedRows}
           disabled={disabled}
-        >
-          <Trash />
-        </Button>
-      </TooltipWrapper>
-    </div>
+          dataType="threads"
+        />
+        <ExportToButton
+          disabled={disabled || columnsToExport.length === 0}
+          getData={mapRowData}
+          generateFileName={generateFileName}
+        />
+        <TooltipWrapper content="Delete">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={() => {
+              setOpen(2);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <Trash />
+          </Button>
+        </TooltipWrapper>
+      </div>
+    </ResponsiveToolbarProvider>
   );
 };
 

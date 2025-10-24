@@ -22,6 +22,8 @@ import {
 } from "use-query-params";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
+import { ResponsiveToolbarProvider } from "@/contexts/ResponsiveToolbarContext";
+import { ResponsiveButton } from "@/components/ui/ResponsiveButton";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -339,6 +341,25 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [navigate, workspaceName],
   );
 
+  const toolbarElements = useMemo(
+    () => [
+      { name: "SEARCH", size: 320, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "FILTERS", size: 40, visible: true },
+      { name: "GAP_BETWEEN", size: 32, visible: true },
+      { name: "DELETE", size: 40, visible: selectedRows.length > 0 },
+      { name: "GAP", size: 8, visible: selectedRows.length > 0 },
+      { name: "SEPARATOR", size: 25, visible: selectedRows.length > 0 },
+      { name: "GAP", size: 8, visible: selectedRows.length > 0 },
+      { name: "REFRESH", size: 40, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "COLUMNS", size: 40, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "CREATE_OPTIMIZATION", size: 210, visible: true },
+    ],
+    [selectedRows.length],
+  );
+
   const expandingConfig = useExpandingConfig({});
 
   const openGroupsRef = useRef<Record<string, boolean>>({});
@@ -436,52 +457,52 @@ const OptimizationsPage: React.FunctionComponent = () => {
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
       />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            config={filtersConfig as never}
-            filters={filters}
-            onChange={setFilters}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <OptimizationsActionsPanel optimizations={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh optimizations list">
-            <Button
+      <ResponsiveToolbarProvider elements={toolbarElements}>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search!}
+              setSearchText={setSearch}
+              placeholder="Search by name"
+              className="w-[320px]"
+              dimension="sm"
+            ></SearchInput>
+            <FiltersButton
+              columns={FILTER_COLUMNS}
+              config={filtersConfig as never}
+              filters={filters}
+              onChange={setFilters}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <OptimizationsActionsPanel optimizations={selectedRows} />
+            <Separator orientation="vertical" className="mx-2 h-4" />
+            <TooltipWrapper content="Refresh optimizations list">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                className="shrink-0"
+                onClick={() => refetch()}
+              >
+                <RotateCw />
+              </Button>
+            </TooltipWrapper>
+            <ColumnsButton
+              columns={DEFAULT_COLUMNS}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+            ></ColumnsButton>
+            <ResponsiveButton
+              text="Create new optimization"
+              icon={<Info />}
               variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => refetch()}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewOptimizationClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new optimization
-          </Button>
+              onClick={handleNewOptimizationClick}
+            />
+          </div>
         </div>
-      </div>
+      </ResponsiveToolbarProvider>
       {Boolean(optimizations.length) && (
         <FeedbackScoresChartsWrapper chartsData={chartsData} />
       )}

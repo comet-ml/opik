@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import { Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
@@ -14,6 +14,8 @@ import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutati
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import { ResponsiveToolbarProvider } from "@/contexts/ResponsiveToolbarContext";
+import { ResponsiveButton } from "@/components/ui/ResponsiveButton";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -39,6 +41,19 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const { mutate } = useTracesBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+
+  const toolbarElements = useMemo(
+    () => [
+      { name: "ADD_TO", size: 90, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "ADD_TAGS", size: 118, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "EXPORT", size: 40, visible: true },
+      { name: "GAP", size: 8, visible: true },
+      { name: "DELETE", size: 40, visible: type === TRACE_DATA_TYPE.traces },
+    ],
+    [type],
+  );
 
   const deleteTracesHandler = useCallback(() => {
     mutate({
@@ -84,67 +99,65 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   );
 
   return (
-    <div className="flex items-center gap-2">
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={open === 2}
-        setOpen={setOpen}
-        onConfirm={deleteTracesHandler}
-        title="Delete traces"
-        description="Deleting these traces will also remove their data from related experiment samples. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete traces"
-        confirmButtonVariant="destructive"
-      />
-      <AddTagDialog
-        key={`tag-${resetKeyRef.current}`}
-        rows={selectedRows}
-        open={open === 3}
-        setOpen={setOpen}
-        projectId={projectId}
-        type={type}
-        onSuccess={onClearSelection}
-      />
-      <AddToDropdown
-        getDataForExport={getDataForExport}
-        selectedRows={selectedRows}
-        disabled={disabled}
-        dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
-      />
-      <TooltipWrapper content="Add tags">
-        <Button
+    <ResponsiveToolbarProvider elements={toolbarElements}>
+      <div className="flex items-center gap-2">
+        <ConfirmDialog
+          key={`delete-${resetKeyRef.current}`}
+          open={open === 2}
+          setOpen={setOpen}
+          onConfirm={deleteTracesHandler}
+          title="Delete traces"
+          description="Deleting these traces will also remove their data from related experiment samples. This action cannot be undone. Are you sure you want to continue?"
+          confirmText="Delete traces"
+          confirmButtonVariant="destructive"
+        />
+        <AddTagDialog
+          key={`tag-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 3}
+          setOpen={setOpen}
+          projectId={projectId}
+          type={type}
+          onSuccess={onClearSelection}
+        />
+        <AddToDropdown
+          getDataForExport={getDataForExport}
+          selectedRows={selectedRows}
+          disabled={disabled}
+          dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+        />
+        <ResponsiveButton
+          text="Add tags"
+          icon={<Tag />}
           variant="outline"
-          size="sm"
           onClick={() => {
             setOpen(3);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
-        >
-          <Tag className="mr-2 size-4" />
-          Add tags
-        </Button>
-      </TooltipWrapper>
-      <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
-        getData={mapRowData}
-        generateFileName={generateFileName}
-      />
-      {type === TRACE_DATA_TYPE.traces && (
-        <TooltipWrapper content="Delete">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => {
-              setOpen(2);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            disabled={disabled}
-          >
-            <Trash />
-          </Button>
-        </TooltipWrapper>
-      )}
-    </div>
+        />
+        <ExportToButton
+          disabled={disabled || columnsToExport.length === 0}
+          getData={mapRowData}
+          generateFileName={generateFileName}
+        />
+        {type === TRACE_DATA_TYPE.traces && (
+          <TooltipWrapper content="Delete">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => {
+                setOpen(2);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+              disabled={disabled}
+            >
+              <Trash />
+            </Button>
+          </TooltipWrapper>
+        )}
+      </div>
+    </ResponsiveToolbarProvider>
   );
 };
 
