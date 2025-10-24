@@ -7,7 +7,7 @@ import os
 import time
 from opik.rest_api.client import OpikApi
 
-projects_bp = Blueprint('projects', __name__)
+projects_bp = Blueprint("projects", __name__)
 
 
 def get_opik_api_client():
@@ -79,211 +79,186 @@ def wait_for_project_to_not_be_visible(project_name, timeout=10, initial_delay=1
 
 
 def setup_env_from_config(config):
-    if config.get('workspace'):
-        os.environ['OPIK_WORKSPACE'] = config['workspace']
-    if config.get('host'):
-        os.environ['OPIK_URL_OVERRIDE'] = config['host']
-    if config.get('api_key'):
-        os.environ['OPIK_API_KEY'] = config['api_key']
+    if config.get("workspace"):
+        os.environ["OPIK_WORKSPACE"] = config["workspace"]
+    if config.get("host"):
+        os.environ["OPIK_URL_OVERRIDE"] = config["host"]
+    if config.get("api_key"):
+        os.environ["OPIK_API_KEY"] = config["api_key"]
 
 
-@projects_bp.route('/create', methods=['POST'])
+@projects_bp.route("/create", methods=["POST"])
 def create_project():
     try:
         data = request.get_json()
-        config = data.get('config', {})
-        name = data.get('name')
+        config = data.get("config", {})
+        name = data.get("name")
 
         if not name:
-            return jsonify({
-                'success': False,
-                'error': 'Project name is required',
-                'type': 'ValueError'
-            }), 400
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Project name is required",
+                    "type": "ValueError",
+                }
+            ), 400
 
         setup_env_from_config(config)
         create_project_via_api(name=name)
 
-        return jsonify({
-            'success': True,
-            'project': {
-                'name': name
-            }
-        }), 200
+        return jsonify({"success": True, "project": {"name": name}}), 200
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': type(e).__name__
-        }), 500
+        return jsonify(
+            {"success": False, "error": str(e), "type": type(e).__name__}
+        ), 500
 
 
-@projects_bp.route('/find', methods=['POST'])
+@projects_bp.route("/find", methods=["POST"])
 def find_project():
     try:
         data = request.get_json()
-        config = data.get('config', {})
-        name = data.get('name')
+        config = data.get("config", {})
+        name = data.get("name")
 
         if not name:
-            return jsonify({
-                'success': False,
-                'error': 'Project name is required',
-                'type': 'ValueError'
-            }), 400
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Project name is required",
+                    "type": "ValueError",
+                }
+            ), 400
 
         setup_env_from_config(config)
         projects = find_project_by_name_sdk(name=name)
 
-        return jsonify({
-            'success': True,
-            'projects': projects
-        }), 200
+        return jsonify({"success": True, "projects": projects}), 200
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': type(e).__name__
-        }), 500
+        return jsonify(
+            {"success": False, "error": str(e), "type": type(e).__name__}
+        ), 500
 
 
-@projects_bp.route('/delete', methods=['DELETE'])
+@projects_bp.route("/delete", methods=["DELETE"])
 def delete_project():
     try:
         data = request.get_json()
-        config = data.get('config', {})
-        name = data.get('name')
+        config = data.get("config", {})
+        name = data.get("name")
 
         if not name:
-            return jsonify({
-                'success': False,
-                'error': 'Project name is required',
-                'type': 'ValueError'
-            }), 400
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Project name is required",
+                    "type": "ValueError",
+                }
+            ), 400
 
         setup_env_from_config(config)
         delete_project_by_name_sdk(name=name)
 
-        return jsonify({
-            'success': True,
-            'message': f'Project {name} deleted successfully'
-        }), 200
+        return jsonify(
+            {"success": True, "message": f"Project {name} deleted successfully"}
+        ), 200
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': type(e).__name__
-        }), 500
+        return jsonify(
+            {"success": False, "error": str(e), "type": type(e).__name__}
+        ), 500
 
 
-@projects_bp.route('/update', methods=['POST'])
+@projects_bp.route("/update", methods=["POST"])
 def update_project():
     try:
         data = request.get_json()
-        config = data.get('config', {})
-        name = data.get('name')
-        new_name = data.get('new_name')
+        config = data.get("config", {})
+        name = data.get("name")
+        new_name = data.get("new_name")
 
         if not name or not new_name:
-            return jsonify({
-                'success': False,
-                'error': 'Both name and new_name are required',
-                'type': 'ValueError'
-            }), 400
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Both name and new_name are required",
+                    "type": "ValueError",
+                }
+            ), 400
 
         setup_env_from_config(config)
         project_id = update_project_by_name_sdk(name=name, new_name=new_name)
 
-        return jsonify({
-            'success': True,
-            'project': {
-                'id': project_id,
-                'name': new_name
-            }
-        }), 200
+        return jsonify(
+            {"success": True, "project": {"id": project_id, "name": new_name}}
+        ), 200
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': type(e).__name__
-        }), 500
+        return jsonify(
+            {"success": False, "error": str(e), "type": type(e).__name__}
+        ), 500
 
 
-@projects_bp.route('/wait-for-visible', methods=['POST'])
+@projects_bp.route("/wait-for-visible", methods=["POST"])
 def wait_for_project_visible():
     try:
         data = request.get_json()
-        config = data.get('config', {})
-        name = data.get('name')
-        timeout = data.get('timeout', 10)
+        config = data.get("config", {})
+        name = data.get("name")
+        timeout = data.get("timeout", 10)
 
         if not name:
-            return jsonify({
-                'success': False,
-                'error': 'Project name is required',
-                'type': 'ValueError'
-            }), 400
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Project name is required",
+                    "type": "ValueError",
+                }
+            ), 400
 
         setup_env_from_config(config)
         wait_for_project_to_be_visible(project_name=name, timeout=timeout)
 
-        return jsonify({
-            'success': True,
-            'message': f'Project {name} is visible'
-        }), 200
+        return jsonify({"success": True, "message": f"Project {name} is visible"}), 200
 
     except TimeoutError as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': 'TimeoutError'
-        }), 408
+        return jsonify({"success": False, "error": str(e), "type": "TimeoutError"}), 408
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': type(e).__name__
-        }), 500
+        return jsonify(
+            {"success": False, "error": str(e), "type": type(e).__name__}
+        ), 500
 
 
-@projects_bp.route('/wait-for-deleted', methods=['POST'])
+@projects_bp.route("/wait-for-deleted", methods=["POST"])
 def wait_for_project_deleted():
     try:
         data = request.get_json()
-        config = data.get('config', {})
-        name = data.get('name')
-        timeout = data.get('timeout', 10)
+        config = data.get("config", {})
+        name = data.get("name")
+        timeout = data.get("timeout", 10)
 
         if not name:
-            return jsonify({
-                'success': False,
-                'error': 'Project name is required',
-                'type': 'ValueError'
-            }), 400
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Project name is required",
+                    "type": "ValueError",
+                }
+            ), 400
 
         setup_env_from_config(config)
         wait_for_project_to_not_be_visible(project_name=name, timeout=timeout)
 
-        return jsonify({
-            'success': True,
-            'message': f'Project {name} has been deleted'
-        }), 200
+        return jsonify(
+            {"success": True, "message": f"Project {name} has been deleted"}
+        ), 200
 
     except TimeoutError as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': 'TimeoutError'
-        }), 408
+        return jsonify({"success": False, "error": str(e), "type": "TimeoutError"}), 408
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'type': type(e).__name__
-        }), 500
+        return jsonify(
+            {"success": False, "error": str(e), "type": type(e).__name__}
+        ), 500
