@@ -37,7 +37,6 @@ public abstract sealed class FeedbackScoreItem {
     @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used")
     private final String projectName;
 
-    @JsonIgnore
     private final UUID projectId;
 
     @NotBlank private final String name;
@@ -55,11 +54,6 @@ public abstract sealed class FeedbackScoreItem {
     public abstract UUID id();
 
     public abstract String threadId();
-
-    @JsonIgnore
-    public UUID projectId() {
-        return projectId;
-    }
 
     // Constructor for subclasses to use
 

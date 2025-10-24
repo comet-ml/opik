@@ -18,6 +18,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AlertEvent(@NotNull AlertEventType eventType,
         @NotBlank String workspaceId,
+        @NotBlank String workspaceName,
         @NotBlank String userName,
         UUID projectId,
         @NotNull Object payload) {

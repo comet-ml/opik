@@ -89,13 +89,15 @@ class GuardrailsServiceImpl implements GuardrailsService {
                 .flatMap(projectDto -> guardrailsDAO.addGuardrails(entityType, projectDto.getValue())
                         .doOnSuccess(__ -> {
                             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                            String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
                             String userName = ctx.get(RequestContext.USER_NAME);
-                            raiseAlertEventIfApplicable(projectDto.getValue(), workspaceId, userName);
+                            raiseAlertEventIfApplicable(projectDto.getValue(), workspaceId, workspaceName, userName);
                         }))
                 .reduce(0L, Long::sum));
     }
 
-    private void raiseAlertEventIfApplicable(List<Guardrail> guardrails, String workspaceId, String userName) {
+    private void raiseAlertEventIfApplicable(List<Guardrail> guardrails, String workspaceId, String workspaceName,
+            String userName) {
         if (CollectionUtils.isEmpty(guardrails)) {
             return;
         }
@@ -109,6 +111,7 @@ class GuardrailsServiceImpl implements GuardrailsService {
             eventBus.post(AlertEvent.builder()
                     .eventType(TRACE_GUARDRAILS_TRIGGERED)
                     .workspaceId(workspaceId)
+                    .workspaceName(workspaceName)
                     .userName(userName)
                     .projectId(projectId)
                     .payload(failedGuardrails)

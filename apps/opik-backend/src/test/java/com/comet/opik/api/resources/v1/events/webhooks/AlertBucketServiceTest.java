@@ -31,6 +31,9 @@ class AlertBucketServiceTest {
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final String BUCKET_KEY_PREFIX = "opik:alert_bucket:";
+    private static final String TEST_WORKSPACE_NAME = "test-workspace-name";
+    private static final String TEST_WORKSPACE_NAME_1 = "test-workspace-name-1";
+    private static final String TEST_WORKSPACE_NAME_2 = "test-workspace-name-2";
 
     private RedissonReactiveClient redissonClient;
     private AlertBucketService alertBucketService;
@@ -79,7 +82,8 @@ class AlertBucketServiceTest {
 
         // When
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload,
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        eventId, payload,
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -126,7 +130,8 @@ class AlertBucketServiceTest {
 
         // When - add first event
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId1, payload1,
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        eventId1, payload1,
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -140,7 +145,8 @@ class AlertBucketServiceTest {
 
         // When - add second event
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2, payload2,
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        eventId2, payload2,
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -181,7 +187,8 @@ class AlertBucketServiceTest {
         var payload1 = "test-payload-1";
 
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alert1Id, workspaceId1, eventType, event1Id, payload1,
+                .create(alertBucketService.addEventToBucket(alert1Id, workspaceId1, TEST_WORKSPACE_NAME_1, eventType,
+                        event1Id, payload1,
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -214,7 +221,8 @@ class AlertBucketServiceTest {
         var payload2 = "test-payload-2";
 
         StepVerifier
-                .create(updatedAlertBucketService.addEventToBucket(alert2Id, workspaceId2, eventType, event2Id,
+                .create(updatedAlertBucketService.addEventToBucket(alert2Id, workspaceId2, TEST_WORKSPACE_NAME_2,
+                        eventType, event2Id,
                         payload2, UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -257,7 +265,8 @@ class AlertBucketServiceTest {
         var eventType = AlertEventType.TRACE_ERRORS;
 
         StepVerifier
-                .create(shortWindowService.addEventToBucket(alert1Id, workspaceId1, eventType, "event-1", "payload-1",
+                .create(shortWindowService.addEventToBucket(alert1Id, workspaceId1, TEST_WORKSPACE_NAME_1, eventType,
+                        "event-1", "payload-1",
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -274,7 +283,8 @@ class AlertBucketServiceTest {
         var workspaceId2 = "test-workspace-" + UUID.randomUUID();
 
         StepVerifier
-                .create(longWindowService.addEventToBucket(alert2Id, workspaceId2, eventType, "event-2", "payload-2",
+                .create(longWindowService.addEventToBucket(alert2Id, workspaceId2, TEST_WORKSPACE_NAME_2, eventType,
+                        "event-2", "payload-2",
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -311,7 +321,8 @@ class AlertBucketServiceTest {
         var eventType = AlertEventType.TRACE_ERRORS;
 
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1", "payload-1",
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        "event-1", "payload-1",
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -326,7 +337,8 @@ class AlertBucketServiceTest {
 
         // Add another event to the same alert
         StepVerifier
-                .create(updatedService.addEventToBucket(alertId, workspaceId, eventType, "event-2", "payload-2",
+                .create(updatedService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        "event-2", "payload-2",
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -358,9 +370,10 @@ class AlertBucketServiceTest {
         // When - add multiple events
         StepVerifier.create(
                 alertBucketService
-                        .addEventToBucket(alertId, workspaceId, eventType, eventId1, payload1,
+                        .addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType, eventId1, payload1,
                                 UUID.randomUUID().toString())
-                        .then(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId2, payload2,
+                        .then(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME,
+                                eventType, eventId2, payload2,
                                 UUID.randomUUID().toString())))
                 .verifyComplete();
 
@@ -392,7 +405,8 @@ class AlertBucketServiceTest {
         var payload = "test-payload-1";
 
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload,
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        eventId, payload,
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -426,7 +440,8 @@ class AlertBucketServiceTest {
 
         // When - add first event
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, eventId, payload,
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        eventId, payload,
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -455,7 +470,8 @@ class AlertBucketServiceTest {
 
         // When - add first event
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-1", "payload-1",
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        "event-1", "payload-1",
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
@@ -474,7 +490,8 @@ class AlertBucketServiceTest {
 
         // Add second event
         StepVerifier
-                .create(alertBucketService.addEventToBucket(alertId, workspaceId, eventType, "event-2", "payload-2",
+                .create(alertBucketService.addEventToBucket(alertId, workspaceId, TEST_WORKSPACE_NAME, eventType,
+                        "event-2", "payload-2",
                         UUID.randomUUID().toString()))
                 .verifyComplete();
 
