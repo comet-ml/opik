@@ -41,7 +41,7 @@ class ChainedMessageProcessor(BaseMessageProcessor):
 
     def process(self, message: messages.BaseMessage) -> None:
         rate_limit_error: Optional[opik.exceptions.OpikCloudRequestsRateLimited] = None
-        
+
         for processor in self._processors:
             try:
                 processor.process(message)
@@ -54,7 +54,7 @@ class ChainedMessageProcessor(BaseMessageProcessor):
                     type(processor),
                     exc_info=True,
                 )
-        
+
         # Rate limit error is a special case that is handled by the caller.
         if rate_limit_error is not None:
             raise rate_limit_error
