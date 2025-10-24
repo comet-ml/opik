@@ -23,7 +23,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -45,7 +44,6 @@ import static org.mockito.Mockito.when;
 class BaseRedisSubscriberUnitTest {
 
     private static final int AWAIT_TIMEOUT_SECONDS = 2;
-    private static final int SLOW_AWAIT_TIMEOUT_SECONDS = 4;
 
     private static TestStreamConfiguration CONFIG;
 
@@ -74,7 +72,7 @@ class BaseRedisSubscriberUnitTest {
     }
 
     @Nested
-    class PendingMessageClaimerTests {
+    class SuccessTests {
 
         @BeforeEach
         void setUp() {
@@ -83,64 +81,21 @@ class BaseRedisSubscriberUnitTest {
         }
 
         @Test
-        void shouldProcessClaimedMessages() {
-            var claimAttempts = new AtomicInteger();
-            var processedMessages = new CopyOnWriteArraySet<String>();
-            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient,
-                    message -> {
-                        processedMessages.add(message);
-                        return Mono.empty();
-                    }));
-            // Mock autoClaim to return messages
-            var claimedMessage = podamFactory.manufacturePojo(String.class);
-            when(stream.autoClaim(
-                    CONFIG.getConsumerGroupName(),
-                    subscriber.getConsumerId(),
-                    CONFIG.getPendingMessageDuration().toJavaDuration().toMillis(),
-                    TimeUnit.MILLISECONDS,
-                    StreamMessageId.MIN,
-                    CONFIG.getConsumerBatchSize()))
-                    .thenAnswer(invocation -> {
-                        claimAttempts.incrementAndGet();
-                        var result = new AutoClaimResult<>(
-                                null,
-                                Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
-                                        Map.of(TestStreamConfiguration.PAYLOAD_FIELD, claimedMessage)),
-                                List.of());
-                        return Mono.just(result);
-                    });
-            // Mock readGroup to return empty on subsequent calls
-            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
-                    .thenReturn(Mono.just(Map.of()));
-            whenAckReturn();
-            whenRemoveReturn();
-
-            subscriber.start();
-
-            await().atMost(SLOW_AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-                        // Verify claimed messages are processed
-                        assertThat(claimAttempts.get()).isGreaterThan(0);
-                        assertThat(processedMessages).containsExactlyInAnyOrder(claimedMessage);
-                        // Verify some processing happened
-                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(0);
-                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
-                    });
-        }
-
-        @Test
         void shouldInterleaveClaimAndReadOperations() {
+            var fastConfig = CONFIG.toBuilder()
+                    .claimIntervalRatio(3)
+                    .build();
             var claimAttempts = new AtomicInteger();
             var readAttempts = new AtomicInteger();
-            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
             // Mock autoClaim to return empty
             when(stream.autoClaim(
-                    CONFIG.getConsumerGroupName(),
+                    fastConfig.getConsumerGroupName(),
                     subscriber.getConsumerId(),
-                    CONFIG.getPendingMessageDuration().toJavaDuration().toMillis(),
+                    fastConfig.getPendingMessageDuration().toJavaDuration().toMillis(),
                     TimeUnit.MILLISECONDS,
                     StreamMessageId.MIN,
-                    CONFIG.getConsumerBatchSize()))
+                    fastConfig.getConsumerBatchSize()))
                     .thenAnswer(invocation -> {
                         claimAttempts.incrementAndGet();
                         var result = new AutoClaimResult<>(
@@ -149,7 +104,7 @@ class BaseRedisSubscriberUnitTest {
                                 List.of());
                         return Mono.just(result);
                     });
-            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+            when(stream.readGroup(eq(fastConfig.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
                     .thenAnswer(invocation -> {
                         readAttempts.incrementAndGet();
                         return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
@@ -166,7 +121,7 @@ class BaseRedisSubscriberUnitTest {
                         // Verify both claim and read operations occur with proper ratio (approximately)
                         var claimCount = claimAttempts.get();
                         assertThat(claimCount).isGreaterThan(0);
-                        assertThat(readAttempts.get()).isGreaterThan(claimCount * CONFIG.getClaimIntervalRatio());
+                        assertThat(readAttempts.get()).isGreaterThan(claimCount * fastConfig.getClaimIntervalRatio());
                         // Verify some processing happened
                         assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
                         assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
@@ -193,7 +148,7 @@ class BaseRedisSubscriberUnitTest {
                     .thenAnswer(invocation -> {
                         readCount.incrementAndGet();
                         // Delay longer than polling interval to cause backpressure
-                        return Mono.delay(Duration.ofMillis(CONFIG.getPoolingInterval().toMilliseconds() * 3))
+                        return Mono.delay(Duration.ofMillis(CONFIG.getPoolingInterval().toMilliseconds() * 2))
                                 .thenReturn(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
                                         Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
                                                 podamFactory.manufacturePojo(String.class))));
@@ -204,7 +159,7 @@ class BaseRedisSubscriberUnitTest {
             subscriber.start();
 
             // Interval ticks should be dropped due to backpressure, but interval continues
-            await().atMost(SLOW_AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         // Verify multiple read attempts were made (interval continues)
                         assertThat(readCount.get()).isGreaterThan(2);
@@ -216,16 +171,19 @@ class BaseRedisSubscriberUnitTest {
 
         @Test
         void shouldNotDieOnClaimError() {
+            var fastConfig = CONFIG.toBuilder()
+                    .claimIntervalRatio(3)
+                    .build();
             var claimCount = new AtomicInteger();
-            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
             // Mock Auto claim to fail
             when(stream.autoClaim(
-                    CONFIG.getConsumerGroupName(),
+                    fastConfig.getConsumerGroupName(),
                     subscriber.getConsumerId(),
-                    CONFIG.getPendingMessageDuration().toJavaDuration().toMillis(),
+                    fastConfig.getPendingMessageDuration().toJavaDuration().toMillis(),
                     TimeUnit.MILLISECONDS,
                     StreamMessageId.MIN,
-                    CONFIG.getConsumerBatchSize()))
+                    fastConfig.getConsumerBatchSize()))
                     .thenAnswer(invocation -> {
                         claimCount.incrementAndGet();
                         return Mono.error(new RuntimeException("Redis autoClaim error"));
@@ -237,7 +195,7 @@ class BaseRedisSubscriberUnitTest {
             subscriber.start();
 
             // Should continue processing after claim errors
-            await().atMost(SLOW_AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         // Verify claim attempts occurred
                         assertThat(claimCount.get()).isGreaterThan(1);

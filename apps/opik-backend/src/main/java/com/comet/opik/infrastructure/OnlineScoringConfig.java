@@ -35,7 +35,7 @@ public class OnlineScoringConfig {
     private Duration longPollingDuration;
 
     @JsonProperty
-    @Min(10) private int claimIntervalRatio;
+    @Min(2) private int claimIntervalRatio;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
@@ -68,7 +68,7 @@ public class OnlineScoringConfig {
         private Duration longPollingDuration;
 
         @JsonProperty
-        @Min(10) private Integer claimIntervalRatio;
+        @Min(2) private Integer claimIntervalRatio;
 
         @Valid @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.MINUTES)

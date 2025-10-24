@@ -69,7 +69,7 @@ public class TraceThreadConfig implements StreamConfiguration {
     @Min(1) @Max(10_000) private int closeTraceThreadMaxItemPerRun;
 
     @JsonProperty
-    @Min(10) private int claimIntervalRatio;
+    @Min(2) private int claimIntervalRatio;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)

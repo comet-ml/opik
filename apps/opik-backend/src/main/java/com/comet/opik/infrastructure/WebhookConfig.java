@@ -73,7 +73,7 @@ public class WebhookConfig implements StreamConfiguration {
     private DebouncingConfig debouncing = new DebouncingConfig();
 
     @JsonProperty
-    @Min(10) private int claimIntervalRatio;
+    @Min(2) private int claimIntervalRatio;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
