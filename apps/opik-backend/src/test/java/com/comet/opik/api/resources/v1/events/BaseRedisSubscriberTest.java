@@ -13,6 +13,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.redisson.Redisson;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.config.Config;
@@ -178,6 +179,123 @@ class BaseRedisSubscriberTest {
             waitForMessagesProcessed(subscriber, usualPayloadMessages.size());
             waitForMessagesAckedAndRemoved(otherPayloadMessages.size());
             assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(otherPayloadMessages.size());
+        }
+    }
+
+    @Nested
+    class PendingMessageClaimerTests {
+
+        @Test
+        void shouldClaimAndProcessPendingMessages() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber1 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
+            subscriber1.start();
+
+            publishMessagesToStream(messages);
+            waitForMessagesProcessed(subscriber1, messages.size());
+
+            // Stop subscriber1 before messages are acknowledged (simulating crash)
+            subscriber1.stop();
+
+            // Verify messages are in pending state
+            var pendingMessages = stream.listPending(config.getConsumerGroupName(),
+                    StreamMessageId.MIN, StreamMessageId.MAX, 100).block();
+            assertThat(pendingMessages).isNotNull().hasSize(messages.size());
+
+            // Start new subscriber that should claim orphaned messages
+            var subscriber2 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
+            subscriber2.start();
+
+            // Wait enough time for messages to be considered orphaned and claimed
+            waitForMillis(config.getPendingMessageDuration().toMilliseconds() + 1000);
+
+            // Wait for claiming to happen (claim interval ratio = 10, so wait for 10+ reads)
+            waitForMillis(config.getPoolingInterval().toMilliseconds() * (config.getClaimIntervalRatio() + 2));
+
+            // Verify messages were claimed and processed by subscriber2
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber2.getSuccessMessageCount().get())
+                            .isGreaterThanOrEqualTo(messages.size()));
+            waitForMessagesAckedAndRemoved();
+        }
+
+        @Test
+        void shouldRespectClaimIntervalRatio() {
+            var claimIntervalRatio = config.getClaimIntervalRatio();
+            var totalReads = claimIntervalRatio * 2 + 1; // Ensure at least 2 claim attempts
+            var messagesPerRead = 2;
+            var totalMessages = totalReads * messagesPerRead;
+
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
+            subscriber.start();
+
+            // Publish messages in batches to ensure multiple read cycles
+            for (int i = 0; i < totalReads; i++) {
+                var messages = List.of(
+                        podamFactory.manufacturePojo(String.class),
+                        podamFactory.manufacturePojo(String.class));
+                publishMessagesToStream(messages);
+                // Wait for one polling interval to ensure messages are read in separate cycles
+                waitForMillis(config.getPoolingInterval().toMilliseconds() + 100);
+            }
+
+            waitForMessagesProcessed(subscriber, totalMessages);
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+            // Verify that both read and claim operations occurred
+            // At least (totalReads / claimIntervalRatio) claims should have happened
+            assertThat(totalReads).isGreaterThanOrEqualTo(claimIntervalRatio);
+        }
+
+        @Test
+        void shouldHandleEmptyPendingList() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            // Wait for normal processing (no pending messages to claim)
+            waitForMessagesProcessed(subscriber, messages.size());
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+
+            // Verify pending list is empty
+            var pendingMessages = stream.listPending(config.getConsumerGroupName(),
+                    StreamMessageId.MIN, StreamMessageId.MAX, 100).block();
+            assertThat(pendingMessages).isNotNull().isEmpty();
+        }
+
+        @Test
+        void shouldNotClaimRecentPendingMessages() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber1 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
+            subscriber1.start();
+
+            publishMessagesToStream(messages);
+            waitForMessagesProcessed(subscriber1, messages.size());
+
+            // Stop subscriber1 immediately (messages are recent, not orphaned)
+            subscriber1.stop();
+
+            // Verify messages are in pending state
+            var pendingMessages = stream.listPending(config.getConsumerGroupName(),
+                    StreamMessageId.MIN, StreamMessageId.MAX, 100).block();
+            assertThat(pendingMessages).isNotNull().hasSize(messages.size());
+
+            // Start new subscriber immediately
+            var subscriber2 = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
+            subscriber2.start();
+
+            // Wait for multiple claim intervals but NOT enough time for messages to be orphaned
+            waitForMillis(config.getPoolingInterval().toMilliseconds() * (config.getClaimIntervalRatio() + 2));
+
+            // Verify messages were NOT claimed by subscriber2 (they're too recent)
+            assertThat(subscriber2.getSuccessMessageCount().get()).isZero();
+            // Messages should still be in pending state
+            pendingMessages = stream.listPending(config.getConsumerGroupName(),
+                    StreamMessageId.MIN, StreamMessageId.MAX, 100).block();
+            assertThat(pendingMessages).isNotNull().hasSize(messages.size());
         }
     }
 
