@@ -3,13 +3,19 @@ import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { PROVIDERS } from "@/constants/providers";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { ProviderKey, PROVIDER_TYPE } from "@/types/providers";
 
-const AIProviderCell = (context: CellContext<unknown, PROVIDER_TYPE>) => {
+const AIProviderCell = (context: CellContext<ProviderKey, PROVIDER_TYPE>) => {
   const provider = context.getValue();
+  const row = context.row.original;
   const Icon = PROVIDERS[provider]?.icon || null;
 
-  const providerKeyLabel = PROVIDERS[provider]?.label || "";
+  // For custom providers, show the provider name (keyName)
+  // For other providers, show the label from PROVIDERS constant
+  const providerKeyLabel = 
+    provider === PROVIDER_TYPE.CUSTOM 
+      ? row.keyName || "Custom Provider"
+      : PROVIDERS[provider]?.label || "";
 
   return (
     <CellWrapper

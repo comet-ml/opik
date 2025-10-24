@@ -24,6 +24,7 @@ const useProviderKeysCreateMutation = () => {
         provider: providerKey.provider,
         ...(providerKey.apiKey && { api_key: providerKey.apiKey }),
         ...(providerKey.base_url && { base_url: providerKey.base_url }),
+        ...(providerKey.keyName && { provider_name: providerKey.keyName }),
         ...(providerKey?.configuration && {
           configuration: providerKey.configuration,
         }),

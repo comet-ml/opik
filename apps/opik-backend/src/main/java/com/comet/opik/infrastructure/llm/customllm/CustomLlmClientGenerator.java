@@ -18,8 +18,6 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.http.HttpClient;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
-
 @RequiredArgsConstructor
 @Slf4j
 public class CustomLlmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
@@ -73,10 +71,21 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
+        // Extract provider_name from configuration (null for legacy providers)
+        String providerName = Optional.ofNullable(config.configuration())
+                .map(configuration -> configuration.get("provider_name"))
+                .orElse(null);
+
+        // Extract the actual model name using the provider name
+        String actualModelName = CustomLlmModelNameChecker.extractModelName(modelParameters.name(), providerName);
+
+        log.debug("Cleaned model name from '{}' to '{}' (providerName='{}') for ChatModel",
+                modelParameters.name(), actualModelName, providerName);
+
         var builder = OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .httpClientBuilder(jdkHttpClientBuilder)
-                .modelName(modelParameters.name().replace(CUSTOM_LLM_MODEL_PREFIX, ""))
+                .modelName(actualModelName)
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);

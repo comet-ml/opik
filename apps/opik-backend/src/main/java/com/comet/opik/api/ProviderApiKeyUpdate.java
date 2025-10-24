@@ -19,6 +19,8 @@ public record ProviderApiKeyUpdate(
                 ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) @Size(max = 150) String name,
+        @JsonView({ProviderApiKey.View.Public.class,
+                ProviderApiKey.View.Write.class}) @Size(max = 100) String providerName,
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) Map<String, String> headers,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) Map<String, String> configuration,
