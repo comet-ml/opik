@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.domain.AlertService;
+import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -49,6 +51,8 @@ public class AlertJob extends Job {
     private final @NonNull WebhookPublisher webhookPublisher;
     private final @NonNull @Config WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
+    private final @NonNull WorkspaceNameService workspaceNameService;
+    @NonNull private final OpikConfiguration config;
 
     @Override
     public void doJob(JobExecutionContext context) {
@@ -199,7 +203,10 @@ public class AlertJob extends Job {
                 eventType,
                 alert,
                 workspaceId,
-                workspaceName,
+                StringUtils.isBlank(workspaceName)
+                        ? workspaceNameService.getWorkspaceName(workspaceId,
+                                config.getAuthentication().getReactService().url())
+                        : workspaceName,
                 payload,
                 webhookConfig.getMaxRetries()) // maxRetries
                 .doOnSuccess(webhookId -> log.info(

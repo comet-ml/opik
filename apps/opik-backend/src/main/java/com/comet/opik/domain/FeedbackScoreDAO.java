@@ -337,7 +337,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return asyncTemplate.nonTransaction(connection -> {

@@ -147,7 +147,7 @@ class TraceServiceImpl implements TraceService {
                 .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .flatMap(project -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+                    String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     // Strip attachments from the trace with the generated ID and project ID
@@ -221,7 +221,7 @@ class TraceServiceImpl implements TraceService {
         return attachmentService.deleteAutoStrippedAttachments(EntityType.TRACE, traceIds)
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+                    String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
