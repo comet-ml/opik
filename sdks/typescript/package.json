@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "1.8.72",
+  "version": "1.8.87",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
@@ -37,11 +37,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./vercel": {
-      "types": "./dist/vercel/index.d.ts",
-      "import": "./dist/vercel/index.js",
-      "require": "./dist/vercel/index.cjs"
     }
   },
   "main": "dist/index.cjs",
@@ -59,9 +54,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.56.0",
-    "@opentelemetry/sdk-node": "^0.201.1",
     "@types/ini": "^4.1.1",
     "@types/mustache": "^4.2.5",
     "@types/node-fetch": "^2.6.12",

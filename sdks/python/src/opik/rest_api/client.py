@@ -17,6 +17,7 @@ from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient, LlmProviderKeyClient
+from .manual_evaluation.client import AsyncManualEvaluationClient, ManualEvaluationClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient, OpenTelemetryIngestionClient
 from .optimizations.client import AsyncOptimizationsClient, OptimizationsClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
@@ -102,6 +103,7 @@ class OpikApi:
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = LlmProviderKeyClient(client_wrapper=self._client_wrapper)
+        self.manual_evaluation = ManualEvaluationClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = OpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
         self.optimizations = OptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
@@ -238,6 +240,7 @@ class AsyncOpikApi:
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = AsyncLlmProviderKeyClient(client_wrapper=self._client_wrapper)
+        self.manual_evaluation = AsyncManualEvaluationClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
         self.optimizations = AsyncOptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)

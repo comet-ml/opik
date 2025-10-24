@@ -18,9 +18,8 @@ import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -53,7 +52,7 @@ public class AlertJob extends Job {
 
     @Override
     public void doJob(JobExecutionContext context) {
-        log.info("Starting alert job - checking for buckets to process");
+        log.debug("Starting alert job - checking for buckets to process");
 
         // Use distributed lock to prevent overlapping scans in case of slow Redis SCAN operations
         lockService.bestEffortLock(
@@ -62,7 +61,7 @@ public class AlertJob extends Job {
                         .flatMap(this::processBucket)
                         .onErrorContinue((throwable, bucketKey) -> log.error("Failed to process bucket '{}': {}",
                                 bucketKey, throwable.getMessage(), throwable))
-                        .doOnComplete(() -> log.info("Alert job finished processing all ready buckets"))
+                        .doOnComplete(() -> log.debug("Alert job finished processing all ready buckets"))
                         .then()),
                 Mono.defer(() -> {
                     log.info("Could not acquire lock for scanning buckets, another job instance is running");
@@ -101,7 +100,8 @@ public class AlertJob extends Job {
                                     bucketData.workspaceId(),
                                     eventType,
                                     bucketData.eventIds(),
-                                    bucketData.payloads()))
+                                    bucketData.payloads(),
+                                    bucketData.userNames()))
                             .then(bucketService.deleteBucket(bucketKey));
                 })
                 .doOnSuccess(__ -> log.info("Successfully processed and deleted bucket: '{}'", bucketKey))
@@ -124,15 +124,16 @@ public class AlertJob extends Job {
             @NonNull UUID alertId,
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds,
-            @NonNull Set<String> payloads) {
+            @NonNull List<String> eventIds,
+            @NonNull List<String> payloads,
+            @NonNull List<String> userNames) {
 
         log.info(
                 "Processing alert bucket: alertId='{}', workspaceId='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
                 alertId, workspaceId, eventType, eventIds.size(), payloads.size());
 
         return Mono.fromCallable(() -> alertService.getByIdAndWorkspace(alertId, workspaceId))
-                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds, payloads))
+                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds, payloads, userNames))
                 .doOnSuccess(
                         __ -> log.info("Successfully sent webhook for alert '{}' with '{}' events and '{}' payloads",
                                 alertId, eventIds.size(), payloads.size()))
@@ -154,8 +155,9 @@ public class AlertJob extends Job {
             @NonNull Alert alert,
             @NonNull String workspaceId,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds,
-            @NonNull Set<String> payloads) {
+            @NonNull List<String> eventIds,
+            @NonNull List<String> payloads,
+            @NonNull List<String> userNames) {
 
         if (Boolean.FALSE.equals(alert.enabled())) {
             log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
@@ -177,6 +179,7 @@ public class AlertJob extends Job {
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
                 "metadata", payloads,
+                "userNames", userNames,
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
@@ -188,11 +191,9 @@ public class AlertJob extends Job {
         // Send via WebhookPublisher with data from alert configuration
         return webhookPublisher.publishWebhookEvent(
                 eventType,
-                alert.id(),
+                alert,
                 workspaceId,
-                alert.webhook().url(),
                 payload,
-                Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()),
                 webhookConfig.getMaxRetries()) // maxRetries
                 .doOnSuccess(webhookId -> log.info(
                         "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",

@@ -58,6 +58,8 @@ tags:
   description: Guardrails related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: Manual Evaluation
+  description: Manual evaluation resources for traces and threads
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -326,6 +328,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/alerts/webhooks/examples:
+    get:
+      tags:
+      - Alerts
+      summary: Get webhook payload examples
+      description: "Get webhook payload examples for all alert event types, optionally\
+        \ filtered by alert type"
+      operationId: getWebhookExamples
+      parameters:
+      - name: alert_type
+        in: query
+        schema:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+      responses:
+        "200":
+          description: Webhook examples
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookExamples"
   /v1/private/alerts/webhooks/tests:
     post:
       tags:
@@ -928,7 +954,21 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: id
+        in: query
+        schema:
+          type: string
+          description: "Filter automation rules with rule ID containing this value\
+            \ (partial match, like %id%)"
       - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: sorting
         in: query
         schema:
           type: string
@@ -2217,6 +2257,70 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/threads:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate threads
+      description: Manually trigger evaluation rules on selected threads. Bypasses
+        sampling and enqueues all specified threads for evaluation.
+      operationId: evaluateThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/traces:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate traces
+      description: Manually trigger evaluation rules on selected traces. Bypasses
+        sampling and enqueues all specified traces for evaluation.
+      operationId: evaluateTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
           content:
             application/json:
               schema:
@@ -4722,7 +4826,6 @@ components:
           type: string
     Alert:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -4735,6 +4838,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook"
         triggers:
@@ -4775,7 +4888,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4891,7 +5004,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4899,7 +5012,6 @@ components:
             $ref: "#/components/schemas/AlertTriggerConfig_Write"
     Alert_Write:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -4912,6 +5024,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Write"
         triggers:
@@ -5027,7 +5149,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -5042,7 +5164,6 @@ components:
           readOnly: true
     Alert_Public:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -5055,6 +5176,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Public"
         triggers:
@@ -5120,6 +5251,13 @@ components:
           type: string
         details:
           type: string
+    WebhookExamples:
+      type: object
+      properties:
+        response_examples:
+          type: object
+          additionalProperties:
+            type: object
     WebhookTestResult:
       type: object
       properties:
@@ -6147,6 +6285,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
+        sortable_by:
+          type: array
+          items:
+            type: string
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
       - action
@@ -9538,6 +9680,60 @@ components:
             type: string
         base_url:
           type: string
+    ManualEvaluationResponse:
+      type: object
+      properties:
+        entities_queued:
+          type: integer
+          description: Number of entities queued for evaluation
+          format: int32
+          example: 5
+        rules_applied:
+          type: integer
+          description: Number of rules that will be applied
+          format: int32
+          example: 2
+    ManualEvaluationRequest:
+      required:
+      - entity_ids
+      - entity_type
+      - project_id
+      - rule_ids
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        entity_ids:
+          minItems: 1
+          type: array
+          description: List of entity IDs (trace IDs or thread IDs) to evaluate
+          example:
+          - 550e8400-e29b-41d4-a716-446655440000
+          - 550e8400-e29b-41d4-a716-446655440001
+          items:
+            type: string
+            description: List of entity IDs (trace IDs or thread IDs) to evaluate
+            format: uuid
+        rule_ids:
+          minItems: 1
+          type: array
+          description: List of automation rule IDs to apply
+          example:
+          - 660e8400-e29b-41d4-a716-446655440000
+          items:
+            type: string
+            description: List of automation rule IDs to apply
+            format: uuid
+        entity_type:
+          type: string
+          description: Type of entity to evaluate (trace or thread)
+          example: trace
+          enum:
+          - trace
+          - thread
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
     Optimization:
@@ -10880,9 +11076,6 @@ components:
       - value
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -10908,6 +11101,9 @@ components:
           - online_scoring
         author:
           type: string
+        id:
+          type: string
+          format: uuid
     SpanFilter_Public:
       type: object
       properties:
@@ -11355,6 +11551,8 @@ components:
         thread_id:
           minLength: 1
           type: string
+        truncate:
+          type: boolean
     TraceThreadPage:
       type: object
       properties:
@@ -11403,9 +11601,6 @@ components:
       - value
       type: object
       properties:
-        thread_id:
-          minLength: 1
-          type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -11430,6 +11625,9 @@ components:
           - sdk
           - online_scoring
         author:
+          type: string
+        thread_id:
+          minLength: 1
           type: string
     FeedbackScoreBatchThread:
       required:

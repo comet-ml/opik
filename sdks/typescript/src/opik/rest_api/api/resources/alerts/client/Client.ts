@@ -156,7 +156,6 @@ export class Alerts {
      *
      * @example
      *     await client.alerts.createAlert({
-     *         name: "name",
      *         webhook: {
      *             url: "url"
      *         }
@@ -426,7 +425,6 @@ export class Alerts {
      *
      * @example
      *     await client.alerts.updateAlert("id", {
-     *         name: "name",
      *         webhook: {
      *             url: "url"
      *         }
@@ -511,6 +509,100 @@ export class Alerts {
     }
 
     /**
+     * Get webhook payload examples for all alert event types, optionally filtered by alert type
+     *
+     * @param {OpikApi.GetWebhookExamplesRequest} request
+     * @param {Alerts.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.alerts.getWebhookExamples()
+     */
+    public getWebhookExamples(
+        request: OpikApi.GetWebhookExamplesRequest = {},
+        requestOptions?: Alerts.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.WebhookExamples> {
+        return core.HttpResponsePromise.fromPromise(this.__getWebhookExamples(request, requestOptions));
+    }
+
+    private async __getWebhookExamples(
+        request: OpikApi.GetWebhookExamplesRequest = {},
+        requestOptions?: Alerts.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.WebhookExamples>> {
+        const { alertType } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (alertType != null) {
+            _queryParams["alert_type"] = serializers.GetWebhookExamplesRequestAlertType.jsonOrThrow(alertType, {
+                unrecognizedObjectKeys: "strip",
+            });
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/alerts/webhooks/examples",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.WebhookExamples.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/alerts/webhooks/examples.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Test alert webhook
      *
      * @param {OpikApi.AlertWrite} request
@@ -520,7 +612,6 @@ export class Alerts {
      *
      * @example
      *     await client.alerts.testWebhook({
-     *         name: "name",
      *         webhook: {
      *             url: "url"
      *         }

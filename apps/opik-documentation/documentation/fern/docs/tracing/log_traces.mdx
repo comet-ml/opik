@@ -183,10 +183,10 @@ Once you have installed and configured the Opik SDK, you can start using it to t
 
     <Steps>
       <Step>
-        Install the Opik AI Vercel SDK:
+        Install the Opik Vercel integration:
 
         ```bash
-        npm install opik
+        npm install opik-vercel
         ```
       </Step>
       <Step>
@@ -206,7 +206,7 @@ Once you have installed and configured the Opik SDK, you can start using it to t
         import { generateText } from "ai";
         import { NodeSDK } from "@opentelemetry/sdk-node";
         import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-        import { OpikExporter } from "opik/vercel";
+        import { OpikExporter } from "opik-vercel";
 
         // Set up OpenTelemetry with Opik
         const sdk = new NodeSDK({
@@ -677,6 +677,178 @@ If you need full control over the logging process, you can use the low-level SDK
     </Tab>
 
 </Tabs>
+
+### Logging traces/spans using context managers
+
+If you are using the low-level SDKs, you can use the context managers to log traces and spans. Context managers provide a clean and Pythonic way to manage the lifecycle of traces and spans, ensuring proper cleanup and error handling.
+
+<Tabs>
+    <Tab title="Python" value="python" language="python">
+        Opik provides two main context managers for logging:
+
+        #### `opik.start_as_current_trace()`
+
+        Use this context manager to create and manage a trace. A trace represents the overall execution flow of your application.
+
+        For detailed API reference, see [`opik.start_as_current_trace`](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/start_as_current_trace.html).
+
+        ```python
+        import opik
+
+        # Basic trace creation
+        with opik.start_as_current_trace("my-trace", project_name="my-project") as trace:
+            # Your application logic here
+            trace.input = {"user_query": "What is the weather?"}
+            trace.output = {"response": "It's sunny today!"}
+            trace.tags = ["weather", "api-call"]
+            trace.metadata = {"model": "gpt-4", "temperature": 0.7}
+        ```
+
+        **Parameters:**
+        - `name` (str): The name of the trace
+        - `input` (Dict[str, Any], optional): Input data for the trace
+        - `output` (Dict[str, Any], optional): Output data for the trace
+        - `tags` (List[str], optional): Tags to categorize the trace
+        - `metadata` (Dict[str, Any], optional): Additional metadata
+        - `project_name` (str, optional): Project name (defaults to environment variable)
+        - `thread_id` (str, optional): Thread identifier for multi-threaded applications
+        - `flush` (bool, optional): Whether to flush data immediately (default: False)
+
+        #### `opik.start_as_current_span()`
+
+        Use this context manager to create and manage a span within a trace. Spans represent individual operations or function calls.
+
+        For detailed API reference, see [`opik.start_as_current_span`](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/start_as_current_span.html).
+
+        ```python
+        import opik
+
+        # Basic span creation
+        with opik.start_as_current_span("llm-call", type="llm", project_name="my-project") as span:
+            # Your LLM call here
+            span.input = {"prompt": "Explain quantum computing"}
+            span.output = {"response": "Quantum computing is..."}
+            span.model = "gpt-4"
+            span.provider = "openai"
+            span.usage = {
+                "prompt_tokens": 10,
+                "completion_tokens": 50,
+                "total_tokens": 60
+            }
+        ```
+
+        **Parameters:**
+        - `name` (str): The name of the span
+        - `type` (SpanType, optional): Type of span ("general", "tool", "llm", "guardrail", etc.)
+        - `input` (Dict[str, Any], optional): Input data for the span
+        - `output` (Dict[str, Any], optional): Output data for the span
+        - `tags` (List[str], optional): Tags to categorize the span
+        - `metadata` (Dict[str, Any], optional): Additional metadata
+        - `project_name` (str, optional): Project name
+        - `model` (str, optional): Model name for LLM spans
+        - `provider` (str, optional): Provider name for LLM spans
+        - `flush` (bool, optional): Whether to flush data immediately
+
+        #### Nested Context Managers
+
+        You can nest spans within traces to create hierarchical structures:
+
+        ```python
+        import opik
+
+        with opik.start_as_current_trace("chatbot-conversation", project_name="chatbot") as trace:
+            trace.input = {"user_message": "Help me with Python"}
+            
+            # First span: Process user input
+            with opik.start_as_current_span("process-input", type="general") as span:
+                span.input = {"raw_input": "Help me with Python"}
+                span.output = {"processed_input": "Python programming help request"}
+            
+            # Second span: Generate response
+            with opik.start_as_current_span("generate-response", type="llm") as span:
+                span.input = {"prompt": "Python programming help request"}
+                span.output = {"response": "I'd be happy to help with Python!"}
+                span.model = "gpt-4"
+                span.provider = "openai"
+            
+            trace.output = {"final_response": "I'd be happy to help with Python!"}
+        ```
+
+        #### Error Handling
+
+        Context managers automatically handle errors and ensure proper cleanup:
+
+        ```python
+        import opik
+
+        try:
+            with opik.start_as_current_trace("risky-operation", project_name="my-project") as trace:
+                trace.input = {"data": "important data"}
+                # This will raise an exception
+                result = 1 / 0
+                trace.output = {"result": result}
+        except ZeroDivisionError:
+            # The trace is still properly closed and logged
+            print("Error occurred, but trace was logged")
+        ```
+
+        #### Dynamic Parameter Updates
+
+        You can modify trace and span parameters both inside and outside the context manager:
+
+        ```python
+        import opik
+
+        # Parameters set outside the context manager
+        with opik.start_as_current_trace(
+            "dynamic-trace",
+            input={"initial": "data"},
+            tags=["initial-tag"],
+            project_name="my-project"
+        ) as trace:
+            # Override parameters inside the context manager
+            trace.input = {"updated": "data"}
+            trace.tags = ["updated-tag", "new-tag"]
+            trace.metadata = {"custom": "metadata"}
+            
+            # The final trace will use the updated values
+        ```
+
+        #### Flush Control
+
+        Control when data is sent to Opik:
+
+        ```python
+        import opik
+
+        # Immediate flush
+        with opik.start_as_current_trace("immediate-trace", flush=True) as trace:
+            trace.input = {"data": "important"}
+            # Data is sent immediately when exiting the context
+
+        # Deferred flush (default)
+        with opik.start_as_current_trace("deferred-trace", flush=False) as trace:
+            trace.input = {"data": "less urgent"}
+            # Data will be sent asynchronously later or when the program exits
+        ```
+
+    </Tab>
+</Tabs>
+
+#### Best Practices
+
+1. **Use descriptive names**: Choose clear, descriptive names for your traces and spans that explain what they represent.
+
+2. **Set appropriate types**: Use the correct span types ("llm", "retrieval", "general", etc.) to help with filtering and analysis.
+
+3. **Include relevant metadata**: Add metadata that will be useful for debugging and analysis, such as model names, parameters, and custom metrics.
+
+4. **Handle errors gracefully**: Let the context manager handle cleanup, but ensure your application logic handles errors appropriately.
+
+5. **Use project organization**: Organize your traces by project to keep your Opik dashboard clean and organized.
+
+6. **Consider performance**: Use `flush=True` only when immediate data availability is required, as it can slow down your application by triggering a synchronous, immediate data upload.
+
 
 ### Logging to a specific project
 

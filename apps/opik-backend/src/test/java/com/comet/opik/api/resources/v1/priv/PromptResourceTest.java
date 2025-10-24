@@ -1156,7 +1156,7 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when prompt does not exist, then return no content")
+        @DisplayName("when prompt does not exist, then return not found")
         void when__promptDoesNotExist__thenReturnNotFound() {
 
             UUID promptId = UUID.randomUUID();
@@ -1169,8 +1169,11 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .delete()) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-                assertThat(response.hasEntity()).isFalse();
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt not found"));
             }
 
             getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);

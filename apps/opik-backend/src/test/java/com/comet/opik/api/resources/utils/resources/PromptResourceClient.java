@@ -41,6 +41,21 @@ public class PromptResourceClient {
         }
     }
 
+    public Prompt getPrompt(UUID id, String apiKey, String workspaceName) {
+
+        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(Prompt.class);
+        }
+    }
+
     public void deletePrompt(UUID id, String apiKey, String workspaceName) {
 
         try (var response = client.target(PROMPT_PATH.formatted(baseURI))

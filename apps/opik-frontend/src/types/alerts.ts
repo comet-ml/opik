@@ -1,16 +1,22 @@
 export enum ALERT_EVENT_TYPE {
-  "trace:errors" = "trace:errors",
-  "trace:feedback_score" = "trace:feedback_score",
-  "trace_thread:feedback_score" = "trace_thread:feedback_score",
-  "prompt:created" = "prompt:created",
-  "prompt:committed" = "prompt:committed",
-  "span:guardrails_triggered" = "span:guardrails_triggered",
-  "prompt:deleted" = "prompt:deleted",
+  trace_errors = "trace:errors",
+  trace_feedback_score = "trace:feedback_score",
+  trace_thread_feedback_score = "trace_thread:feedback_score",
+  prompt_created = "prompt:created",
+  prompt_committed = "prompt:committed",
+  trace_guardrails_triggered = "trace:guardrails_triggered",
+  prompt_deleted = "prompt:deleted",
 }
 
 export enum ALERT_TRIGGER_CONFIG_TYPE {
   "scope:project" = "scope:project",
   "threshold:feedback_score" = "threshold:feedback_score",
+}
+
+export enum ALERT_TYPE {
+  general = "general",
+  slack = "slack",
+  pagerduty = "pagerduty",
 }
 
 export interface AlertTriggerConfig {
@@ -45,10 +51,17 @@ export interface Webhook {
   last_updated_by?: string;
 }
 
+export interface AlertMetadata {
+  base_url?: string;
+  routing_key?: string;
+}
+
 export interface Alert {
   id?: string;
   name: string;
   enabled: boolean;
+  alert_type?: ALERT_TYPE;
+  metadata?: AlertMetadata;
   webhook: Webhook;
   triggers: AlertTrigger[];
   created_at?: string;

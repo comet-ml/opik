@@ -14,8 +14,9 @@ import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -35,11 +36,15 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
  * Traces to be scored. Extending classes must provide a particular implementation for the score method.
  * This class extends BaseRedisSubscriber to reuse common Redis stream handling functionality.
  */
-@Slf4j
 public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> {
 
     public static final int TRACE_PAGE_LIMIT = 2000;
     private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
+
+    /**
+     * Logger for the actual subclass, in order to have the correct class name in the logs.
+     */
+    private final Logger log = LoggerFactory.getLogger(this.getClass());
 
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
@@ -53,16 +58,12 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
             @NonNull String metricsBaseName) {
         super(OnlineScoringStreamConfigurationAdapter.create(config, type),
                 redisson,
-                metricsBaseName,
-                OnlineScoringConfig.PAYLOAD_FIELD);
+                OnlineScoringConfig.PAYLOAD_FIELD,
+                ONLINE_SCORING_NAMESPACE,
+                metricsBaseName);
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
         this.type = type;
-    }
-
-    @Override
-    protected String getMetricNamespace() {
-        return ONLINE_SCORING_NAMESPACE;
     }
 
     @Override

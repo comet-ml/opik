@@ -85,6 +85,7 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.common.collect.ImmutableMap;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -97,6 +98,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -115,8 +117,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -6593,6 +6593,133 @@ class DatasetsResourceTest {
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
+    }
+
+    @Nested
+    @DisplayName("OPIK-2469: Cross-Project Traces Duplicate Test")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CrossProjectTracesDuplicateTest {
+
+        @Test
+        @DisplayName("Should return unique experiment items when trace has spans in multiple projects")
+        void findDatasetItemsWithExperimentItems__whenTraceHasSpansInMultipleProjects__thenReturnUniqueItems() {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create dataset item
+            var datasetItem = factory.manufacturePojo(DatasetItem.class);
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create Project A and Project B
+            var projectA = UUID.randomUUID().toString();
+            var projectB = UUID.randomUUID().toString();
+
+            // Create trace in Project A
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectA)
+                    .build();
+            createAndAssert(trace1, workspaceName, apiKey);
+
+            // Create span in Project A for trace1
+            var span1InProjectA = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectA)
+                    .traceId(trace1.id())
+                    .build();
+            createSpan(span1InProjectA, apiKey, workspaceName);
+
+            // ROOT CAUSE SIMULATION: Create span in Project B for the SAME trace (trace1)
+            // This creates a cross-project trace scenario through the API
+            var span1InProjectB = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectB)
+                    .traceId(trace1.id())
+                    .build();
+            createSpan(span1InProjectB, apiKey, workspaceName);
+
+            // Create another trace in Project A (no cross-project issue)
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectA)
+                    .build();
+            createAndAssert(trace2, workspaceName, apiKey);
+
+            // Create experiment items for both traces
+            var experimentId = GENERATOR.generate();
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace1.id())
+                    .input(trace1.input())
+                    .output(trace1.output())
+                    .build();
+
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace2.id())
+                    .input(trace2.input())
+                    .output(trace2.output())
+                    .build();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem1, experimentItem2))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query the endpoint
+            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId,
+                    List.of(experimentId),
+                    apiKey,
+                    workspaceName);
+
+            // Assert results
+            assertThat(result).isNotNull();
+            assertThat(result.content()).hasSize(1);
+
+            var datasetItemResult = result.content().get(0);
+            assertThat(datasetItemResult.id()).isEqualTo(datasetItem.id());
+
+            // CRITICAL ASSERTION: Should have exactly 2 unique experiment items (no duplicates)
+            // Without the fix, trace1 appears twice because it has spans in 2 projects
+            var experimentItems = datasetItemResult.experimentItems();
+            assertThat(experimentItems).isNotNull();
+
+            // Count experiment items by their ID to detect duplicates
+            var experimentItemIds = experimentItems.stream()
+                    .map(ExperimentItem::id)
+                    .collect(Collectors.toList());
+
+            var uniqueIds = new HashSet<>(experimentItemIds);
+
+            // THIS IS THE KEY ASSERTION - Verifies fix for OPIK-2469
+            assertThat(experimentItemIds)
+                    .as("Should not contain duplicate experiment item IDs - trace1 has spans in 2 projects but should appear once")
+                    .hasSameSizeAs(uniqueIds)
+                    .as("Should have exactly 2 unique experiment items")
+                    .hasSize(2);
+
+            // Verify the correct experiment items are present
+            assertThat(uniqueIds).containsExactlyInAnyOrder(experimentItem1.id(), experimentItem2.id());
+
+            // Verify each experiment item appears only once
+            experimentItemIds.forEach(id -> {
+                long count = experimentItemIds.stream().filter(i -> i.equals(id)).count();
+                assertThat(count)
+                        .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
+                        .isEqualTo(1);
+            });
         }
     }
 }

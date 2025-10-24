@@ -159,7 +159,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.total_tokens",
-        label: "Total tokens (average)",
+        label: "Total tokens (avg.)",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.total_tokens)
@@ -168,7 +168,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.prompt_tokens",
-        label: "Input tokens (average)",
+        label: "Input tokens (avg.)",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.prompt_tokens)
@@ -177,7 +177,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.completion_tokens",
-        label: "Output tokens (average)",
+        label: "Output tokens (avg.)",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.completion_tokens)

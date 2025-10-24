@@ -1,11 +1,14 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import { useNavigate } from "@tanstack/react-router";
 
 import useAlertsList from "@/api/alerts/useAlertsList";
 import AlertsRowActionsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsRowActionsCell";
 import AlertsEventsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsEventsCell";
+import AlertTypeCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertTypeCell";
+import { ALERT_TYPE_LABELS } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -16,7 +19,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
-import { Alert } from "@/types/alerts";
+import { Alert, ALERT_TYPE } from "@/types/alerts";
 import {
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
@@ -41,7 +44,6 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
 import AlertsActionsPanel from "@/components/pages/ConfigurationPage/AlertsTab/AlertsActionsPanel";
-import AddEditAlertDialog from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertDialog/AddEditAlertDialog";
 
 export const getRowId = (a: Alert) => a.id!;
 
@@ -57,6 +59,12 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: "alert_type",
+    label: "Destination",
+    type: COLUMN_TYPE.string,
+    cell: AlertTypeCell as never,
   },
   {
     id: "webhook_url",
@@ -110,6 +118,11 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "alert_type",
+    label: "Destination",
+    type: COLUMN_TYPE.category,
+  },
+  {
     id: "webhook_url",
     label: "Endpoint",
     type: COLUMN_TYPE.string,
@@ -137,6 +150,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "alert_type",
   "webhook_url",
   "triggers",
   "created_by",
@@ -145,9 +159,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 
 const AlertsTab: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const newAlertDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const navigate = useNavigate();
 
   const [search = "", setSearch] = useQueryParam("alerts_search", StringParam, {
     updateType: "replaceIn",
@@ -174,6 +186,23 @@ const AlertsTab: React.FunctionComponent = () => {
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        alert_type: {
+          keyComponentProps: {
+            options: Object.values(ALERT_TYPE).map((type) => ({
+              value: type,
+              label: ALERT_TYPE_LABELS[type],
+            })),
+            placeholder: "Select type",
+          },
+        },
+      } as Record<string, { keyComponentProps: Record<string, unknown> }>,
+    }),
+    [],
+  );
 
   const { data, isPending } = useAlertsList(
     {
@@ -262,9 +291,12 @@ const AlertsTab: React.FunctionComponent = () => {
   );
 
   const handleNewAlertClick = useCallback(() => {
-    setOpenDialog(true);
-    newAlertDialogKeyRef.current = newAlertDialogKeyRef.current + 1;
-  }, []);
+    navigate({
+      to: "/$workspaceName/configuration/alerts/new",
+      params: { workspaceName },
+      search: (prev) => prev, // Preserve existing search params
+    });
+  }, [navigate, workspaceName]);
 
   if (isPending) {
     return <Loader />;
@@ -285,6 +317,7 @@ const AlertsTab: React.FunctionComponent = () => {
             columns={FILTERS_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            config={filtersConfig}
           />
         </div>
 
@@ -333,11 +366,6 @@ const AlertsTab: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddEditAlertDialog
-        key={newAlertDialogKeyRef.current}
-        open={openDialog}
-        setOpen={setOpenDialog}
-      />
     </div>
   );
 };

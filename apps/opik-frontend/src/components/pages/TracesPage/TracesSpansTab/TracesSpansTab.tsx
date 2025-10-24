@@ -95,6 +95,10 @@ import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetails
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import { Filter } from "@/types/filters";
+import {
+  USER_FEEDBACK_COLUMN_ID,
+  USER_FEEDBACK_NAME,
+} from "@/constants/shared";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -209,6 +213,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "output",
   "duration",
   COLUMN_COMMENTS_ID,
+  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
@@ -525,21 +530,31 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            accessorFn: (row) =>
-              row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
-          }) as ColumnData<BaseTraceData>,
-      ),
-    ];
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: DynamicColumn = {
+      id: USER_FEEDBACK_COLUMN_ID,
+      label: USER_FEEDBACK_NAME,
+      columnType: COLUMN_TYPE.number,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
+    );
+
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+        }) as ColumnData<BaseTraceData>,
+    );
   }, [dynamicScoresColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
@@ -588,6 +603,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       onCommentsReply: (row?: Trace | Span) => {
         handleRowClick(row, DetailsActionSection.Comments);
       },
+      enableUserFeedbackEditing: true,
     }),
     [handleRowClick],
   );

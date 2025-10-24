@@ -19,6 +19,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
@@ -61,6 +62,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertEventType.TRACE_ERRORS;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
@@ -103,7 +105,7 @@ public interface TraceService {
 
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
-    Mono<TraceThread> getThreadById(UUID projectId, String threadId);
+    Mono<TraceThread> getThreadById(UUID projectId, String threadId, boolean truncate);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 
@@ -158,8 +160,36 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                                        raiseAlertEventIfApplicable(List.of(savedTrace), workspaceId, userName);
                                     }));
                 }));
+    }
+
+    private void raiseAlertEventIfApplicable(List<Trace> traces, String workspaceId, String userName) {
+        if (CollectionUtils.isEmpty(traces)) {
+            return;
+        }
+
+        var tracesWithErrors = traces.stream()
+                .filter(trace -> trace.errorInfo() != null)
+                .map(trace -> trace.toBuilder()
+                        .createdBy(userName)
+                        .createdAt(Instant.now())
+                        .lastUpdatedBy(userName)
+                        .lastUpdatedAt(Instant.now())
+                        .build())
+                .toList();
+
+        if (CollectionUtils.isNotEmpty(tracesWithErrors)) {
+            var projectId = traces.getFirst().projectId();
+            eventBus.post(AlertEvent.builder()
+                    .eventType(TRACE_ERRORS)
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .projectId(projectId)
+                    .payload(tracesWithErrors)
+                    .build());
+        }
     }
 
     @WithSpan
@@ -202,9 +232,23 @@ class TraceServiceImpl implements TraceService {
                     return resolveProjects
                             .flatMap(traces -> template
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
-                                    .doOnSuccess(
-                                            __ -> eventBus.post(new TracesCreated(traces, workspaceId, userName))));
+                                    .doOnSuccess(__ -> {
+                                        eventBus.post(new TracesCreated(traces, workspaceId, userName));
+                                        raiseAlertEventIfApplicableForBatch(traces, workspaceId, userName);
+                                    }));
                 }));
+    }
+
+    // Traces could belong to different projects
+    private void raiseAlertEventIfApplicableForBatch(List<Trace> traces, String workspaceId, String userName) {
+        if (CollectionUtils.isEmpty(traces)) {
+            return;
+        }
+
+        traces.stream()
+                .collect(Collectors.groupingBy(Trace::projectId))
+                .values()
+                .forEach(tracesPerProject -> raiseAlertEventIfApplicable(tracesPerProject, workspaceId, userName));
     }
 
     private List<Trace> dedupTraces(List<Trace> initialTraces) {
@@ -572,8 +616,8 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
-    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId) {
-        return dao.findThreadById(projectId, threadId)
+    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
+        return dao.findThreadById(projectId, threadId, truncate)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
     }
 

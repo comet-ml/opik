@@ -69,6 +69,7 @@ export class OpikCallbackHandler
   private client: Opik;
   private rootTraceId?: string;
   private tracerMap: Map<string, Trace | Span> = new Map();
+  private rootTraces: Map<string, Trace> = new Map();
 
   constructor(options?: Partial<OpikCallbackHandlerOptions>) {
     super();
@@ -127,7 +128,20 @@ export class OpikCallbackHandler
         metadata,
         threadId: this.options.metadata?.threadId as string | undefined,
       });
-      this.tracerMap.set(runId, trace);
+
+      this.rootTraces.set(runId, trace);
+
+      const span = trace.span({
+        type: type || OpikSpanType.General,
+        name,
+        input,
+        tags,
+        metadata,
+        model,
+        provider,
+      });
+
+      this.tracerMap.set(runId, span);
 
       return;
     }
@@ -184,17 +198,21 @@ export class OpikCallbackHandler
       tags,
       usage,
       metadata,
+      endTime: new Date(),
     });
-    span.end();
 
     if (runId === this.rootTraceId) {
-      const rootTrace = this.tracerMap.get(this.rootTraceId)!;
-      rootTrace?.update({
-        output,
-      });
+      const rootTrace = this.rootTraces.get(this.rootTraceId);
+      if (rootTrace) {
+        rootTrace.update({
+          output,
+          errorInfo,
+          endTime: new Date(),
+        });
+      }
       this.rootTraceId = undefined;
-      rootTrace?.end();
       this.tracerMap.clear();
+      this.rootTraces.clear();
     }
   }
 
@@ -247,6 +265,7 @@ export class OpikCallbackHandler
     runName?: string
   ): Promise<void> {
     logger.debug(`handleLLMStart runId - ${runId}, parentRunId ${parentRunId}`);
+
     this.startTracing({
       runId,
       parentRunId,
