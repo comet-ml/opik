@@ -98,18 +98,14 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 end_time=ANY_BUT_NONE,
                                 id=ANY_STRING,
                                 input=ANY_DICT,
-                                metadata=ANY_DICT.containing(
-                                    {
-                                        "created_from": "litellm",
-                                    }
-                                ),
+                                metadata=ANY_DICT,
                                 project_name=constants.PROJECT_NAME,
                                 model=ANY_STRING,
-                                name="completion",
+                                name="chat_completion_create",
                                 output=ANY_DICT,
                                 provider="openai",
                                 start_time=ANY_BUT_NONE,
-                                tags=["litellm"],
+                                tags=ANY_BUT_NONE,
                                 type="llm",
                                 usage=ANY_DICT,
                                 spans=[],
@@ -132,18 +128,14 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 end_time=ANY_BUT_NONE,
                                 id=ANY_STRING,
                                 input=ANY_DICT,
-                                metadata=ANY_DICT.containing(
-                                    {
-                                        "created_from": "litellm",
-                                    }
-                                ),
+                                metadata=ANY_DICT,
                                 project_name=constants.PROJECT_NAME,
                                 model=ANY_STRING,
-                                name="completion",
+                                name="chat_completion_create",
                                 output=ANY_DICT,
                                 provider="openai",
                                 start_time=ANY_BUT_NONE,
-                                tags=["litellm"],
+                                tags=ANY_BUT_NONE,
                                 type="llm",
                                 usage=ANY_DICT,
                                 spans=[],

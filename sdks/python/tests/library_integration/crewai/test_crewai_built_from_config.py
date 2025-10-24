@@ -18,12 +18,14 @@ def test_crewai__happyflow(
 ):
     project_name = "crewai-test"
 
-    track_crewai(project_name=project_name)
 
     inputs = {"topic": "AI Agents"}
-    c = LatestAiDevelopmentCrew()
-    c = c.crew()
-    _ = c.kickoff(inputs=inputs)
+    crew_builder = LatestAiDevelopmentCrew()
+    crew = crew_builder.crew()
+
+    track_crewai(project_name=project_name, crew=crew)
+
+    _ = crew.kickoff(inputs=inputs)
 
     opik.flush_tracker()
 
@@ -78,18 +80,14 @@ def test_crewai__happyflow(
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata=ANY_DICT.containing(
-                                            {
-                                                "created_from": "litellm",
-                                            }
-                                        ),
+                                        metadata=ANY_DICT,
                                         model=ANY_STRING,
-                                        name="completion",
+                                        name="chat_completion_create",
                                         output=ANY_DICT,
                                         project_name=project_name,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
-                                        tags=["litellm"],
+                                        tags=ANY_BUT_NONE,
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
@@ -125,18 +123,14 @@ def test_crewai__happyflow(
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata=ANY_DICT.containing(
-                                            {
-                                                "created_from": "litellm",
-                                            }
-                                        ),
+                                        metadata=ANY_DICT,
                                         model=ANY_STRING,
-                                        name="completion",
+                                        name="chat_completion_create",
                                         output=ANY_DICT,
                                         project_name=project_name,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
-                                        tags=["litellm"],
+                                        tags=ANY_BUT_NONE,
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],

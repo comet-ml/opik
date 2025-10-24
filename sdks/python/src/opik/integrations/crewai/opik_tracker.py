@@ -1,8 +1,9 @@
 from typing import Optional
 
-import crewai
-
-import opik.integrations.litellm
+from crewai import Crew
+from crewai import Agent
+from crewai import Task
+#import opik.integrations.litellm
 from . import crewai_decorator, flow_patchers
 
 __IS_TRACKING_ENABLED = False
@@ -10,6 +11,7 @@ __IS_TRACKING_ENABLED = False
 
 def track_crewai(
     project_name: Optional[str] = None,
+    crew: Optional[Crew] = None,
 ) -> None:
     """
     Tracks CrewAI activities by enabling tracking decorators for various critical methods.
@@ -34,14 +36,38 @@ def track_crewai(
         project_name=project_name,
     )
 
-    crewai.Crew.kickoff = crewai_wrapper(crewai.Crew.kickoff)
-    crewai.Crew.kickoff_for_each = crewai_wrapper(crewai.Crew.kickoff_for_each)
-    crewai.Agent.execute_task = crewai_wrapper(crewai.Agent.execute_task)
-    crewai.Task.execute_sync = crewai_wrapper(crewai.Task.execute_sync)
+    Crew.kickoff = crewai_wrapper(Crew.kickoff)
+    Crew.kickoff_for_each = crewai_wrapper(Crew.kickoff_for_each)
+    Agent.execute_task = crewai_wrapper(Agent.execute_task)
+    Task.execute_sync = crewai_wrapper(Task.execute_sync)
 
-    opik.integrations.litellm.track_litellm()
+    #opik.integrations.litellm.track_litellm()
 
     flow_patchers.patch_flow_init(project_name=project_name)
     flow_patchers.patch_flow_kickoff_async(project_name=project_name)
+
+    if crew is not None:
+        import crewai.llms.providers.openai.completion
+        import crewai.llms.providers.anthropic.completion
+        import crewai.llms.providers.gemini.completion
+        import crewai.llms.providers.bedrock.completion
+
+        # patch LLM clients used by CrewAI (openai, anthropic, gemini, bedrock) using
+        # existing Opik integration
+        # Note: only azure ai is not supported yet.
+        for agent in crew.agents:
+            if isinstance(agent.llm, crewai.llms.providers.openai.completion.OpenAICompletion):
+                from opik.integrations.openai import track_openai
+                agent.llm.client = track_openai(agent.llm.client, project_name=project_name)
+            elif isinstance(agent.llm, crewai.llms.providers.anthropic.completion.AnthropicCompletion):
+                from opik.integrations.anthropic import track_anthropic
+                agent.llm.client = track_anthropic(agent.llm.client, project_name=project_name)
+            elif isinstance(agent.llm, crewai.llms.providers.gemini.completion.GeminiCompletion):
+                from opik.integrations.genai import track_genai
+                agent.llm.client = track_genai(agent.llm.client, project_name=project_name)
+            elif isinstance(agent.llm, crewai.llms.providers.bedrock.completion.BedrockCompletion):
+                from opik.integrations.bedrock import track_bedrock
+                agent.llm.client = track_bedrock(agent.llm.client, project_name=project_name)
+
 
     return None

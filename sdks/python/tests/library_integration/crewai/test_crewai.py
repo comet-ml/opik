@@ -15,8 +15,6 @@ from . import constants
 def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(
     fake_backend,
 ):
-    track_crewai(project_name=constants.PROJECT_NAME)
-
     researcher = Agent(
         role="Test Researcher",
         goal="Find basic information",
@@ -56,6 +54,8 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
         process=Process.sequential,
         verbose=True,
     )
+
+    track_crewai(project_name=constants.PROJECT_NAME, crew=crew)
 
     inputs = {"topic": "AI"}
     crew.kickoff(inputs=inputs)
@@ -112,18 +112,14 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata=ANY_DICT.containing(
-                                            {
-                                                "created_from": "litellm",
-                                            }
-                                        ),
+                                        metadata=ANY_DICT,
                                         model=ANY_STRING,
-                                        name="completion",
+                                        name="chat_completion_create",
                                         output=ANY_DICT,
                                         project_name=constants.PROJECT_NAME,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
-                                        tags=["litellm"],
+                                        tags=ANY_BUT_NONE,
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
@@ -159,18 +155,14 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata=ANY_DICT.containing(
-                                            {
-                                                "created_from": "litellm",
-                                            }
-                                        ),
+                                        metadata=ANY_DICT,
                                         model=ANY_STRING,
-                                        name="completion",
+                                        name="chat_completion_create",
                                         output=ANY_DICT,
                                         project_name=constants.PROJECT_NAME,
                                         provider="openai",
                                         start_time=ANY_BUT_NONE,
-                                        tags=["litellm"],
+                                        tags=ANY_BUT_NONE,
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                                         spans=[],
