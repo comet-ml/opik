@@ -235,7 +235,7 @@ class AlertResourceTest {
         void createAlert__whenEnabledIsNull__thenCreateAlert() {
             var mock = prepareMockWorkspace();
 
-            var alert = factory.manufacturePojo(Alert.class).toBuilder()
+            var alert = generateAlert().toBuilder()
                     .enabled(null)
                     .build();
 
@@ -2106,7 +2106,8 @@ class AlertResourceTest {
             var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
 
             String url = BASE_URL + "/" + mock.getRight() + "/projects";
-            String fallbackText = String.format("Overall %d Traces with errors created, you could check them here: <%s|View All>",
+            String fallbackText = String.format(
+                    "Overall %d Traces with errors created, you could check them here: <%s|View All>",
                     tracesWithErrors.size(), url);
 
             // Verify Slack payload has fallback block due to text truncation
@@ -2225,7 +2226,8 @@ class AlertResourceTest {
 
             // Verify Slack payload has fallback block due to text truncation
             String url = BASE_URL + "/" + mock.getRight() + "/prompts";
-            String fallbackText = String.format("Overall %d Prompts commits created, you could check them here: <%s|View All>",
+            String fallbackText = String.format(
+                    "Overall %d Prompts commits created, you could check them here: <%s|View All>",
                     commitsCnt, url);
             verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
