@@ -1,5 +1,6 @@
 import { test, expect } from '../../fixtures/datasets.fixture';
 import { DatasetsPage } from '../../page-objects/datasets.page';
+import { generateDatasetName } from '../../helpers/random';
 
 test.describe('Datasets CRUD Tests', () => {
   test.describe('with SDK-created datasets', () => {
@@ -14,7 +15,7 @@ test.describe('Datasets CRUD Tests', () => {
     });
 
     test('should update dataset name via SDK', async ({ page, helperClient, createDatasetSdk }) => {
-      const newName = 'updated_test_dataset_name';
+      const newName = generateDatasetName();
       let nameUpdated = false;
 
       try {
@@ -76,7 +77,7 @@ test.describe('Datasets CRUD Tests', () => {
     });
 
     test('should update dataset name via SDK', async ({ page, helperClient, createDatasetUi }) => {
-      const newName = 'updated_test_dataset_name';
+      const newName = generateDatasetName();
       let nameUpdated = false;
 
       try {

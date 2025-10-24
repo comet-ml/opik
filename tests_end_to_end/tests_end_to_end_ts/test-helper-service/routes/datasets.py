@@ -1,8 +1,11 @@
 from flask import Blueprint, request, jsonify
 import opik
+from opik.rest_api.core.api_error import ApiError
 import time
+import logging
 
 datasets_bp = Blueprint("datasets", __name__)
+logger = logging.getLogger(__name__)
 
 
 def get_opik_client():
@@ -29,10 +32,14 @@ def find_dataset():
     try:
         dataset = client.get_dataset(dataset_name)
         return jsonify({"id": dataset.id, "name": dataset.name})
-    except Exception as e:
-        if "404" in str(e) or "not found" in str(e).lower():
+    except ApiError as e:
+        if e.status_code == 404:
             return jsonify(None), 404
-        raise
+        logger.error(f"Error finding dataset: {type(e).__name__}")
+        return jsonify({"error": "An internal error occurred"}), 500
+    except Exception as e:
+        logger.error(f"Error finding dataset: {type(e).__name__}")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @datasets_bp.route("/api/datasets/update", methods=["POST"])
@@ -62,10 +69,14 @@ def delete_dataset():
     try:
         client.delete_dataset(dataset_name)
         return jsonify({"success": True})
-    except Exception as e:
-        if "404" in str(e) or "not found" in str(e).lower():
+    except ApiError as e:
+        if e.status_code == 404:
             return jsonify({"success": True})
-        raise
+        logger.error(f"Error deleting dataset: {type(e).__name__}")
+        return jsonify({"error": "An internal error occurred"}), 500
+    except Exception as e:
+        logger.error(f"Error deleting dataset: {type(e).__name__}")
+        return jsonify({"error": "An internal error occurred"}), 500
 
 
 @datasets_bp.route("/api/datasets/wait-for-visible", methods=["POST"])
@@ -76,20 +87,22 @@ def wait_for_dataset_visible():
 
     client = get_opik_client()
     start_time = time.time()
-    dataset = None
 
     while time.time() - start_time < timeout:
         try:
             dataset = client.get_dataset(dataset_name)
             if dataset:
                 return jsonify({"id": dataset.id, "name": dataset.name})
-        except Exception:
-            pass
+        except ApiError as e:
+            if e.status_code == 404:
+                pass
+            else:
+                logger.error(f"Error waiting for dataset visibility: {type(e).__name__}")
+        except Exception as e:
+            logger.error(f"Error waiting for dataset visibility: {type(e).__name__}")
         time.sleep(0.5)
 
-    return jsonify(
-        {"error": f"Dataset {dataset_name} not visible after {timeout}s"}
-    ), 404
+    return jsonify({"error": "Dataset not visible within timeout"}), 404
 
 
 @datasets_bp.route("/api/datasets/wait-for-deleted", methods=["POST"])
@@ -105,10 +118,13 @@ def wait_for_dataset_deleted():
         try:
             client.get_dataset(dataset_name)
             time.sleep(0.5)
-        except Exception as e:
-            if "404" in str(e) or "not found" in str(e).lower():
+        except ApiError as e:
+            if e.status_code == 404:
                 return jsonify({"success": True})
+            logger.error(f"Error waiting for dataset deletion: {type(e).__name__}")
+            time.sleep(0.5)
+        except Exception as e:
+            logger.error(f"Error waiting for dataset deletion: {type(e).__name__}")
+            time.sleep(0.5)
 
-    return jsonify(
-        {"error": f"Dataset {dataset_name} still exists after {timeout}s"}
-    ), 400
+    return jsonify({"error": "Dataset still exists after timeout"}), 400
