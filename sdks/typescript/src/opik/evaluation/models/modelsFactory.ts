@@ -169,7 +169,7 @@ export function resolveModel(
   options?: VercelAIChatModelOptions
 ): OpikBaseModel {
   // Handle undefined/null → use default
-  if (model == null) {
+  if (model === undefined || model === null) {
     return createModel(DEFAULT_MODEL, options);
   }
 

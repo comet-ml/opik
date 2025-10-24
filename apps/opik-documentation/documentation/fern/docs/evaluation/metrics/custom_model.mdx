@@ -182,7 +182,7 @@ class CustomProviderModel extends OpikBaseModel {
     return response.choices[0].message.content;
   }
 
-  async generateProviderResponse(messages: OpikMessage[]): Promise<any> {
+  async generateProviderResponse(messages: OpikMessage[]): Promise<unknown> {
     // Make API call to your custom provider
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",

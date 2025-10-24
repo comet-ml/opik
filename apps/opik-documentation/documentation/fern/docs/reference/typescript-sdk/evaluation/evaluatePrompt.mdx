@@ -207,18 +207,28 @@ Simple prompt evaluation with default settings:
 import { Opik, evaluatePrompt } from "opik";
 
 const client = new Opik();
-const dataset = await client.getOrCreateDataset({ name: "translations" });
+const dataset = await client.getOrCreateDataset({ name: "qa-dataset" });
 
 await dataset.insert([
-  { language: "French", text: "Hello world" },
-  { language: "Spanish", text: "Good morning" },
+  {
+    question: "What is the capital of France?",
+    expected_answer: "Paris",
+  },
+  {
+    question: "How do you calculate the area of a circle?",
+    expected_answer: "π × radius²",
+  },
 ]);
 
 const result = await evaluatePrompt({
   dataset,
   messages: [
-    { role: "system", content: "You are a professional translator" },
-    { role: "user", content: "Translate to {{language}}: {{text}}" },
+    {
+      role: "system",
+      content:
+        "You are a helpful assistant. Answer questions accurately and concisely.",
+    },
+    { role: "user", content: "{{question}}" },
   ],
   model: "gpt-4o",
 });
@@ -234,6 +244,19 @@ Evaluate prompts with automatic scoring:
 ```typescript
 import { evaluatePrompt } from "opik";
 import { Hallucination, ExactMatch } from "opik";
+
+// Create dataset with expected answers
+const dataset = await client.getOrCreateDataset({ name: "geography-qa" });
+await dataset.insert([
+  {
+    country: "France",
+    expected_answer: "Paris",
+  },
+  {
+    country: "Japan",
+    expected_answer: "Tokyo",
+  },
+]);
 
 await evaluatePrompt({
   dataset,

@@ -1,11 +1,22 @@
 /**
  * Evaluate Prompt with Metrics Example
  *
- * This example demonstrates how to:
- * 1. Create or retrieve a dataset
- * 2. Use the Prompt management system to create and manage prompts
- * 3. Evaluate prompts using the evaluatePrompt function
+ * This example demonstrates a comprehensive prompt engineering workflow where you:
+ * 1. Create or retrieve a dataset for testing
+ * 2. Use the Prompt management system to create and version prompts
+ * 3. Evaluate multiple prompt versions using the evaluatePrompt function
  * 4. Apply multiple metrics (Usefulness and Moderation) to assess quality
+ * 5. Compare different prompt versions to identify the best performing one
+ *
+ * This is particularly valuable for:
+ * - A/B testing different prompt approaches
+ * - Iteratively improving prompt performance
+ * - Tracking prompt version history and performance changes
+ * - Making data-driven decisions about which prompts to deploy
+ * - Understanding how prompt changes affect different types of inputs
+ *
+ * The example shows creating an initial prompt, evaluating it, then creating an
+ * improved version and comparing the results to demonstrate measurable improvements.
  */
 import { Opik } from "../src/opik";
 import { evaluatePrompt } from "../src/opik/evaluation/evaluatePrompt";

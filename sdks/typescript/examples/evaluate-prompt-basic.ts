@@ -27,7 +27,7 @@ async function basicExample() {
     },
   ]);
 
-  // Step 2: Create a prompt using Prompt management
+  // Step 2: Create a prompt
   const prompt = await client.createPrompt({
     name: "qa-assistant",
     prompt: "Answer this question: {{question}}\nContext: {{context}}",

@@ -119,8 +119,8 @@ await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
   model: "gpt-4o",
-  temperature: 0.7, // Supported
-  seed: 42, // Supported
+  temperature: 0.7,
+  seed: 42,
   scoringMetrics: [
     new Hallucination({
       model: "gpt-4o",

@@ -66,7 +66,7 @@
     "@typescript-eslint/parser": "^8.16.0",
     "eslint": "^9.20.0",
     "globals": "^15.14.0",
-    "msw": "^2.11.5",
+    "msw": "^2.11.6",
     "prettier": "^3.4.1",
     "tsup": "^8.3.6",
     "typescript": "^5.7.2",

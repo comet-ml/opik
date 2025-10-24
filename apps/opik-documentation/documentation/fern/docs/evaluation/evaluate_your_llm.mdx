@@ -72,7 +72,7 @@ expected: string;
 };
 
 const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
-const { input } = datasetItem;
+    const { input } = datasetItem;
 
     const openai = new OpenAI();
     const response = await openai.chat.completions.create({
@@ -656,6 +656,7 @@ evaluation = evaluate(
 Opik supports advanced evaluation metrics that can analyze the detailed execution information of your LLM tasks. These metrics receive a `task_span` parameter containing structured data about the task execution, including input, output, metadata, and nested operations.
 
 Task span metrics are particularly useful for evaluating:
+
 - The internal structure and behavior of your LLM applications
 - Performance characteristics like execution patterns
 - Quality of intermediate steps in complex workflows
@@ -673,10 +674,9 @@ from opik.evaluation.metrics import BaseMetric, score_result
 from opik.message_processing.emulation.models import SpanModel
 
 class ExecutionTimeMetric(BaseMetric):
-    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
-        # Calculate execution duration
-        if task_span.start_time and task_span.end_time:
-            duration = (task_span.end_time - task_span.start_time).total_seconds()
+def score(self, task_span: SpanModel, \*\*ignored_kwargs: Any) -> score_result.ScoreResult: # Calculate execution duration
+if task_span.start_time and task_span.end_time:
+duration = (task_span.end_time - task_span.start_time).total_seconds()
 
             # Score based on execution speed
             if duration < 1.0:
@@ -697,7 +697,8 @@ class ExecutionTimeMetric(BaseMetric):
             name=self.name,
             reason=reason
         )
-```
+
+````
 </CodeBlocks>
 
 #### Using task span metrics in evaluation
@@ -723,11 +724,14 @@ evaluation = evaluate(
     ],
     experiment_name="Comprehensive Evaluation"
 )
-```
+````
+
 </CodeBlocks>
 
 <Tip>
-When you use task span metrics, Opik automatically enables span collection and analysis. You don't need to configure anything special - the system will detect metrics with `task_span` parameters and handle them appropriately.
+  When you use task span metrics, Opik automatically enables span collection and
+  analysis. You don't need to configure anything special - the system will
+  detect metrics with `task_span` parameters and handle them appropriately.
 </Tip>
 
 #### Accessing span hierarchy
@@ -746,7 +750,7 @@ openai_client = track_openai(openai.OpenAI())
 
 @track
 def research_topic(topic: str) -> str:
-    """Main research function that creates nested spans."""
+"""Main research function that creates nested spans."""
 
     # This will create a nested span for gathering context
     context = gather_context(topic)
@@ -761,40 +765,41 @@ def research_topic(topic: str) -> str:
 
 @track
 def gather_context(topic: str) -> str:
-    """Gather background context - creates its own span."""
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{
-            "role": "user",
-            "content": f"Provide background context about: {topic}"
-        }]
-    )
-    return response.choices[0].message.content
+"""Gather background context - creates its own span."""
+response = openai_client.chat.completions.create(
+model="gpt-3.5-turbo",
+messages=[{
+"role": "user",
+"content": f"Provide background context about: {topic}"
+}]
+)
+return response.choices[0].message.content
 
 @track
 def analyze_information(context: str, topic: str) -> str:
-    """Analyze the gathered information - creates its own span."""
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{
-            "role": "user",
-            "content": f"Analyze this context about {topic}: {context}"
-        }]
-    )
-    return response.choices[0].message.content
+"""Analyze the gathered information - creates its own span."""
+response = openai_client.chat.completions.create(
+model="gpt-3.5-turbo",
+messages=[{
+"role": "user",
+"content": f"Analyze this context about {topic}: {context}"
+}]
+)
+return response.choices[0].message.content
 
 @track
 def generate_summary(analysis: str, topic: str) -> str:
-    """Generate final summary - creates its own span."""
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{
-            "role": "user",
-            "content": f"Create a summary for {topic} based on: {analysis}"
-        }]
-    )
-    return response.choices[0].message.content
-```
+"""Generate final summary - creates its own span."""
+response = openai_client.chat.completions.create(
+model="gpt-3.5-turbo",
+messages=[{
+"role": "user",
+"content": f"Create a summary for {topic} based on: {analysis}"
+}]
+)
+return response.choices[0].message.content
+
+````
 </CodeBlocks>
 
 When you call `research_topic("artificial intelligence")`, Opik will create a hierarchy of spans:
@@ -1355,7 +1360,8 @@ SpanModel(id='0199f2c5-4097-7139-8e20-ce93d10ca3b0',
           error_info=None,
           total_cost=None,
           last_updated_at=datetime.datetime(2025, 10, 17, 15, 24, 5, 196101, tzinfo=TzInfo(UTC)))
-```
+````
+
 </CodeBlocks>
 
 You can then analyze this complete execution hierarchy using task span metrics:
@@ -1440,6 +1446,7 @@ class HierarchyAnalysisMetric(BaseMetric):
             name=self.name,
             reason=reason
         )
+
 ```
 </CodeBlocks>
 
@@ -1447,8 +1454,10 @@ For the `SpanModel`'s hierarchy given above the `HierarchyAnalysisMetric` metric
 
 <CodeBlocks>
 ```
+
     Score: 0.96, Reason: Reasoning-focused operation: 3 LLM calls across 7 spans (depth: 2)
-```
+
+````
 </CodeBlocks>
 
 #### Best practices for task span metrics
@@ -1497,3 +1506,4 @@ You can access all the experiments logged to the platform from the SDK with the
     ```
 
 </CodeBlocks>
+````
