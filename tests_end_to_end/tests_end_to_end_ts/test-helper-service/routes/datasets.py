@@ -97,7 +97,9 @@ def wait_for_dataset_visible():
             if e.status_code == 404:
                 pass
             else:
-                logger.error(f"Error waiting for dataset visibility: {type(e).__name__}")
+                logger.error(
+                    f"Error waiting for dataset visibility: {type(e).__name__}"
+                )
         except Exception as e:
             logger.error(f"Error waiting for dataset visibility: {type(e).__name__}")
         time.sleep(0.5)
