@@ -2,7 +2,13 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi, describe, it, expect, beforeEach, type MockedFunction } from "vitest";
+import { csv2json } from "json-2-csv";
 import CSVPreview from "./CSVPreview";
+
+// Mock the csv2json library
+vi.mock("json-2-csv", () => ({
+  csv2json: vi.fn(),
+}));
 
 // Mock the fetch function
 global.fetch = vi.fn() as MockedFunction<typeof fetch>;
@@ -40,17 +46,20 @@ describe("CSVPreview", () => {
 
   it("should render small CSV without virtual scrolling", async () => {
     const mockCSVText = "Name,Age,City\nJohn,25,NYC\nJane,30,LA";
+    const mockParsedData = [
+      { Name: "John", Age: "25", City: "NYC" },
+      { Name: "Jane", Age: "30", City: "LA" }
+    ];
     
     (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
       ok: true,
       text: () => Promise.resolve(mockCSVText),
     } as Response);
 
+    vi.mocked(csv2json).mockResolvedValueOnce(mockParsedData as never);
+
     renderWithQueryClient(
-      <CSVPreview 
-        url="http://example.com/test.csv" 
-        enableVirtualScrolling={true}
-      />
+      <CSVPreview url="http://example.com/test.csv" />
     );
 
     // Wait for data to load
@@ -68,24 +77,27 @@ describe("CSVPreview", () => {
   });
 
   it("should render large CSV with virtual scrolling", async () => {
-    // Create a large CSV dataset (200+ rows)
-    const headers = "ID,Name,Email,Age,Department";
-    const rows = Array.from({ length: 200 }, (_, i) => 
-      `${i + 1},User${i + 1},user${i + 1}@example.com,${25 + (i % 40)},Dept${(i % 5) + 1}`
-    ).join("\n");
-    const mockCSVText = `${headers}\n${rows}`;
+    // Create a large CSV dataset (200+ rows)  
+    const mockParsedData = Array.from({ length: 200 }, (_, i) => ({
+      ID: String(i + 1),
+      Name: `User${i + 1}`,
+      Email: `user${i + 1}@example.com`,
+      Age: String(25 + (i % 40)),
+      Department: `Dept${(i % 5) + 1}`,
+    }));
+
+    const mockCSVText = "ID,Name,Email,Age,Department\n" + 
+      mockParsedData.map(row => Object.values(row).join(",")).join("\n");
     
     (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
       ok: true,
       text: () => Promise.resolve(mockCSVText),
     } as Response);
 
+    vi.mocked(csv2json).mockResolvedValueOnce(mockParsedData as never);
+
     renderWithQueryClient(
-      <CSVPreview 
-        url="http://example.com/large.csv" 
-        enableVirtualScrolling={true}
-        showPagination={false}
-      />
+      <CSVPreview url="http://example.com/large.csv" />
     );
 
     // Wait for data to load and check for virtualization message
@@ -102,40 +114,68 @@ describe("CSVPreview", () => {
     expect(screen.getByText(/virtualized for performance/)).toBeInTheDocument();
   });
 
-  it("should disable virtual scrolling when pagination is enabled", async () => {
-    // Create a large CSV dataset
-    const headers = "ID,Name,Email";
-    const rows = Array.from({ length: 200 }, (_, i) => 
-      `${i + 1},User${i + 1},user${i + 1}@example.com`
-    ).join("\n");
-    const mockCSVText = `${headers}\n${rows}`;
+  it("should handle fetch errors gracefully", async () => {
+    (fetch as MockedFunction<typeof fetch>).mockRejectedValueOnce(
+      new Error("Network error")
+    );
+
+    renderWithQueryClient(
+      <CSVPreview url="http://example.com/error.csv" />
+    );
+
+    // Wait for error state
+    await waitFor(() => {
+      expect(screen.getByText(/Network error/)).toBeInTheDocument();
+    });
+  });
+
+  it("should handle parsing errors gracefully", async () => {
+    const mockCSVText = "Invalid,CSV\nContent";
     
     (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
       ok: true,
       text: () => Promise.resolve(mockCSVText),
     } as Response);
 
+    vi.mocked(csv2json).mockRejectedValueOnce(new Error("Parse error"));
+
     renderWithQueryClient(
-      <CSVPreview 
-        url="http://example.com/large.csv" 
-        enableVirtualScrolling={true}
-        showPagination={true}  // Pagination enabled should disable virtual scrolling
-      />
+      <CSVPreview url="http://example.com/invalid.csv" />
     );
 
-    // Wait for data to load
+    // Wait for error state
     await waitFor(() => {
-      expect(screen.getByText("User1")).toBeInTheDocument();
+      expect(screen.getByText(/Parse error/)).toBeInTheDocument();
     });
-
-    // Should not show virtualization message when pagination is enabled
-    expect(screen.queryByText(/virtualized for performance/)).not.toBeInTheDocument();
-    
-    // Should show pagination controls
-    expect(screen.getByText("Previous")).toBeInTheDocument();
-    expect(screen.getByText("Next")).toBeInTheDocument();
   });
 
-  // Note: Error and empty state tests removed as they're not the focus of virtual scrolling
-  // and React Query's async behavior makes them flaky in the test environment
+  it("should support up to 100k rows", async () => {
+    // Test with maxRows parameter
+    const mockParsedData = Array.from({ length: 150000 }, (_, i) => ({
+      ID: String(i + 1),
+      Name: `User${i + 1}`,
+    }));
+
+    const mockCSVText = "ID,Name\n" + 
+      mockParsedData.map(row => Object.values(row).join(",")).join("\n");
+    
+    (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve(mockCSVText),
+    } as Response);
+
+    vi.mocked(csv2json).mockResolvedValueOnce(mockParsedData as never);
+
+    renderWithQueryClient(
+      <CSVPreview url="http://example.com/huge.csv" maxRows={100000} />
+    );
+
+    // Wait for data to load 
+    await waitFor(() => {
+      expect(screen.getByText(/Showing first 100,000 rows of 150,000 total rows/)).toBeInTheDocument();
+    });
+
+    // Should use virtual scrolling for this large dataset
+    expect(screen.getByText(/virtualized for performance/)).toBeInTheDocument();
+  });
 });

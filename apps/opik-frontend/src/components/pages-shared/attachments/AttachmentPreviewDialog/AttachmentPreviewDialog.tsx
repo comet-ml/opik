@@ -116,7 +116,7 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
   const renderCSVContent = () => {
     return (
       <div className="h-[80vh] w-full">
-        <CSVPreview url={url}></CSVPreview>
+        <CSVPreview url={url} />
       </div>
     );
   };

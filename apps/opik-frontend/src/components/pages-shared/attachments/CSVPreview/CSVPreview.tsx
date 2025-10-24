@@ -1,6 +1,7 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { csv2json } from "json-2-csv";
 import isString from "lodash/isString";
 
 import Loader from "@/components/shared/Loader/Loader";
@@ -13,43 +14,39 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { parseCSV, CSVData } from "@/lib/csv";
 import { cn } from "@/lib/utils";
 
 interface CSVPreviewProps {
   url: string;
   maxRows?: number;
-  showPagination?: boolean;
-  enableVirtualScrolling?: boolean;
+}
+
+interface CSVData {
+  headers: string[];
+  rows: string[][];
+  totalRows: number;
 }
 
 // Virtual scrolling constants matching DataTable patterns
 const ROW_HEIGHT = 36; // Height for each row in pixels
 const HEADER_HEIGHT = 40; // Height for header row
-const MIN_OVERSCAN_ROWS = 2; // Minimum rows to render outside visible area
 const MAX_CONTAINER_HEIGHT = 500; // Maximum height for the scrollable container
 const VIRTUAL_THRESHOLD = 100; // Use virtual scrolling for datasets larger than this
 
 const CSVPreview: React.FC<CSVPreviewProps> = ({
   url,
-  maxRows = 100,
-  showPagination = true,
-  enableVirtualScrolling = true,
+  maxRows = 100000, // Support up to 100k rows
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
-  const [currentPage, setCurrentPage] = useState(0);
-  const rowsPerPage = 50;
 
   const {
-    data: csvText,
+    data: csvData,
     isPending,
     isError,
     error,
   } = useQuery({
     queryKey: ["csv", url],
-    queryFn: async () => {
+    queryFn: async (): Promise<CSVData> => {
       try {
         const response = await fetch(url);
         
@@ -59,7 +56,43 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
           );
         }
         
-        return await response.text();
+        const csvText = await response.text();
+        
+        // Normalize line endings
+        const normalizedText = csvText.replace(/\r\n|\r/g, "\n");
+        
+        // Parse CSV using existing json-2-csv library
+        const parsed = await csv2json(normalizedText, {
+          excelBOM: true,
+          trimHeaderFields: true,
+          trimFieldValues: true,
+        });
+
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          return { headers: [], rows: [], totalRows: 0 };
+        }
+
+        // Type assertion for the parsed data as json-2-csv returns Record<string, unknown>[]
+        const parsedData = parsed as Record<string, unknown>[];
+        
+        // Extract headers from the first object's keys
+        const headers = Object.keys(parsedData[0]);
+        
+        // Convert objects array to rows array (array of arrays), limited by maxRows
+        const limitedData = parsedData.slice(0, maxRows);
+        const rows = limitedData.map((row) => 
+          headers.map((header) => {
+            const value = row[header];
+            // Convert all values to strings for consistency
+            return value == null ? "" : String(value);
+          })
+        );
+
+        return { 
+          headers, 
+          rows, 
+          totalRows: parsedData.length 
+        };
       } catch (error) {
         let message: string | undefined;
         if (isString(error)) {
@@ -68,90 +101,49 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
           message = error.message;
         }
         throw new Error(
-          message ?? "Failed to fetch CSV file. CORS issue or invalid URL.",
+          message ?? "Failed to fetch or parse CSV file. CORS issue or invalid URL.",
         );
       }
     },
   });
 
-  const {
-    data: csvData,
-    isPending: isParsing,
-    isError: isParseError,
-    error: parseError,
-  } = useQuery({
-    queryKey: ["csv-parse", csvText],
-    queryFn: async () => {
-      if (!csvText || !isString(csvText)) return null;
-      return await parseCSV(csvText);
-    },
-    enabled: Boolean(csvText && isString(csvText)),
-  });
-
-  const paginatedData = useMemo(() => {
-    if (!csvData) return null;
-
-    const startRow = currentPage * rowsPerPage;
-    const endRow = Math.min(
-      startRow + rowsPerPage,
-      Math.min(csvData.rows.length, maxRows),
-    );
-
-    return {
-      ...csvData,
-      rows: csvData.rows.slice(startRow, endRow),
-      totalRows: csvData.rows.length,
-      startRow,
-      endRow,
-    };
-  }, [csvData, currentPage, rowsPerPage, maxRows]);
-
   // Determine if we should use virtual scrolling
   const shouldUseVirtualScrolling = useMemo(() => {
-    return enableVirtualScrolling && 
-           csvData && 
-           csvData.rows.length > VIRTUAL_THRESHOLD &&
-           !showPagination; // Don't use virtual scrolling if pagination is enabled
-  }, [enableVirtualScrolling, csvData, showPagination]);
+    return csvData && csvData.rows.length > VIRTUAL_THRESHOLD;
+  }, [csvData]);
 
   // Virtual scrolling setup for large datasets
   const virtualizer = useVirtualizer({
     count: csvData?.rows?.length || 0,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: Math.max(MIN_OVERSCAN_ROWS, Math.ceil(MAX_CONTAINER_HEIGHT / ROW_HEIGHT)),
+    overscan: 5,
     enabled: Boolean(shouldUseVirtualScrolling),
   });
 
-  const totalPages = useMemo(() => {
-    if (!csvData) return 0;
-    return Math.ceil(Math.min(csvData.rows.length, maxRows) / rowsPerPage);
-  }, [csvData, maxRows, rowsPerPage]);
-
   const renderContent = () => {
-    if (isPending || isParsing) return <Loader />;
+    if (isPending) return <Loader />;
 
     if (isError) return <NoData icon={null} message={error?.message} />;
-    
-    if (isParseError) {
-      return <NoData icon={null} message={`CSV parsing failed: ${parseError?.message || 'Unknown error'}`} />;
-    }
 
-    if (!paginatedData || paginatedData.headers.length === 0) {
+    if (!csvData || csvData.headers.length === 0) {
       return <NoData message="No CSV data found" icon={null} />;
     }
 
     return (
       <div className="space-y-4">
-        {shouldUseVirtualScrolling ? (
+        {/* Row count info */}
+        {csvData.totalRows > maxRows ? (
           <div className="text-sm text-muted-foreground">
-            Showing {Math.min(csvData?.rows?.length || 0, maxRows).toLocaleString()} rows, {csvData?.headers?.length || 0} columns (virtualized for performance)
+            Showing first {maxRows.toLocaleString()} rows of {csvData.totalRows.toLocaleString()} total rows, {csvData.headers.length} columns
+            {shouldUseVirtualScrolling ? " (virtualized for performance)" : ""}
           </div>
-        ) : paginatedData.totalRows > maxRows ? (
+        ) : (
           <div className="text-sm text-muted-foreground">
-            Showing first {maxRows} rows of {paginatedData.totalRows} total rows
+            {csvData.rows.length.toLocaleString()} rows, {csvData.headers.length} columns
+            {shouldUseVirtualScrolling ? " (virtualized for performance)" : ""}
           </div>
-        ) : null}
+        )}
 
         {shouldUseVirtualScrolling ? (
           /* Virtual Scrolling Table for Large Datasets */
@@ -162,7 +154,7 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
               style={{
                 height: Math.min(
                   MAX_CONTAINER_HEIGHT,
-                  (Math.min(csvData?.rows?.length || 0, maxRows) * ROW_HEIGHT) + HEADER_HEIGHT
+                  (csvData.rows.length * ROW_HEIGHT) + HEADER_HEIGHT
                 ),
               }}
             >
@@ -170,7 +162,7 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                 {/* Static Header */}
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    {csvData?.headers.map((header, index) => (
+                    {csvData.headers.map((header, index) => (
                       <TableHead 
                         key={index} 
                         className="font-semibold border-b border-border"
@@ -185,10 +177,10 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                 {/* Virtual Table Body */}
                 <TableBody>
                   <tr style={{ height: virtualizer.getTotalSize() }}>
-                    <td colSpan={csvData?.headers.length || 0} className="p-0">
+                    <td colSpan={csvData.headers.length} className="p-0">
                       <div className="relative">
                         {virtualizer.getVirtualItems().map((virtualRow) => {
-                          const row = csvData?.rows[virtualRow.index];
+                          const row = csvData.rows[virtualRow.index];
                           if (!row) return null;
                           
                           return (
@@ -212,8 +204,8 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                                     cellIndex > 0 && "border-l border-border"
                                   )}
                                   style={{
-                                    minWidth: `${100 / (csvData?.headers.length || 1)}%`,
-                                    width: `${100 / (csvData?.headers.length || 1)}%`,
+                                    minWidth: `${100 / csvData.headers.length}%`,
+                                    width: `${100 / csvData.headers.length}%`,
                                   }}
                                   title={cell}
                                 >
@@ -231,12 +223,12 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
             </div>
           </div>
         ) : (
-          /* Regular Table for Small Datasets or When Pagination is Enabled */
+          /* Regular Table for Small Datasets */
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  {paginatedData.headers.map((header, index) => (
+                  {csvData.headers.map((header, index) => (
                     <TableHead key={index} className="font-semibold">
                       {header}
                     </TableHead>
@@ -244,7 +236,7 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedData.rows.map((row, rowIndex) => (
+                {csvData.rows.map((row, rowIndex) => (
                   <TableRow key={rowIndex}>
                     {row.map((cell, cellIndex) => (
                       <TableCell
@@ -258,45 +250,6 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                 ))}
               </TableBody>
             </Table>
-          </div>
-        )}
-
-        {showPagination && totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage === 0}
-              onClick={() => setCurrentPage((prev) => Math.max(0, prev - 1))}
-            >
-              <ChevronLeft className="size-4" />
-              Previous
-            </Button>
-
-            <span className="text-sm text-muted-foreground">
-              Page {currentPage + 1} of {totalPages}
-            </span>
-
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage >= totalPages - 1}
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))
-              }
-            >
-              Next
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        )}
-
-        {paginatedData.totalRows > 0 && !shouldUseVirtualScrolling && (
-          <div className="text-sm text-muted-foreground">
-            Showing rows {paginatedData.startRow + 1}-{paginatedData.endRow}
-            {paginatedData.totalRows > maxRows
-              ? ` of first ${maxRows} rows (${paginatedData.totalRows} total)`
-              : ` of ${paginatedData.totalRows} total`}
           </div>
         )}
       </div>
