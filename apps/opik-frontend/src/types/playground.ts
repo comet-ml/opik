@@ -22,6 +22,8 @@ export interface ChatCompletionMessageChoiceType {
   delta: {
     content: string;
   };
+  finish_reason?: string;
+  index?: number;
 }
 
 export interface ChatCompletionSuccessMessageType {

@@ -20,10 +20,15 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/components/shared/Loader/Loader";
-import { mustachePlugin } from "@/constants/codeMirrorPlugins";
+import {
+  mustachePlugin,
+  codeMirrorPromptTheme,
+} from "@/constants/codeMirrorPlugins";
 import { DropdownOption } from "@/types/shared";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
-import LLMPromptMessageActions from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
+import LLMPromptMessageActions, {
+  ImprovePromptConfig,
+} from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
 import { useMessageContent } from "@/hooks/useMessageContent";
 
@@ -42,26 +47,6 @@ const MESSAGE_TYPE_OPTIONS = [
   },
 ];
 
-const theme = EditorView.theme({
-  "&": {
-    fontSize: "0.875rem",
-    cursor: "text",
-  },
-  "&.cm-focused": {
-    outline: "none",
-  },
-  ".cm-line": {
-    "padding-left": 0,
-  },
-  ".cm-scroller": {
-    fontFamily: "inherit",
-  },
-  ".cm-placeholder": {
-    color: "var(--codemirror-gutter)",
-    fontWeight: 300,
-  },
-});
-
 interface LLMPromptMessageProps {
   message: LLMMessage;
   hideRemoveButton: boolean;
@@ -74,6 +59,7 @@ interface LLMPromptMessageProps {
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
   disableImages?: boolean;
+  improvePromptConfig?: ImprovePromptConfig;
 }
 
 const LLMPromptMessage = ({
@@ -88,6 +74,7 @@ const LLMPromptMessage = ({
   onDuplicateMessage,
   onRemoveMessage,
   disableImages = true,
+  improvePromptConfig,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -160,6 +147,7 @@ const LLMPromptMessage = ({
                   onChangeMessage={onChangeMessage}
                   setIsLoading={setIsLoading}
                   setIsHoldActionsVisible={setIsHoldActionsVisible}
+                  improvePromptConfig={improvePromptConfig}
                 />
               )}
               {!hideRemoveButton && (
@@ -206,7 +194,7 @@ const LLMPromptMessage = ({
                 onCreateEditor={(view) => {
                   editorViewRef.current = view;
                 }}
-                theme={theme}
+                theme={codeMirrorPromptTheme}
                 value={localText}
                 onChange={handleContentChange}
                 placeholder="Type your message"
