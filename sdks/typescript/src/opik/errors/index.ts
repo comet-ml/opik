@@ -5,3 +5,4 @@
 export * from "./BaseError";
 export * from "./types";
 export * from "./dataset";
+export * from "./search";
