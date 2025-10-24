@@ -27,6 +27,7 @@ export enum TREE_DATABLOCK_TYPE {
   GUARDRAILS = "guardrails",
   DURATION = "duration",
   NUMBERS_OF_TOKENS = "tokens",
+  TOKENS_BREAKDOWN = "tokensBreakdown",
   ESTIMATED_COST = "estimatedCost",
   NUMBER_OF_SCORES = "numberOfScores",
   NUMBER_OF_COMMENTS = "numberOfComments",
