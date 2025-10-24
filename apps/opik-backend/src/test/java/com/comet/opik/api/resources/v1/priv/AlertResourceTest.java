@@ -2106,7 +2106,7 @@ class AlertResourceTest {
             var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
 
             String url = BASE_URL + "/" + mock.getRight() + "/projects";
-            String fallbackText = String.format("Overall %d Traces with errors created, you could check them here: %s",
+            String fallbackText = String.format("Overall %d Traces with errors created, you could check them here: <%s|View All>",
                     tracesWithErrors.size(), url);
 
             // Verify Slack payload has fallback block due to text truncation
@@ -2156,7 +2156,7 @@ class AlertResourceTest {
 
             String url = BASE_URL + "/" + mock.getRight() + "/projects";
             String fallbackText = String.format(
-                    "Overall %d Traces with Guardrails Triggered created, you could check them here: %s",
+                    "Overall %d Traces with Guardrails Triggered created, you could check them here: <%s|View All>",
                     guardrails.size(), url);
 
             // Verify Slack payload has fallback block due to text truncation
@@ -2194,7 +2194,7 @@ class AlertResourceTest {
 
             // Verify Slack payload has fallback block due to text truncation
             String url = BASE_URL + "/" + mock.getRight() + "/prompts";
-            String fallbackText = String.format("Overall %d Prompts created, you could check them here: %s",
+            String fallbackText = String.format("Overall %d Prompts created, you could check them here: <%s|View All>",
                     promptsCnt, url);
             verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
@@ -2225,7 +2225,7 @@ class AlertResourceTest {
 
             // Verify Slack payload has fallback block due to text truncation
             String url = BASE_URL + "/" + mock.getRight() + "/prompts";
-            String fallbackText = String.format("Overall %d Prompts commits created, you could check them here: %s",
+            String fallbackText = String.format("Overall %d Prompts commits created, you could check them here: <%s|View All>",
                     commitsCnt, url);
             verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
@@ -2268,7 +2268,7 @@ class AlertResourceTest {
             // Verify Slack payload has fallback block due to text truncation
             String url = BASE_URL + "/" + mock.getRight() + "/projects";
             String fallbackText = String.format(
-                    "Overall %d Traces Feedback Scores created, you could check them here: %s",
+                    "Overall %d Traces Feedback Scores created, you could check them here: <%s|View All>",
                     scoresCnt, url);
             verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
@@ -2336,7 +2336,7 @@ class AlertResourceTest {
             // Verify Slack payload has fallback block due to text truncation
             String url = BASE_URL + "/" + mock.getRight() + "/projects";
             String fallbackText = String.format(
-                    "Overall %d Threads Feedback Scores created, you could check them here: %s",
+                    "Overall %d Threads Feedback Scores created, you could check them here: <%s|View All>",
                     scoresCnt, url);
             verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
