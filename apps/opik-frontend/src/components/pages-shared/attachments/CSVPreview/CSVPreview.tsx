@@ -14,7 +14,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import DataTableWrapper from "@/components/shared/DataTable/DataTableWrapper";
 import { cn } from "@/lib/utils";
+import { ROW_HEIGHT_MAP } from "@/constants/shared";
+import { ROW_HEIGHT } from "@/types/shared";
 
 interface CSVPreviewProps {
   url: string;
@@ -28,10 +31,11 @@ interface CSVData {
 }
 
 // Virtual scrolling constants matching DataTable patterns
-const ROW_HEIGHT = 36; // Height for each row in pixels
-const HEADER_HEIGHT = 40; // Height for header row
+const CSV_ROW_HEIGHT = ROW_HEIGHT.small; // Use standard small row height (44px)
+const VIRTUAL_ROW_HEIGHT = parseInt(ROW_HEIGHT_MAP[CSV_ROW_HEIGHT].height as string, 10);
 const MAX_CONTAINER_HEIGHT = 500; // Maximum height for the scrollable container
 const VIRTUAL_THRESHOLD = 100; // Use virtual scrolling for datasets larger than this
+const OVERSCAN_COUNT = 5; // Number of rows to render outside visible area
 
 const CSVPreview: React.FC<CSVPreviewProps> = ({
   url,
@@ -116,8 +120,8 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
   const virtualizer = useVirtualizer({
     count: csvData?.rows?.length || 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 5,
+    estimateSize: () => VIRTUAL_ROW_HEIGHT,
+    overscan: OVERSCAN_COUNT,
     enabled: Boolean(shouldUseVirtualScrolling),
   });
 
@@ -147,26 +151,26 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
 
         {shouldUseVirtualScrolling ? (
           /* Virtual Scrolling Table for Large Datasets */
-          <div className="rounded-md border">
+          <DataTableWrapper>
             <div
               ref={parentRef}
               className="overflow-auto"
               style={{
                 height: Math.min(
                   MAX_CONTAINER_HEIGHT,
-                  (csvData.rows.length * ROW_HEIGHT) + HEADER_HEIGHT
+                  (csvData.rows.length * VIRTUAL_ROW_HEIGHT) + VIRTUAL_ROW_HEIGHT
                 ),
               }}
             >
               <Table>
                 {/* Static Header */}
                 <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow>
+                  <TableRow style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}>
                     {csvData.headers.map((header, index) => (
                       <TableHead 
                         key={index} 
                         className="font-semibold border-b border-border"
-                        style={{ height: HEADER_HEIGHT }}
+                        style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}
                       >
                         {header}
                       </TableHead>
@@ -184,35 +188,24 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                           if (!row) return null;
                           
                           return (
-                            <div
+                            <TableRow
                               key={virtualRow.index}
-                              className={cn(
-                                "absolute top-0 left-0 w-full flex",
-                                "border-b border-border hover:bg-muted/50"
-                              )}
+                              className="absolute top-0 left-0 w-full border-b transition-colors group/row comet-table-row-active"
                               style={{
-                                height: ROW_HEIGHT,
+                                height: VIRTUAL_ROW_HEIGHT,
                                 transform: `translateY(${virtualRow.start}px)`,
                               }}
                             >
                               {row.map((cell, cellIndex) => (
-                                <div
+                                <TableCell
                                   key={cellIndex}
-                                  className={cn(
-                                    "flex items-center px-4 py-2",
-                                    "max-w-[200px] truncate text-sm",
-                                    cellIndex > 0 && "border-l border-border"
-                                  )}
-                                  style={{
-                                    minWidth: `${100 / csvData.headers.length}%`,
-                                    width: `${100 / csvData.headers.length}%`,
-                                  }}
+                                  className="max-w-[200px] truncate text-sm"
                                   title={cell}
                                 >
-                                  {cell}
-                                </div>
+                                  <div className="truncate">{cell}</div>
+                                </TableCell>
                               ))}
-                            </div>
+                            </TableRow>
                           );
                         })}
                       </div>
@@ -221,13 +214,13 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                 </TableBody>
               </Table>
             </div>
-          </div>
+          </DataTableWrapper>
         ) : (
           /* Regular Table for Small Datasets */
-          <div className="rounded-md border">
+          <DataTableWrapper>
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}>
                   {csvData.headers.map((header, index) => (
                     <TableHead key={index} className="font-semibold">
                       {header}
@@ -237,20 +230,20 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
               </TableHeader>
               <TableBody>
                 {csvData.rows.map((row, rowIndex) => (
-                  <TableRow key={rowIndex}>
+                  <TableRow key={rowIndex} style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}>
                     {row.map((cell, cellIndex) => (
                       <TableCell
                         key={cellIndex}
-                        className="max-w-[200px] truncate"
+                        className="max-w-[200px] truncate text-sm"
                       >
-                        <div title={cell}>{cell}</div>
+                        <div className="truncate" title={cell}>{cell}</div>
                       </TableCell>
                     ))}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </DataTableWrapper>
         )}
       </div>
     );
