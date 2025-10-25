@@ -5,7 +5,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 from rich.console import Console
@@ -18,6 +18,9 @@ from opik.api_objects.span import span_data
 from opik.api_objects.trace.migration import prepare_traces_and_spans_for_copy
 
 console = Console()
+
+# Constants for import command
+DEFAULT_PROJECT_NAME = "default"
 
 
 def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
@@ -326,250 +329,876 @@ def _import_prompts(
     return imported_count
 
 
-@click.command(name="import")
+def _find_experiment_files(data_dir: Path) -> List[Path]:
+    """Find all experiment JSON files in the directory."""
+    return list(data_dir.glob("experiment_*.json"))
+
+
+def _load_experiment_data(experiment_file: Path) -> Dict[str, Any]:
+    """Load experiment data from JSON file."""
+    with open(experiment_file, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _find_trace_by_id(
+    client: opik.Opik, trace_id: str, project_name: str
+) -> Optional[Any]:
+    """Find a trace by ID in the specified project."""
+    try:
+        # Use the proper API method to get trace by ID
+        trace = client.get_trace_content(trace_id)
+        return trace
+    except Exception:
+        return None
+
+
+def _find_dataset_item_by_content(
+    dataset: Any, expected_content: Dict[str, Any]
+) -> Optional[str]:
+    """Find a dataset item by matching its content."""
+    try:
+        items = dataset.get_items()
+        for item in items:
+            # Compare key fields for matching
+            if item.get("input") == expected_content.get("input") and item.get(
+                "expected_output"
+            ) == expected_content.get("expected_output"):
+                return item.get("id")
+    except Exception:
+        pass
+    return None
+
+
+def _create_dataset_item(dataset: Any, item_data: Dict[str, Any]) -> str:
+    """Create a dataset item and return its ID."""
+    new_item = {
+        "input": item_data.get("input"),
+        "expected_output": item_data.get("expected_output"),
+        "metadata": item_data.get("metadata"),
+    }
+
+    dataset.insert([new_item])
+
+    # Find the newly created item
+    items = dataset.get_items()
+    for item in items:
+        if (
+            item.get("input") == new_item["input"]
+            and item.get("expected_output") == new_item["expected_output"]
+        ):
+            return item.get("id")
+
+    dataset_name = getattr(dataset, "name", None)
+    raise Exception(
+        f"Failed to create dataset item. "
+        f"Input: {new_item.get('input')!r}, "
+        f"Expected Output: {new_item.get('expected_output')!r}"
+        + (f", Dataset: {dataset_name!r}" if dataset_name else "")
+    )
+
+
+def _handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
+    """Handle trace references from deduplicated exports."""
+    trace_reference = item_data.get("trace_reference")
+    if trace_reference:
+        trace_id = trace_reference.get("trace_id")
+        console.print(f"[blue]Using trace reference: {trace_id}[/blue]")
+        return trace_id
+
+    # Fall back to direct trace_id
+    return item_data.get("trace_id")
+
+
+def _recreate_experiment(
+    client: opik.Opik,
+    experiment_data: Dict[str, Any],
+    project_name: str,
+    dry_run: bool = False,
+) -> bool:
+    """Recreate a single experiment from exported data."""
+    experiment_info = experiment_data["experiment"]
+    items_data = experiment_data["items"]
+
+    experiment_name = (
+        experiment_info.get("name") or f"recreated-{experiment_info['id']}"
+    )
+    dataset_name = experiment_info["dataset_name"]
+
+    console.print(f"[blue]Recreating experiment: {experiment_name}[/blue]")
+
+    if dry_run:
+        console.print(
+            f"[yellow]Would create experiment '{experiment_name}' with {len(items_data)} items[/yellow]"
+        )
+        return True
+
+    try:
+        # Get or create the dataset
+        try:
+            dataset = client.get_dataset(dataset_name)
+        except ApiError as e:
+            if e.status_code == 404:
+                console.print(
+                    f"[yellow]Dataset '{dataset_name}' not found, creating it...[/yellow]"
+                )
+                dataset = client.create_dataset(
+                    name=dataset_name,
+                    description=f"Recreated dataset for experiment {experiment_name}",
+                )
+            else:
+                raise
+
+        # Create the experiment
+        experiment = client.create_experiment(
+            dataset_name=dataset_name,
+            name=experiment_name,
+            experiment_config=experiment_info.get("metadata"),
+            type=experiment_info.get("type", "regular"),
+        )
+
+        # Process experiment items
+        experiment_items = []
+        successful_items = 0
+        skipped_items = 0
+
+        for item_data in items_data:
+            # Handle trace reference (from deduplicated exports)
+            trace_id = _handle_trace_reference(item_data)
+            if not trace_id:
+                console.print(
+                    "[yellow]Warning: No trace ID found, skipping item[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+            # Find the trace
+            trace = _find_trace_by_id(client, trace_id, project_name)
+            if not trace:
+                console.print(
+                    f"[yellow]Warning: Trace {trace_id} not found, skipping item[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+            # Handle dataset item
+            dataset_item_data = item_data.get("dataset_item_data", {})
+            if not dataset_item_data:
+                console.print(
+                    "[yellow]Warning: No dataset item data, skipping item[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+            try:
+                # Find or create dataset item
+                dataset_item_id = _find_dataset_item_by_content(
+                    dataset, dataset_item_data
+                )
+                if not dataset_item_id:
+                    dataset_item_id = _create_dataset_item(dataset, dataset_item_data)
+
+                # Create experiment item reference
+                experiment_items.append(
+                    opik.ExperimentItemReferences(
+                        dataset_item_id=dataset_item_id,
+                        trace_id=trace_id,
+                    )
+                )
+                successful_items += 1
+
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Failed to handle dataset item: {e}[/yellow]"
+                )
+                skipped_items += 1
+                continue
+
+        # Insert experiment items
+        if experiment_items:
+            experiment.insert(experiment_items)
+            console.print(
+                f"[green]Created experiment '{experiment_name}' with {successful_items} items[/green]"
+            )
+            if skipped_items > 0:
+                console.print(
+                    f"[yellow]Skipped {skipped_items} items due to missing data[/yellow]"
+                )
+        else:
+            console.print(
+                f"[yellow]No valid items found for experiment '{experiment_name}'[/yellow]"
+            )
+
+        return True
+
+    except Exception as e:
+        console.print(
+            f"[red]Error recreating experiment '{experiment_name}': {e}[/red]"
+        )
+        return False
+
+
+def _recreate_experiments(
+    client: opik.Opik,
+    project_dir: Path,
+    project_name: str,
+    dry_run: bool = False,
+    name_pattern: Optional[str] = None,
+) -> int:
+    """Recreate experiments from JSON files."""
+    experiment_files = _find_experiment_files(project_dir)
+
+    if not experiment_files:
+        console.print(f"[yellow]No experiment files found in {project_dir}[/yellow]")
+        return 0
+
+    console.print(f"[green]Found {len(experiment_files)} experiment files[/green]")
+
+    # Filter experiments by name pattern if specified
+    if name_pattern:
+        filtered_files = []
+        for exp_file in experiment_files:
+            try:
+                exp_data = _load_experiment_data(exp_file)
+                exp_name = exp_data.get("experiment", {}).get("name", "")
+                if exp_name and _matches_name_pattern(exp_name, name_pattern):
+                    filtered_files.append(exp_file)
+            except Exception:
+                continue
+
+        if filtered_files:
+            console.print(
+                f"[blue]Filtered to {len(filtered_files)} experiments matching pattern '{name_pattern}'[/blue]"
+            )
+            experiment_files = filtered_files
+        else:
+            console.print(
+                f"[yellow]No experiments found matching pattern '{name_pattern}'[/yellow]"
+            )
+            return 0
+
+    successful = 0
+    failed = 0
+
+    for experiment_file in experiment_files:
+        try:
+            experiment_data = _load_experiment_data(experiment_file)
+
+            if _recreate_experiment(client, experiment_data, project_name, dry_run):
+                successful += 1
+            else:
+                failed += 1
+
+        except Exception as e:
+            console.print(f"[red]Error processing {experiment_file.name}: {e}[/red]")
+            failed += 1
+            continue
+
+    return successful
+
+
+def _import_by_type(
+    import_type: str,
+    workspace_folder: str,
+    workspace: str,
+    dry_run: bool,
+    name_pattern: Optional[str],
+    debug: bool,
+    recreate_experiments: bool = False,
+) -> None:
+    """
+    Import data by type (dataset, project, experiment) with pattern matching.
+
+    Args:
+        import_type: Type of data to import ("dataset", "project", "experiment")
+        workspace_folder: Base workspace folder containing the data
+        workspace: Target workspace name
+        dry_run: Whether to show what would be imported without importing
+        name_pattern: Optional regex pattern to filter items by name
+        debug: Enable debug output
+        recreate_experiments: Whether to recreate experiments after importing
+    """
+    try:
+        if debug:
+            console.print(
+                f"[blue]DEBUG: Starting {import_type} import from {workspace_folder}[/blue]"
+            )
+
+        # Initialize Opik client
+        client = opik.Opik(workspace=workspace)
+
+        # Determine source directory based on import type
+        base_path = Path(workspace_folder)
+
+        if import_type == "dataset":
+            source_dir = base_path / "datasets"
+        elif import_type == "project":
+            source_dir = base_path / "projects"
+        elif import_type == "experiment":
+            source_dir = base_path / "experiments"
+        elif import_type == "prompt":
+            source_dir = base_path / "prompts"
+        else:
+            console.print(f"[red]Unknown import type: {import_type}[/red]")
+            return
+
+        if not source_dir.exists():
+            console.print(
+                f"[yellow]Source directory {source_dir} does not exist[/yellow]"
+            )
+            return
+
+        if debug:
+            console.print(f"[blue]Source directory: {source_dir}[/blue]")
+
+        imported_count = 0
+
+        if import_type == "dataset":
+            imported_count = _import_datasets_from_directory(
+                client, source_dir, dry_run, name_pattern, debug
+            )
+        elif import_type == "project":
+            imported_count = _import_projects_from_directory(
+                client, source_dir, dry_run, name_pattern, debug, recreate_experiments
+            )
+        elif import_type == "experiment":
+            imported_count = _import_experiments_from_directory(
+                client, source_dir, dry_run, name_pattern, debug, recreate_experiments
+            )
+        elif import_type == "prompt":
+            imported_count = _import_prompts_from_directory(
+                client, source_dir, dry_run, name_pattern, debug
+            )
+
+        if dry_run:
+            console.print(
+                f"[blue]Dry run complete: Would import {imported_count} {import_type}s[/blue]"
+            )
+        else:
+            console.print(
+                f"[green]Successfully imported {imported_count} {import_type}s[/green]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error importing {import_type}s: {e}[/red]")
+        sys.exit(1)
+
+
+def _import_datasets_from_directory(
+    client: opik.Opik,
+    source_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str],
+    debug: bool,
+) -> int:
+    """Import datasets from a directory."""
+    try:
+        dataset_files = list(source_dir.glob("dataset_*.json"))
+
+        if not dataset_files:
+            console.print("[yellow]No dataset files found in the directory[/yellow]")
+            return 0
+
+        imported_count = 0
+        for dataset_file in dataset_files:
+            try:
+                with open(dataset_file, "r", encoding="utf-8") as f:
+                    dataset_data = json.load(f)
+
+                dataset_name = dataset_data.get("name", "")
+
+                # Filter by name pattern if specified
+                if name_pattern and not _matches_name_pattern(
+                    dataset_name, name_pattern
+                ):
+                    if debug:
+                        console.print(
+                            f"[blue]Skipping dataset {dataset_name} (doesn't match pattern)[/blue]"
+                        )
+                    continue
+
+                if dry_run:
+                    console.print(f"[blue]Would import dataset: {dataset_name}[/blue]")
+                    imported_count += 1
+                    continue
+
+                if debug:
+                    console.print(f"[blue]Importing dataset: {dataset_name}[/blue]")
+
+                # Create dataset
+                dataset = client.create_dataset(name=dataset_name)
+
+                # Import dataset items
+                items = dataset_data.get("items", [])
+                if items:
+                    dataset.insert(items)
+
+                imported_count += 1
+                if debug:
+                    console.print(
+                        f"[green]Imported dataset: {dataset_name} with {len(items)} items[/green]"
+                    )
+
+            except Exception as e:
+                console.print(
+                    f"[red]Error importing dataset from {dataset_file}: {e}[/red]"
+                )
+                continue
+
+        return imported_count
+
+    except Exception as e:
+        console.print(f"[red]Error importing datasets: {e}[/red]")
+        return 0
+
+
+def _import_projects_from_directory(
+    client: opik.Opik,
+    source_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str],
+    debug: bool,
+    recreate_experiments: bool = False,
+) -> int:
+    """Import projects from a directory."""
+    try:
+        project_dirs = [d for d in source_dir.iterdir() if d.is_dir()]
+
+        if not project_dirs:
+            console.print("[yellow]No project directories found[/yellow]")
+            return 0
+
+        imported_count = 0
+        for project_dir in project_dirs:
+            try:
+                project_name = project_dir.name
+
+                # Filter by name pattern if specified
+                if name_pattern and not _matches_name_pattern(
+                    project_name, name_pattern
+                ):
+                    if debug:
+                        console.print(
+                            f"[blue]Skipping project {project_name} (doesn't match pattern)[/blue]"
+                        )
+                    continue
+
+                if dry_run:
+                    console.print(f"[blue]Would import project: {project_name}[/blue]")
+                    imported_count += 1
+                    continue
+
+                if debug:
+                    console.print(f"[blue]Importing project: {project_name}[/blue]")
+
+                # Import traces from the project directory
+                trace_files = list(project_dir.glob("trace_*.json"))
+                traces_imported = 0
+
+                for trace_file in trace_files:
+                    try:
+                        with open(trace_file, "r", encoding="utf-8") as f:
+                            trace_data = json.load(f)
+
+                        # Import trace and spans
+                        trace_info = trace_data.get("trace", {})
+                        spans_info = trace_data.get("spans", [])
+
+                        # Create trace
+                        trace = client.trace(
+                            name=trace_info.get("name", "imported_trace"),
+                            input=trace_info.get("input", {}),
+                            output=trace_info.get("output", {}),
+                            project_name=project_name,
+                        )
+
+                        # Create spans
+                        for span_info in spans_info:
+                            client.span(
+                                name=span_info.get("name", "imported_span"),
+                                input=span_info.get("input", {}),
+                                output=span_info.get("output", {}),
+                                trace_id=trace.id,
+                                project_name=project_name,
+                            )
+
+                        traces_imported += 1
+
+                    except Exception as e:
+                        console.print(
+                            f"[red]Error importing trace from {trace_file}: {e}[/red]"
+                        )
+                        continue
+
+                # Handle experiment recreation if requested
+                if recreate_experiments:
+                    experiment_files = list(project_dir.glob("experiment_*.json"))
+                    if experiment_files:
+                        if debug:
+                            console.print(
+                                f"[blue]Found {len(experiment_files)} experiment files in project {project_name}[/blue]"
+                            )
+
+                        # Recreate experiments
+                        experiments_recreated = _recreate_experiments(
+                            client, project_dir, project_name, dry_run, name_pattern
+                        )
+
+                        if debug and experiments_recreated > 0:
+                            console.print(
+                                f"[green]Recreated {experiments_recreated} experiments for project {project_name}[/green]"
+                            )
+
+                if traces_imported > 0:
+                    imported_count += 1
+                    if debug:
+                        console.print(
+                            f"[green]Imported project: {project_name} with {traces_imported} traces[/green]"
+                        )
+
+            except Exception as e:
+                console.print(
+                    f"[red]Error importing project {project_dir.name}: {e}[/red]"
+                )
+                continue
+
+        return imported_count
+
+    except Exception as e:
+        console.print(f"[red]Error importing projects: {e}[/red]")
+        return 0
+
+
+def _import_experiments_from_directory(
+    client: opik.Opik,
+    source_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str],
+    debug: bool,
+    recreate_experiments: bool,
+) -> int:
+    """Import experiments from a directory."""
+    try:
+        experiment_files = list(source_dir.glob("experiment_*.json"))
+
+        if not experiment_files:
+            console.print("[yellow]No experiment files found in the directory[/yellow]")
+            return 0
+
+        imported_count = 0
+        for experiment_file in experiment_files:
+            try:
+                with open(experiment_file, "r", encoding="utf-8") as f:
+                    experiment_data = json.load(f)
+
+                experiment_info = experiment_data.get("experiment", {})
+                experiment_name = experiment_info.get("name", "")
+
+                # Filter by name pattern if specified
+                if name_pattern and not _matches_name_pattern(
+                    experiment_name, name_pattern
+                ):
+                    if debug:
+                        console.print(
+                            f"[blue]Skipping experiment {experiment_name} (doesn't match pattern)[/blue]"
+                        )
+                    continue
+
+                if dry_run:
+                    console.print(
+                        f"[blue]Would import experiment: {experiment_name}[/blue]"
+                    )
+                    imported_count += 1
+                    continue
+
+                if debug:
+                    console.print(
+                        f"[blue]Importing experiment: {experiment_name}[/blue]"
+                    )
+
+                # Import experiment using the existing _recreate_experiment function
+                success = _recreate_experiment(
+                    client,
+                    experiment_data,
+                    experiment_info.get("dataset_name", "default"),
+                    dry_run,
+                )
+
+                if success:
+                    imported_count += 1
+                    if debug:
+                        console.print(
+                            f"[green]Imported experiment: {experiment_name}[/green]"
+                        )
+
+            except Exception as e:
+                console.print(
+                    f"[red]Error importing experiment from {experiment_file}: {e}[/red]"
+                )
+                continue
+
+        return imported_count
+
+    except Exception as e:
+        console.print(f"[red]Error importing experiments: {e}[/red]")
+        return 0
+
+
+def _import_prompts_from_directory(
+    client: opik.Opik,
+    source_dir: Path,
+    dry_run: bool,
+    name_pattern: Optional[str],
+    debug: bool,
+) -> int:
+    """Import prompts from a directory."""
+    try:
+        prompt_files = list(source_dir.glob("prompt_*.json"))
+
+        if not prompt_files:
+            console.print("[yellow]No prompt files found in the directory[/yellow]")
+            return 0
+
+        imported_count = 0
+        for prompt_file in prompt_files:
+            try:
+                with open(prompt_file, "r", encoding="utf-8") as f:
+                    prompt_data = json.load(f)
+
+                prompt_name = prompt_data.get("name", "")
+                if not prompt_name:
+                    console.print(
+                        f"[yellow]Skipping {prompt_file.name} (no name found)[/yellow]"
+                    )
+                    continue
+
+                # Filter by name pattern if specified
+                if name_pattern and not _matches_name_pattern(
+                    prompt_name, name_pattern
+                ):
+                    if debug:
+                        console.print(
+                            f"[blue]Skipping prompt {prompt_name} (doesn't match pattern)[/blue]"
+                        )
+                    continue
+
+                if dry_run:
+                    console.print(f"[blue]Would import prompt: {prompt_name}[/blue]")
+                    imported_count += 1
+                    continue
+
+                if debug:
+                    console.print(f"[blue]Importing prompt: {prompt_name}[/blue]")
+
+                # Get current version data
+                current_version = prompt_data.get("current_version", {})
+                prompt_text = current_version.get("prompt", "")
+                metadata = current_version.get("metadata")
+                prompt_type = current_version.get("type")
+
+                if not prompt_text:
+                    console.print(
+                        f"[yellow]Skipping {prompt_name} (no prompt text found)[/yellow]"
+                    )
+                    continue
+
+                # Create the prompt
+                try:
+                    # Import the Prompt class and PromptType
+                    from opik.api_objects.prompt.prompt import Prompt
+                    from opik.api_objects.prompt.types import PromptType
+
+                    # Convert string type to PromptType enum if needed
+                    if prompt_type and isinstance(prompt_type, str):
+                        try:
+                            prompt_type_enum = PromptType(prompt_type)
+                        except ValueError:
+                            console.print(
+                                f"[yellow]Unknown prompt type '{prompt_type}', using MUSTACHE[/yellow]"
+                            )
+                            prompt_type_enum = PromptType.MUSTACHE
+                    else:
+                        prompt_type_enum = PromptType.MUSTACHE
+
+                    # Create the prompt
+                    Prompt(
+                        name=prompt_name,
+                        prompt=prompt_text,
+                        metadata=metadata,
+                        type=prompt_type_enum,
+                    )
+
+                    imported_count += 1
+                    if debug:
+                        console.print(f"[green]Imported prompt: {prompt_name}[/green]")
+
+                except Exception as e:
+                    console.print(
+                        f"[red]Error creating prompt {prompt_name}: {e}[/red]"
+                    )
+                    continue
+
+            except Exception as e:
+                console.print(
+                    f"[red]Error importing prompt from {prompt_file}: {e}[/red]"
+                )
+                continue
+
+        return imported_count
+
+    except Exception as e:
+        console.print(f"[red]Error importing prompts: {e}[/red]")
+        return 0
+
+
+@click.group(name="import")
+@click.argument("workspace", type=str)
+@click.pass_context
+def import_group(ctx: click.Context, workspace: str) -> None:
+    """Import data to Opik workspace."""
+    ctx.ensure_object(dict)
+    ctx.obj["workspace"] = workspace
+
+
+@import_group.command(name="dataset")
 @click.argument(
-    "workspace_folder",
-    type=click.Path(file_okay=False, dir_okay=True, readable=True),
+    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
 )
-@click.argument("workspace_name", type=str)
 @click.option(
     "--dry-run",
     is_flag=True,
     help="Show what would be imported without actually importing.",
 )
 @click.option(
-    "--all",
-    is_flag=True,
-    help="Include all data types (traces, datasets, prompts).",
-)
-@click.option(
-    "--include",
-    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
-    multiple=True,
-    default=["traces"],
-    help="Data types to include in upload. Can be specified multiple times. Defaults to traces only.",
-)
-@click.option(
-    "--exclude",
-    type=click.Choice(["traces", "datasets", "prompts"], case_sensitive=False),
-    multiple=True,
-    help="Data types to exclude from upload. Can be specified multiple times.",
-)
-@click.option(
     "--name",
     type=str,
-    help="Filter items by name using Python regex patterns. Matches against trace names, dataset names, or prompt names.",
+    help="Filter datasets by name using Python regex patterns.",
 )
 @click.option(
     "--debug",
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
-def import_data(
+@click.pass_context
+def import_dataset(
+    ctx: click.Context,
     workspace_folder: str,
-    workspace_name: str,
     dry_run: bool,
-    all: bool,
-    include: tuple,
-    exclude: tuple,
     name: Optional[str],
     debug: bool,
 ) -> None:
-    """
-    Upload data from local files to a workspace or workspace/project.
+    """Import datasets from workspace/datasets directory."""
+    workspace = ctx.obj["workspace"]
+    _import_by_type("dataset", workspace_folder, workspace, dry_run, name, debug)
 
-    This command reads data from JSON files in the specified workspace folder
-    and imports them to the specified workspace or project.
 
-    Note: Thread metadata is automatically calculated from traces with the same thread_id,
-    so threads don't need to be imported separately.
+@import_group.command(name="project")
+@click.argument(
+    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be imported without actually importing.",
+)
+@click.option(
+    "--name",
+    type=str,
+    help="Filter projects by name using Python regex patterns.",
+)
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug output to show detailed information about the import process.",
+)
+@click.option(
+    "--recreate-experiments",
+    is_flag=True,
+    help="Recreate experiments when importing projects. Defaults to False.",
+)
+@click.pass_context
+def import_project(
+    ctx: click.Context,
+    workspace_folder: str,
+    dry_run: bool,
+    name: Optional[str],
+    debug: bool,
+    recreate_experiments: bool,
+) -> None:
+    """Import projects from workspace/projects directory."""
+    workspace = ctx.obj["workspace"]
+    _import_by_type(
+        "project",
+        workspace_folder,
+        workspace,
+        dry_run,
+        name,
+        debug,
+        recreate_experiments,
+    )
 
-    WORKSPACE_FOLDER: Directory containing JSON files to import.
-    WORKSPACE_NAME: Either a workspace name (e.g., "my-workspace") to import to all projects,
-                   or workspace/project (e.g., "my-workspace/my-project") to import to a specific project.
-    """
-    try:
-        if debug:
-            console.print("[blue]DEBUG: Starting import with parameters:[/blue]")
-            console.print(f"[blue]  workspace_folder: {workspace_folder}[/blue]")
-            console.print(f"[blue]  workspace_name: {workspace_name}[/blue]")
-            console.print(f"[blue]  include: {include}[/blue]")
-            console.print(f"[blue]  debug: {debug}[/blue]")
 
-        # Parse workspace/project from the argument
-        if "/" in workspace_name:
-            workspace, project_name = workspace_name.split("/", 1)
-            import_to_specific_project = True
-            if debug:
-                console.print(
-                    f"[blue]DEBUG: Parsed workspace: {workspace}, project: {project_name}[/blue]"
-                )
-        else:
-            # Only workspace specified - upload to all projects
-            workspace = workspace_name
-            project_name = None
-            import_to_specific_project = False
-            if debug:
-                console.print(f"[blue]DEBUG: Workspace only: {workspace}[/blue]")
+@import_group.command(name="experiment")
+@click.argument(
+    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be imported without actually importing.",
+)
+@click.option(
+    "--name",
+    type=str,
+    help="Filter experiments by name using Python regex patterns.",
+)
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug output to show detailed information about the import process.",
+)
+@click.pass_context
+def import_experiment(
+    ctx: click.Context,
+    workspace_folder: str,
+    dry_run: bool,
+    name: Optional[str],
+    debug: bool,
+) -> None:
+    """Import experiments from workspace/experiments directory."""
+    workspace = ctx.obj["workspace"]
+    # Always recreate experiments when importing
+    _import_by_type(
+        "experiment", workspace_folder, workspace, dry_run, name, debug, True
+    )
 
-        # Initialize Opik client with workspace
-        if debug:
-            console.print(
-                f"[blue]DEBUG: Initializing Opik client with workspace: {workspace}[/blue]"
-            )
-        client = opik.Opik(workspace=workspace)
 
-        # Use the specified workspace folder directly
-        project_dir = Path(workspace_folder)
-
-        # Determine which data types to upload
-        if all:
-            # If --all is specified, include all data types
-            include_set = {"traces", "datasets", "prompts"}
-        else:
-            include_set = set(item.lower() for item in include)
-
-        exclude_set = set(item.lower() for item in exclude)
-
-        # Apply exclusions
-        data_types = include_set - exclude_set
-
-        if not project_dir.exists():
-            console.print(f"[red]Error: Directory not found: {project_dir}[/red]")
-            console.print("[yellow]Make sure the path is correct.[/yellow]")
-            sys.exit(1)
-
-        console.print(f"[green]Uploading data from {project_dir}[/green]")
-
-        if import_to_specific_project:
-            console.print(
-                f"[blue]Uploading to workspace: {workspace}, project: {project_name}[/blue]"
-            )
-        else:
-            console.print(
-                f"[blue]Uploading to workspace: {workspace} (all projects)[/blue]"
-            )
-
-        if debug:
-            console.print(f"[blue]Data types: {', '.join(sorted(data_types))}[/blue]")
-
-        # Note about workspace vs project-specific data
-        project_specific = [dt for dt in data_types if dt in ["traces"]]
-        workspace_data = [dt for dt in data_types if dt in ["datasets", "prompts"]]
-
-        if project_specific and workspace_data:
-            if import_to_specific_project:
-                console.print(
-                    f"[yellow]Note: {', '.join(project_specific)} will be imported to project '{project_name}', {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
-                )
-            else:
-                console.print(
-                    f"[yellow]Note: {', '.join(project_specific)} will be imported to all projects, {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
-                )
-        elif workspace_data:
-            console.print(
-                f"[yellow]Note: {', '.join(workspace_data)} belong to workspace '{workspace}'[/yellow]"
-            )
-
-        if dry_run:
-            console.print("[yellow]Dry run mode - no data will be imported[/yellow]")
-
-        if import_to_specific_project:
-            # Upload to specific project
-            # Create a new client instance with the specific project name
-            assert project_name is not None  # Type narrowing for mypy
-            client = opik.Opik(workspace=workspace, project_name=project_name)
-
-            # Upload each data type
-            total_imported = 0
-
-            # Upload traces
-            if "traces" in data_types:
-                if debug:
-                    console.print("[blue]Uploading traces...[/blue]")
-                traces_imported = _import_traces(client, project_dir, dry_run, name)
-                total_imported += traces_imported
-
-            # Upload datasets
-            if "datasets" in data_types:
-                if debug:
-                    console.print("[blue]Uploading datasets...[/blue]")
-                datasets_imported = _import_datasets(client, project_dir, dry_run, name)
-                total_imported += datasets_imported
-
-            # Upload prompts
-            if "prompts" in data_types:
-                if debug:
-                    console.print("[blue]Uploading prompts...[/blue]")
-                prompts_imported = _import_prompts(client, project_dir, dry_run, name)
-                total_imported += prompts_imported
-
-            if dry_run:
-                console.print(
-                    f"[green]Dry run complete: Would import {total_imported} items[/green]"
-                )
-            else:
-                console.print(
-                    f"[green]Successfully imported {total_imported} items to project '{project_name}'[/green]"
-                )
-        else:
-            # Upload to all projects in workspace
-            # Get all projects in the workspace
-            try:
-                projects_response = client.rest_client.projects.find_projects()
-                projects = projects_response.content or []
-
-                if not projects:
-                    console.print(
-                        f"[yellow]No projects found in workspace '{workspace}'[/yellow]"
-                    )
-                    return
-
-                console.print(
-                    f"[blue]Found {len(projects)} projects in workspace[/blue]"
-                )
-
-                # Upload workspace-level data once (datasets, experiments, prompts)
-                total_imported = 0
-
-                # Upload datasets
-                if "datasets" in data_types:
-                    if debug:
-                        console.print("[blue]Uploading datasets...[/blue]")
-                    datasets_imported = _import_datasets(
-                        client, project_dir, dry_run, name
-                    )
-                    total_imported += datasets_imported
-
-                # Upload prompts
-                if "prompts" in data_types:
-                    if debug:
-                        console.print("[blue]Uploading prompts...[/blue]")
-                    prompts_imported = _import_prompts(
-                        client, project_dir, dry_run, name
-                    )
-                    total_imported += prompts_imported
-
-                # Note: Traces are project-specific and should be imported to a specific project
-                # rather than being uploaded to all projects in a workspace
-                if "traces" in data_types:
-                    console.print(
-                        "[yellow]Note: Traces are project-specific. Use workspace/project format to import traces to a specific project.[/yellow]"
-                    )
-
-                if dry_run:
-                    console.print(
-                        f"[green]Dry run complete: Would import {total_imported} items to workspace '{workspace}'[/green]"
-                    )
-                else:
-                    console.print(
-                        f"[green]Successfully imported {total_imported} items to workspace '{workspace}'[/green]"
-                    )
-
-            except Exception as e:
-                console.print(f"[red]Error getting projects from workspace: {e}[/red]")
-                sys.exit(1)
-
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+@import_group.command(name="prompt")
+@click.argument(
+    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be imported without actually importing.",
+)
+@click.option(
+    "--name",
+    type=str,
+    help="Filter prompts by name using Python regex patterns.",
+)
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug output to show detailed information about the import process.",
+)
+@click.pass_context
+def import_prompt(
+    ctx: click.Context,
+    workspace_folder: str,
+    dry_run: bool,
+    name: Optional[str],
+    debug: bool,
+) -> None:
+    """Import prompts from workspace/prompts directory."""
+    workspace = ctx.obj["workspace"]
+    _import_by_type("prompt", workspace_folder, workspace, dry_run, name, debug)
