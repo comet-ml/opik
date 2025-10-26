@@ -19,6 +19,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ALERT_TYPE } from "@/types/alerts";
+import DestinationSelector from "./DestinationSelector";
 import WebhookHeaders from "./WebhookHeaders";
 import { AlertFormType } from "./schema";
 
@@ -35,6 +37,52 @@ const WebhookSettings: React.FC<WebhookSettingsProps> = ({ form }) => {
           Configure how the platform sends notifications to your system.
         </Description>
       </div>
+
+      <FormField
+        control={form.control}
+        name="alertType"
+        render={({ field }) => (
+          <FormItem>
+            <Label>Destination</Label>
+            <FormControl>
+              <DestinationSelector
+                value={field.value}
+                onChange={field.onChange}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      {form.watch("alertType") === ALERT_TYPE.pagerduty && (
+        <FormField
+          control={form.control}
+          name="routingKey"
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, ["routingKey"]);
+            return (
+              <FormItem>
+                <Label>Routing Key</Label>
+                <Description>
+                  PagerDuty routing key for an integration on a service or on a
+                  global ruleset
+                </Description>
+                <FormControl>
+                  <Input
+                    className={cn({
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                    placeholder="Enter routing key"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      )}
 
       <FormField
         control={form.control}

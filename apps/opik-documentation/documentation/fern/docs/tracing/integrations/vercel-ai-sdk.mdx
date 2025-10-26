@@ -27,7 +27,7 @@ OPENAI_API_KEY="<openai-api-key>" # in case you are using an OpenAI model
 ```
 
 ```ts
-import { OpikExporter } from "opik/vercel";
+import { OpikExporter } from "opik-vercel";
 
 new OpikExporter();
 ```
@@ -41,14 +41,14 @@ Next.js has support for OpenTelemetry instrumentation on the framework level. Le
 Install dependencies:
 
 ```bash
-npm install opik @vercel/otel @opentelemetry/api-logs @opentelemetry/instrumentation @opentelemetry/sdk-logs
+npm install opik-vercel @vercel/otel @opentelemetry/api-logs @opentelemetry/instrumentation @opentelemetry/sdk-logs
 ```
 
 Add `OpikExporter` to your instrumentation file:
 
 ```ts filename="instrumentation.ts"
 import { registerOTel } from "@vercel/otel";
-import { OpikExporter } from "opik/vercel";
+import { OpikExporter } from "opik-vercel";
 
 export function register() {
   registerOTel({
@@ -63,7 +63,7 @@ export function register() {
 Install dependencies:
 
 ```bash
-npm install opik ai @ai-sdk/openai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
+npm install opik-vercel ai @ai-sdk/openai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
 ```
 
 ```ts
@@ -71,7 +71,7 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { OpikExporter } from "opik/vercel";
+import { OpikExporter } from "opik-vercel";
 
 const sdk = new NodeSDK({
   traceExporter: new OpikExporter(),
