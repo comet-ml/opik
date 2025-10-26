@@ -6158,7 +6158,7 @@ class TracesResourceTest {
                     .comments(null)
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Create spans with various providers including duplicates and empty strings
             List<Span> spans = List.of(
@@ -6232,7 +6232,7 @@ class TracesResourceTest {
                     .comments(null)
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Retrieve trace from the API
             UUID projectId = getProjectId(projectName, workspaceName, apiKey);
@@ -6271,7 +6271,7 @@ class TracesResourceTest {
                     .comments(null)
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Create spans with only empty provider strings
             List<Span> spans = List.of(
@@ -6327,7 +6327,7 @@ class TracesResourceTest {
                     .comments(null)
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Create spans with providers in non-alphabetical order
             List<Span> spans = List.of(
@@ -7334,7 +7334,7 @@ class TracesResourceTest {
                     .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Close thread
             Mono.delay(Duration.ofMillis(500)).block();
@@ -10960,7 +10960,7 @@ class TracesResourceTest {
                     .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
                     .build();
 
-            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
             // Assert that the thread is created and open using getTraceThreads API
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
