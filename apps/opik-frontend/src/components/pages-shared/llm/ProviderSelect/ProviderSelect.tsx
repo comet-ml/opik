@@ -2,10 +2,14 @@ import React, { useCallback, useMemo } from "react";
 import { Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { PROVIDER_TYPE, ProviderKey } from "@/types/providers";
+import { PROVIDER_TYPE, ProviderKey, ProviderOption } from "@/types/providers";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
-import { SelectItem, SelectValue, SelectSeparator } from "@/components/ui/select";
+import {
+  SelectItem,
+  SelectValue,
+  SelectSeparator,
+} from "@/components/ui/select";
 import { Tag } from "@/components/ui/tag";
 
 const ADD_CUSTOM_PROVIDER_VALUE = "__add_custom_provider__" as const;
@@ -37,11 +41,11 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   isAddingCustomProvider,
 }) => {
   const options = useMemo(() => {
-    const providerOptions: any[] = [];
+    const providerOptions: ProviderOption[] = [];
 
     // Add standard providers (non-custom)
     const standardProviders = PROVIDERS_OPTIONS.filter(
-      (option) => option.value !== PROVIDER_TYPE.CUSTOM
+      (option) => option.value !== PROVIDER_TYPE.CUSTOM,
     );
 
     standardProviders.forEach((option) => {
@@ -49,7 +53,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         configuredProviderKeys?.includes(option.value as PROVIDER_TYPE) ||
         configuredProvidersList?.some((key) => key.provider === option.value) ||
         false;
-      
+
       providerOptions.push({
         ...option,
         configured: isConfigured,
@@ -57,9 +61,10 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     });
 
     // Add each configured custom provider as a separate option
-    const customProviders = configuredProvidersList?.filter(
-      (key) => key.provider === PROVIDER_TYPE.CUSTOM
-    ) || [];
+    const customProviders =
+      configuredProvidersList?.filter(
+        (key) => key.provider === PROVIDER_TYPE.CUSTOM,
+      ) || [];
 
     if (customProviders.length > 0) {
       customProviders.forEach((customProvider) => {
@@ -77,8 +82,11 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     // Add the "Add custom provider" option at the end
     if (onAddCustomProvider) {
       // Always add separator before "Add custom provider"
-      providerOptions.push({ isSeparator: true, value: "__separator_add_custom__" });
-      
+      providerOptions.push({
+        isSeparator: true,
+        value: "__separator_add_custom__",
+      });
+
       providerOptions.push({
         value: ADD_CUSTOM_PROVIDER_VALUE,
         label: "Add custom provider",
@@ -104,14 +112,14 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
           </div>
         );
       }
-      
+
       if (!value) {
         return <SelectValue placeholder="Select a provider" />;
       }
 
       // Check if it's a custom provider ID
       const customProvider = configuredProvidersList?.find(
-        (key) => key.id === value
+        (key) => key.id === value,
       );
 
       if (customProvider) {
@@ -145,10 +153,10 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         </div>
       );
     },
-    [configuredProvidersList, isAddingCustomProvider]
+    [configuredProvidersList, isAddingCustomProvider],
   );
 
-  const renderOption = useCallback((option: any) => {
+  const renderOption = useCallback((option: ProviderOption) => {
     // Handle separator
     if (option.isSeparator) {
       return <SelectSeparator key={option.value} />;
@@ -156,7 +164,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
 
     const isAddCustom = option.isAddCustom || false;
     const isConfigured = option.configured || false;
-    
+
     // Use the icon from the option if it exists, otherwise look it up
     const Icon = option.icon || PROVIDERS[option.value as PROVIDER_TYPE]?.icon;
 
@@ -193,7 +201,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       }
       onChange(newValue);
     },
-    [onChange, onAddCustomProvider]
+    [onChange, onAddCustomProvider],
   );
 
   return (
@@ -203,7 +211,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       renderOption={renderOption}
       value={value}
       onChange={handleChange}
-      options={options}
+      options={options as unknown as { value: string; label: string }[]}
       className={cn({
         "border-destructive": hasError,
       })}

@@ -12,8 +12,8 @@ const AIProviderCell = (context: CellContext<ProviderKey, PROVIDER_TYPE>) => {
 
   // For custom providers, show the provider name (keyName)
   // For other providers, show the label from PROVIDERS constant
-  const providerKeyLabel = 
-    provider === PROVIDER_TYPE.CUSTOM 
+  const providerKeyLabel =
+    provider === PROVIDER_TYPE.CUSTOM
       ? row.keyName || "Custom Provider"
       : PROVIDERS[provider]?.label || "";
 

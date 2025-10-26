@@ -57,7 +57,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <Description>
                 {isEdit
                   ? "Provider name cannot be changed after creation to prevent breaking existing model references."
-                  : "A unique identifier for this provider instance (e.g., \"ollama\", \"vLLM\", \"LM-Studio\")."}
+                  : 'A unique identifier for this provider instance (e.g., "ollama", "vLLM", "LM-Studio").'}
               </Description>
             </FormItem>
           );
