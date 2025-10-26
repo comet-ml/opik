@@ -51,11 +51,28 @@ public interface LlmProviderApiKeyDAO {
             " WHERE workspace_id = :workspaceId ")
     List<ProviderApiKey> find(@Bind("workspaceId") String workspaceId);
 
-    @SqlQuery("SELECT * FROM llm_provider_api_key WHERE workspace_id = :workspaceId AND provider = :provider AND provider_name = :providerName")
-    Optional<ProviderApiKey> findByProviderAndName(
+    @SqlQuery("SELECT * FROM llm_provider_api_key WHERE workspace_id = :workspaceId AND provider = :provider AND provider_name IS NULL LIMIT 1")
+    Optional<ProviderApiKey> findByProvider(
+            @Bind("workspaceId") String workspaceId,
+            @Bind("provider") String provider);
+
+    @SqlQuery("SELECT * FROM llm_provider_api_key WHERE workspace_id = :workspaceId AND provider = :provider " +
+            "AND provider_name = :providerName LIMIT 1")
+    Optional<ProviderApiKey> findByProviderAndProviderName(
             @Bind("workspaceId") String workspaceId,
             @Bind("provider") String provider,
             @Bind("providerName") String providerName);
+
+    default Optional<ProviderApiKey> findByProviderAndName(
+            String workspaceId,
+            String provider,
+            String providerName) {
+        if (providerName == null) {
+            return findByProvider(workspaceId, provider);
+        } else {
+            return findByProviderAndProviderName(workspaceId, provider, providerName);
+        }
+    }
 
     @SqlUpdate("DELETE FROM llm_provider_api_key WHERE id IN (<ids>) AND workspace_id = :workspaceId")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
