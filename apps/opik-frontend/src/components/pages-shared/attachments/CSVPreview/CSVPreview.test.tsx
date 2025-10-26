@@ -1,7 +1,14 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { vi, describe, it, expect, beforeEach, type MockedFunction } from "vitest";
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  type MockedFunction,
+} from "vitest";
 import { csv2json } from "json-2-csv";
 import CSVPreview from "./CSVPreview";
 
@@ -33,9 +40,7 @@ const createQueryClient = () =>
 const renderWithQueryClient = (component: React.ReactElement) => {
   const queryClient = createQueryClient();
   return render(
-    <QueryClientProvider client={queryClient}>
-      {component}
-    </QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{component}</QueryClientProvider>,
   );
 };
 
@@ -48,9 +53,9 @@ describe("CSVPreview", () => {
     const mockCSVText = "Name,Age,City\nJohn,25,NYC\nJane,30,LA";
     const mockParsedData = [
       { Name: "John", Age: "25", City: "NYC" },
-      { Name: "Jane", Age: "30", City: "LA" }
+      { Name: "Jane", Age: "30", City: "LA" },
     ];
-    
+
     (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
       ok: true,
       text: () => Promise.resolve(mockCSVText),
@@ -58,9 +63,7 @@ describe("CSVPreview", () => {
 
     vi.mocked(csv2json).mockResolvedValueOnce(mockParsedData as never);
 
-    renderWithQueryClient(
-      <CSVPreview url="http://example.com/test.csv" />
-    );
+    renderWithQueryClient(<CSVPreview url="http://example.com/test.csv" />);
 
     // Wait for data to load
     await waitFor(() => {
@@ -71,13 +74,15 @@ describe("CSVPreview", () => {
     expect(screen.getByText("Name")).toBeInTheDocument();
     expect(screen.getByText("John")).toBeInTheDocument();
     expect(screen.getByText("Jane")).toBeInTheDocument();
-    
+
     // Should not show virtualization message for small datasets
-    expect(screen.queryByText(/virtualized for performance/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/virtualized for performance/),
+    ).not.toBeInTheDocument();
   });
 
   it("should render large CSV with virtual scrolling", async () => {
-    // Create a large CSV dataset (200+ rows)  
+    // Create a large CSV dataset (200+ rows)
     const mockParsedData = Array.from({ length: 200 }, (_, i) => ({
       ID: String(i + 1),
       Name: `User${i + 1}`,
@@ -86,9 +91,10 @@ describe("CSVPreview", () => {
       Department: `Dept${(i % 5) + 1}`,
     }));
 
-    const mockCSVText = "ID,Name,Email,Age,Department\n" + 
-      mockParsedData.map(row => Object.values(row).join(",")).join("\n");
-    
+    const mockCSVText =
+      "ID,Name,Email,Age,Department\n" +
+      mockParsedData.map((row) => Object.values(row).join(",")).join("\n");
+
     (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
       ok: true,
       text: () => Promise.resolve(mockCSVText),
@@ -96,13 +102,13 @@ describe("CSVPreview", () => {
 
     vi.mocked(csv2json).mockResolvedValueOnce(mockParsedData as never);
 
-    renderWithQueryClient(
-      <CSVPreview url="http://example.com/large.csv" />
-    );
+    renderWithQueryClient(<CSVPreview url="http://example.com/large.csv" />);
 
     // Wait for data to load and check for virtualization message
     await waitFor(() => {
-      expect(screen.getByText(/virtualized for performance/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/virtualized for performance/),
+      ).toBeInTheDocument();
     });
 
     // Should show headers
@@ -116,12 +122,10 @@ describe("CSVPreview", () => {
 
   it("should handle fetch errors gracefully", async () => {
     (fetch as MockedFunction<typeof fetch>).mockRejectedValueOnce(
-      new Error("Network error")
+      new Error("Network error"),
     );
 
-    renderWithQueryClient(
-      <CSVPreview url="http://example.com/error.csv" />
-    );
+    renderWithQueryClient(<CSVPreview url="http://example.com/error.csv" />);
 
     // Wait for error state
     await waitFor(() => {
@@ -131,7 +135,7 @@ describe("CSVPreview", () => {
 
   it("should handle parsing errors gracefully", async () => {
     const mockCSVText = "Invalid,CSV\nContent";
-    
+
     (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
       ok: true,
       text: () => Promise.resolve(mockCSVText),
@@ -139,9 +143,7 @@ describe("CSVPreview", () => {
 
     vi.mocked(csv2json).mockRejectedValueOnce(new Error("Parse error"));
 
-    renderWithQueryClient(
-      <CSVPreview url="http://example.com/invalid.csv" />
-    );
+    renderWithQueryClient(<CSVPreview url="http://example.com/invalid.csv" />);
 
     // Wait for error state
     await waitFor(() => {
@@ -156,9 +158,10 @@ describe("CSVPreview", () => {
       Name: `User${i + 1}`,
     }));
 
-    const mockCSVText = "ID,Name\n" + 
-      mockParsedData.map(row => Object.values(row).join(",")).join("\n");
-    
+    const mockCSVText =
+      "ID,Name\n" +
+      mockParsedData.map((row) => Object.values(row).join(",")).join("\n");
+
     (fetch as MockedFunction<typeof fetch>).mockResolvedValueOnce({
       ok: true,
       text: () => Promise.resolve(mockCSVText),
@@ -167,12 +170,14 @@ describe("CSVPreview", () => {
     vi.mocked(csv2json).mockResolvedValueOnce(mockParsedData as never);
 
     renderWithQueryClient(
-      <CSVPreview url="http://example.com/huge.csv" maxRows={100000} />
+      <CSVPreview url="http://example.com/huge.csv" maxRows={100000} />,
     );
 
-    // Wait for data to load 
+    // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText(/Showing first 100,000 rows of 150,000 total rows/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Showing first 100,000 rows of 150,000 total rows/),
+      ).toBeInTheDocument();
     });
 
     // Should use virtual scrolling for this large dataset

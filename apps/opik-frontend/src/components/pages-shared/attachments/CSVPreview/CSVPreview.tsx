@@ -15,7 +15,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import DataTableWrapper from "@/components/shared/DataTable/DataTableWrapper";
-import { cn } from "@/lib/utils";
 import { ROW_HEIGHT_MAP } from "@/constants/shared";
 import { ROW_HEIGHT } from "@/types/shared";
 
@@ -24,23 +23,24 @@ interface CSVPreviewProps {
   maxRows?: number;
 }
 
+type CSVRow = Record<string, string>;
+
 interface CSVData {
   headers: string[];
-  rows: string[][];
+  rows: CSVRow[];
   totalRows: number;
 }
 
-// Virtual scrolling constants matching DataTable patterns
+const VIRTUAL_THRESHOLD = 100;
 const CSV_ROW_HEIGHT = ROW_HEIGHT.small; // Use standard small row height (44px)
-const VIRTUAL_ROW_HEIGHT = parseInt(ROW_HEIGHT_MAP[CSV_ROW_HEIGHT].height as string, 10);
+const VIRTUAL_ROW_HEIGHT = parseInt(
+  ROW_HEIGHT_MAP[CSV_ROW_HEIGHT].height as string,
+  10,
+);
 const MAX_CONTAINER_HEIGHT = 500; // Maximum height for the scrollable container
-const VIRTUAL_THRESHOLD = 100; // Use virtual scrolling for datasets larger than this
 const OVERSCAN_COUNT = 5; // Number of rows to render outside visible area
 
-const CSVPreview: React.FC<CSVPreviewProps> = ({
-  url,
-  maxRows = 100000, // Support up to 100k rows
-}) => {
+const CSVPreview: React.FC<CSVPreviewProps> = ({ url, maxRows = 100000 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -53,18 +53,18 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
     queryFn: async (): Promise<CSVData> => {
       try {
         const response = await fetch(url);
-        
+
         if (!response.ok) {
           throw new Error(
             `Failed to fetch CSV file: ${response.status} ${response.statusText}`,
           );
         }
-        
+
         const csvText = await response.text();
-        
+
         // Normalize line endings
         const normalizedText = csvText.replace(/\r\n|\r/g, "\n");
-        
+
         // Parse CSV using existing json-2-csv library
         const parsed = await csv2json(normalizedText, {
           excelBOM: true,
@@ -78,24 +78,28 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
 
         // Type assertion for the parsed data as json-2-csv returns Record<string, unknown>[]
         const parsedData = parsed as Record<string, unknown>[];
-        
+
         // Extract headers from the first object's keys
         const headers = Object.keys(parsedData[0]);
-        
+
         // Convert objects array to rows array (array of arrays), limited by maxRows
         const limitedData = parsedData.slice(0, maxRows);
-        const rows = limitedData.map((row) => 
-          headers.map((header) => {
-            const value = row[header];
-            // Convert all values to strings for consistency
-            return value == null ? "" : String(value);
-          })
+        const rows = limitedData.map((row) =>
+          headers.reduce(
+            (acc, header) => {
+              const value = row[header];
+              // Convert all values to strings for consistency
+              acc[header] = value == null ? "" : String(value);
+              return acc;
+            },
+            {} as Record<string, string>,
+          ),
         );
 
-        return { 
-          headers, 
-          rows, 
-          totalRows: parsedData.length 
+        return {
+          headers,
+          rows,
+          totalRows: parsedData.length,
         };
       } catch (error) {
         let message: string | undefined;
@@ -105,19 +109,21 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
           message = error.message;
         }
         throw new Error(
-          message ?? "Failed to fetch or parse CSV file. CORS issue or invalid URL.",
+          message ??
+            "Failed to fetch or parse CSV file. CORS issue or invalid URL.",
         );
       }
     },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 
-  // Determine if we should use virtual scrolling
   const shouldUseVirtualScrolling = useMemo(() => {
     return csvData && csvData.rows.length > VIRTUAL_THRESHOLD;
   }, [csvData]);
 
-  // Virtual scrolling setup for large datasets
-  const virtualizer = useVirtualizer({
+  const rowVirtualizer = useVirtualizer({
     count: csvData?.rows?.length || 0,
     getScrollElement: () => parentRef.current,
     estimateSize: () => VIRTUAL_ROW_HEIGHT,
@@ -128,7 +134,9 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
   const renderContent = () => {
     if (isPending) return <Loader />;
 
-    if (isError) return <NoData icon={null} message={error?.message} />;
+    if (isError) {
+      return <NoData icon={null} message={error?.message} />;
+    }
 
     if (!csvData || csvData.headers.length === 0) {
       return <NoData message="No CSV data found" icon={null} />;
@@ -139,12 +147,15 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
         {/* Row count info */}
         {csvData.totalRows > maxRows ? (
           <div className="text-sm text-muted-foreground">
-            Showing first {maxRows.toLocaleString()} rows of {csvData.totalRows.toLocaleString()} total rows, {csvData.headers.length} columns
+            Showing first {maxRows.toLocaleString()} rows of{" "}
+            {csvData.totalRows.toLocaleString()} total rows,{" "}
+            {csvData.headers.length} columns
             {shouldUseVirtualScrolling ? " (virtualized for performance)" : ""}
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">
-            {csvData.rows.length.toLocaleString()} rows, {csvData.headers.length} columns
+            {csvData.rows.length.toLocaleString()} rows,{" "}
+            {csvData.headers.length} columns
             {shouldUseVirtualScrolling ? " (virtualized for performance)" : ""}
           </div>
         )}
@@ -158,7 +169,7 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
               style={{
                 height: Math.min(
                   MAX_CONTAINER_HEIGHT,
-                  (csvData.rows.length * VIRTUAL_ROW_HEIGHT) + VIRTUAL_ROW_HEIGHT
+                  csvData.rows.length * VIRTUAL_ROW_HEIGHT + VIRTUAL_ROW_HEIGHT,
                 ),
               }}
             >
@@ -167,8 +178,8 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}>
                     {csvData.headers.map((header, index) => (
-                      <TableHead 
-                        key={index} 
+                      <TableHead
+                        key={index}
                         className="font-semibold border-b border-border"
                         style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}
                       >
@@ -177,16 +188,16 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                     ))}
                   </TableRow>
                 </TableHeader>
-                
+
                 {/* Virtual Table Body */}
                 <TableBody>
-                  <tr style={{ height: virtualizer.getTotalSize() }}>
+                  <tr style={{ height: rowVirtualizer.getTotalSize() }}>
                     <td colSpan={csvData.headers.length} className="p-0">
                       <div className="relative">
-                        {virtualizer.getVirtualItems().map((virtualRow) => {
+                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                           const row = csvData.rows[virtualRow.index];
                           if (!row) return null;
-                          
+
                           return (
                             <TableRow
                               key={virtualRow.index}
@@ -196,13 +207,15 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
                                 transform: `translateY(${virtualRow.start}px)`,
                               }}
                             >
-                              {row.map((cell, cellIndex) => (
+                              {csvData.headers.map((header, cellIndex) => (
                                 <TableCell
                                   key={cellIndex}
                                   className="max-w-[200px] truncate text-sm"
-                                  title={cell}
+                                  title={row[header]}
                                 >
-                                  <div className="truncate">{cell}</div>
+                                  <div className="truncate">
+                                    {row[header] || ""}
+                                  </div>
                                 </TableCell>
                               ))}
                             </TableRow>
@@ -230,13 +243,18 @@ const CSVPreview: React.FC<CSVPreviewProps> = ({
               </TableHeader>
               <TableBody>
                 {csvData.rows.map((row, rowIndex) => (
-                  <TableRow key={rowIndex} style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}>
-                    {row.map((cell, cellIndex) => (
+                  <TableRow
+                    key={rowIndex}
+                    style={ROW_HEIGHT_MAP[CSV_ROW_HEIGHT]}
+                  >
+                    {csvData.headers.map((header, cellIndex) => (
                       <TableCell
                         key={cellIndex}
                         className="max-w-[200px] truncate text-sm"
                       >
-                        <div className="truncate" title={cell}>{cell}</div>
+                        <div className="truncate" title={row[header]}>
+                          {row[header] || ""}
+                        </div>
                       </TableCell>
                     ))}
                   </TableRow>
