@@ -26,8 +26,8 @@ export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => 
-      row.provider === PROVIDER_TYPE.CUSTOM 
+    accessorFn: (row) =>
+      row.provider === PROVIDER_TYPE.CUSTOM
         ? row.keyName || "Custom Provider"
         : PROVIDERS[row.provider]?.apiKeyName,
   },
@@ -83,7 +83,7 @@ const AIProvidersTab = () => {
 
     return providerKeys.filter((p) => {
       const providerDetails = PROVIDERS[p.provider];
-      
+
       // Handle custom providers differently - search by keyName
       if (p.provider === PROVIDER_TYPE.CUSTOM) {
         return (
@@ -142,7 +142,9 @@ const AIProvidersTab = () => {
         <Button
           onClick={handleAddConfigurationClick}
           size="sm"
-          disabled={areAllProvidersConfigured(providerKeys.filter(pk => pk.provider !== PROVIDER_TYPE.CUSTOM))}
+          disabled={areAllProvidersConfigured(
+            providerKeys.filter((pk) => pk.provider !== PROVIDER_TYPE.CUSTOM),
+          )}
         >
           Add configuration
         </Button>
