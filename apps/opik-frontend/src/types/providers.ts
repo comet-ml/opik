@@ -432,6 +432,17 @@ export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
 }
 
+export interface ProviderOption {
+  value: string;
+  label?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  configured?: boolean;
+  isCustomProvider?: boolean;
+  description?: string;
+  isAddCustom?: boolean;
+  isSeparator?: boolean;
+}
+
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
 
 export interface LLMOpenAIConfigsType {
