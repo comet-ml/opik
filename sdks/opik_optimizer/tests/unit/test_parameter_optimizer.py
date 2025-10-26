@@ -56,20 +56,14 @@ def test_parameter_optimizer_selects_best_parameters(
     )
     monkeypatch.setattr(
         ParameterOptimizer,
-        "validate_optimization_inputs",
+        "_validate_optimization_inputs",
         lambda *args, **kwargs: None,
         raising=False,
     )
     monkeypatch.setattr(
         ParameterOptimizer,
-        "setup_agent_class",
+        "_setup_agent_class",
         lambda self, prompt, agent_class=None: types.SimpleNamespace(),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        ParameterOptimizer,
-        "configure_prompt_model",
-        lambda self, prompt: None,
         raising=False,
     )
     monkeypatch.setattr(
@@ -78,12 +72,23 @@ def test_parameter_optimizer_selects_best_parameters(
         raising=False,
     )
 
+    # Mock the opik client's create_optimization method
+    mock_optimization = types.SimpleNamespace(id="opt-123")
+    monkeypatch.setattr(
+        "opik.Opik.create_optimization",
+        lambda self, **kwargs: mock_optimization,
+        raising=False,
+    )
+
+    # Create mock dataset with required attributes
+    mock_dataset = types.SimpleNamespace(name="test-dataset", id="dataset-123")
+
     result = optimizer.optimize_parameter(
         prompt=prompt,
-        dataset=object(),
+        dataset=mock_dataset,
         metric=lambda *_: 0.0,
         parameter_space=parameter_space,
-        n_trials=2,
+        max_trials=2,
     )
 
     assert pytest.approx(result.initial_score) == 0.1

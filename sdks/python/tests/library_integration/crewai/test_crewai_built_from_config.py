@@ -92,6 +92,7 @@ def test_crewai__happyflow(
                                         tags=["litellm"],
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        total_cost=ANY_BUT_NONE,
                                         spans=[],
                                     )
                                 ],
@@ -139,6 +140,7 @@ def test_crewai__happyflow(
                                         tags=["litellm"],
                                         type="llm",
                                         usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                                        total_cost=ANY_BUT_NONE,
                                         spans=[],
                                     )
                                 ],

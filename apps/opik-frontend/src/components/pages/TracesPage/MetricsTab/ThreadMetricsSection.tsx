@@ -42,7 +42,7 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
   },
   {
     id: "number_of_messages",
-    label: "No. of messages",
+    label: "Message count",
     type: COLUMN_TYPE.number,
   },
   {

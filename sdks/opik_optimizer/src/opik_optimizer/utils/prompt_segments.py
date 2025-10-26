@@ -175,8 +175,7 @@ def apply_segment_updates(
         function_map=prompt.function_map,
         model=prompt.model,
         invoke=prompt.invoke,
-        project_name=prompt.project_name,
-        **prompt.model_kwargs,
+        model_parameters=prompt.model_kwargs,
     )
 
 

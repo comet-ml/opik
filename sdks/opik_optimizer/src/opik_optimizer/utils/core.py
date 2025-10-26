@@ -327,8 +327,15 @@ def create_litellm_agent_class(
         class LiteLLMAgent(OptimizableAgent):
             model = prompt.model
             model_kwargs = prompt.model_kwargs
-            project_name = prompt.project_name
             optimizer = optimizer_ref
+
+            def __init__(
+                self, prompt: "ChatPrompt", project_name: str | None = None
+            ) -> None:
+                # Get project_name from optimizer if available
+                if project_name is None and hasattr(self.optimizer, "project_name"):
+                    project_name = self.optimizer.project_name
+                super().__init__(prompt, project_name=project_name)
 
             def invoke(
                 self, messages: list[dict[str, str]], seed: int | None = None
@@ -342,8 +349,15 @@ def create_litellm_agent_class(
         class LiteLLMAgent(OptimizableAgent):  # type: ignore[no-redef]
             model = prompt.model
             model_kwargs = prompt.model_kwargs
-            project_name = prompt.project_name
             optimizer = optimizer_ref
+
+            def __init__(
+                self, prompt: "ChatPrompt", project_name: str | None = None
+            ) -> None:
+                # Get project_name from optimizer if available
+                if project_name is None and hasattr(self.optimizer, "project_name"):
+                    project_name = self.optimizer.project_name
+                super().__init__(prompt, project_name=project_name)
 
     return LiteLLMAgent
 
