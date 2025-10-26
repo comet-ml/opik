@@ -1,5 +1,4 @@
 pytest
-dspy>=2.6.18,<=2.6.24
 pytest-asyncio
 pytest-cov
 pytest-env

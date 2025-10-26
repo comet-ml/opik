@@ -1,4 +1,4 @@
-langchain_core<1.0.0
+langchain<1.0.0
 langchain_community
 langchain_google_vertexai
 langchain_google_genai

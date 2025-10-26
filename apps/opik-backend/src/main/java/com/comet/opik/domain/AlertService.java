@@ -47,6 +47,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.deserializeEventPayload;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.prepareWebhookPayload;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.webhookEventPayloadPerType;
@@ -232,6 +233,7 @@ class AlertServiceImpl implements AlertService {
             .enabled(true)
             .webhook(Webhook.builder()
                     .build())
+            .metadata(Map.of(ROUTING_KEY_METADATA_KEY, "example-routing-key"))
             .build();
 
     private static final Map<AlertType, WebhookExamples> WEBHOOK_EXAMPLES = prepareWebhookPayloadExamples();
@@ -421,11 +423,13 @@ class AlertServiceImpl implements AlertService {
                 .alertType(Optional.ofNullable(alert.alertType()).orElse(AlertType.GENERAL))
                 .alertId(alertId)
                 .alertName(StringUtils.isBlank(alert.name()) ? "Test Alert" : alert.name())
+                .alertMetadata(Optional.ofNullable(alert.metadata()).orElse(Map.of()))
                 .payload(payload)
                 .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
                 .secret(alert.webhook().secretToken())
                 .maxRetries(1)
                 .workspaceId(workspaceId)
+                .workspaceName("demo_workspace_name")
                 .createdAt(Instant.now())
                 .build();
     }

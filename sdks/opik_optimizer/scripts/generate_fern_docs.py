@@ -38,6 +38,7 @@ class ClassInspector:
     def parse_param_descriptions(self, docstring: str) -> dict[str, str]:
         """
         Parses the 'Args:' section of a docstring and extracts parameter descriptions.
+        Handles multi-line descriptions by continuing until the next parameter or end of Args section.
         """
         param_desc: dict[str, str] = {}
         if not docstring:
@@ -45,19 +46,46 @@ class ClassInspector:
 
         lines = docstring.splitlines()
         in_args_section = False
+        current_param = None
+        current_description_lines = []
 
         for line in lines:
             stripped = line.strip()
+
+            # Check if we're entering the Args section
             if stripped.startswith("Args:") or stripped.startswith("Arguments:"):
                 in_args_section = True
                 continue
+
             if in_args_section:
-                if stripped == "" or not re.match(r"^\**\w+:", stripped):
-                    break
+                # Check if this is a new parameter (starts with word followed by colon)
                 match = re.match(r"^(\**\w+):\s*(.*)", stripped)
                 if match:
+                    # Save previous parameter if exists
+                    if current_param:
+                        param_desc[current_param] = " ".join(current_description_lines)
+
+                    # Start new parameter
                     param_name, description = match.groups()
-                    param_desc[param_name] = description
+                    current_param = param_name
+                    current_description_lines = [description] if description else []
+                elif stripped == "":
+                    # Empty line might indicate end of Args section
+                    # But only if we haven't started a parameter yet, or if next non-empty line doesn't continue
+                    continue
+                elif current_param and stripped:
+                    # Continuation of current parameter description
+                    current_description_lines.append(stripped)
+                elif not stripped and current_param:
+                    # Empty line while processing a parameter - might be end of Args
+                    continue
+                else:
+                    # Non-parameter line that doesn't match expected format - end of Args section
+                    break
+
+        # Don't forget to save the last parameter
+        if current_param:
+            param_desc[current_param] = " ".join(current_description_lines)
 
         return param_desc
 
@@ -233,8 +261,12 @@ class ClassInspector:
             init_params = self.get_pydantic_model_fields()
         else:
             init_func = getattr(self.cls, "__init__", None)
-            init_doc = inspect.getdoc(init_func) if init_func else None
-            init_params = self.parse_signature(init_func, init_doc) if init_func else []
+            # Use class docstring for parameter descriptions, not __init__ docstring
+            # This is because Python conventionally puts parameter docs in the class docstring
+            class_doc = self.get_docstring()
+            init_params = (
+                self.parse_signature(init_func, class_doc) if init_func else []
+            )
 
         return ClassInfo(
             class_docstring=self.get_docstring(),
@@ -247,7 +279,7 @@ class ClassInspector:
         if not param.required:
             field += " optional={true}"
         if param.default is not None and param.default != inspect._empty:
-            field += f' defaultValue="{param.default}"'
+            field += f' default="{param.default}"'
 
         if param.description:
             field += f">{param.description}</ParamField>"
@@ -320,7 +352,6 @@ classes_to_document = [
     opik_optimizer.ParameterOptimizer,
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
-    opik_optimizer.MiproOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
     opik_optimizer.GepaOptimizer,
     opik_optimizer.HierarchicalReflectiveOptimizer,

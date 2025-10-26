@@ -214,10 +214,10 @@ onlineScoring:
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: 'online_scoring'
-  # Default: 3
+  # Default: 5
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
-  consumerBatchSize: 3
+  consumerBatchSize: 5
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -353,9 +353,9 @@ traceThreadConfig:
   # Default: 100
   # Description: Maximum number of messages returned within a Redis Stream get
   consumerBatchSize: 100
-  # Default: 200 ms
+  # Default: 500ms
   # Description: How often the trace thread consumer will check Redis for new messages (in milliseconds)
-  poolingInterval: 200ms
+  poolingInterval: 500ms
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
   longPollingDuration: 5s
@@ -371,7 +371,7 @@ traceThreadConfig:
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: 300ms
-  # Default: 1000
+  # Default: 2000
   # Description: The maximum number of item to process in a single close trace thread run
   closeTraceThreadMaxItemPerRun: 2000
 
@@ -409,7 +409,8 @@ webhook:
   poolingInterval: 1s
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
-  longPollingDuration: 5s
+  # Note: In tests, set this <= poolingInterval to avoid backpressure drops
+  longPollingDuration: 500ms
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: 3

@@ -13,6 +13,12 @@ export enum ALERT_TRIGGER_CONFIG_TYPE {
   "threshold:feedback_score" = "threshold:feedback_score",
 }
 
+export enum ALERT_TYPE {
+  general = "general",
+  slack = "slack",
+  pagerduty = "pagerduty",
+}
+
 export interface AlertTriggerConfig {
   id?: string;
   alert_trigger_id?: string;
@@ -45,10 +51,17 @@ export interface Webhook {
   last_updated_by?: string;
 }
 
+export interface AlertMetadata {
+  base_url?: string;
+  routing_key?: string;
+}
+
 export interface Alert {
   id?: string;
   name: string;
   enabled: boolean;
+  alert_type?: ALERT_TYPE;
+  metadata?: AlertMetadata;
   webhook: Webhook;
   triggers: AlertTrigger[];
   created_at?: string;
