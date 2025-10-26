@@ -1126,14 +1126,17 @@ redirects:
     permanent: true
   # Agent optimization restructuring redirects
   - source: "/docs/opik/agent_optimization/opik_optimizer/quickstart"
-    destination: "/docs/opik/agent_optimization/overview"
+    destination: "/docs/opik/agent_optimization/opik_optimizer/overview"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/datasets"
-    destination: "/docs/opik/agent_optimization/overview"
+    destination: "/docs/opik/agent_optimization/opik_optimizer/overview"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/models"
-    destination: "/docs/opik/agent_optimization/overview"
+    destination: "/docs/opik/agent_optimization/opik_optimizer/overview"
     permanent: true
   - source: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
-    destination: "/docs/opik/agent_optimization/overview"
+    destination: "/docs/opik/agent_optimization/opik_optimizer/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/overview"
+    destination: "/docs/opik/agent_optimization/opik_optimizer/overview"
     permanent: true
