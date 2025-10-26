@@ -73,11 +73,16 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   >({
     resolver: zodResolver(AIProviderFormSchema),
     defaultValues: {
-      provider: providerKey?.provider || defaultProvider || "",
+      // For custom providers being edited, use the provider ID instead of the provider type
+      provider:
+        providerKey?.provider === PROVIDER_TYPE.CUSTOM
+          ? providerKey.id
+          : providerKey?.provider || defaultProvider || "",
       apiKey: "",
       location: providerKey?.configuration?.location ?? "",
       url: providerKey?.base_url ?? "",
-      providerName: providerKey?.keyName ?? "",
+      // Use provider_name for custom providers, keyName is just the display name
+      providerName: providerKey?.provider_name ?? providerKey?.keyName ?? "",
       models: convertCustomProviderModels(
         providerKey?.configuration?.models ?? "",
       ),
@@ -317,7 +322,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                               );
                               form.setValue(
                                 "providerName",
-                                customProvider.keyName ?? "",
+                                customProvider.provider_name ??
+                                  customProvider.keyName ??
+                                  "",
                               );
                               form.setValue(
                                 "models",
