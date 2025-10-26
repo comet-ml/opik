@@ -23,7 +23,12 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
   form,
 }) => {
   // Determine if we're in edit mode by checking if providerName has an initial value
-  const isEdit = Boolean(form.formState.defaultValues?.providerName);
+  const defaultValues = form.formState.defaultValues;
+  const isEdit = Boolean(
+    defaultValues &&
+      "providerName" in defaultValues &&
+      defaultValues.providerName,
+  );
 
   return (
     <div className="flex flex-col gap-4 pb-4">
@@ -52,7 +57,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <Description>
                 {isEdit
                   ? "Provider name cannot be changed after creation to prevent breaking existing model references."
-                  : "A unique identifier for this provider instance (e.g., \"ollama\", \"vllm-local\", \"lm-studio\"). Use lowercase letters, numbers, and hyphens only."}
+                  : "A unique identifier for this provider instance (e.g., \"ollama\", \"vLLM\", \"LM-Studio\")."}
               </Description>
             </FormItem>
           );
