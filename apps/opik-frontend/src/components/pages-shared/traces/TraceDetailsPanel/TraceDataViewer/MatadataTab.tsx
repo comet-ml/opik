@@ -25,16 +25,16 @@ const MetadataTab: React.FunctionComponent<MetadataTabProps> = ({
     // For Spans, include provider information if available
     if ("provider" in data && data.provider) {
       return {
-        provider: data.provider,
         ...previousUsageData,
+        provider: data.provider,
       };
     }
 
     // For Traces, include providers array
     if ("providers" in data && data.providers) {
       return {
-        providers: data.providers,
         ...previousUsageData,
+        providers: data.providers,
       };
     }
 
