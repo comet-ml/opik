@@ -55,10 +55,34 @@ export const CustomProviderDetailsFormSchema = z.object({
     ),
 });
 
+// Schema for editing existing custom providers (uses provider ID instead of type)
+export const CustomProviderEditFormSchema = z.object({
+  provider: z.string().uuid(), // Provider ID for existing custom providers
+  providerName: z
+    .string({
+      required_error: "Provider name is required",
+    })
+    .min(1, { message: "Provider name is required" }),
+  apiKey: z.string(),
+  url: z.string().url(),
+  models: z
+    .string()
+    .min(1, { message: "Models is required" })
+    .refine(
+      (models) => {
+        const modelsArray = models.split(",").map((m) => m.trim());
+
+        return modelsArray.length === uniq(modelsArray).length;
+      },
+      { message: "All model names should be unique" },
+    ),
+});
+
 export const AIProviderFormSchema = z.union([
   CloudAIProviderDetailsFormSchema,
   VertexAIProviderDetailsFormSchema,
   CustomProviderDetailsFormSchema,
+  CustomProviderEditFormSchema,
 ]);
 
 export type AIProviderFormType = z.infer<typeof AIProviderFormSchema>;
