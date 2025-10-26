@@ -315,6 +315,7 @@ eval_results = evaluate(
                 <div className="comet-body-s-accented truncate">{m.label}</div>
                 <div className="comet-body-s mt-0.5 text-light-slate">
                   <ExplainerDescription
+                    isMinimalLink
                     description={m.description || ""}
                     docLink={m.docLink}
                     docHash={m.docHash}
