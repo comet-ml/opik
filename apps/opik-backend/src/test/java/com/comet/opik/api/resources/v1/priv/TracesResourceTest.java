@@ -6138,8 +6138,42 @@ class TracesResourceTest {
                     .isEqualTo(expectedTotalSpanCount);
         }
 
-        @Test
-        void createAndRetrieveTraces__providersReflectUniqueSpanProviders() {
+        private Stream<Arguments> createAndRetrieveTraces__providersTestScenarios() {
+            return Stream.of(
+                    // Test: Unique providers with deduplication, empty string filtering, and alphabetical sorting
+                    Arguments.of(
+                            "providersReflectUniqueSpanProviders",
+                            List.of("openai", "anthropic", "openai", "", "google"),
+                            List.of("anthropic", "google", "openai"),
+                            "Providers should contain unique, non-empty provider names sorted alphabetically"),
+                    // Test: Empty when no spans
+                    Arguments.of(
+                            "providersEmptyWhenNoSpans",
+                            List.of(),
+                            List.of(),
+                            "Providers should be empty when trace has no spans"),
+                    // Test: Empty when all spans have empty provider
+                    Arguments.of(
+                            "providersEmptyWhenAllSpansHaveEmptyProvider",
+                            List.of("", ""),
+                            List.of(),
+                            "Providers should be empty when all spans have empty provider strings"),
+                    // Test: Alphabetical sorting
+                    Arguments.of(
+                            "providersAreSortedAlphabetically",
+                            List.of("zebra", "apple", "microsoft"),
+                            List.of("apple", "microsoft", "zebra"),
+                            "Providers should be sorted alphabetically"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("createAndRetrieveTraces__providersTestScenarios")
+        void createAndRetrieveTraces__providers(
+                String scenarioName,
+                List<String> spanProviders,
+                List<String> expectedProviders,
+                String assertionDescription) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -6160,40 +6194,19 @@ class TracesResourceTest {
 
             traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
-            // Create spans with various providers including duplicates and empty strings
-            List<Span> spans = List.of(
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.llm)
-                            .provider("openai")
-                            .build(),
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.llm)
-                            .provider("anthropic")
-                            .build(),
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.llm)
-                            .provider("openai") // duplicate
-                            .build(),
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.general)
-                            .provider("") // empty string should be filtered out
-                            .build(),
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.llm)
-                            .provider("google")
-                            .build());
+            // Create spans with specified providers
+            if (!spanProviders.isEmpty()) {
+                List<Span> spans = spanProviders.stream()
+                        .map(provider -> factory.manufacturePojo(Span.class).toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .type(SpanType.llm)
+                                .provider(provider)
+                                .build())
+                        .toList();
 
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            }
 
             // Retrieve trace from the API
             UUID projectId = getProjectId(projectName, workspaceName, apiKey);
@@ -6208,166 +6221,8 @@ class TracesResourceTest {
                     .orElseThrow(() -> new AssertionError("Trace should be present"));
 
             assertThat(returnedTrace.providers())
-                    .as("Providers should contain unique, non-empty provider names sorted alphabetically")
-                    .containsExactly("anthropic", "google", "openai");
-        }
-
-        @Test
-        void createAndRetrieveTraces__providersEmptyWhenNoSpans() {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            // Create trace without spans
-            var trace = createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(projectName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .endTime(Instant.now())
-                    .comments(null)
-                    .build();
-
-            traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-            // Retrieve trace from the API
-            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
-            Trace.TracePage resultPage = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
-                    List.of(), List.of(), 100, Map.of());
-            List<Trace> returnedTraces = resultPage.content();
-
-            // Verify providers field is empty
-            Trace returnedTrace = returnedTraces.stream()
-                    .filter(t -> t.id().equals(trace.id()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Trace should be present"));
-
-            assertThat(returnedTrace.providers())
-                    .as("Providers should be empty when trace has no spans")
-                    .isEmpty();
-        }
-
-        @Test
-        void createAndRetrieveTraces__providersEmptyWhenAllSpansHaveEmptyProvider() {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            // Create trace
-            var trace = createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(projectName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .endTime(Instant.now())
-                    .comments(null)
-                    .build();
-
-            traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-            // Create spans with only empty provider strings
-            List<Span> spans = List.of(
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.general)
-                            .provider("")
-                            .build(),
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.general)
-                            .provider("")
-                            .build());
-
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            // Retrieve trace from the API
-            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
-            Trace.TracePage resultPage = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
-                    List.of(), List.of(), 100, Map.of());
-            List<Trace> returnedTraces = resultPage.content();
-
-            // Verify providers field is empty
-            Trace returnedTrace = returnedTraces.stream()
-                    .filter(t -> t.id().equals(trace.id()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Trace should be present"));
-
-            assertThat(returnedTrace.providers())
-                    .as("Providers should be empty when all spans have empty provider strings")
-                    .isEmpty();
-        }
-
-        @Test
-        void createAndRetrieveTraces__providersAreSortedAlphabetically() {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-
-            // Create trace
-            var trace = createTrace().toBuilder()
-                    .projectId(null)
-                    .projectName(projectName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .endTime(Instant.now())
-                    .comments(null)
-                    .build();
-
-            traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-            // Create spans with providers in non-alphabetical order
-            List<Span> spans = List.of(
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.llm)
-                            .provider("zebra")
-                            .build(),
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.llm)
-                            .provider("apple")
-                            .build(),
-                    factory.manufacturePojo(Span.class).toBuilder()
-                            .projectName(projectName)
-                            .traceId(trace.id())
-                            .type(SpanType.llm)
-                            .provider("microsoft")
-                            .build());
-
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            // Retrieve trace from the API
-            UUID projectId = getProjectId(projectName, workspaceName, apiKey);
-            Trace.TracePage resultPage = traceResourceClient.getTraces(projectName, projectId, apiKey, workspaceName,
-                    List.of(), List.of(), 100, Map.of());
-            List<Trace> returnedTraces = resultPage.content();
-
-            // Verify providers are sorted alphabetically
-            Trace returnedTrace = returnedTraces.stream()
-                    .filter(t -> t.id().equals(trace.id()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Trace should be present"));
-
-            assertThat(returnedTrace.providers())
-                    .as("Providers should be sorted alphabetically")
-                    .containsExactly("apple", "microsoft", "zebra")
-                    .isSorted();
+                    .as(assertionDescription)
+                    .containsExactlyElementsOf(expectedProviders);
         }
 
         @Test
