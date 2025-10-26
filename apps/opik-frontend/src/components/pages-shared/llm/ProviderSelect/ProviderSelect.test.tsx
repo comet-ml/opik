@@ -45,7 +45,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value=""
         onChange={onChange}
         configuredProvidersList={mockProviders}
-      />
+      />,
     );
 
     // Should show placeholder
@@ -60,7 +60,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value=""
         onChange={onChange}
         configuredProvidersList={mockProviders}
-      />
+      />,
     );
 
     // Initially shows placeholder
@@ -72,7 +72,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value="custom-1"
         onChange={onChange}
         configuredProvidersList={mockProviders}
-      />
+      />,
     );
 
     // Should show the selected custom provider's name in the trigger
@@ -87,7 +87,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value="custom-2"
         onChange={onChange}
         configuredProvidersList={mockProviders}
-      />
+      />,
     );
 
     // Should show the vllm provider's name in the trigger
@@ -102,7 +102,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value={PROVIDER_TYPE.OPEN_AI}
         onChange={onChange}
         configuredProvidersList={mockProviders}
-      />
+      />,
     );
 
     // Should show the OpenAI provider
@@ -117,7 +117,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value=""
         onChange={onChange}
         configuredProvidersList={[]}
-      />
+      />,
     );
 
     // Should still render without errors
@@ -132,7 +132,7 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value=""
         onChange={onChange}
         configuredProvidersList={mockProviders}
-      />
+      />,
     );
 
     // Component should render successfully with the prop
@@ -147,11 +147,10 @@ describe("ProviderSelect - Multiple Custom Providers", () => {
         value=""
         onChange={onChange}
         configuredProvidersList={mockProviders}
-      />
+      />,
     );
 
     // onChange should accept string values (both PROVIDER_TYPE and custom IDs)
     expect(onChange).toBeInstanceOf(Function);
   });
 });
-

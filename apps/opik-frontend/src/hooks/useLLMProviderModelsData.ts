@@ -1644,13 +1644,14 @@ const useLLMProviderModelsData = () => {
 
       // Normalize the provider for custom providers
       // Dynamic custom provider keys like "custom-llm:ollama" should be treated as PROVIDER_TYPE.CUSTOM
-      const normalizedProvider = lastPickedModelProvider?.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)
+      const normalizedProvider = lastPickedModelProvider?.startsWith(
+        `${PROVIDER_TYPE.CUSTOM}:`,
+      )
         ? PROVIDER_TYPE.CUSTOM
         : lastPickedModelProvider;
 
       const isLastPickedModelValid =
-        !!normalizedProvider &&
-        setupProviders.includes(normalizedProvider);
+        !!normalizedProvider && setupProviders.includes(normalizedProvider);
 
       if (isLastPickedModelValid) {
         return lastPickedModel;

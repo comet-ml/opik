@@ -75,7 +75,7 @@ const PromptModelSelect = ({
 
   const groupOptions = useMemo(() => {
     const allProviderModels = getProviderModels();
-    
+
     // Build a map of configured provider keys
     // For standard providers: use provider type directly
     // For custom providers: create dynamic keys like "custom-llm:ollama"
@@ -83,7 +83,7 @@ const PromptModelSelect = ({
     configuredProvidersList.forEach((p) => {
       if (p.provider === PROVIDER_TYPE.CUSTOM) {
         // For custom providers, add dynamic key
-        const providerKey = p.provider_name 
+        const providerKey = p.provider_name
           ? `${PROVIDER_TYPE.CUSTOM}:${p.provider_name}`
           : PROVIDER_TYPE.CUSTOM;
         configuredProviderKeys.add(providerKey);
@@ -103,7 +103,9 @@ const PromptModelSelect = ({
       ([providerKey, providerModels]) => {
         providerModels.forEach(({ value }) => {
           // For custom providers, map to the base PROVIDER_TYPE.CUSTOM
-          const mappedProvider = providerKey.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)
+          const mappedProvider = providerKey.startsWith(
+            `${PROVIDER_TYPE.CUSTOM}:`,
+          )
             ? PROVIDER_TYPE.CUSTOM
             : (providerKey as PROVIDER_TYPE);
           modelProviderMapRef.current[value] = mappedProvider;
@@ -124,13 +126,17 @@ const PromptModelSelect = ({
 
         // Handle custom providers with dynamic labels
         if (providerKey.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
-          const customProviderName = providerKey.substring(`${PROVIDER_TYPE.CUSTOM}:`.length);
+          const customProviderName = providerKey.substring(
+            `${PROVIDER_TYPE.CUSTOM}:`.length,
+          );
           // Find the display name from the configured provider
           const customConfig = configuredProvidersList.find(
-            (p) => p.provider === PROVIDER_TYPE.CUSTOM && p.provider_name === customProviderName
+            (p) =>
+              p.provider === PROVIDER_TYPE.CUSTOM &&
+              p.provider_name === customProviderName,
           );
           const displayName = customConfig?.keyName || customProviderName;
-          
+
           return {
             label: `${displayName} (Custom)`,
             options,
@@ -178,23 +184,20 @@ const PromptModelSelect = ({
       .filter((filteredGroupedOption) => !isNull(filteredGroupedOption));
   }, [filterValue, groupOptions]);
 
-  const getProviderIcon = useCallback(
-    (providerType: PROVIDER_TYPE | "") => {
-      if (!providerType) {
-        return null;
-      }
+  const getProviderIcon = useCallback((providerType: PROVIDER_TYPE | "") => {
+    if (!providerType) {
+      return null;
+    }
 
-      // Handle icon for dynamic custom providers
-      if (providerType.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
-        // For dynamic custom providers, use the custom provider icon
-        return PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
-      }
+    // Handle icon for dynamic custom providers
+    if (providerType.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
+      // For dynamic custom providers, use the custom provider icon
+      return PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
+    }
 
-      // For standard providers, use their specific icon
-      return PROVIDERS[providerType].icon;
-    },
-    [],
-  );
+    // For standard providers, use their specific icon
+    return PROVIDERS[providerType].icon;
+  }, []);
 
   const getProviderLabel = useCallback(
     (providerType: PROVIDER_TYPE | "") => {
@@ -205,7 +208,9 @@ const PromptModelSelect = ({
       // Handle label for dynamic custom providers
       if (providerType.startsWith(`${PROVIDER_TYPE.CUSTOM}:`)) {
         // For dynamic custom providers, get the label from groupOptions
-        const customGroup = groupOptions.find((o) => o.provider === providerType);
+        const customGroup = groupOptions.find(
+          (o) => o.provider === providerType,
+        );
         return customGroup ? customGroup.label : "";
       }
 
