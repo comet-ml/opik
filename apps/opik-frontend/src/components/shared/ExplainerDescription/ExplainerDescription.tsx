@@ -8,6 +8,7 @@ import { Explainer } from "@/types/shared";
 type ExplainerDescriptionProps = {
   size?: "sm" | "md";
   className?: string;
+  iconSize?: string;
 } & Omit<Explainer, "id">;
 
 const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
@@ -15,6 +16,7 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
   description,
   docLink,
   docHash,
+  iconSize = "size-4",
   className,
 }) => {
   return (
@@ -35,7 +37,7 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
             rel="noreferrer"
           >
             Read more
-            <SquareArrowOutUpRight className="ml-1 size-4 shrink-0" />
+            <SquareArrowOutUpRight className={cn("ml-1 shrink-0", iconSize)} />
           </a>
         </Button>
       )}

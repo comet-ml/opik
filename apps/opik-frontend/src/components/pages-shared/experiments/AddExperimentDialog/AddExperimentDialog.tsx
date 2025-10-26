@@ -318,6 +318,7 @@ eval_results = evaluate(
                     description={m.description || ""}
                     docLink={m.docLink}
                     docHash={m.docHash}
+                    iconSize="size-3"
                   />
                 </div>
               </div>
