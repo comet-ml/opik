@@ -39,18 +39,18 @@ def test_gepa_optimizer() -> None:
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = GepaOptimizer(
         model="openai/gpt-4o-mini",
-        reflection_model="openai/gpt-4o-mini",
-        temperature=0.1,
-        max_tokens=1000,
-        num_threads=2,
-        rounds=1,
-        num_prompts_per_round=2,
+        model_parameters={"temperature": 0.1, "max_tokens": 1000},
+        n_threads=2,
         seed=42,
     )
 
     # Run optimization with reduced sample size
     results = optimizer.optimize_prompt(
-        dataset=dataset, metric=levenshtein_ratio, prompt=prompt, n_samples=3
+        dataset=dataset,
+        metric=levenshtein_ratio,
+        prompt=prompt,
+        n_samples=3,
+        max_trials=3,
     )
 
     # Enhanced OptimizationResult validation

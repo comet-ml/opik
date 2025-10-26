@@ -1,3 +1,3 @@
-from .mipro_optimizer import MiproOptimizer, MIPROv2
+from .mipro_optimizer_v2 import MIPROv2
 
-__all__ = ["MiproOptimizer", "MIPROv2"]
+__all__ = ["MIPROv2"]

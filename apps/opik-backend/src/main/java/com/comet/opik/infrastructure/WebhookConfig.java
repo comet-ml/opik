@@ -42,6 +42,11 @@ public class WebhookConfig implements StreamConfiguration {
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval = Duration.seconds(1);
 
+    @Valid @JsonProperty
+    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
+    private Duration longPollingDuration;
+
     // Webhook-specific configuration
     @Valid @JsonProperty
     @Min(1) @Max(10) private int maxRetries = 3;

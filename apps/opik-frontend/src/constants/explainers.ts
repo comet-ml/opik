@@ -75,6 +75,9 @@ export enum EXPLAINER_ID {
   trace_opik_ai = "trace_opik_ai",
   feedback_scores_hotkeys = "feedback_scores_hotkeys",
   llm_judge_variable_mapping = "llm_judge_variable_mapping",
+  prompt_generation_learn_more = "prompt_generation_learn_more",
+  prompt_improvement_learn_more = "prompt_improvement_learn_more",
+  prompt_improvement_optimizer = "prompt_improvement_optimizer",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -525,5 +528,25 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.llm_judge_variable_mapping,
     description:
       "Choose the trace field that should fill each variable. Map variables to any trace field, including image fields like input.image_url or output.image_base64.",
+  },
+  [EXPLAINER_ID.prompt_generation_learn_more]: {
+    id: EXPLAINER_ID.prompt_generation_learn_more,
+    description:
+      "Not sure where to start? Tell us your goal in plain language, and we'll generate a ready-to-use prompt.",
+    docLink: "/prompt_engineering/improve",
+    docHash: "#generate",
+  },
+  [EXPLAINER_ID.prompt_improvement_learn_more]: {
+    id: EXPLAINER_ID.prompt_improvement_learn_more,
+    description:
+      "Give your prompt a boost! Add optional guidance, or let AI apply best-practice improvements for you.",
+    docLink: "/prompt_engineering/improve",
+    docHash: "#improve",
+  },
+  [EXPLAINER_ID.prompt_improvement_optimizer]: {
+    id: EXPLAINER_ID.prompt_improvement_optimizer,
+    description:
+      "Looking for advanced optimization algorithms? Check out the Opik optimizer!",
+    docLink: "/agent_optimization/opik_optimizer/overview",
   },
 };

@@ -42,7 +42,7 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
   },
   {
     id: "number_of_messages",
-    label: "No. of messages",
+    label: "Message count",
     type: COLUMN_TYPE.number,
   },
   {
@@ -154,7 +154,7 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
         />
       </div>
       <div
-        className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
         style={{ "--chart-height": "230px" } as React.CSSProperties}
       >
         <div>

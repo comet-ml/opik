@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 
-import { cn } from "@/lib/utils";
+import { buildFullBaseUrl, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,7 +21,7 @@ import { Description } from "@/components/ui/description";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import Loader from "@/components/shared/Loader/Loader";
 
-import { Alert } from "@/types/alerts";
+import { Alert, ALERT_TYPE } from "@/types/alerts";
 import useAlertCreateMutation from "@/api/alerts/useAlertCreateMutation";
 import useAlertUpdateMutation from "@/api/alerts/useAlertUpdateMutation";
 import useAppStore from "@/store/AppStore";
@@ -61,6 +61,8 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
     defaultValues: {
       name: alert?.name || "",
       enabled: alert?.enabled ?? true,
+      alertType: alert?.alert_type || ALERT_TYPE.general,
+      routingKey: alert?.metadata?.routing_key || "",
       url: alert?.webhook?.url || "",
       secretToken: alert?.webhook?.secret_token || "",
       headers: alert?.webhook?.headers
@@ -74,11 +76,21 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
   });
 
   const getAlert = useCallback(() => {
-    const formData = form.getValues();
+    const formData = form.watch();
 
     return {
       name: formData.name.trim(),
       enabled: formData.enabled,
+      alert_type: formData.alertType,
+      metadata: {
+        ...alert?.metadata,
+        base_url: buildFullBaseUrl(),
+        ...(formData.alertType === ALERT_TYPE.pagerduty && {
+          routing_key: formData.routingKey
+            ? formData.routingKey.trim()
+            : undefined,
+        }),
+      },
       webhook: {
         url: formData.url.trim(),
         secret_token: formData.secretToken || undefined,
@@ -95,7 +107,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
       },
       triggers: formTriggersToAlertTriggers(formData.triggers, projectsIds),
     };
-  }, [form, projectsIds]);
+  }, [form, projectsIds, alert?.metadata]);
 
   const handleNavigateBack = useCallback(() => {
     navigate({

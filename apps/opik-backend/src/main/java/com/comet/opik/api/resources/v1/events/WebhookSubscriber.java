@@ -1,17 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.AlertEventType;
-import com.comet.opik.api.FeedbackScoreItem;
-import com.comet.opik.api.Guardrail;
-import com.comet.opik.api.Prompt;
-import com.comet.opik.api.PromptVersion;
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
+import com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
@@ -22,8 +15,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -41,34 +32,13 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     private final WebhookHttpClient webhookHttpClient;
     private final WebhookConfig webhookConfig;
 
-    private static final TypeReference<List<Prompt>> LIST_PROMPT_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<Prompt> PROMPT_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<PromptVersion> PROMPT_VERSION_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<List<Trace>> LIST_TRACE_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<List<FeedbackScoreItem.FeedbackScoreBatchItem>> LIST_TRACE_SCORE_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<List<FeedbackScoreItem.FeedbackScoreBatchItemThread>> LIST_THREAD_SCORE_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<List<Guardrail>> LIST_GUARDRAIL_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
     private final LongCounter webhookEventProcessedCounter;
 
     @Inject
     public WebhookSubscriber(@NonNull WebhookConfig webhookConfig,
             @NonNull RedissonReactiveClient redisson,
             @NonNull WebhookHttpClient webhookHttpClient) {
-        super(webhookConfig, redisson, METRICS_BASE_NAME, WebhookConfig.PAYLOAD_FIELD);
+        super(webhookConfig, redisson, WebhookConfig.PAYLOAD_FIELD, METRICS_NAMESPACE, METRICS_BASE_NAME);
         this.webhookHttpClient = webhookHttpClient;
         this.webhookConfig = webhookConfig;
 
@@ -77,11 +47,6 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                 .counterBuilder("opik_webhook_events_processed_total")
                 .setDescription("Total number of webhook events processed")
                 .build();
-    }
-
-    @Override
-    protected String getMetricNamespace() {
-        return METRICS_NAMESPACE;
     }
 
     @Override
@@ -98,7 +63,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
                             @SuppressWarnings("unchecked")
                             WebhookEvent<Map<String, Object>> webhookEvent = (WebhookEvent<Map<String, Object>>) event;
 
-                            return Mono.fromCallable(() -> deserializeEventPayload(webhookEvent))
+                            return Mono.fromCallable(() -> AlertPayloadAdapter.prepareWebhookPayload(webhookEvent))
                                     .subscribeOn(Schedulers.boundedElastic())
                                     .flatMap(webhookHttpClient::sendWebhook)
                                     .doOnSuccess(unused -> {
@@ -163,36 +128,6 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
             log.debug("Webhook event validation passed for event: '{}'", event.getId());
         });
-    }
-
-    public static WebhookEvent<Map<String, Object>> deserializeEventPayload(
-            @NonNull WebhookEvent<Map<String, Object>> event) {
-        Map<String, Object> payload = event.getPayload();
-        @SuppressWarnings("unchecked")
-        List<String> metadatas = (List<String>) payload.getOrDefault("metadata", List.of());
-
-        var deserializeMetadata = metadatas.stream()
-                .map(metadata -> JsonUtils.readValue(metadata, payloadTypePerEventType(event.getEventType())))
-                .toList();
-
-        Map<String, Object> updatedPayload = new HashMap<>(payload);
-        updatedPayload.put("metadata", deserializeMetadata);
-
-        return event.toBuilder()
-                .payload(updatedPayload)
-                .build();
-    }
-
-    private static TypeReference<?> payloadTypePerEventType(AlertEventType eventType) {
-        return switch (eventType) {
-            case PROMPT_DELETED -> LIST_PROMPT_TYPE_REFERENCE;
-            case PROMPT_CREATED -> PROMPT_TYPE_REFERENCE;
-            case PROMPT_COMMITTED -> PROMPT_VERSION_TYPE_REFERENCE;
-            case TRACE_ERRORS -> LIST_TRACE_TYPE_REFERENCE;
-            case TRACE_FEEDBACK_SCORE -> LIST_TRACE_SCORE_TYPE_REFERENCE;
-            case TRACE_THREAD_FEEDBACK_SCORE -> LIST_THREAD_SCORE_TYPE_REFERENCE;
-            case TRACE_GUARDRAILS_TRIGGERED -> LIST_GUARDRAIL_TYPE_REFERENCE;
-        };
     }
 
     @Override
