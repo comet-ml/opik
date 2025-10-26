@@ -40,7 +40,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
           return (
             <FormItem>
-              <Label htmlFor="providerName">Provider Name</Label>
+              <Label htmlFor="providerName">Provider name</Label>
               <FormControl>
                 <Input
                   id="providerName"

@@ -23,7 +23,7 @@ type ProviderSelectProps = {
 
 // Helper function to get display name for custom providers
 const getCustomProviderDisplayName = (provider: ProviderKey): string => {
-  return provider.provider_name || provider.keyName || "Custom Provider";
+  return provider.provider_name || provider.keyName || "Custom provider";
 };
 
 const ProviderSelect: React.FC<ProviderSelectProps> = ({
@@ -62,8 +62,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     ) || [];
 
     if (customProviders.length > 0) {
-      providerOptions.push({ isSeparator: true, value: "__separator_1__" });
-      
       customProviders.forEach((customProvider) => {
         providerOptions.push({
           value: customProvider.id,
@@ -76,15 +74,14 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       });
     }
 
-    // Add the "Add Custom Provider" option at the end
+    // Add the "Add custom provider" option at the end
     if (onAddCustomProvider) {
-      if (customProviders.length === 0) {
-        providerOptions.push({ isSeparator: true, value: "__separator_2__" });
-      }
+      // Always add separator before "Add custom provider"
+      providerOptions.push({ isSeparator: true, value: "__separator_add_custom__" });
       
       providerOptions.push({
         value: ADD_CUSTOM_PROVIDER_VALUE,
-        label: "Add Custom Provider",
+        label: "Add custom provider",
         icon: Plus,
         isAddCustom: true,
       });
@@ -95,14 +92,14 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
 
   const renderTrigger = useCallback(
     (value: string) => {
-      // When adding a new custom provider, show "Custom Provider" even if value is empty
+      // When adding a new custom provider, show "Custom provider" even if value is empty
       if (isAddingCustomProvider && !value) {
         const Icon = PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
         return (
-          <div className="flex w-full items-center justify-between">
+          <div className="flex w-full items-center justify-between text-foreground">
             <div className="flex items-center gap-2">
               <Icon />
-              Custom Provider
+              Custom provider
             </div>
           </div>
         );
@@ -120,7 +117,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       if (customProvider) {
         const Icon = PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
         return (
-          <div className="flex w-full items-center justify-between">
+          <div className="flex w-full items-center justify-between text-foreground">
             <div className="flex items-center gap-2">
               <Icon />
               {getCustomProviderDisplayName(customProvider)}
@@ -140,7 +137,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       }
 
       return (
-        <div className="flex w-full items-center justify-between">
+        <div className="flex w-full items-center justify-between text-foreground">
           <div className="flex items-center gap-2">
             <Icon />
             {label}
@@ -176,7 +173,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
         }
         withoutCheck
         wrapperAsChild={true}
-        className={cn(isAddCustom && "text-primary font-medium")}
       >
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
@@ -200,12 +196,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     [onChange, onAddCustomProvider]
   );
 
-  // Filter out separators for SelectBox options
-  const selectBoxOptions = useMemo(
-    () => options.filter((opt) => !opt.isSeparator),
-    [options]
-  );
-
   return (
     <SelectBox
       disabled={disabled}
@@ -213,7 +203,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       renderOption={renderOption}
       value={value}
       onChange={handleChange}
-      options={selectBoxOptions}
+      options={options}
       className={cn({
         "border-destructive": hasError,
       })}
