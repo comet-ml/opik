@@ -39,11 +39,7 @@ export const CustomProviderDetailsFormSchema = z.object({
     .string({
       required_error: "Provider name is required",
     })
-    .min(1, { message: "Provider name is required" })
-    .regex(/^[a-zA-Z0-9-]+$/, {
-      message:
-        "Provider name must contain only letters, numbers, and hyphens",
-    }),
+    .min(1, { message: "Provider name is required" }),
   apiKey: z.string(),
   url: z.string().url(),
   models: z
