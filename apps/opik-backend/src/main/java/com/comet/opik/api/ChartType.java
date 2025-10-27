@@ -4,7 +4,12 @@ import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum ChartType {
     LINE("line"),
-    BAR("bar");
+    BAR("bar"),
+    AREA("area"),
+    STACKED_BAR("stacked_bar"),
+    STACKED_AREA("stacked_area"),
+    PIE("pie"),
+    DONUT("donut");
 
     private final String value;
 

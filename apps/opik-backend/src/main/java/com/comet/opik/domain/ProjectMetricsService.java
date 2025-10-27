@@ -29,10 +29,14 @@ public interface ProjectMetricsService {
 class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
+    private final @NonNull ProjectMetricsAggregatorService aggregatorService;
+    private final @NonNull com.comet.opik.infrastructure.ServiceTogglesConfig serviceToggles;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
-            @NonNull ProjectService projectService) {
+            @NonNull ProjectService projectService,
+            @NonNull ProjectMetricsAggregatorService aggregatorService,
+            @NonNull com.comet.opik.infrastructure.ServiceTogglesConfig serviceToggles) {
         projectMetricHandler = Map.ofEntries(
                 // Existing metrics
                 Map.entry(MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount),
@@ -69,12 +73,41 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 // Medium additions - span duration
                 Map.entry(MetricType.SPAN_DURATION, projectMetricsDAO::getSpanDuration));
         this.projectService = projectService;
+        this.aggregatorService = aggregatorService;
+        this.serviceToggles = serviceToggles;
     }
 
     @Override
     public Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request) {
         // Will throw an error in case we try to get a private project with public visibility
         projectService.get(projectId);
+
+        // Feature toggle: Use new aggregator service or old DAO queries
+        if (serviceToggles.isMetricsAggregatorEnabled()) {
+            log.debug("Using ProjectMetricsAggregatorService (reusing existing stats queries) for metric '{}'",
+                    request.metricType());
+            @SuppressWarnings("unchecked")
+            Mono<ProjectMetricResponse<Number>> aggregatorResult = aggregatorService
+                    .getProjectMetrics(projectId, request)
+                    .map(response -> (ProjectMetricResponse<Number>) response)
+                    .onErrorResume(error -> {
+                        log.error("Error using aggregator service for metric '{}', falling back to DAO: '{}'",
+                                request.metricType(), error.getMessage(), error);
+                        // Fallback to old implementation on error
+                        return getProjectMetricsFromDAO(projectId, request);
+                    });
+            return aggregatorResult;
+        } else {
+            log.debug("Using ProjectMetricsDAO (dedicated SQL queries) for metric '{}'",
+                    request.metricType());
+            return getProjectMetricsFromDAO(projectId, request);
+        }
+    }
+
+    /**
+     * Get metrics using old DAO implementation (dedicated SQL queries).
+     */
+    private Mono<ProjectMetricResponse<Number>> getProjectMetricsFromDAO(UUID projectId, ProjectMetricRequest request) {
         return getMetricHandler(request.metricType())
                 .apply(projectId, request)
                 .map(dataPoints -> ProjectMetricResponse.builder()

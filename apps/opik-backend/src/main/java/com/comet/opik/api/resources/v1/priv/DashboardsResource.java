@@ -378,8 +378,7 @@ public class DashboardsResource {
                 dashboardId, request.interval(), workspaceId);
 
         ChartDataResponse chartData = chartDataService.getChartData(chartId, request)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext.get().getUserName(),
-                        requestContext.get().getWorkspaceId()))
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info("Got data for chart '{}' with {} series on workspaceId '{}'", chartId,
@@ -403,8 +402,7 @@ public class DashboardsResource {
                 request.chartDataRequest().interval(), workspaceId);
 
         ChartDataResponse chartData = chartDataService.getChartPreviewData(request.chart(), request.chartDataRequest())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext.get().getUserName(),
-                        requestContext.get().getWorkspaceId()))
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info("Got preview data with {} series on workspaceId '{}'", chartData.series().size(), workspaceId);

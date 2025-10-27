@@ -1,37 +1,48 @@
 export type DashboardType = "prebuilt" | "custom";
-export type ChartType = "line" | "bar";
+export type ChartType = "line" | "bar" | "area" | "stacked_bar" | "stacked_area" | "pie" | "donut";
 export type GroupByType = "automatic" | "manual";
 export type FilterType = "trace" | "thread";
 export type MetricType =
-  // Existing metrics
+  // Trace metrics
   | "FEEDBACK_SCORES"
   | "TRACE_COUNT"
   | "TOKEN_USAGE"
   | "DURATION"
   | "COST"
   | "GUARDRAILS_FAILED_COUNT"
-  | "THREAD_COUNT"
-  | "THREAD_DURATION"
-  | "THREAD_FEEDBACK_SCORES"
-  // Easy additions
   | "ERROR_COUNT"
-  | "SPAN_COUNT"
-  | "LLM_SPAN_COUNT"
-  // Medium additions - token metrics
   | "COMPLETION_TOKENS"
   | "PROMPT_TOKENS"
   | "TOTAL_TOKENS"
-  // Medium additions - count metrics
   | "INPUT_COUNT"
   | "OUTPUT_COUNT"
   | "METADATA_COUNT"
   | "TAGS_AVERAGE"
-  // Medium additions - calculated metrics
   | "TRACE_WITH_ERRORS_PERCENT"
   | "GUARDRAILS_PASS_RATE"
   | "AVG_COST_PER_TRACE"
-  // Medium additions - span duration
-  | "SPAN_DURATION";
+  // Span metrics (aggregated at trace level)
+  | "SPAN_COUNT"
+  | "LLM_SPAN_COUNT"
+  | "SPAN_DURATION"
+  // Span metrics (direct span-level)
+  | "SPAN_TOTAL_COUNT"
+  | "SPAN_ERROR_COUNT"
+  | "SPAN_INPUT_COUNT"
+  | "SPAN_OUTPUT_COUNT"
+  | "SPAN_METADATA_COUNT"
+  | "SPAN_TAGS_AVERAGE"
+  | "SPAN_COST"
+  | "SPAN_AVG_COST"
+  | "SPAN_FEEDBACK_SCORES"
+  | "SPAN_TOKEN_USAGE"
+  | "SPAN_PROMPT_TOKENS"
+  | "SPAN_COMPLETION_TOKENS"
+  | "SPAN_TOTAL_TOKENS"
+  // Thread metrics
+  | "THREAD_COUNT"
+  | "THREAD_DURATION"
+  | "THREAD_FEEDBACK_SCORES";
 
 export type TimeInterval = "HOURLY" | "DAILY" | "WEEKLY";
 

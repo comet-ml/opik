@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import { MoreHorizontal, Pencil, Trash2, Copy } from "lucide-react";
-import { DashboardChart } from "@/types/dashboards";
+import { DashboardChart, TimeInterval } from "@/types/dashboards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,12 +16,14 @@ import useChartDeleteMutation from "@/api/dashboards/useChartDeleteMutation";
 interface ChartCardProps {
   chart: DashboardChart;
   dashboardId: string;
+  interval: TimeInterval;
   onEditChart: (chartId: string) => void;
 }
 
 const ChartCard: React.FC<ChartCardProps> = ({
   chart,
   dashboardId,
+  interval,
   onEditChart,
 }) => {
   const resetKeyRef = useRef(0);
@@ -92,6 +94,7 @@ const ChartCard: React.FC<ChartCardProps> = ({
           <ChartDisplay
             chart={chart}
             dashboardId={dashboardId}
+            interval={interval}
           />
         </CardContent>
       </Card>

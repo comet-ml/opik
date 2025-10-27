@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useParams, useNavigate } from "@tanstack/react-router";
 import { Plus, Settings2 } from "lucide-react";
 
@@ -8,7 +8,9 @@ import useAppStore from "@/store/AppStore";
 import Loader from "@/components/shared/Loader/Loader";
 import useDashboardById from "@/api/dashboards/useDashboardById";
 import { formatDate } from "@/lib/date";
+import { TimeInterval } from "@/types/dashboards";
 import ChartCard from "./ChartCard";
+import IntervalSelector from "./IntervalSelector";
 
 const DashboardViewPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ const DashboardViewPage: React.FunctionComponent = () => {
     projectId: string;
   };
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [selectedInterval, setSelectedInterval] = useState<TimeInterval>("DAILY");
 
   const { data: dashboard, isPending } = useDashboardById({
     dashboardId,
@@ -59,6 +62,10 @@ const DashboardViewPage: React.FunctionComponent = () => {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <IntervalSelector
+                value={selectedInterval}
+                onChange={setSelectedInterval}
+              />
               {dashboard.type === "custom" && (
                 <Button
                   onClick={() => {
@@ -119,6 +126,7 @@ const DashboardViewPage: React.FunctionComponent = () => {
                 key={chart.id}
                 chart={chart}
                 dashboardId={dashboardId}
+                interval={selectedInterval}
                 onEditChart={(chartId) => {
                   navigate({
                     to: "/$workspaceName/projects/$projectId/dashboards/$dashboardId/charts/$chartId/edit",

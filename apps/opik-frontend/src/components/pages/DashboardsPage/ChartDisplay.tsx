@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Activity } from "lucide-react";
 
-import { DashboardChart, ChartDataRequest } from "@/types/dashboards";
+import { DashboardChart, ChartDataRequest, TimeInterval } from "@/types/dashboards";
 import useAppStore from "@/store/AppStore";
 import useChartDataQuery from "@/api/dashboards/useChartDataQuery";
 import Loader from "@/components/shared/Loader/Loader";
@@ -10,11 +10,13 @@ import ChartPreview from "./ChartPreview";
 type ChartDisplayProps = {
   chart: DashboardChart;
   dashboardId: string;
+  interval: TimeInterval;
 };
 
 const ChartDisplay: React.FunctionComponent<ChartDisplayProps> = ({
   chart,
   dashboardId,
+  interval,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -24,11 +26,11 @@ const ChartDisplay: React.FunctionComponent<ChartDisplayProps> = ({
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     return {
-      interval: "DAILY",
+      interval: interval,
       interval_start: weekAgo.toISOString(),
       interval_end: now.toISOString(),
     };
-  }, []);
+  }, [interval]);
 
   const { data: chartData, isPending } = useChartDataQuery(
     {
