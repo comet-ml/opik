@@ -4,6 +4,7 @@ from opik.integrations.crewai import track_crewai
 from crewai.flow.flow import Flow, start, listen
 
 from ...testlib import (
+    ANY,
     ANY_BUT_NONE,
     ANY_STRING,
     ANY_DICT,
@@ -107,7 +108,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 tags=ANY_BUT_NONE,
                                 type="llm",
-                                usage=ANY_DICT,
+                                usage=ANY_DICT.containing(constants.EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT),
                                 total_cost=ANY_BUT_NONE,
                                 spans=[],
                             )
@@ -138,7 +139,7 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 tags=ANY_BUT_NONE,
                                 type="llm",
-                                usage=ANY_DICT,
+                                usage=ANY_DICT.containing(constants.EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT),
                                 total_cost=ANY_BUT_NONE,
                                 spans=[],
                             )

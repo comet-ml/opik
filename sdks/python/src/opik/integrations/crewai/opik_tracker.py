@@ -10,8 +10,6 @@ from opik.integrations.litellm import track_completion
 
 from . import crewai_decorator, flow_patchers
 
-__IS_TRACKING_ENABLED = False
-
 
 def track_crewai(
     project_name: Optional[str] = None,
@@ -29,11 +27,6 @@ def track_crewai(
     Parameters:
         project_name: The name of the project to associate with the tracking.
     """
-    global __IS_TRACKING_ENABLED
-
-    if __IS_TRACKING_ENABLED:
-        return
-    __IS_TRACKING_ENABLED = True
 
     decorator_factory = crewai_decorator.CrewAITrackDecorator()
 
