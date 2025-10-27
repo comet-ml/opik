@@ -4,7 +4,14 @@ WORKDIR /opt/opik-backend
 
 COPY pom.xml spotless.xml ./
 COPY src ./src
+COPY opik-telemetry-extension ./opik-telemetry-extension
 
+# Build telemetry extension first
+WORKDIR /opt/opik-backend/opik-telemetry-extension
+RUN mvn clean package -DskipTests
+
+# Build main application
+WORKDIR /opt/opik-backend
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
 
 ARG OPIK_VERSION
@@ -39,6 +46,8 @@ RUN chmod +x ./*.sh
 
 COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
 COPY --from=build /opt/opik-backend/target/*.jar ./
+# Copy telemetry extension JAR (built as part of the build process)
+COPY --from=build /opt/opik-backend/opik-telemetry-extension/target/opik-telemetry-extension-*.jar ./opik-telemetry-extension.jar
 
 EXPOSE 8080
 EXPOSE 3003
