@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.OpikApplication;
+import com.comet.opik.api.resources.v1.events.TestRedisSubscriber;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.events.EventModule;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
@@ -53,7 +54,8 @@ public class TestDropwizardAppExtensionUtils {
             List<Class<? extends Module>> disableModules,
             List<AbstractModule> modules,
             String minioUrl,
-            boolean isMinIO) {
+            boolean isMinIO,
+            List<Class<?>> disableExtensions) {
     }
 
     public static TestDropwizardAppExtension newTestDropwizardAppExtension(String jdbcUrl,
@@ -143,6 +145,14 @@ public class TestDropwizardAppExtensionUtils {
             Optional.ofNullable(appContextConfig.disableModules)
                     .orElse(List.of())
                     .forEach(injector::disableModules);
+
+            var extensionsToDisable = new ArrayList<>(
+                    Optional.ofNullable(appContextConfig.disableExtensions).orElse(List.of()));
+
+            // Always disable TestRedisSubscriber from auto-discovery (it's a test helper, not a real component)
+            extensionsToDisable.add(TestRedisSubscriber.class);
+
+            extensionsToDisable.forEach(injector::disableExtensions);
 
             if (appContextConfig.mockEventBus() != null) {
                 injector.modulesOverride(new EventModule() {

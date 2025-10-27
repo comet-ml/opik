@@ -4,11 +4,10 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .webhook_event_object import WebhookEventObject
 
 
 class WebhookExamples(UniversalBaseModel):
-    response_examples: typing.Optional[typing.Dict[str, WebhookEventObject]] = None
+    response_examples: typing.Optional[typing.Dict[str, typing.Dict[str, typing.Optional[typing.Any]]]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

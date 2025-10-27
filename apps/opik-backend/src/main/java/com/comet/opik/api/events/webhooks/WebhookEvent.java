@@ -1,6 +1,7 @@
 package com.comet.opik.api.events.webhooks;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertType;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -31,13 +32,23 @@ public class WebhookEvent<T> {
 
     @NotNull private AlertEventType eventType;
 
+    @NotNull private AlertType alertType;
+
     @NotNull private UUID alertId;
 
+    @NotNull private String alertName;
+
+    @NotNull Map<String, String> alertMetadata;
+
     @NotBlank private String workspaceId;
+
+    @NotBlank private String workspaceName;
 
     @NotBlank private String userName;
 
     @NotNull private T payload;
+
+    private String jsonPayload;
 
     @NotNull private Instant createdAt;
 

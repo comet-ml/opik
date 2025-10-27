@@ -14,6 +14,7 @@ import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPlaygroundButton";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
@@ -101,6 +102,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           Use this prompt
         </Button>
         <TryInPlaygroundButton prompt={prompt} />
+        <ImproveInPlaygroundButton prompt={prompt} />
         <Button
           className="ml-auto"
           size="sm"

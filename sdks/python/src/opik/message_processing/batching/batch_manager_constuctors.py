@@ -15,6 +15,9 @@ FEEDBACK_SCORES_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE = 1000
 GUARDRAIL_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS = 1.0
 GUARDRAIL_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE = 1000
 
+EXPERIMENT_ITEMS_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS = 3.0
+EXPERIMENT_ITEMS_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE = 1000
+
 
 def create_batch_manager(
     queue: message_queue.MessageQueue[messages.BaseMessage],
@@ -55,6 +58,12 @@ def create_batch_manager(
         flush_callback=queue.put,
     )
 
+    experiment_items_batch_message_batcher = batchers.CreateExperimentItemsBatchMessageBatcher(
+        flush_interval_seconds=EXPERIMENT_ITEMS_BATCH_MESSAGE_BATCHER_FLUSH_INTERVAL_SECONDS,
+        max_batch_size=EXPERIMENT_ITEMS_BATCH_MESSAGE_BATCHER_MAX_BATCH_SIZE,
+        flush_callback=queue.put,
+    )
+
     message_to_batcher_mapping: Dict[
         Type[messages.BaseMessage], base_batcher.BaseBatcher
     ] = {
@@ -64,6 +73,7 @@ def create_batch_manager(
         messages.AddTraceFeedbackScoresBatchMessage: add_trace_feedback_scores_batch_message_batcher,
         messages.AddThreadsFeedbackScoresBatchMessage: add_threads_feedback_scores_batch_message_batcher,
         messages.GuardrailBatchMessage: guardrail_batch_message_batcher,
+        messages.CreateExperimentItemsBatchMessage: experiment_items_batch_message_batcher,
     }
 
     batch_manager_ = batch_manager.BatchManager(

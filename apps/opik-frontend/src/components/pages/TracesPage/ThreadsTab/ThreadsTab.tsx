@@ -69,6 +69,10 @@ import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/Traces
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { ThreadStatus } from "@/types/thread";
+import {
+  USER_FEEDBACK_COLUMN_ID,
+  USER_FEEDBACK_NAME,
+} from "@/constants/shared";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -97,7 +101,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
   },
   {
     id: "number_of_messages",
-    label: "No. of messages",
+    label: "Message count",
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
@@ -206,6 +210,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "last_updated_at",
   "duration",
   "status",
+  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
@@ -368,21 +373,31 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   }, [feedbackScoresNames]);
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            accessorFn: (row) =>
-              row.feedback_scores?.find((f) => f.name === label),
-            statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
-          }) as ColumnData<Thread>,
-      ),
-    ];
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: DynamicColumn = {
+      id: USER_FEEDBACK_COLUMN_ID,
+      label: USER_FEEDBACK_NAME,
+      columnType: COLUMN_TYPE.number,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
+    );
+
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+        }) as ColumnData<Thread>,
+    );
   }, [dynamicScoresColumns]);
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
@@ -439,6 +454,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       setThreadId(row.id);
     },
     [setThreadId],
+  );
+
+  const meta = useMemo(
+    () => ({
+      projectId,
+      projectName,
+      enableUserFeedbackEditing: true,
+    }),
+    [projectId, projectName],
   );
 
   const columns = useMemo(() => {
@@ -620,6 +644,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        meta={meta}
       />
       <PageBodyStickyContainer
         className="py-4"

@@ -103,55 +103,14 @@ for (let i = 0; i < 10; i++) {
 await client.flush();
 ```
 
-## Vercel AI SDK Integration
+## Integrations
 
-Opik provides seamless integration with the Vercel AI SDK through OpenTelemetry instrumentation.
+Opik provides seamless integrations with popular AI frameworks and tools. Check out our integration packages:
 
-### Installation
-
-Install the required dependencies:
-
-```bash
-npm install opik ai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
-```
-
-### Usage
-
-```typescript
-import { openai } from "@ai-sdk/openai";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { NodeSDK } from "@opentelemetry/sdk-node";
-import { generateText } from "ai";
-import { OpikExporter } from "opik/vercel";
-
-const sdk = new NodeSDK({
-  traceExporter: new OpikExporter(),
-  instrumentations: [getNodeAutoInstrumentations()],
-});
-
-sdk.start();
-
-const { text } = await generateText({
-  model: openai("gpt-4o-mini"),
-  prompt: "What is love? Describe it in 10 words or less.",
-  experimental_telemetry: OpikExporter.getSettings({
-    name: "ai-sdk-integration",
-  }),
-});
-
-await sdk.shutdown();
-```
-
-This integration automatically captures:
-
-- Input prompts and messages
-- Model responses
-- Token usage statistics
-- Tool calls and their results
-- Timing information
-- Error states
-
-All this telemetry data is automatically sent to your Opik project for analysis and monitoring.
+- **Vercel AI** - [`opik-vercel`](https://www.npmjs.com/package/opik-vercel)
+- **OpenAI** - [`opik-openai`](https://www.npmjs.com/package/opik-openai)
+- **LangChain** - [`opik-langchain`](https://www.npmjs.com/package/opik-langchain)
+- **Google Gemini** - [`opik-gemini`](https://www.npmjs.com/package/opik-gemini)
 
 ## Contributing
 

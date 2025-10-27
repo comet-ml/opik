@@ -1,7 +1,6 @@
 import copy
 import json
 import logging
-import sys
 import textwrap
 import types
 from collections.abc import Callable, Mapping
@@ -11,8 +10,6 @@ from typing import Any, Optional
 from types import SimpleNamespace
 
 import pytest
-
-from . import stub_opik  # noqa: F401
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.evolutionary_optimizer import reporting as evo_reporting
@@ -48,22 +45,6 @@ from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (
     _sync_tool_description_in_system,
 )
 from opik_optimizer.optimization_result import OptimizationResult
-
-
-root = Path(__file__).resolve().parents[3]
-src_root = root / "src"
-
-try:
-    import opik_optimizer  # type: ignore  # noqa: F401
-except ImportError:  # pragma: no cover - fallback for isolated tests
-    pkg = types.ModuleType("opik_optimizer")
-    pkg.__path__ = [str(src_root / "opik_optimizer")]
-    sys.modules["opik_optimizer"] = pkg
-
-if "opik_optimizer.utils" not in sys.modules:
-    utils_pkg = types.ModuleType("opik_optimizer.utils")
-    utils_pkg.__path__ = [str(src_root / "opik_optimizer" / "utils")]
-    sys.modules["opik_optimizer.utils"] = utils_pkg
 
 
 def _sample_tool_entry() -> dict[str, Any]:
