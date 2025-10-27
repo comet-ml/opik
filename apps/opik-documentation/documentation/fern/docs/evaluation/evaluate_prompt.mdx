@@ -40,7 +40,26 @@ To run the experiment, you can use the following code:
 
 <CodeBlocks>
     ```typescript title="TypeScript" language="typescript"
-    // Coming soon
+    import { Opik, evaluatePrompt } from 'opik';
+
+    // Create a dataset that contains the samples you want to evaluate
+    const opikClient = new Opik();
+    const dataset = await opikClient.getOrCreateDataset({
+        name: "my_dataset",
+    });
+    await dataset.insert([
+        { input: "Hello, world!", expected_output: "Hello, world!" },
+        { input: "What is the capital of France?", expected_output: "Paris" },
+    ]);
+
+    // Run the evaluation
+    await evaluatePrompt({
+        dataset,
+        messages: [
+            { role: "user", content: "Translate the following text to French: {{input}}" },
+        ],
+        model: "gpt-4o",
+    });
     ```
 
     ```python title="Python" language="python"
@@ -113,7 +132,27 @@ for scoring:
     ```
 
     ```typescript title="TypeScript" language="typescript"
-    // Coming soon  - In the meantime, check out the Agent evaluation guide
+    import { Opik, evaluatePrompt, Hallucination } from 'opik';
+
+    // Create a dataset that contains the samples you want to evaluate
+    const opikClient = new Opik();
+    const dataset = await opikClient.getOrCreateDataset({
+        name: "my_dataset",
+    });
+    await dataset.insert([
+        { input: "Hello, world!", expected_output: "Hello, world!" },
+        { input: "What is the capital of France?", expected_output: "Paris" },
+    ]);
+
+    // Run the evaluation
+    await evaluatePrompt({
+        dataset,
+        messages: [
+            { role: "user", content: "Translate the following text to French: {{input}}" },
+        ],
+        model: "gpt-4o",
+        scoringMetrics: [new Hallucination()],
+    });
     ```
 
 </CodeBlocks>
@@ -149,7 +188,36 @@ You can customize the model used by create a new model using the [`LiteLLMChatMo
     ```
 
     ```typescript title="TypeScript" language="typescript"
-    // Coming soon - In the meantime, check out the Agent evaluation guide
+    import { Opik, evaluatePrompt, Hallucination } from 'opik';
+    import { openai } from '@ai-sdk/openai';
+
+    // Create a dataset that contains the samples you want to evaluate
+    const opikClient = new Opik();
+    const dataset = await opikClient.getOrCreateDataset({
+        name: "my_dataset",
+    });
+    await dataset.insert([
+        { input: "Hello, world!", expected_output: "Hello, world!" },
+        { input: "What is the capital of France?", expected_output: "Paris" },
+    ]);
+
+
+    // Define a custom model proivider with specific configuration
+    const openai = createOpenAI({
+        // custom settings https://ai-sdk.dev/providers/ai-sdk-providers/openai#setup
+        baseURL: "https://api.openai.com/v1"
+    });
+
+    // Run the evaluation
+    await evaluatePrompt({
+        dataset,
+        messages: [
+            { role: "user", content: "Translate the following text to French: {{input}}" },
+        ],
+        model: openai('gpt-4o'),
+        scoringMetrics: [new Hallucination()],
+        temperature: 0
+    });
     ```
 
 </CodeBlocks>
