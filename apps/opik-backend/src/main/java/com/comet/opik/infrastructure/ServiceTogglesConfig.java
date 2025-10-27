@@ -19,6 +19,4 @@ public class ServiceTogglesConfig {
     @NotNull boolean alertsEnabled;
     @JsonProperty
     @NotNull boolean welcomeWizardEnabled;
-    @JsonProperty
-    @NotNull boolean metricsAggregatorEnabled = true; // Default to false for backward compatibility
 }

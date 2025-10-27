@@ -36,7 +36,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.GuardrailResult;
-import com.comet.opik.domain.ProjectMetricsDAO;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -369,10 +368,10 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACES), Integer.class,
-                    Map.of(ProjectMetricsDAO.NAME_TRACES, expected.getFirst()),
-                    Map.of(ProjectMetricsDAO.NAME_TRACES, expected.get(1)),
-                    Map.of(ProjectMetricsDAO.NAME_TRACES, expected.getLast()));
+                    .build(), marker, List.of(ProjectMetricsService.NAME_TRACES), Integer.class,
+                    Map.of(ProjectMetricsService.NAME_TRACES, expected.getFirst()),
+                    Map.of(ProjectMetricsService.NAME_TRACES, expected.get(1)),
+                    Map.of(ProjectMetricsService.NAME_TRACES, expected.getLast()));
         }
 
         @ParameterizedTest
@@ -412,10 +411,10 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .traceFilters(List.of(getFilter.apply(traces.getFirst())))
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACES), Integer.class,
-                    singletonMap(ProjectMetricsDAO.NAME_TRACES, expectedValues.get(expectedIndexes.get(0))),
-                    singletonMap(ProjectMetricsDAO.NAME_TRACES, expectedValues.get(expectedIndexes.get(1))),
-                    singletonMap(ProjectMetricsDAO.NAME_TRACES, expectedValues.get(expectedIndexes.get(2))));
+                    .build(), marker, List.of(ProjectMetricsService.NAME_TRACES), Integer.class,
+                    singletonMap(ProjectMetricsService.NAME_TRACES, expectedValues.get(expectedIndexes.get(0))),
+                    singletonMap(ProjectMetricsService.NAME_TRACES, expectedValues.get(expectedIndexes.get(1))),
+                    singletonMap(ProjectMetricsService.NAME_TRACES, expectedValues.get(expectedIndexes.get(2))));
         }
 
         Stream<Arguments> happyPathWithFilter() {
@@ -508,7 +507,7 @@ class ProjectMetricsResourceTest {
 
             Map<String, Integer> emptyTraces = new HashMap<>() {
                 {
-                    put(ProjectMetricsDAO.NAME_TRACES, null);
+                    put(ProjectMetricsService.NAME_TRACES, null);
                 }
             };
 
@@ -517,7 +516,7 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACES), Integer.class, emptyTraces,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_TRACES), Integer.class, emptyTraces,
                     emptyTraces, emptyTraces);
         }
 
@@ -1092,18 +1091,19 @@ class ProjectMetricsResourceTest {
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            var costMinus3 = Map.of(ProjectMetricsDAO.NAME_COST,
+            var costMinus3 = Map.of(ProjectMetricsService.NAME_COST,
                     createSpans(projectName, subtract(marker, TIME_BUCKET_3, interval)));
-            var costMinus1 = Map.of(ProjectMetricsDAO.NAME_COST,
+            var costMinus1 = Map.of(ProjectMetricsService.NAME_COST,
                     createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval)));
-            var costCurrent = Map.of(ProjectMetricsDAO.NAME_COST, createSpans(projectName, marker));
+            var costCurrent = Map.of(ProjectMetricsService.NAME_COST, createSpans(projectName, marker));
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.COST)
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class, costMinus3, costMinus1,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_COST), BigDecimal.class, costMinus3,
+                    costMinus1,
                     costCurrent);
         }
 
@@ -1124,13 +1124,13 @@ class ProjectMetricsResourceTest {
                     tracesWithSpans.getRight().stream().filter(span -> span.traceId() == traceForFilter.id()).toList());
             var costMinus3Total = calculateCost(tracesWithSpans.getRight());
 
-            var costMinus1 = Map.of(ProjectMetricsDAO.NAME_COST,
+            var costMinus1 = Map.of(ProjectMetricsService.NAME_COST,
                     createSpans(projectName, subtract(marker, TIME_BUCKET_1, interval)));
-            var costCurrent = Map.of(ProjectMetricsDAO.NAME_COST, createSpans(projectName, marker));
+            var costCurrent = Map.of(ProjectMetricsService.NAME_COST, createSpans(projectName, marker));
 
-            var expectedValues = Arrays.asList(Map.of(ProjectMetricsDAO.NAME_COST, filteredCostMinus3),
-                    Map.of(ProjectMetricsDAO.NAME_COST, costMinus3Total.subtract(filteredCostMinus3)),
-                    Map.of(ProjectMetricsDAO.NAME_COST, costMinus3Total), costMinus1, costCurrent, null);
+            var expectedValues = Arrays.asList(Map.of(ProjectMetricsService.NAME_COST, filteredCostMinus3),
+                    Map.of(ProjectMetricsService.NAME_COST, costMinus3Total.subtract(filteredCostMinus3)),
+                    Map.of(ProjectMetricsService.NAME_COST, costMinus3Total), costMinus1, costCurrent, null);
 
             // create feedback scores for the first trace
             tracesWithSpans.getLeft().forEach(trace -> trace.feedbackScores()
@@ -1150,7 +1150,7 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .traceFilters(List.of(getFilter.apply(traceForFilter)))
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_COST), BigDecimal.class,
                     expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)),
                     expectedValues.get(expectedIndexes.get(2)));
@@ -1171,7 +1171,7 @@ class ProjectMetricsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
-                    put(ProjectMetricsDAO.NAME_COST, null);
+                    put(ProjectMetricsService.NAME_COST, null);
                 }
             };
 
@@ -1180,7 +1180,7 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_COST), BigDecimal.class, empty, empty, empty);
+                    .build(), marker, List.of(ProjectMetricsService.NAME_COST), BigDecimal.class, empty, empty, empty);
         }
 
         private BigDecimal createSpans(
@@ -1237,17 +1237,17 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsCurrent = createTraces(projectName, marker);
 
             var durationMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus3.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus3.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus3.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsMinus3.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsMinus3.getLast());
             var durationMinus1 = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus1.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus1.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus1.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsMinus1.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsCurrent.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsCurrent.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsCurrent.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsCurrent.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsCurrent.getLast());
 
             getMetricsAndAssert(
                     projectId,
@@ -1258,8 +1258,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, ProjectMetricsDAO.NAME_TRACE_DURATION_P90,
-                            ProjectMetricsDAO.NAME_TRACE_DURATION_P99),
+                    List.of(ProjectMetricsService.NAME_TRACE_DURATION_P50,
+                            ProjectMetricsService.NAME_TRACE_DURATION_P90,
+                            ProjectMetricsService.NAME_TRACE_DURATION_P99),
                     BigDecimal.class,
                     durationMinus3,
                     durationMinus1,
@@ -1294,25 +1295,25 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsCurrent = createTraces(projectName, marker);
 
             var durationTraceForFilter = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsTraceForFilter.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsTraceForFilter.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsTraceForFilter.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsTraceForFilter.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsTraceForFilter.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsTraceForFilter.getLast());
             var durationMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus3.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus3.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus3.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsMinus3.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsMinus3.getLast());
             var durationTotalMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsTotalMinus3.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsTotalMinus3.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsTotalMinus3.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsTotalMinus3.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsTotalMinus3.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsTotalMinus3.getLast());
             var durationMinus1 = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsMinus1.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsMinus1.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsMinus1.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsMinus1.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P50, durationsCurrent.get(0),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P90, durationsCurrent.get(1),
-                    ProjectMetricsDAO.NAME_TRACE_DURATION_P99, durationsCurrent.getLast());
+                    ProjectMetricsService.NAME_TRACE_DURATION_P50, durationsCurrent.get(0),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsService.NAME_TRACE_DURATION_P99, durationsCurrent.getLast());
 
             var expectedValues = Arrays.asList(durationTraceForFilter, durationMinus3, durationTotalMinus3,
                     durationMinus1, durationCurrent, null);
@@ -1339,8 +1340,9 @@ class ProjectMetricsResourceTest {
                             .traceFilters(List.of(getFilter.apply(traceForFilter.getFirst())))
                             .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, ProjectMetricsDAO.NAME_TRACE_DURATION_P90,
-                            ProjectMetricsDAO.NAME_TRACE_DURATION_P99),
+                    List.of(ProjectMetricsService.NAME_TRACE_DURATION_P50,
+                            ProjectMetricsService.NAME_TRACE_DURATION_P90,
+                            ProjectMetricsService.NAME_TRACE_DURATION_P99),
                     BigDecimal.class,
                     expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)),
@@ -1363,9 +1365,9 @@ class ProjectMetricsResourceTest {
 
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
-                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, null);
-                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P90, null);
-                    put(ProjectMetricsDAO.NAME_TRACE_DURATION_P99, null);
+                    put(ProjectMetricsService.NAME_TRACE_DURATION_P50, null);
+                    put(ProjectMetricsService.NAME_TRACE_DURATION_P90, null);
+                    put(ProjectMetricsService.NAME_TRACE_DURATION_P99, null);
                 }
             };
 
@@ -1378,8 +1380,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of(ProjectMetricsDAO.NAME_TRACE_DURATION_P50, ProjectMetricsDAO.NAME_TRACE_DURATION_P90,
-                            ProjectMetricsDAO.NAME_TRACE_DURATION_P99),
+                    List.of(ProjectMetricsService.NAME_TRACE_DURATION_P50,
+                            ProjectMetricsService.NAME_TRACE_DURATION_P90,
+                            ProjectMetricsService.NAME_TRACE_DURATION_P99),
                     BigDecimal.class,
                     empty,
                     empty,
@@ -1432,11 +1435,11 @@ class ProjectMetricsResourceTest {
             String projectName = RandomStringUtils.randomAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            var guardrailsMinus3 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+            var guardrailsMinus3 = Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT,
                     createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_3, interval)));
-            var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+            var guardrailsMinus1 = Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT,
                     createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_1, interval)));
-            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+            var guardrails = Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT,
                     createTracesWithGuardrails(projectName, marker));
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
@@ -1444,7 +1447,7 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT), Long.class,
                     guardrailsMinus3, guardrailsMinus1, guardrails);
         }
 
@@ -1465,16 +1468,16 @@ class ProjectMetricsResourceTest {
             var filteredGuardrailsMinus3 = tracesWithGuardrails.getRight().getFirst(); // guardrails count for first trace
             var guardrailsMinus3Total = tracesWithGuardrails.getRight().stream().mapToLong(Long::longValue).sum();
 
-            var guardrailsMinus1 = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+            var guardrailsMinus1 = Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT,
                     createTracesWithGuardrails(projectName, subtract(marker, TIME_BUCKET_1, interval)));
-            var guardrails = Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+            var guardrails = Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT,
                     createTracesWithGuardrails(projectName, marker));
 
             var expectedValues = Arrays.asList(
-                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, filteredGuardrailsMinus3),
-                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT,
+                    Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT, filteredGuardrailsMinus3),
+                    Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT,
                             guardrailsMinus3Total - filteredGuardrailsMinus3),
-                    Map.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, guardrailsMinus3Total),
+                    Map.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT, guardrailsMinus3Total),
                     guardrailsMinus1,
                     guardrails,
                     null);
@@ -1495,7 +1498,7 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .traceFilters(List.of(filter))
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT), Long.class,
                     expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)),
                     expectedValues.get(expectedIndexes.get(2)));
@@ -1571,7 +1574,7 @@ class ProjectMetricsResourceTest {
         private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
             Map<String, Long> empty = new HashMap<>() {
                 {
-                    put(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT, null);
+                    put(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT, null);
                 }
             };
 
@@ -1580,7 +1583,8 @@ class ProjectMetricsResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_GUARDRAILS_FAILED_COUNT), Long.class, empty, empty,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_GUARDRAILS_FAILED_COUNT), Long.class, empty,
+                    empty,
                     empty);
         }
     }
@@ -1608,16 +1612,16 @@ class ProjectMetricsResourceTest {
             Long threadCountNow = (long) createTracesWithThreads(projectName, marker, 3, null).size();
 
             // SUT
-            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountMinus3);
-            Map<String, Long> minus1 = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountMinus1);
-            Map<String, Long> current = Map.of(ProjectMetricsDAO.NAME_THREADS, threadCountNow);
+            Map<String, Long> minus3 = Map.of(ProjectMetricsService.NAME_THREADS, threadCountMinus3);
+            Map<String, Long> minus1 = Map.of(ProjectMetricsService.NAME_THREADS, threadCountMinus1);
+            Map<String, Long> current = Map.of(ProjectMetricsService.NAME_THREADS, threadCountNow);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_THREADS), Long.class,
                     minus3, minus1, current);
         }
 
@@ -1660,11 +1664,11 @@ class ProjectMetricsResourceTest {
             var updatedThread = traceResourceClient.getTraceThread(
                     tracesPerThreadMinus3.getFirst().getFirst().threadId(), projectId, API_KEY, WORKSPACE_NAME);
 
-            Map<String, Long> minus1 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadMinus1.size());
-            Map<String, Long> current = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadNow.size());
+            Map<String, Long> minus1 = Map.of(ProjectMetricsService.NAME_THREADS, (long) tracesPerThreadMinus1.size());
+            Map<String, Long> current = Map.of(ProjectMetricsService.NAME_THREADS, (long) tracesPerThreadNow.size());
 
-            var expectedValues = Arrays.asList(Map.of(ProjectMetricsDAO.NAME_THREADS, 1L),
-                    Map.of(ProjectMetricsDAO.NAME_THREADS, (long) tracesPerThreadMinus3.size() - 1), minus1,
+            var expectedValues = Arrays.asList(Map.of(ProjectMetricsService.NAME_THREADS, 1L),
+                    Map.of(ProjectMetricsService.NAME_THREADS, (long) tracesPerThreadMinus3.size() - 1), minus1,
                     current, null);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
@@ -1673,7 +1677,7 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .threadFilters(List.of(getFilter.apply(updatedThread)))
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    .build(), marker, List.of(ProjectMetricsService.NAME_THREADS), Long.class,
                     expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)),
                     expectedValues.get(expectedIndexes.get(2)));
@@ -1734,14 +1738,14 @@ class ProjectMetricsResourceTest {
         }
 
         private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
-            Map<String, Long> empty = singletonMap(ProjectMetricsDAO.NAME_THREADS, null);
+            Map<String, Long> empty = singletonMap(ProjectMetricsService.NAME_THREADS, null);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
                     .interval(interval)
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
-                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class, empty, empty, empty);
+                    .build(), marker, List.of(ProjectMetricsService.NAME_THREADS), Long.class, empty, empty, empty);
         }
     }
 
@@ -1769,17 +1773,17 @@ class ProjectMetricsResourceTest {
 
             // SUT
             var durationMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus3.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus3.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus3.getLast());
+                    ProjectMetricsService.NAME_THREAD_DURATION_P50, durationsMinus3.getFirst(),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P99, durationsMinus3.getLast());
             var durationMinus1 = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus1.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus1.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus1.getLast());
+                    ProjectMetricsService.NAME_THREAD_DURATION_P50, durationsMinus1.getFirst(),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsCurrent.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsCurrent.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsCurrent.getLast());
+                    ProjectMetricsService.NAME_THREAD_DURATION_P50, durationsCurrent.getFirst(),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P99, durationsCurrent.getLast());
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_DURATION)
@@ -1787,8 +1791,9 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker,
-                    List.of(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, ProjectMetricsDAO.NAME_THREAD_DURATION_P90,
-                            ProjectMetricsDAO.NAME_THREAD_DURATION_P99),
+                    List.of(ProjectMetricsService.NAME_THREAD_DURATION_P50,
+                            ProjectMetricsService.NAME_THREAD_DURATION_P90,
+                            ProjectMetricsService.NAME_THREAD_DURATION_P99),
                     BigDecimal.class, durationMinus3, durationMinus1, durationCurrent);
         }
 
@@ -1817,21 +1822,21 @@ class ProjectMetricsResourceTest {
             var durationsCurrent = createTracesWithThreadDuration(projectName, marker);
 
             var filteredDurationMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, filteredDurationsMinus3.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, filteredDurationsMinus3.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, filteredDurationsMinus3.getLast());
+                    ProjectMetricsService.NAME_THREAD_DURATION_P50, filteredDurationsMinus3.getFirst(),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P90, filteredDurationsMinus3.get(1),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P99, filteredDurationsMinus3.getLast());
             var restDurationMinus3 = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus3.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus3.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus3.getLast());
+                    ProjectMetricsService.NAME_THREAD_DURATION_P50, durationsMinus3.getFirst(),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P90, durationsMinus3.get(1),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P99, durationsMinus3.getLast());
             var durationMinus1 = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsMinus1.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsMinus1.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsMinus1.getLast());
+                    ProjectMetricsService.NAME_THREAD_DURATION_P50, durationsMinus1.getFirst(),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P90, durationsMinus1.get(1),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P50, durationsCurrent.getFirst(),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P90, durationsCurrent.get(1),
-                    ProjectMetricsDAO.NAME_THREAD_DURATION_P99, durationsCurrent.getLast());
+                    ProjectMetricsService.NAME_THREAD_DURATION_P50, durationsCurrent.getFirst(),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P90, durationsCurrent.get(1),
+                    ProjectMetricsService.NAME_THREAD_DURATION_P99, durationsCurrent.getLast());
 
             var expectedValues = Arrays.asList(filteredDurationMinus3, restDurationMinus3,
                     durationMinus1, durationCurrent, null);
@@ -1864,8 +1869,9 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .threadFilters(List.of(getFilter.apply(updatedThread)))
                     .build(), marker,
-                    List.of(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, ProjectMetricsDAO.NAME_THREAD_DURATION_P90,
-                            ProjectMetricsDAO.NAME_THREAD_DURATION_P99),
+                    List.of(ProjectMetricsService.NAME_THREAD_DURATION_P50,
+                            ProjectMetricsService.NAME_THREAD_DURATION_P90,
+                            ProjectMetricsService.NAME_THREAD_DURATION_P99),
                     BigDecimal.class,
                     expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)),
@@ -1960,9 +1966,9 @@ class ProjectMetricsResourceTest {
 
         private void getAndAssertEmpty(UUID projectId, TimeInterval interval, Instant marker) {
             Map<String, BigDecimal> empty = new HashMap<>();
-            empty.put(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, null);
-            empty.put(ProjectMetricsDAO.NAME_THREAD_DURATION_P90, null);
-            empty.put(ProjectMetricsDAO.NAME_THREAD_DURATION_P99, null);
+            empty.put(ProjectMetricsService.NAME_THREAD_DURATION_P50, null);
+            empty.put(ProjectMetricsService.NAME_THREAD_DURATION_P90, null);
+            empty.put(ProjectMetricsService.NAME_THREAD_DURATION_P99, null);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_DURATION)
@@ -1970,8 +1976,9 @@ class ProjectMetricsResourceTest {
                     .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
                     .intervalEnd(Instant.now())
                     .build(), marker,
-                    List.of(ProjectMetricsDAO.NAME_THREAD_DURATION_P50, ProjectMetricsDAO.NAME_THREAD_DURATION_P90,
-                            ProjectMetricsDAO.NAME_THREAD_DURATION_P99),
+                    List.of(ProjectMetricsService.NAME_THREAD_DURATION_P50,
+                            ProjectMetricsService.NAME_THREAD_DURATION_P90,
+                            ProjectMetricsService.NAME_THREAD_DURATION_P99),
                     BigDecimal.class, empty, empty, empty);
         }
     }
