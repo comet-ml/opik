@@ -177,12 +177,12 @@ export const convertConversationToMarkdown = (
       if (hasToolCalls) {
         for (const toolCall of toolCalls) {
           // Skip tool calls that don't have a function property at all
-          if (!toolCall.function) {
+          if (!isObject(toolCall) || !(toolCall as any).function) {
             continue;
           }
 
           const functionName =
-            toolCall.function.name || toolCall.id || "unknown name";
+            (toolCall as any).function.name || (toolCall as any).id || "unknown name";
 
           lines.push(`<details style="margin-left: 20px;">`);
           lines.push(
@@ -192,13 +192,13 @@ export const convertConversationToMarkdown = (
           lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;**Function:** ${functionName}`);
           lines.push(
             `&nbsp;&nbsp;&nbsp;&nbsp;**Arguments:** ${
-              toolCall.function?.arguments || "N/A"
+              (toolCall as any).function?.arguments || "N/A"
             }`,
           );
 
           // Look for the corresponding tool response
           const toolResponse = conversationData.messages.find(
-            (msg) => msg.role === "tool" && msg.tool_call_id === toolCall.id,
+            (msg) => msg.role === "tool" && msg.tool_call_id === (toolCall as any).id,
           );
 
           if (toolResponse && toolResponse.content) {
