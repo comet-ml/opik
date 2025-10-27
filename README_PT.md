@@ -1,30 +1,3 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Opik — README (Português)</title>
-  <style>
-    /* Estilos simples para manter o formato similar ao README original */
-    :root{--center:#333;--muted:#666;--accent:#0366d6}
-    body{font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color:var(--center); margin:28px; line-height:1.6}
-    .center{text-align:center}
-    a{color:var(--accent); text-decoration:none}
-    h1,h2{margin:0.25em 0}
-    h1 .logo{display:inline-block}
-    .badges img{margin:0 6px; vertical-align:middle}
-    .toc{margin:1em 0}
-    .tip{background:#f6f8fa;border-left:4px solid #dfe2e5;padding:12px;margin:16px 0}
-    pre{background:#0b0b0b;color:#f6f6f6;padding:12px;border-radius:6px;overflow:auto}
-    code{background:#f2f2f2;padding:2px 4px;border-radius:4px}
-    table{width:100%;border-collapse:collapse}
-    table th, table td{padding:8px;border:1px solid #e6e6e6;text-align:left}
-    .screenshot{display:block;margin:16px auto}
-    footer{margin-top:28px;color:var(--muted);font-size:0.95rem}
-  </style>
-</head>
-<body>
-
 <div class="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_KO.md">한국어</a></b></div>
 
 <h1 class="center" style="border-bottom: none">
@@ -279,6 +252,3 @@ Para saber mais sobre como contribuir com o Opik, veja nossas <a href="CONTRIBUT
 <footer class="center">
   Tradução para Português gerada — formato HTML/CSS preservado. Se quiser que eu gere um arquivo README_pt.md em markdown ou ajustar o tom (pt-PT vs pt-BR), diga qual preferência.
 </footer>
-
-</body>
-</html>
