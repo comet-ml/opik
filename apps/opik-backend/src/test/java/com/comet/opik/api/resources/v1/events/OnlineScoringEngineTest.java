@@ -55,6 +55,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.text.StringEscapeUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -78,6 +79,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -87,6 +89,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @Slf4j
@@ -334,6 +337,76 @@ class OnlineScoringEngineTest {
         assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
         assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
         assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
+    }
+
+    @Test
+    @DisplayName("test filtering evaluators by trace metadata")
+    void testFilteringEvaluatorsByTraceMetadata(OnlineScoringSampler onlineScoringSampler) throws Exception {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        // Create three evaluators
+        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+
+        var evaluator1 = createRule(projectId, evaluatorCode);
+        var evaluator2 = createRule(projectId, evaluatorCode);
+        var evaluator3 = createRule(projectId, evaluatorCode);
+
+        var evaluatorId1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+        var evaluatorId2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+        evaluatorsResourceClient.createEvaluator(evaluator3, WORKSPACE_NAME, API_KEY); // Create evaluator3 but don't select it
+
+        // Create trace with metadata specifying only evaluator1 and evaluator2
+        var traceId = generator.generate();
+        var metadata = JsonUtils.MAPPER.createObjectNode();
+        metadata.putArray("selected_rule_ids")
+                .add(evaluatorId1.toString())
+                .add(evaluatorId2.toString());
+
+        var trace = createTrace(traceId, projectId).toBuilder()
+                .metadata(metadata)
+                .build();
+
+        var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
+                + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
+                + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
+
+        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        onlineScoringSampler.onTracesCreated(event);
+
+        // Wait longer for async processing to complete (both evaluators need to process)
+        Awaitility.await().untilAsserted(() -> {
+            // Verify that evaluators were processed
+            // We should have at least 1 call to scoreBatchOfTraces
+            Mockito.verify(feedbackScoreService, Mockito.atLeastOnce()).scoreBatchOfTraces(captor.capture());
+
+            // Collect all scores from all calls
+            var allScores = captor.getAllValues().stream()
+                    .flatMap(List::stream)
+                    .toList();
+
+            // Verify that only 2 evaluators were processed (evaluator1 and evaluator2)
+            // Each evaluator produces 3 feedback scores, so we expect 2 * 3 = 6 scores total
+            assertThat(allScores).hasSize(6);
+
+            // Verify all scores are from online scoring
+            var scoresBySource = allScores.stream()
+                    .collect(Collectors.groupingBy(FeedbackScoreItem::source));
+
+            assertThat(scoresBySource).containsOnlyKeys(ScoreSource.ONLINE_SCORING);
+            assertThat(scoresBySource.get(ScoreSource.ONLINE_SCORING)).hasSize(6);
+        });
     }
 
     @Test
