@@ -43,6 +43,7 @@ jobs:
                   --skip "chat.comet.com" \
                   --skip "http://localhost" \
                   --skip "http://localhost:5173" \
+                  --skip "googletagmanager.com" \
                   --skip "insights/script.js" \
                   --format csv | awk -F',' '
                     BEGIN { found_broken = 0 }

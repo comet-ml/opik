@@ -9,6 +9,11 @@
 .idea/
 *.iml
 
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
+
 # Maven
 target/
 **/dependency-reduced-pom.xml
@@ -20,7 +25,9 @@ target/
 /apps/opik-python-backend/images/
 
 # Opik opimizer related
+/sdks/opik_optimizer/artifacts
 /sdks/opik_optimizer/benchmark_results/
+/sdks/opik_optimizer/node_modules
 
 # FE related
 /apps/opik-frontend/dist
@@ -34,6 +41,10 @@ target/
 
 # testing
 /apps/opik-frontend/coverage
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+**/.litellm_cache
 
 # Vagrant
 **/.vagrant
@@ -60,7 +71,8 @@ __pycache__
 pip-log.txt
 .venv*
 .ipynb_checkpoints
-.python-version
+# Track Python version pin to avoid accidental environment drift.
+# Remove this exclusion so changes to the version file are committed.
 
 # VS Code
 .vscode
@@ -77,3 +89,6 @@ opik-sandbox-executor-python.tar.gz
 # Update span cost workflow
 response.txt
 *.log
+
+# Playwright
+.playwright-mcp/

@@ -1,7 +1,5 @@
 ---
 description: Describes metrics related to scoring the conversational threads
-
-pytest_codeblocks_skip: true
 ---
 
 The conversational metrics can be used to score the quality of conversational threads collected by Opik through multiple traces.
@@ -9,11 +7,11 @@ Also, they can be used to score the quality of the conversations collected by ot
 
 You can use the following metrics:
 
-| Metric | Description |
-| ------ | ----------- |
+| Metric                        | Description                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------ |
 | ConversationalCoherenceMetric | Calculates the conversational coherence score for a given conversation thread. |
-| SessionCompletenessQuality | Evaluates the completeness of a session within a conversational thread. |
-| UserFrustrationMetric | Calculates the user frustration score for a given conversational thread. |
+| SessionCompletenessQuality    | Evaluates the completeness of a session within a conversational thread.        |
+| UserFrustrationMetric         | Calculates the user frustration score for a given conversational thread.       |
 
 These metrics are based on the idea of using an LLM to evaluate the turns of the conversation between user and LLM.
 For this we have a prompt template used to generate the prompt for the LLM. By default, the `gpt-4o` model is used
@@ -31,7 +29,7 @@ turns by evaluating the consistency in responses, logical flow, and overall
 context maintenance. It evaluates whether the conversation session felt like a
 natural, adaptive, helpful interaction.
 
-The ``ConversationalCoherenceMetric`` builds a sliding window of dialogue turns for
+The `ConversationalCoherenceMetric` builds a sliding window of dialogue turns for
 each turn in the conversation. It then uses a language model to evaluate whether
 the final `assistant` message within each window is relevant and coherent in
 relation to the preceding conversational context.
@@ -40,7 +38,7 @@ It supports both synchronous and asynchronous operations to accommodate the mode
 operation type. It returns a score between `0.0` and `1.0`, where `0.0` indicates a
 low coherence score and `1.0` indicates a high coherence score.
 
- It can be used in the following way:
+It can be used in the following way:
 
 ```python
 from opik.evaluation.metrics import ConversationalCoherenceMetric
@@ -206,4 +204,5 @@ Asynchronous scoring is also supported with the `ascore` scoring method.
 
 ## Next steps
 
-Read more about the conversational threads evaluation on the [conversational threads evaluation](/evaluation/evaluate_threads) page.
+- Read more about [conversational threads evaluation](/evaluation/evaluate_threads)
+- Learn how to create [custom conversation metrics](/evaluation/metrics/custom_conversation_metric)

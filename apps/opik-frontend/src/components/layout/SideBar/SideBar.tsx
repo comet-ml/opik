@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SparklesIcon,
+  UserPen,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -33,7 +34,8 @@ import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
 import SidebarMenuItem, {
   MENU_ITEM_TYPE,
@@ -98,6 +100,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         label: "Datasets",
         count: "datasets",
       },
+      {
+        id: "annotation_queues",
+        path: "/$workspaceName/annotation-queues",
+        type: MENU_ITEM_TYPE.router,
+        icon: UserPen,
+        label: "Annotation queues",
+        count: "annotation_queues",
+      },
     ],
   },
   {
@@ -160,12 +170,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   setExpanded,
 }) => {
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
+  const { open: openQuickstart } = useOpenQuickStartDialog();
 
-  const {
-    activeWorkspaceName: workspaceName,
-    quickstartOpened,
-    setQuickstartOpened,
-  } = useAppStore();
+  const { activeWorkspaceName: workspaceName } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -243,6 +250,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: annotationQueuesData } = useAnnotationQueuesList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -250,6 +269,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     prompts: promptsData?.total,
     rules: rulesData?.total,
     optimizations: optimizationsData?.total,
+    annotation_queues: annotationQueuesData?.total,
   };
 
   const logo = LogoComponent ? (
@@ -283,7 +303,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         type: MENU_ITEM_TYPE.button,
         icon: GraduationCap,
         label: "Quickstart guide",
-        onClick: () => setQuickstartOpened(true),
+        onClick: openQuickstart,
       },
       {
         id: "provideFeedback",
@@ -330,7 +350,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         size="icon-2xs"
         onClick={() => setExpanded((s) => !s)}
         className={cn(
-          "absolute -right-3 top-2 hidden rounded-full z-50 group-hover:flex",
+          "absolute -right-3 top-2 hidden rounded-full z-50 lg:group-hover:flex",
         )}
       >
         {expanded ? <ChevronLeft /> : <ChevronRight />}
@@ -371,8 +391,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         open={openProvideFeedback}
         setOpen={setOpenProvideFeedback}
       />
-
-      <QuickstartDialog open={quickstartOpened} setOpen={setQuickstartOpened} />
     </>
   );
 };

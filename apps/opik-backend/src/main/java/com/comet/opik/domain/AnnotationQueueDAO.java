@@ -228,7 +228,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                        value,
                        created_by,
                        last_updated_at,
-                       created_by AS author
+                       last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE workspace_id = :workspace_id
                     AND project_id IN (SELECT project_id FROM queues_final)
@@ -301,32 +301,30 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     GROUP BY qi.queue_id, fs.name
                 ) as fs_avg
                 GROUP BY queue_id
-            ), feedback_scores_reviewers_grouped AS (
-                SELECT
-                    entity_id,
-                    created_by,
-                    name,
-                    COUNT(1) AS cnt
-                FROM feedback_scores_combined
-                GROUP BY entity_id, created_by, name
+            ), queue_items_with_reviewers AS (
+                SELECT DISTINCT
+                    qi.queue_id,
+                    qi.item_id,
+                    fsc.created_by AS username
+                FROM queue_items_final AS qi
+                INNER JOIN feedback_scores_combined AS fsc
+                 ON fsc.entity_id = qi.item_id
+                WHERE has(qi.feedback_definitions, fsc.name)  -- only names defined for this queue
             ), feedback_scores_reviewers_agg AS (
                 SELECT
-                    fsr_sum.queue_id,
+                    qir_sum.queue_id,
                     mapFromArrays(
-                        groupArray(fsr_sum.username),
-                        groupArray(fsr_sum.cnt)
+                        groupArray(qir_sum.username),
+                        groupArray(qir_sum.cnt)
                     ) AS reviewers
                 FROM (
                     SELECT
-                        qi.queue_id,
-                        fsr.created_by AS username,
-                        sum(fsr.cnt) AS cnt
-                    FROM queue_items_final AS qi
-                    INNER JOIN feedback_scores_reviewers_grouped AS fsr
-                     ON fsr.entity_id = qi.item_id
-                    WHERE has(qi.feedback_definitions, fsr.name)  -- only names defined for this queue
-                    GROUP BY qi.queue_id, fsr.created_by
-                ) as fsr_sum
+                        queue_id,
+                        username,
+                        COUNT(1) AS cnt
+                    FROM queue_items_with_reviewers
+                    GROUP BY queue_id, username
+                ) as qir_sum
                 GROUP BY queue_id
             )
             SELECT

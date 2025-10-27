@@ -17,6 +17,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateUtils;
+import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -93,7 +94,8 @@ class SpanDAO {
                 last_updated_at,
                 error_info,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                truncation_threshold
             ) VALUES
                 <items:{item |
                     (
@@ -118,7 +120,8 @@ class SpanDAO {
                         if(:last_updated_at<item.index> IS NULL, NULL, parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
                         :error_info<item.index>,
                         :created_by<item.index>,
-                        :last_updated_by<item.index>
+                        :last_updated_by<item.index>,
+                        :truncation_threshold<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -153,7 +156,8 @@ class SpanDAO {
                 error_info,
                 created_at,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                truncation_threshold
             )
             SELECT
                 new_span.id as id,
@@ -237,7 +241,8 @@ class SpanDAO {
                     LENGTH(old_span.created_by) > 0, old_span.created_by,
                     new_span.created_by
                 ) as created_by,
-                new_span.last_updated_by as last_updated_by
+                new_span.last_updated_by as last_updated_by,
+                new_span.truncation_threshold as truncation_threshold
             FROM (
                 SELECT
                     :id as id,
@@ -261,7 +266,8 @@ class SpanDAO {
                     :error_info as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
-                    :user_name as last_updated_by
+                    :user_name as last_updated_by,
+                    :truncation_threshold as truncation_threshold
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -303,7 +309,8 @@ class SpanDAO {
             	error_info,
             	created_at,
             	created_by,
-            	last_updated_by
+            	last_updated_by,
+            	truncation_threshold
             )
             SELECT
             	id,
@@ -327,7 +334,8 @@ class SpanDAO {
             	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
-                :user_name as last_updated_by
+                :user_name as last_updated_by,
+                :truncation_threshold
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -350,7 +358,7 @@ class SpanDAO {
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
                 start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
-                created_by, last_updated_by
+                created_by, last_updated_by, truncation_threshold
             )
             SELECT
                 new_span.id as id,
@@ -447,7 +455,8 @@ class SpanDAO {
                     LENGTH(old_span.created_by) > 0, old_span.created_by,
                     new_span.created_by
                 ) as created_by,
-                new_span.last_updated_by as last_updated_by
+                new_span.last_updated_by as last_updated_by,
+                new_span.truncation_threshold as truncation_threshold
             FROM (
                 SELECT
                     :id as id,
@@ -471,7 +480,8 @@ class SpanDAO {
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
-                    :user_name as last_updated_by
+                    :user_name as last_updated_by,
+                    :truncation_threshold as truncation_threshold
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -583,7 +593,7 @@ class SpanDAO {
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    arrayStringConcat(reasons, ', ') AS reason,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '<no reason>', x), reasons), ', ')) AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
@@ -809,7 +819,7 @@ class SpanDAO {
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    arrayStringConcat(reasons, ', ') AS reason,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
@@ -860,6 +870,10 @@ class SpanDAO {
             , spans_final AS (
                 SELECT
                       s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
+                      truncated_input,
+                      truncated_output,
+                      input_length,
+                      output_length,
                       if(end_time IS NOT NULL AND start_time IS NOT NULL
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
@@ -905,9 +919,11 @@ class SpanDAO {
             )
             SELECT
                 s.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                <if(!exclude_input)>, <if(truncate)> substring(replaceRegexpAll(s.input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> s.input as input<endif> <endif>
-                <if(!exclude_output)>, <if(truncate)> substring(replaceRegexpAll(s.output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> s.output as output<endif> <endif>
-                <if(!exclude_metadata)>, <if(truncate)> substring(replaceRegexpAll(s.metadata, '<truncate>', '"[image]"'), 1, <truncationSize>) as metadata <else> s.metadata as metadata<endif> <endif>
+                <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(s.truncated_input, '<truncate>', '"[image]"') as input <else> s.input as input<endif> <endif>
+                <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(s.truncated_output, '<truncate>', '"[image]"') as output <else> s.output as output<endif> <endif>
+                <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(s.metadata, '<truncate>', '"[image]"') as metadata <else> s.metadata as metadata<endif> <endif>
+                <if(truncate)>, input_length >= truncation_threshold as input_truncated<endif>
+                <if(truncate)>, output_length >= truncation_threshold as output_truncated<endif>
                 <if(!exclude_feedback_scores)>
                 , fsa.feedback_scores_list as feedback_scores_list
                 , fsa.feedback_scores as feedback_scores
@@ -1157,7 +1173,7 @@ class SpanDAO {
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    arrayStringConcat(reasons, ', ') AS reason,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
                             authors,
@@ -1396,6 +1412,8 @@ class SpanDAO {
                     statement.bindNull("last_updated_at" + i, String.class);
                 }
 
+                TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
+
                 bindCost(span, statement, String.valueOf(i));
 
                 i++;
@@ -1462,6 +1480,8 @@ class SpanDAO {
         } else {
             statement.bind("error_info", "");
         }
+
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
         bindCost(span, statement, "");
 
@@ -1587,6 +1607,8 @@ class SpanDAO {
             statement.bind("total_estimated_cost_version",
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
+
+        TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist) {
@@ -1734,11 +1756,13 @@ class SpanDAO {
                 .endTime(getValue(exclude, SpanField.END_TIME, row, "end_time", Instant.class))
                 .input(Optional.ofNullable(getValue(exclude, SpanField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated", row,
+                                value))
                         .orElse(null))
                 .output(Optional.ofNullable(getValue(exclude, SpanField.OUTPUT, row, "output", String.class))
                         .filter(str -> !str.isBlank())
-                        .map(JsonUtils::getJsonNodeFromStringWithFallback)
+                        .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "output_truncated", row,
+                                value))
                         .orElse(null))
                 .metadata(Optional
                         .ofNullable(getValue(exclude, SpanField.METADATA, row, "metadata", String.class))

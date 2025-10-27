@@ -1,23 +1,18 @@
 import { CellContext } from "@tanstack/react-table";
 
-import { Alert, ALERT_EVENT_TYPE } from "@/types/alerts";
+import { Alert } from "@/types/alerts";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
-
-const EVENT_TYPE_LABELS: Record<ALERT_EVENT_TYPE, string> = {
-  [ALERT_EVENT_TYPE.trace_errors]: "New error",
-  [ALERT_EVENT_TYPE.guardrails]: "Guardrail triggered",
-  [ALERT_EVENT_TYPE.prompt_creation]: "Prompt creation",
-  [ALERT_EVENT_TYPE.prompt_commit]: "Prompt commit",
-  [ALERT_EVENT_TYPE.trace_score]: "Trace score",
-  [ALERT_EVENT_TYPE.thread_score]: "Thread score",
-};
+import { TRIGGER_CONFIG } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
 
 const AlertsEventsCell = (context: CellContext<Alert, unknown>) => {
   const alert = context.row.original;
-  const value = !alert.events?.length
+  const value = !alert.triggers?.length
     ? "-"
-    : alert.events
-        .map((event) => EVENT_TYPE_LABELS[event.event_type] || event.event_type)
+    : alert.triggers
+        .map(
+          (trigger) =>
+            TRIGGER_CONFIG[trigger.event_type]?.title || trigger.event_type,
+        )
         .join(", ");
 
   const textContext = {

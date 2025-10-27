@@ -6,6 +6,7 @@ import { ArrowRight, Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef } from "react";
 import { FormProvider, useForm, useFormContext } from "react-hook-form";
 import { z } from "zod";
+import isFunction from "lodash/isFunction";
 
 const CancelButton = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (buttonProps, ref) => {
@@ -47,6 +48,65 @@ const SubmitButton = React.forwardRef<
 SubmitButton.displayName = "CommentFormSubmitButton";
 
 const MAX_LENGTH_LIMIT = 5000;
+
+export type StandaloneTextareaFieldProps = TextareaProps & {
+  value?: string;
+  onValueChange?: (value: string) => void;
+  error?: string;
+};
+
+const StandaloneTextareaField = React.forwardRef<
+  HTMLTextAreaElement,
+  StandaloneTextareaFieldProps
+>(({ value = "", onValueChange, error, className, ...props }, ref) => {
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const { unsubscribe } = { unsubscribe: () => {} };
+    updateTextAreaHeight(textAreaRef.current);
+    return () => unsubscribe();
+  });
+
+  const callbackTextareaRef = useCallback(
+    (e: HTMLTextAreaElement | null) => {
+      textAreaRef.current = e;
+      if (isFunction(ref)) {
+        ref(e);
+      } else if (ref) {
+        ref.current = e;
+      }
+      updateTextAreaHeight(e);
+    },
+    [ref],
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (textAreaRef.current) {
+      updateTextAreaHeight(textAreaRef.current);
+    }
+    onValueChange?.(e.target.value);
+  };
+
+  return (
+    <Textarea
+      {...props}
+      value={value}
+      onChange={handleChange}
+      autoFocus
+      ref={callbackTextareaRef}
+      maxLength={MAX_LENGTH_LIMIT}
+      className={cn(
+        "min-h-[64px] w-full rounded-md border p-3 pr-10 resize-none overflow-hidden",
+        {
+          "border-destructive": error,
+        },
+        className,
+      )}
+    />
+  );
+});
+
+StandaloneTextareaField.displayName = "StandaloneTextareaField";
 
 type TextareaFieldProps = Omit<
   TextareaProps,
@@ -97,6 +157,7 @@ type UserCommentFormComponents = {
   SubmitButton: typeof SubmitButton;
   CancelButton: typeof CancelButton;
   TextareaField: typeof TextareaField;
+  StandaloneTextareaField: typeof StandaloneTextareaField;
 };
 
 const commentSchema = z.object({
@@ -169,5 +230,6 @@ const UserCommentForm: UserCommentFormComponents &
 UserCommentForm.CancelButton = CancelButton;
 UserCommentForm.SubmitButton = SubmitButton;
 UserCommentForm.TextareaField = TextareaField;
+UserCommentForm.StandaloneTextareaField = StandaloneTextareaField;
 
 export default UserCommentForm;

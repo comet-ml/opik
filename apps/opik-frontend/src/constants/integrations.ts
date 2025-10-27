@@ -27,7 +27,7 @@ import openrouterLogoUrl from "/images/integrations/openrouter.png";
 import openrouterWhiteLogoUrl from "/images/integrations/openrouter-white.png";
 import predibaseLogoUrl from "/images/integrations/predibase.png";
 // import pydanticaiLogoUrl from "/images/integrations/pydanticai.png";
-import smolagentsLogoUrl from "/images/integrations/smolagents.png";
+// import smolagentsLogoUrl from "/images/integrations/smolagents.png";
 // import strandsAgentsLogoUrl from "/images/integrations/strands-agents.png";
 // import vercelAiLogoUrl from "/images/integrations/vercel-ai.png";
 // import watsonxLogoUrl from "/images/integrations/watsonx.png";
@@ -46,6 +46,8 @@ import liteLLMCode from "@/components/pages-shared/onboarding/FrameworkIntegrati
 import ragasCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Ragas.py?raw";
 import dspyCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/DSPy.py?raw";
 
+import { integrationLogsMap } from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-logs";
+
 import ollamaCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Ollama.py?raw";
 import crewaiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/CrewAI.py?raw";
 import adkCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/ADK.py?raw";
@@ -57,7 +59,7 @@ import deepseekCode from "@/components/pages-shared/onboarding/FrameworkIntegrat
 import guardrailsaiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/GuardrailsAI.py?raw";
 import predibaseCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Predibase.py?raw";
 // import pydanticaiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/PydanticAI.py?raw";
-import smolagentsCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Smolagents.py?raw";
+// import smolagentsCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/Smolagents.py?raw";
 import { buildDocsUrl } from "@/lib/utils";
 // import strandsAgentsCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/StrandsAgents.py?raw";
 // import vercelAiCode from "@/components/pages-shared/onboarding/FrameworkIntegrations/integration-scripts/VercelAI.py?raw";
@@ -75,6 +77,8 @@ export type Integration = {
   tag?: string;
   installCommand: string;
   docsLink: string;
+  executionUrl?: string;
+  executionLogs?: string[];
 };
 
 export const INTEGRATION_CATEGORIES = {
@@ -103,7 +107,9 @@ export const INTEGRATIONS: Integration[] = [
     whiteIcon: openAIWhiteLogoUrl,
     code: openAiCode,
     installCommand: "pip install -U opik openai",
-    docsLink: buildDocsUrl("/tracing/integrations/openai"),
+    docsLink: buildDocsUrl("/integrations/openai"),
+    executionUrl: "openai/run_stream",
+    executionLogs: integrationLogsMap.OpenAI,
   },
   // TODO: Code snippet required
   // {
@@ -124,7 +130,9 @@ export const INTEGRATIONS: Integration[] = [
     icon: anthropicLogoUrl,
     code: anthropicCode,
     installCommand: "pip install -U opik anthropic",
-    docsLink: buildDocsUrl("/tracing/integrations/anthropic"),
+    docsLink: buildDocsUrl("/integrations/anthropic"),
+    executionUrl: "anthropic/run_stream",
+    executionLogs: integrationLogsMap.Anthropic,
   },
 
   {
@@ -136,7 +144,7 @@ export const INTEGRATIONS: Integration[] = [
     whiteIcon: bedrockWhiteLogoUrl,
     code: bedrockCode,
     installCommand: "pip install -U opik boto3",
-    docsLink: buildDocsUrl("/tracing/integrations/bedrock"),
+    docsLink: buildDocsUrl("/integrations/bedrock"),
   },
   {
     id: "gemini",
@@ -146,7 +154,9 @@ export const INTEGRATIONS: Integration[] = [
     icon: geminiLogoUrl,
     code: geminiCode,
     installCommand: "pip install -U opik google-genai",
-    docsLink: buildDocsUrl("/tracing/integrations/gemini"),
+    docsLink: buildDocsUrl("/integrations/gemini"),
+    // executionUrl: "gemini/run_stream",
+    // executionLogs: integrationLogsMap.Gemini,
   },
   {
     id: "ollama",
@@ -157,7 +167,7 @@ export const INTEGRATIONS: Integration[] = [
     whiteIcon: ollamaWhiteLogoUrl,
     code: ollamaCode,
     installCommand: "pip install -U opik ollama",
-    docsLink: buildDocsUrl("/tracing/integrations/ollama"),
+    docsLink: buildDocsUrl("/integrations/ollama"),
   },
   {
     id: "langchain",
@@ -167,7 +177,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: langChainLogoUrl,
     code: langChainCode,
     installCommand: "pip install -U opik langchain langchain_openai",
-    docsLink: buildDocsUrl("/tracing/integrations/langchain"),
+    docsLink: buildDocsUrl("/integrations/langchain"),
   },
 
   {
@@ -178,7 +188,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: langGraphLogoUrl,
     code: langGraphCode,
     installCommand: "pip install -U opik langgraph langchain",
-    docsLink: buildDocsUrl("/tracing/integrations/langgraph"),
+    docsLink: buildDocsUrl("/integrations/langgraph"),
   },
   {
     id: "llamaindex",
@@ -190,7 +200,7 @@ export const INTEGRATIONS: Integration[] = [
     installCommand:
       "pip install -U opik llama-index llama-index-agent-openai llama-index-llms-openai llama-index-callbacks-opik",
 
-    docsLink: buildDocsUrl("/tracing/integrations/llama_index"),
+    docsLink: buildDocsUrl("/integrations/llama_index"),
   },
   {
     id: "haystack",
@@ -200,7 +210,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: haystackLogoUrl,
     code: haystackCode,
     installCommand: "pip install -U opik haystack-ai",
-    docsLink: buildDocsUrl("/tracing/integrations/haystack"),
+    docsLink: buildDocsUrl("/integrations/haystack"),
   },
   {
     id: "litellm",
@@ -210,7 +220,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: liteLLMLogoUrl,
     code: liteLLMCode,
     installCommand: "pip install -U opik litellm",
-    docsLink: buildDocsUrl("/tracing/integrations/litellm"),
+    docsLink: buildDocsUrl("/integrations/litellm"),
   },
 
   {
@@ -221,7 +231,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: crewaiLogoUrl,
     code: crewaiCode,
     installCommand: "pip install -U opik crewai crewai-tools",
-    docsLink: buildDocsUrl("/tracing/integrations/crewai"),
+    docsLink: buildDocsUrl("/integrations/crewai"),
   },
   {
     id: "dspy",
@@ -231,7 +241,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: dspyLogoUrl,
     code: dspyCode,
     installCommand: "pip install -U opik dspy",
-    docsLink: buildDocsUrl("/tracing/integrations/dspy"),
+    docsLink: buildDocsUrl("/integrations/dspy"),
   },
   {
     id: "ragas",
@@ -241,7 +251,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: ragasLogoUrl,
     code: ragasCode,
     installCommand: "pip install -U opik ragas",
-    docsLink: buildDocsUrl("/tracing/integrations/ragas"),
+    docsLink: buildDocsUrl("/integrations/ragas"),
   },
   {
     id: "groq",
@@ -251,7 +261,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: groqLogoUrl,
     code: groqCode,
     installCommand: "pip install -U opik litellm",
-    docsLink: buildDocsUrl("/tracing/integrations/groq"),
+    docsLink: buildDocsUrl("/integrations/groq"),
   },
 
   {
@@ -262,7 +272,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: googleAdkLogoUrl,
     code: adkCode,
     installCommand: "pip install -U opik google-adk litellm",
-    docsLink: buildDocsUrl("/tracing/integrations/adk"),
+    docsLink: buildDocsUrl("/integrations/adk"),
   },
   // TODO: Code snippet required
   // {
@@ -284,7 +294,7 @@ export const INTEGRATIONS: Integration[] = [
     whiteIcon: openrouterWhiteLogoUrl,
     code: openrouterCode,
     installCommand: "pip install -U opik openai",
-    docsLink: buildDocsUrl("/tracing/integrations/openrouter"),
+    docsLink: buildDocsUrl("/integrations/openrouter"),
   },
   {
     id: "autogen",
@@ -295,7 +305,7 @@ export const INTEGRATIONS: Integration[] = [
     code: autogenCode,
     installCommand:
       'pip install -U "autogen-agentchat" "autogen-ext[openai]" opik opentelemetry-sdk opentelemetry-instrumentation-openai opentelemetry-exporter-otlp',
-    docsLink: buildDocsUrl("/tracing/integrations/autogen"),
+    docsLink: buildDocsUrl("/integrations/autogen"),
   },
 
   {
@@ -307,7 +317,7 @@ export const INTEGRATIONS: Integration[] = [
     code: agnoCode,
     installCommand:
       "pip install -U opik agno openai opentelemetry-sdk opentelemetry-exporter-otlp openinference-instrumentation-agno yfinance",
-    docsLink: buildDocsUrl("/tracing/integrations/agno"),
+    docsLink: buildDocsUrl("/integrations/agno"),
   },
   {
     id: "deepseek",
@@ -317,7 +327,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: deepseekLogoUrl,
     code: deepseekCode,
     installCommand: "pip install -U opik openai",
-    docsLink: buildDocsUrl("/tracing/integrations/deepseek"),
+    docsLink: buildDocsUrl("/integrations/deepseek"),
   },
   // TODO: custom UI required
   // {
@@ -340,7 +350,7 @@ export const INTEGRATIONS: Integration[] = [
     installCommand:
       "pip install -U opik guardrails-ai \nguardrails configure \nguardrails hub install hub://guardrails/politeness_check",
 
-    docsLink: buildDocsUrl("/tracing/integrations/guardrails-ai"),
+    docsLink: buildDocsUrl("/integrations/guardrails-ai"),
   },
 
   {
@@ -351,7 +361,7 @@ export const INTEGRATIONS: Integration[] = [
     icon: predibaseLogoUrl,
     code: predibaseCode,
     installCommand: "pip install -U opik predibase langchain",
-    docsLink: buildDocsUrl("/tracing/integrations/predibase"),
+    docsLink: buildDocsUrl("/integrations/predibase"),
   },
   // TODO: Not working, error
   // {
@@ -365,16 +375,17 @@ export const INTEGRATIONS: Integration[] = [
   //     "pip install --upgrade --quiet opik pydantic-ai logfire 'logfire[httpx]'",
   //   isHidden: true,
   // },
-  {
-    id: "smolagents",
-    title: "Smolagents",
-    description: "Frameworks & tools",
-    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
-    icon: smolagentsLogoUrl,
-    code: smolagentsCode,
-    installCommand: "pip install -U opik 'smolagents[telemetry,toolkit]'",
-    docsLink: buildDocsUrl("/tracing/integrations/smolagents"),
-  },
+  // Replaced with "View all integrations" card in the grid
+  // {
+  //   id: "smolagents",
+  //   title: "Smolagents",
+  //   description: "Frameworks & tools",
+  //   category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+  //   icon: smolagentsLogoUrl,
+  //   code: smolagentsCode,
+  //   installCommand: "pip install -U opik 'smolagents[telemetry,toolkit]'",
+  //   docsLink: buildDocsUrl("/integrations/smolagents"),
+  // },
   // TODO: Outdated code
   // {
   //   id: "strands-agents",

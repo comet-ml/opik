@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.stringtemplate.v4.ST;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -23,8 +24,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogLevel;
-import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.infrastructure.log.tables.UserLogTableFactory.UserLogTableDAO;
+import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.TemplateUtils.QueryItem;
 import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
 
@@ -37,7 +39,7 @@ public interface AutomationRuleEvaluatorLogsDAO extends UserLogTableDAO {
         return new AutomationRuleEvaluatorLogsDAOImpl(factory);
     }
 
-    Mono<LogPage> findLogs(LogCriteria criteria);
+    Flux<LogItem> findLogs(LogCriteria criteria);
 
 }
 
@@ -73,7 +75,7 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    public Mono<LogPage> findLogs(@NonNull LogCriteria criteria) {
+    public Flux<LogItem> findLogs(@NonNull LogCriteria criteria) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
 
@@ -87,21 +89,9 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
 
                     bindParameters(criteria, statement);
 
-                    return statement.execute();
-
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)))
-                .collectList()
-                .map(this::mapPage);
-    }
-
-    private LogPage mapPage(List<LogItem> logs) {
-        return LogPage.builder()
-                .content(logs)
-                .page(1)
-                .total(logs.size())
-                .size(logs.size())
-                .build();
+                .flatMap(result -> result.map((row, rowMetadata) -> mapRow(row)));
     }
 
     private LogItem mapRow(Row row) {
@@ -111,21 +101,46 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                 .workspaceId(row.get("workspace_id", String.class))
                 .ruleId(row.get("rule_id", UUID.class))
                 .message(row.get("message", String.class))
-                .markers(row.get("markers", Map.class))
+                .markers(getStringStringMap(row.get("markers", Map.class)))
                 .build();
+    }
+
+    /**
+     * Safely converts a Map<?, ?> to a Map<String, String>, or returns null if input is null.
+     * Throws IllegalArgumentException if any key or value is not convertible to String.
+     */
+    private Map<String, String> getStringStringMap(Object mapObj) {
+        if (mapObj == null) {
+            return null;
+        }
+        if (!(mapObj instanceof Map<?, ?>)) {
+            throw new IllegalArgumentException("Expected a Map for markers, got: " + mapObj.getClass());
+        }
+        Map<?, ?> rawMap = (Map<?, ?>) mapObj;
+        return rawMap.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> String.valueOf(e.getKey()),
+                        e -> String.valueOf(e.getValue())));
     }
 
     private void bindTemplateParameters(LogCriteria criteria, ST template) {
         Optional.ofNullable(criteria.level()).ifPresent(level -> template.add("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> template.add("ruleId", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> template.add("limit", limit));
+        // Only add offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            template.add("offset", (criteria.page() - 1) * criteria.size());
+        }
     }
 
     private void bindParameters(LogCriteria criteria, Statement statement) {
-        statement.bind("workspace_id", criteria.workspaceId());
         Optional.ofNullable(criteria.level()).ifPresent(level -> statement.bind("level", level));
         Optional.ofNullable(criteria.entityId()).ifPresent(ruleId -> statement.bind("rule_id", ruleId));
         Optional.ofNullable(criteria.size()).ifPresent(limit -> statement.bind("limit", limit));
+        // Only bind offset if both page and size are present
+        if (criteria.page() != null && criteria.size() != null) {
+            statement.bind("offset", (criteria.page() - 1) * criteria.size());
+        }
     }
 
     @Override
@@ -169,7 +184,6 @@ class AutomationRuleEvaluatorLogsDAOImpl implements AutomationRuleEvaluatorLogsD
                     return statement.execute();
 
                 })
-                .collectList()
                 .then();
 
     }

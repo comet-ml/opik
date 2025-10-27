@@ -1,0 +1,114 @@
+from typing import Any
+from typing_extensions import TypedDict
+
+from opik.integrations.langchain import OpikTracer
+from opik import track
+
+from opik_optimizer.utils import search_wikipedia
+from opik_optimizer import (
+    OptimizableAgent,
+    ChatPrompt,
+)
+
+from langgraph.graph import StateGraph
+from langchain_openai import ChatOpenAI
+from langchain.agents import Tool, create_react_agent, AgentExecutor
+from langchain_core.prompts import PromptTemplate
+
+
+# Create a wrapper function without optional parameters for LangChain compatibility
+def search_wikipedia_tool(query: str) -> list[str]:
+    """
+    This agent is used to search wikipedia. It can retrieve additional details
+    about a topic.
+    """
+    return search_wikipedia(query, use_api=False)
+
+
+search_wikipedia_tool = track(type="tool")(search_wikipedia_tool)
+
+
+class InputState(TypedDict):
+    input: str
+
+
+# Define the schema for the output
+class OutputState(TypedDict):
+    output: str
+
+
+# Define the overall schema, combining both input and output
+class OverallState(InputState, OutputState):
+    pass
+
+
+def create_graph(project_name: str, prompt_template: str) -> Any:
+    llm = ChatOpenAI(model="gpt-4o", temperature=0, stream_usage=True)
+
+    agent_tools = [
+        Tool(
+            name="search_wikipedia",
+            func=search_wikipedia_tool,
+            description="""This agent is used to search wikipedia. It can retrieve additional details about a topic.""",
+        )
+    ]
+
+    # Ensure the prompt template has the required ReAct format placeholders
+    if "{tools}" not in prompt_template:
+        prompt_template += "\n\nYou have access to the following tools:\n\n{tools}"
+    if "{tool_names}" not in prompt_template:
+        prompt_template += '\n\nUse the following format:\n\nQuestion: "the input question you must answer"\nThought: "you should always think about what to do"\nAction: "the action to take" --- should be one of [{tool_names}]\nAction Input: "the input to the action"\nObservation: "the result of the action"\n... (this Thought/Action/Action Input/Observation can repeat N times)\nThought: "I now know the final answer"\nFinal Answer: "the final answer to the original input question"\n\nBegin!\n\nQuestion: {input}\nThought: {agent_scratchpad}'
+
+    prompt = PromptTemplate.from_template(prompt_template)
+    agent = create_react_agent(llm, tools=agent_tools, prompt=prompt)
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=agent_tools,
+        handle_parsing_errors=True,
+        verbose=False,
+    )
+    workflow = StateGraph(OverallState, input=InputState, output=OutputState)
+    # We'll set this below:
+    opik_tracer = None
+
+    def run_agent_node(state: InputState) -> OutputState:
+        # "input" is from the State
+        user_input = state["input"]
+        # "input" is from the State
+        result = agent_executor.invoke(
+            {"input": user_input}, config={"callbacks": [opik_tracer]}
+        )
+        # "input", "output" are from the State
+        return {"output": result["output"]}
+
+    workflow.add_node("agent", run_agent_node)
+    workflow.set_entry_point("agent")
+    workflow.set_finish_point("agent")
+    graph = workflow.compile()
+
+    # Setup the Opik tracker:
+    opik_tracer = OpikTracer(
+        project_name=project_name,
+        graph=graph.get_graph(xray=True),
+    )
+    return graph
+
+
+class LangGraphAgent(OptimizableAgent):
+    project_name = "langgraph-agent"
+
+    def init_agent(self, prompt: ChatPrompt) -> None:
+        self.prompt = prompt
+        self.graph = create_graph(
+            self.project_name,
+            self.prompt.get_messages()[0]["content"],
+        )
+
+    def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
+        if len(messages) > 1:
+            # Skip the system prompt
+            messages = messages[1:]
+        for message in messages:
+            result = self.graph.invoke({"input": message["content"]})
+
+        return result["output"] if result else "No result from agent"

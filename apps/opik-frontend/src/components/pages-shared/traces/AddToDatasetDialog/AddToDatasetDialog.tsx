@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import get from "lodash/get";
 import isUndefined from "lodash/isUndefined";
-import { Database, MessageCircleWarning } from "lucide-react";
+import { Database, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Span, Trace } from "@/types/traces";
@@ -29,16 +29,18 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/components/ui/toast";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 
-const DEFAULT_SIZE = 5;
+const DEFAULT_SIZE = 100;
 
 type AddToDatasetDialogProps = {
-  rows: Array<Trace | Span>;
+  getDataForExport: () => Promise<Array<Trace | Span>>;
+  selectedRows: Array<Trace | Span>;
   open: boolean;
   setOpen: (open: boolean) => void;
 };
 
 const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
-  rows,
+  getDataForExport,
+  selectedRows,
   open,
   setOpen,
 }) => {
@@ -47,6 +49,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [fetching, setFetching] = useState<boolean>(false);
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
 
@@ -68,11 +71,11 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const total = data?.total ?? 0;
 
   const validRows = useMemo(() => {
-    return rows.filter((r) => !isUndefined(r.input));
-  }, [rows]);
+    return selectedRows.filter((r) => !isUndefined(r.input));
+  }, [selectedRows]);
 
   const noValidRows = validRows.length === 0;
-  const partialValid = validRows.length !== rows.length;
+  const partialValid = validRows.length !== selectedRows.length;
 
   const onItemsAdded = useCallback(
     (dataset: Dataset) => {
@@ -102,40 +105,59 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   );
 
   const addToDatasetHandler = useCallback(
-    (dataset: Dataset) => {
+    async (dataset: Dataset) => {
+      setFetching(true);
       setOpen(false);
-      mutate(
-        {
-          workspaceName,
-          datasetId: dataset.id,
-          datasetItems: validRows.map((r) => {
-            const isSpan = isObjectSpan(r);
-            const spanId = isSpan ? r.id : "";
-            const traceId = isSpan ? get(r, "trace_id", "") : r.id;
+      try {
+        const rows = await getDataForExport();
+        const validRowsFromFetch = rows.filter((r) => !isUndefined(r.input));
 
-            return {
-              data: {
-                input: r.input,
-                ...(r.output && { expected_output: r.output }),
-              },
-              source: isSpan
-                ? DATASET_ITEM_SOURCE.span
-                : DATASET_ITEM_SOURCE.trace,
-              trace_id: traceId,
-              ...(isSpan ? { span_id: spanId } : {}),
-            };
-          }),
-        },
-        {
-          onSuccess: () => onItemsAdded(dataset),
-        },
-      );
+        mutate(
+          {
+            workspaceName,
+            datasetId: dataset.id,
+            datasetItems: validRowsFromFetch.map((r) => {
+              const isSpan = isObjectSpan(r);
+              const spanId = isSpan ? r.id : "";
+              const traceId = isSpan ? get(r, "trace_id", "") : r.id;
+
+              return {
+                data: {
+                  input: r.input,
+                  ...(r.output && { expected_output: r.output }),
+                },
+                source: isSpan
+                  ? DATASET_ITEM_SOURCE.span
+                  : DATASET_ITEM_SOURCE.trace,
+                trace_id: traceId,
+                ...(isSpan ? { span_id: spanId } : {}),
+              };
+            }),
+          },
+          {
+            onSuccess: () => onItemsAdded(dataset),
+          },
+        );
+      } catch (error) {
+        const message = get(
+          error,
+          ["response", "data", "message"],
+          get(error, "message", "Failed to fetch data for adding to dataset"),
+        );
+        toast({
+          title: "Failed to fetch data",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setFetching(false);
+      }
     },
-    [setOpen, mutate, workspaceName, validRows, onItemsAdded],
+    [getDataForExport, setOpen, mutate, workspaceName, onItemsAdded, toast],
   );
 
   const renderListItems = () => {
-    if (isPending) {
+    if (isPending || fetching) {
       return <Loader />;
     }
 
@@ -219,22 +241,26 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
               ]}
             />
-            <div className="flex gap-2.5">
-              <SearchInput
-                searchText={search}
-                setSearchText={setSearch}
-              ></SearchInput>
+            <div className="my-2 flex items-center justify-between">
+              <h3 className="comet-title-xs">Select a dataset</h3>
               <Button
-                variant="secondary"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setOpen(false);
                   setOpenDialog(true);
                 }}
                 disabled={noValidRows}
               >
+                <Plus className="mr-2 size-4" />
                 Create new dataset
               </Button>
             </div>
+            <SearchInput
+              searchText={search}
+              setSearchText={setSearch}
+              className="w-full"
+            />
             {renderAlert()}
             <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
               {renderListItems()}
@@ -257,6 +283,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={addToDatasetHandler}
+        hideUpload={true}
       />
     </>
   );

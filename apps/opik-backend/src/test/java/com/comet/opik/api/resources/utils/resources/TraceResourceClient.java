@@ -12,6 +12,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadBatchIdentifier;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -186,8 +187,13 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public Trace getById(UUID id, String workspaceName, String apiKey) {
+        return getById(id, workspaceName, apiKey, false);
+    }
+
+    public Trace getById(UUID id, String workspaceName, String apiKey, boolean stripAttachments) {
         var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
+                .queryParam("strip_attachments", stripAttachments)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -300,28 +306,22 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void deleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames, String author,
+    public void deleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
             String apiKey,
             String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("threads")
-                .path("feedback-scores")
-                .path("delete")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(DeleteThreadFeedbackScores.builder()
-                        .projectName(projectName)
-                        .threadId(threadId)
-                        .names(scoreNames)
-                        .author(author)
-                        .build()))) {
-
+        try (var response = callDeleteThreadFeedbackScores(
+                projectName, threadId, scoreNames, author, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
-    public Response callDeleteThreadFeedbackScores(String projectName, String threadId, Set<String> scoreNames,
+    public Response callDeleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
             String apiKey,
             String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
@@ -335,6 +335,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .projectName(projectName)
                         .threadId(threadId)
                         .names(scoreNames)
+                        .author(author)
                         .build()));
     }
 
@@ -392,6 +393,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
+        return getTraceThread(threadId, projectId, false, apiKey, workspaceName);
+    }
+
+    public TraceThread getTraceThread(String threadId, UUID projectId, boolean truncate, String apiKey,
+            String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
@@ -399,7 +405,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
+                .post(Entity.json(TraceThreadIdentifier.builder()
+                        .projectId(projectId)
+                        .threadId(threadId)
+                        .truncate(truncate)
+                        .build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();
@@ -547,6 +557,21 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .put(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).projectName(projectName)
                         .threadId(threadId).build()))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public void closeTraceThreads(Set<String> threadIds, UUID projectId, String projectName, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("close")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(TraceThreadBatchIdentifier.builder().projectId(projectId).projectName(projectName)
+                        .threadIds(threadIds).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }

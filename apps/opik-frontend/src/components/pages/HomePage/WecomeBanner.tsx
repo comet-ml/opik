@@ -1,15 +1,15 @@
 import welcomeBannerUrl from "/images/welcome-banner.png";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, X } from "lucide-react";
-import useAppStore from "@/store/AppStore";
 import React from "react";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 
 type WelcomeBannerProps = {
   setOpen: (open: boolean) => void;
 };
 
 const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
-  const { setQuickstartOpened } = useAppStore();
+  const { open: openQuickstart } = useOpenQuickStartDialog();
 
   return (
     <div
@@ -32,11 +32,7 @@ const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ setOpen }) => {
           Opik helps you build safer, more reliable AI systems through advanced
           tracing, experiment management, evaluation, and real-time monitoring
         </div>
-        <Button
-          variant="secondary"
-          className="mt-6"
-          onClick={() => setQuickstartOpened(true)}
-        >
+        <Button variant="secondary" className="mt-6" onClick={openQuickstart}>
           Get started <ChevronRight className="ml-2 size-4 shrink-0" />
         </Button>
       </div>

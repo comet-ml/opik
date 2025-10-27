@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import { Button } from "@/components/ui/button";
-import { PromptWithLatestVersion } from "@/types/prompts";
+import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
@@ -14,8 +14,12 @@ import CommitHistory from "@/components/pages/PromptPage/PromptTab/CommitHistory
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPlaygroundButton";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import RestoreVersionDialog from "./RestoreVersionDialog";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import { parseContentWithImages } from "@/lib/llm";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -24,6 +28,8 @@ interface PromptTabInterface {
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const [openUseThisPrompt, setOpenUseThisPrompt] = useState(false);
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
+  const [versionToRestore, setVersionToRestore] =
+    useState<PromptVersion | null>(null);
 
   const [activeVersionId, setActiveVersionId] = useQueryParam(
     "activeVersionId",
@@ -60,6 +66,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
     setOpenEditPrompt(value);
   };
 
+  const handleRestoreVersionClick = (version: PromptVersion) => {
+    setVersionToRestore(version);
+  };
+
   useEffect(() => {
     if (prompt?.latest_version?.id && !activeVersionId) {
       setActiveVersionId(prompt.latest_version.id, "replaceIn");
@@ -71,6 +81,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       setActiveVersionId(null);
     };
   }, [setActiveVersionId]);
+
+  const { text: displayText, images: extractedImages } = useMemo(() => {
+    return parseContentWithImages(activeVersion?.template || "");
+  }, [activeVersion?.template]);
 
   if (!prompt) {
     return <Loader />;
@@ -88,6 +102,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           Use this prompt
         </Button>
         <TryInPlaygroundButton prompt={prompt} />
+        <ImproveInPlaygroundButton prompt={prompt} />
         <Button
           className="ml-auto"
           size="sm"
@@ -102,8 +117,22 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         <div className="flex grow flex-col gap-2">
           <p className="comet-body-s-accented text-foreground">Prompt</p>
           <code className="comet-code flex w-full whitespace-pre-wrap break-all rounded-md bg-primary-foreground p-3">
-            {activeVersion?.template}
+            {displayText}
           </code>
+          {extractedImages.length > 0 && (
+            <>
+              <p className="comet-body-s-accented mt-4 text-foreground">
+                Images
+              </p>
+              <PromptMessageImageTags
+                images={extractedImages}
+                setImages={() => {}}
+                editable={false}
+                preview={true}
+                align="start"
+              />
+            </>
+          )}
           {activeVersion?.metadata && (
             <>
               <p className="comet-body-s-accented mt-4 text-foreground">
@@ -139,6 +168,8 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             versions={versions || []}
             activeVersionId={activeVersionId || ""}
             onVersionClick={(version) => setActiveVersionId(version.id)}
+            onRestoreVersionClick={handleRestoreVersionClick}
+            latestVersionId={prompt.latest_version?.id}
           />
         </div>
       </div>
@@ -155,6 +186,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
+        onSetActiveVersionId={setActiveVersionId}
+      />
+
+      <RestoreVersionDialog
+        open={!!versionToRestore}
+        setOpen={(v) => setVersionToRestore(v ? versionToRestore : null)}
+        versionToRestore={versionToRestore}
         onSetActiveVersionId={setActiveVersionId}
       />
     </div>

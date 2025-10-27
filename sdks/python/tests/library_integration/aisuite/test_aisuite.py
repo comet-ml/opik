@@ -317,3 +317,75 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
 
     llm_span_metadata = trace_tree.spans[0].spans[0].metadata
     _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+def test_aisuite__openai_provider__client_chat_completions_create__opik_args__happyflow(
+    fake_backend,
+):
+    client = aisuite.Client()
+    wrapped_client = track_aisuite(
+        aisuite_client=client,
+        project_name=PROJECT_NAME,
+    )
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    _ = wrapped_client.chat.completions.create(
+        model="openai:gpt-3.5-turbo",
+        messages=messages,
+        max_tokens=10,
+        opik_args=args_dict,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input={"messages": messages},
+        output={"choices": ANY_BUT_NONE},
+        tags=["aisuite", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=PROJECT_NAME,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
+                tags=["aisuite", "span_tag"],
+                metadata=ANY_DICT.containing({"span_key": "span_value"}),
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=PROJECT_NAME,
+                spans=[],
+                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                provider="openai",
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)

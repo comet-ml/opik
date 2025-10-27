@@ -4,15 +4,21 @@ import { Trace } from "@/types/traces";
 
 type UseTraceByIdParams = {
   traceId: string;
+  stripAttachments?: boolean;
 };
 
 // TODO add default value from cache
 const getTraceById = async (
   { signal }: QueryFunctionContext,
-  { traceId }: UseTraceByIdParams,
+  { traceId, stripAttachments }: UseTraceByIdParams,
 ) => {
   const { data } = await api.get<Trace>(TRACES_REST_ENDPOINT + traceId, {
     signal,
+    params: {
+      ...(stripAttachments !== undefined && {
+        strip_attachments: stripAttachments,
+      }),
+    },
   });
 
   return data;

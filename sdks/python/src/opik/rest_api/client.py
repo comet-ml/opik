@@ -3,6 +3,7 @@
 import typing
 
 import httpx
+from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
 from .automation_rule_evaluators.client import AsyncAutomationRuleEvaluatorsClient, AutomationRuleEvaluatorsClient
@@ -16,6 +17,7 @@ from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient, LlmProviderKeyClient
+from .manual_evaluation.client import AsyncManualEvaluationClient, ManualEvaluationClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient, OpenTelemetryIngestionClient
 from .optimizations.client import AsyncOptimizationsClient, OptimizationsClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
@@ -26,6 +28,7 @@ from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesCli
 from .spans.client import AsyncSpansClient, SpansClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
+from .welcome_wizard.client import AsyncWelcomeWizardClient, WelcomeWizardClient
 from .workspaces.client import AsyncWorkspacesClient, WorkspacesClient
 
 
@@ -89,6 +92,7 @@ class OpikApi:
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
+        self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
@@ -99,6 +103,7 @@ class OpikApi:
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = LlmProviderKeyClient(client_wrapper=self._client_wrapper)
+        self.manual_evaluation = ManualEvaluationClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = OpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
         self.optimizations = OptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
@@ -106,6 +111,7 @@ class OpikApi:
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
+        self.welcome_wizard = WelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
         self.redirect = RedirectClient(client_wrapper=self._client_wrapper)
 
@@ -223,6 +229,7 @@ class AsyncOpikApi:
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
+        self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
@@ -233,6 +240,7 @@ class AsyncOpikApi:
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = AsyncLlmProviderKeyClient(client_wrapper=self._client_wrapper)
+        self.manual_evaluation = AsyncManualEvaluationClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
         self.optimizations = AsyncOptimizationsClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
@@ -240,6 +248,7 @@ class AsyncOpikApi:
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
+        self.welcome_wizard = AsyncWelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)
         self.redirect = AsyncRedirectClient(client_wrapper=self._client_wrapper)
 

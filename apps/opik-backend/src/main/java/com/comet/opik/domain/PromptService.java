@@ -6,6 +6,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
@@ -14,6 +15,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.TemplateParseUtils;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -34,6 +36,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
+import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
+import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
 import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -56,6 +61,8 @@ public interface PromptService {
 
     Prompt getById(UUID id);
 
+    List<Prompt> getByIds(Set<UUID> ids);
+
     PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
 
     PromptVersion getVersionById(UUID id);
@@ -63,6 +70,8 @@ public interface PromptService {
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
     PromptVersion retrievePromptVersion(String name, String commit);
+
+    PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
     Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(Set<UUID> versionsIds);
 }
@@ -83,11 +92,13 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull EventBus eventBus;
 
     @Override
     public Prompt create(@NonNull Prompt promptRequest) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
         var newPrompt = promptRequest.toBuilder()
@@ -109,6 +120,14 @@ class PromptServiceImpl implements PromptService {
                     .handle(() -> createPromptVersionFromPromptRequest(createdPrompt, workspaceId, promptRequest))
                     .withRetry(3, this::newVersionConflict);
         }
+
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_CREATED)
+                .userName(userName)
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .payload(newPrompt)
+                .build());
 
         return createdPrompt;
     }
@@ -227,6 +246,7 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion createPromptVersion(@NonNull CreatePromptVersion createPromptVersion) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
         String userName = requestContext.get().getUserName();
 
         UUID id = createPromptVersion.version().id() == null
@@ -248,14 +268,22 @@ class PromptServiceImpl implements PromptService {
                     .commit(commit)
                     .build();
 
-            return savePromptVersion(workspaceId, promptVersion);
+            var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
+            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName);
+
+            return savedPromptVersion;
         });
 
         if (createPromptVersion.version().commit() != null) {
             return handler.withError(this::newVersionConflict);
         } else {
             // only retry if commit is not provided
-            return handler.onErrorDo(() -> retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName));
+            return handler.onErrorDo(() -> {
+                var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
+                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName);
+
+                return savedPromptVersion;
+            });
         }
     }
 
@@ -292,6 +320,10 @@ class PromptServiceImpl implements PromptService {
     @Override
     public void delete(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
+        String userName = requestContext.get().getUserName();
+
+        var prompt = getById(id);
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
@@ -310,6 +342,8 @@ class PromptServiceImpl implements PromptService {
 
             return null;
         });
+
+        postPromptsDeletedEvent(List.of(prompt), workspaceId, workspaceName, userName);
     }
 
     @Override
@@ -319,12 +353,18 @@ class PromptServiceImpl implements PromptService {
             return;
         }
 
+        var prompts = getByIds(ids);
+
         String workspaceId = requestContext.get().getWorkspaceId();
+        String workspaceName = requestContext.get().getWorkspaceName();
+        String userName = requestContext.get().getUserName();
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             handle.attach(PromptDAO.class).delete(ids, workspaceId);
             return null;
         });
+
+        postPromptsDeletedEvent(prompts, workspaceId, workspaceName, userName);
     }
 
     private PromptVersion retryableCreateVersion(String workspaceId, CreatePromptVersion request, Prompt prompt,
@@ -395,6 +435,17 @@ class PromptServiceImpl implements PromptService {
                                             .build())
                                     .orElse(null))
                     .build();
+        });
+    }
+
+    @Override
+    public List<Prompt> getByIds(@NonNull Set<UUID> ids) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            return promptDAO.findByIds(ids, workspaceId);
         });
     }
 
@@ -520,6 +571,51 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
+    public PromptVersion restorePromptVersion(@NonNull UUID promptId, @NonNull UUID versionId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Restoring prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
+                versionId, promptId, workspaceId);
+
+        // Get the version to restore
+        PromptVersion versionToRestore = getVersionById(versionId);
+
+        // Verify the version belongs to the specified prompt
+        if (!versionToRestore.promptId().equals(promptId)) {
+            throw new NotFoundException("Prompt version not found for the specified prompt");
+        }
+
+        // Get the prompt to get its name
+        Prompt prompt = getById(promptId);
+
+        // Create a new version with the content from the old version
+        UUID newVersionId = idGenerator.generateId();
+        String newCommit = CommitUtils.getCommit(newVersionId);
+
+        PromptVersion newVersion = versionToRestore.toBuilder()
+                .id(newVersionId)
+                .commit(newCommit)
+                .createdBy(userName)
+                .changeDescription("Restored from version " + versionToRestore.commit())
+                .build();
+
+        PromptVersion restoredVersion = EntityConstraintHandler
+                .handle(() -> savePromptVersion(workspaceId, newVersion))
+                .onErrorDo(() -> retryableCreateVersion(workspaceId,
+                        CreatePromptVersion.builder()
+                                .name(prompt.name())
+                                .version(newVersion)
+                                .build(),
+                        prompt, userName));
+
+        log.info("Successfully restored prompt version with id '{}' for prompt id '{}' on workspace_id '{}'",
+                versionId, promptId, workspaceId);
+
+        return restoredVersion;
+    }
+
+    @Override
     public Mono<Map<UUID, String>> getVersionsCommitByVersionsIds(@NonNull Set<UUID> versionsIds) {
 
         if (versionsIds.isEmpty()) {
@@ -533,5 +629,27 @@ class PromptServiceImpl implements PromptService {
                     return promptVersionDAO.findCommitByVersionsIds(versionsIds, workspaceId).stream()
                             .collect(toMap(PromptVersionId::id, PromptVersionId::commit));
                 })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
+            String userName) {
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_COMMITTED)
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .userName(userName)
+                .payload(promptVersion)
+                .build());
+    }
+
+    private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String workspaceName,
+            String userName) {
+        eventBus.post(AlertEvent.builder()
+                .eventType(PROMPT_DELETED)
+                .userName(userName)
+                .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
+                .payload(prompts)
+                .build());
     }
 }

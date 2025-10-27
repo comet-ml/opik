@@ -72,6 +72,7 @@
 
     /* Chart colors */
     --chart-tick-stroke: #373d4d;
+    --chart-grid-stroke: #f1f5f8;
 
     /* DataTable colors */
 
@@ -115,7 +116,7 @@
     --diff-added-text: #1d6728;
 
     /* Upload field colors */
-    --upload-icon-bg: 203 213 225;
+    --upload-icon-bg: 213 26.8% 83.9%;
 
     /* Code block colors */
     --code-block: #fbfcfd;
@@ -188,43 +189,44 @@
 
   .dark {
     /* Design system colors */
-    --primary: 217.2 91.2% 59.8%;
-    --primary-hover: 217.2 91.2% 69.8%;
-    --primary-active: 217.2 91.2% 49.8%;
-    --secondary: 240 93% 95%; /* To replace */
-    --primary-100: 217.2 32.6% 17.5%;
+    --primary: 223 91% 60%;
+    --primary-hover: 217 91% 70%;
+    --primary-active: 220, 91%, 67%;
+    --secondary: 0, 0%, 18%;
+    --primary-100: 222, 25%, 14%;
     --white: #ffffff;
 
-    --foreground-secondary: 210 40% 98%;
-    --muted-gray: 217.2 32.6% 35%;
-    --muted-disabled: 217.2 32.6% 25%;
+    --foreground-secondary: 214, 32%, 91%;
+    --muted-gray: 0, 0%, 30%;
+    --muted-disabled: 0, 0%, 14%;
 
-    --muted-slate: 215 16%, 47%; /* To replace */
-    --light-slate: 215.4 16.3% 46.9%;
-    --slate-300: 213 27% 84%; /* To replace */
-    --border: 217.2 32.6% 17.5%;
-    --breadcrumb-last: 217.2 32.6% 55%;
-    --secondary-foreground: 222.2 47.4% 11.2%; /* To replace */
-    --primary-foreground: 217.2 32.6% 25.5%;
+    --muted-slate: 0, 0%, 64%;
+    --light-slate: 0, 0%, 64%;
+    --slate-300: 213 27% 84%;
+    --border: 0, 0%, 16%;
+    --breadcrumb-last: 214, 32%, 91%;
+    --secondary-foreground: 0, 0%, 10%;
+    --primary-foreground: 0, 0%, 11%;
 
-    --background: 222 84% 4.9%;
-    --foreground: 210 40% 87%;
+    --background: 0, 0%, 7%;
+    --foreground: 214, 32%, 91%;
 
-    --soft-background: 222 84% 6%;
+    --soft-background: 0, 0%, 7%;
+    --accent-background: 0, 0%, 9%;
 
     /* other colors - Dark Mode */
-    --tooltip: 210 40% 98%;
-    --tooltip-foreground: 222 84% 4.9%;
+    --tooltip: 0, 0%, 9%;
+    --tooltip-foreground: 214, 32%, 91%;
 
     /* Legacy variables - Dark Mode (for backward compatibility) */
-    --input: 217.2 32.6% 17.5%;
+    --input: 0, 0%, 16%;
     --ring: 217.2 91.2% 59.8%;
 
     /* Popover colors - Dark Mode */
     --popover-gray: 217.2 32.6% 10%;
 
-    --muted-foreground: 217.2 32.6% 55%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted-foreground: 0, 0%, 64%;
+    --accent: 0, 0%, 12%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 348 86% 61%;
@@ -237,8 +239,8 @@
     --gray-100: 217.2 32.6% 15%;
 
     /* Special button colors - Dark Mode */
-    --special-button: #22c785;
-    --special-button-hover: #28b575;
+    --special-button: #20ac74;
+    --special-button-hover: #219c6a;
     --special-button-active: #1e9a65;
 
     /* Action cards - Dark Mode */
@@ -246,35 +248,41 @@
       0 2px 4px -2px rgb(255 255 255 / 0.05);
 
     /* Action types - Dark Mode (darker backgrounds, lighter text) */
-    --action-trace-background: #1a332a;
-    --action-trace-text: #52c794;
-    --action-experiment-background: #3d1a36;
-    --action-experiment-text: #e48cc7;
-    --action-guardrail-background: #3d2a1a;
-    --action-guardrail-text: #e8a567;
-    --action-playground-background: #2a1a3d;
-    --action-playground-text: #b88ce8;
+    --action-trace-background: #29322f;
+    --action-trace-text: #14bb83;
+    --action-experiment-background: #2b2229;
+    --action-experiment-text: #cf44ad;
+    --action-guardrail-background: #322d29;
+    --action-guardrail-text: #ff9847;
+    --action-playground-background: #2e2932;
+    --action-playground-text: #a06dd9;
 
     /* Feature colors - Dark Mode */
-    --feature-experiment-management: #8a8eff;
-    --feature-llm: #6bd4c9;
+    --feature-experiment-management: #3b70f6;
+    --feature-llm: #20ac74;
 
     /* Muted colors - Dark Mode */
-    --muted: 217.2 32.6% 17.5%;
+    --muted: 0, 0%, 11%;
 
     /* Toggle colors - Dark Mode */
     --toggle-outline-active: #2c3c56;
 
     /* Thread colors - Dark Mode */
+    --thread-icon-background: #2e2932;
+    --thread-icon-text: #a06dd9;
     --thread-active: #2a3f2f;
     --thread-inactive: #2a3447;
     --message-input-background: #2a2f47;
 
     /* CodeMirror theme colors - Dark Mode (GitHub Dark theme) */
-    --codemirror-background: #2c3c56;
+    --codemirror-background: #1c1c1c;
     --codemirror-gutter: #7d8590;
     --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
     --codemirror-syntax-blue: #79c0ff;
+
+    /* Chart colors */
+    --chart-tick-stroke: #a3a3a3;
+    --chart-grid-stroke: #303030;
 
     /* Diff colors - Dark Mode */
     --diff-removed-bg: #7f1d1d;
@@ -283,40 +291,39 @@
     --diff-added-text: #bbf7d0;
 
     /* Upload field colors - Dark Mode */
-    --upload-icon-bg: 71 85 105;
+    --upload-icon-bg: 215 19.3% 34.5%;
 
     /* Code block colors - Dark Mode */
-    --code-block: #1e293b;
+    --code-block: #1c1c1c;
 
     /* Welcome banner gradient colors - Dark Mode */
     --banner-gradient-start: #0f172a;
     --banner-gradient-end: hsl(var(--primary));
 
     /* Scrollbar colors - Dark Mode */
-    --scrollbar-thumb: #64748b;
-    --scrollbar-thumb-hover: #94a3b8;
-    --scrollbar-background: #000000;
-
+    --scrollbar-thumb: #242424;
+    --scrollbar-thumb-hover: #2e2e2e;
+    --scrollbar-background: #121212;
     /* Tag variant background and text colors - Dark Mode */
-    --tag-gray-bg: #374151;
-    --tag-purple-bg: #4c1d95;
-    --tag-purple-text: #c4b5fd;
-    --tag-burgundy-bg: #7e1065;
-    --tag-burgundy-text: #f3e8ff;
-    --tag-pink-bg: #9d174d;
-    --tag-pink-text: #fecdd3;
-    --tag-red-bg: #7f1d1d;
-    --tag-red-text: #fef2f2;
-    --tag-orange-bg: #9a3412;
-    --tag-orange-text: #fed7aa;
-    --tag-yellow-bg: #a16207;
-    --tag-yellow-text: #fef3c7;
-    --tag-green-bg: #14532d;
-    --tag-green-text: #bbf7d0;
-    --tag-turquoise-bg: #155e75;
-    --tag-turquoise-text: #a7f3d0;
-    --tag-blue-bg: #1e3a8a;
-    --tag-blue-text: #dbeafe;
+    --tag-gray-bg: #242424;
+    --tag-purple-bg: #2e2932;
+    --tag-purple-text: #a06dd9;
+    --tag-burgundy-bg: #2b2229;
+    --tag-burgundy-text: #cf44ad;
+    --tag-pink-bg: #2e2427;
+    --tag-pink-text: #f45d8a;
+    --tag-red-bg: #322929;
+    --tag-red-text: #f36d6d;
+    --tag-orange-bg: #322d29;
+    --tag-orange-text: #ff9847;
+    --tag-yellow-bg: #323029;
+    --tag-yellow-text: #ebad00;
+    --tag-green-bg: #29322f;
+    --tag-green-text: #14bb83;
+    --tag-turquoise-bg: #293232;
+    --tag-turquoise-text: #0fbfd2;
+    --tag-blue-bg: #292e32;
+    --tag-blue-text: #6eabe7;
 
     /* Info box colors - Dark Mode */
     --info-box-bg: 224 76% 33%;
@@ -342,6 +349,15 @@
 
   .dark .cm-focused .cm-selectionBackground {
     background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .dark thead th {
+    background-color: hsl(var(--accent-background));
+  }
+
+  /* Playground table headers - no background in dark mode */
+  .dark .playground-table thead th {
+    background-color: transparent;
   }
 
   .comet-expanded {
@@ -459,7 +475,7 @@
   /* Custom scrollbar styling that adapts to website theme
    * Problem: Browsers use OS scrollbar appearance which may not match website theme
    * - User has light OS theme + website in dark mode = light scrollbars on dark UI (jarring)
-   * - User has dark OS theme + website in light mode = dark scrollbars on light UI (inconsistent)  
+   * - User has dark OS theme + website in light mode = dark scrollbars on light UI (inconsistent)
    * Solution: Force custom scrollbar styling that adapts to website theme changes
    * - Dark theme: Apply dark scrollbars regardless of OS preference (.dark body)
    * - Light theme (non-Windows): Use default OS scrollbars for better native feel
@@ -489,6 +505,10 @@
 
     ::-webkit-scrollbar-thumb:hover {
       background: var(--scrollbar-thumb-hover);
+    }
+
+    ::-webkit-scrollbar-corner {
+      background: var(--scrollbar-background);
     }
 
     ::-webkit-scrollbar-button {
@@ -607,6 +627,16 @@
   }
 }
 
+/* Specific styling for MarkdownHighlighter component only */
+.comet-markdown-highlighter {
+  /* Make H2 about the same size as strong elements */
+  h2 {
+    @apply text-base font-medium; /* Same size as base text but medium weight like strong */
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+}
+
 .comet-button-badge {
   position: relative;
   --size: 10px;
@@ -641,5 +671,85 @@ div.cm-theme div.cm-search.cm-panel {
 
   button[name="close"] {
     @apply top-0 bottom-px my-auto leading-none size-6 opacity-50 hover:opacity-100;
+  }
+}
+
+/* Collapsible headings styles */
+.collapsible-heading {
+  @apply border border-border rounded-lg mb-4;
+
+  /* Summary styling */
+  summary.collapsible-heading-summary {
+    @apply cursor-pointer p-4 hover:bg-muted/50 transition-colors;
+    list-style: none; /* Remove default arrow */
+
+    /* Custom arrow */
+    &::before {
+      content: "▶";
+      @apply inline-block mr-2 text-muted-foreground transition-transform duration-200;
+    }
+
+    /* Rotate arrow when open */
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  /* Content wrapper */
+  .collapsible-heading-content {
+    @apply p-4 pt-0 border-t border-border;
+  }
+
+  /* When open, rotate arrow */
+  &[open] summary.collapsible-heading-summary::before {
+    transform: rotate(90deg);
+  }
+
+  /* Dark theme adjustments */
+  .dark & {
+    @apply border-border;
+
+    summary.collapsible-heading-summary {
+      @apply hover:bg-muted/30;
+    }
+  }
+}
+
+/* Specific styling for collapsible headings in markdown */
+.comet-markdown .collapsible-heading {
+  /* Ensure proper spacing with other markdown elements */
+  margin: 1rem 0;
+
+  /* Style headings inside collapsible sections */
+  .collapsible-heading-content {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      @apply mt-4 mb-2;
+
+      &:first-child {
+        @apply mt-0;
+      }
+    }
+
+    p {
+      @apply mb-2;
+
+      &:last-child {
+        @apply mb-0;
+      }
+    }
+
+    ul,
+    ol {
+      @apply mb-2;
+
+      &:last-child {
+        @apply mb-0;
+      }
+    }
   }
 }

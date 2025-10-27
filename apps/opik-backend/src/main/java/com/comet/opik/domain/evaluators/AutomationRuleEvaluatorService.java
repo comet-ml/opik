@@ -13,7 +13,11 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.cache.CacheEvict;
 import com.comet.opik.infrastructure.cache.Cacheable;
@@ -33,6 +37,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -53,10 +59,15 @@ public interface AutomationRuleEvaluatorService {
     <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, UUID projectId,
             @NonNull String workspaceId);
 
+    <E, T extends AutomationRuleEvaluator<E>> List<T> findByIds(@NonNull Set<UUID> ids, UUID projectId,
+            @NonNull String workspaceId);
+
     void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId);
 
-    AutomationRuleEvaluatorPage find(UUID projectId, @NonNull String workspaceId,
-            String name, int page, int size);
+    AutomationRuleEvaluatorPage find(int page, int size,
+            @NonNull AutomationRuleEvaluatorSearchCriteria searchCriteria,
+            @NonNull String workspaceId,
+            @NonNull List<String> sortableBy);
 
     <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId);
 
@@ -74,6 +85,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull TransactionTemplate template;
     private final @NonNull AutomationRuleEvaluatorLogsDAO logsDAO;
     private final @NonNull OpikConfiguration opikConfiguration;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
@@ -169,8 +183,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
+                String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
                 int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
-                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled());
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
 
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
                     case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->
@@ -253,6 +268,32 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
+    public <E, T extends AutomationRuleEvaluator<E>> List<T> findByIds(@NonNull Set<UUID> ids, UUID projectId,
+            @NonNull String workspaceId) {
+        log.debug("Finding AutomationRuleEvaluators with ids '{}' in projectId '{}' and workspaceId '{}'", ids,
+                projectId, workspaceId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
+            var criteria = AutomationRuleEvaluatorCriteria.builder().ids(ids).build();
+            return dao.find(workspaceId, projectId, criteria)
+                    .stream()
+                    .map(ruleEvaluator -> switch (ruleEvaluator) {
+                        case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
+                        case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel traceThreadLlmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadLlmAsJudge);
+                        case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel traceThreadUserDefinedMetricPython ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadUserDefinedMetricPython);
+                    })
+                    .map(evaluator -> (T) evaluator)
+                    .toList();
+        });
+    }
+
+    @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
@@ -279,22 +320,39 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public AutomationRuleEvaluatorPage find(UUID projectId,
+    public AutomationRuleEvaluatorPage find(int pageNum, int size,
+            @NonNull AutomationRuleEvaluatorSearchCriteria searchCriteria,
             @NonNull String workspaceId,
-            String name,
-            int pageNum, int size) {
+            @NonNull List<String> sortableBy) {
 
-        log.debug("Finding AutomationRuleEvaluators with name pattern '{}' in projectId '{}' and workspaceId '{}'",
-                name, projectId, workspaceId);
+        log.debug("Finding AutomationRuleEvaluators with searchCriteria '{}' in workspaceId '{}'",
+                searchCriteria, workspaceId);
+
+        String filtersSQL = Optional.ofNullable(searchCriteria.filters())
+                .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.AUTOMATION_RULE_EVALUATOR))
+                .orElse(null);
+
+        Map<String, Object> filterMapping = Optional.ofNullable(searchCriteria.filters())
+                .map(filterQueryBuilder::toStateSQLMapping)
+                .orElse(Map.of());
+
+        String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(
+                searchCriteria.sortingFields(),
+                sortingFactory.getFieldMapping());
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            var criteria = AutomationRuleEvaluatorCriteria.builder().name(name).build();
-            var total = dao.findCount(workspaceId, projectId, criteria);
+            var criteria = AutomationRuleEvaluatorCriteria.builder()
+                    .id(searchCriteria.id())
+                    .name(searchCriteria.name())
+                    .filters(searchCriteria.filters())
+                    .build();
+            var total = dao.findCount(workspaceId, searchCriteria.projectId(), criteria);
             var offset = (pageNum - 1) * size;
 
             List<AutomationRuleEvaluator<?>> automationRuleEvaluators = List.copyOf(
-                    dao.find(workspaceId, projectId, criteria, offset, size)
+                    dao.find(workspaceId, searchCriteria.projectId(), criteria, sortingFieldsSql, filtersSQL,
+                            filterMapping, offset, size)
                             .stream()
                             .map(evaluator -> switch (evaluator) {
                                 case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
@@ -308,11 +366,15 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             })
                             .toList());
 
-            log.info("Found {} AutomationRuleEvaluators for projectId '{}'", automationRuleEvaluators.size(),
-                    projectId);
-            return new AutomationRuleEvaluatorPage(pageNum, automationRuleEvaluators.size(),
-                    total,
-                    automationRuleEvaluators);
+            log.info("Found {} AutomationRuleEvaluators for searchCriteria '{}'", automationRuleEvaluators.size(),
+                    searchCriteria);
+            return AutomationRuleEvaluatorPage.builder()
+                    .page(pageNum)
+                    .size(automationRuleEvaluators.size())
+                    .total(total)
+                    .content(automationRuleEvaluators)
+                    .sortableBy(sortableBy)
+                    .build();
         });
     }
 
@@ -342,6 +404,13 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     public Mono<LogPage> getLogs(@NonNull LogCriteria criteria) {
-        return logsDAO.findLogs(criteria);
+        return logsDAO.findLogs(criteria)
+                .collectList()
+                .map(logs -> LogPage.builder()
+                        .content(logs)
+                        .page(Optional.ofNullable(criteria.page()).orElse(1))
+                        .total(logs.size())
+                        .size(logs.size())
+                        .build());
     }
 }

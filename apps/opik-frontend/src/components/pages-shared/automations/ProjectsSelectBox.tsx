@@ -1,28 +1,111 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { DropdownOption } from "@/types/shared";
 import useAppStore from "@/store/AppStore";
+import { Project } from "@/types/projects";
 
 const DEFAULT_LOADED_PROJECT_ITEMS = 1000;
+const MORE_LOADED_PROJECT_ITEMS = 10000;
+export const PROJECTS_SELECT_QUERY_KEY = "projects-select-box";
+
+export type UseProjectsSelectDataParams = {
+  isLoadedMore?: boolean;
+};
+
+export type UseProjectsSelectDataResponse = {
+  projects: Project[];
+  total: number;
+  isLoading: boolean;
+};
+
+export const useProjectsSelectData = ({
+  isLoadedMore,
+}: UseProjectsSelectDataParams): UseProjectsSelectDataResponse => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const queryClient = useQueryClient();
+
+  const cachedQueries = queryClient.getQueryCache().findAll({
+    queryKey: [PROJECTS_SELECT_QUERY_KEY],
+    exact: false,
+  });
+
+  type CachedProjectsData = { content: Project[]; total: number };
+
+  const longestCachedData = cachedQueries.reduce<CachedProjectsData | null>(
+    (longest, query) => {
+      const data = query.state.data as CachedProjectsData | undefined;
+      if (
+        data?.content &&
+        (!longest || data.content.length > longest.content.length)
+      ) {
+        return data;
+      }
+      return longest;
+    },
+    null,
+  );
+
+  const shouldFetch = !longestCachedData || isLoadedMore;
+
+  const { data: fetchedData, isLoading: isFetching } = useProjectsList(
+    {
+      workspaceName,
+      page: 1,
+      size: isLoadedMore
+        ? MORE_LOADED_PROJECT_ITEMS
+        : DEFAULT_LOADED_PROJECT_ITEMS,
+      queryKey: PROJECTS_SELECT_QUERY_KEY,
+    },
+    {
+      enabled: shouldFetch,
+      placeholderData: keepPreviousData,
+    },
+  );
+
+  if (longestCachedData) {
+    return {
+      projects: longestCachedData.content,
+      total: longestCachedData.total,
+      isLoading: false,
+    };
+  }
+
+  if (shouldFetch) {
+    return {
+      projects: fetchedData?.content ?? [],
+      total: fetchedData?.total ?? 0,
+      isLoading: isFetching,
+    };
+  }
+
+  return {
+    projects: [],
+    total: 0,
+    isLoading: false,
+  };
+};
 
 interface BaseProjectsSelectBoxProps {
   className?: string;
   disabled?: boolean;
+  minWidth?: number;
 }
 
 interface SingleSelectProjectsProps extends BaseProjectsSelectBoxProps {
   value: string;
-  onChange: (value: string) => void;
+  onValueChange: (value: string) => void;
   multiselect?: false;
 }
 
 interface MultiSelectProjectsProps extends BaseProjectsSelectBoxProps {
   value: string[];
-  onChange: (value: string[]) => void;
+  onValueChange: (value: string[]) => void;
   multiselect: true;
+  showSelectAll?: boolean;
+  selectAllLabel?: string;
 }
 
 type ProjectsSelectBoxProps =
@@ -30,45 +113,37 @@ type ProjectsSelectBoxProps =
   | MultiSelectProjectsProps;
 
 const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
-  const { className, disabled } = props;
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { className, disabled, minWidth } = props;
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
-  const { data, isLoading } = useProjectsList(
-    {
-      workspaceName,
-      page: 1,
-      size: isLoadedMore ? 10000 : DEFAULT_LOADED_PROJECT_ITEMS,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  const total = data?.total ?? 0;
+  const { projects, total, isLoading } = useProjectsSelectData({
+    isLoadedMore,
+  });
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
   const options: DropdownOption<string>[] = useMemo(() => {
-    return (data?.content || []).map((project) => ({
+    return projects.map((project) => ({
       value: project.id,
       label: project.name,
     }));
-  }, [data?.content]);
+  }, [projects]);
 
   const loadableSelectBoxProps = props.multiselect
     ? {
         options,
         value: props.value,
         placeholder: "Select projects",
-        onChange: props.onChange,
+        onChange: props.onValueChange,
         multiselect: true as const,
+        showSelectAll: props.showSelectAll,
+        selectAllLabel: props.selectAllLabel || "All projects",
       }
     : {
         options,
         value: props.value,
         placeholder: "Select a project",
-        onChange: props.onChange,
+        onChange: props.onValueChange,
         multiselect: false as const,
       };
 
@@ -81,6 +156,7 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
           : undefined
       }
       buttonClassName={className}
+      minWidth={minWidth}
       disabled={disabled}
       isLoading={isLoading}
       optionsCount={DEFAULT_LOADED_PROJECT_ITEMS}

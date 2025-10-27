@@ -20,26 +20,51 @@ The `thread_id` is a user-defined identifier that must be unique per project. Al
 
 You can log chat conversations by specifying the `thread_id` parameter when using either the low level SDK, Python decorators, or integration libraries:
 
-<Tabs>
-    <Tab title="Python decorators" value="Python decorators">
-    ```python
+<CodeBlocks>
+    ```typescript title="Typescript SDK" language="typescript"
+    import { Opik } from "opik";
+
+    const client = new Opik({
+    apiUrl: "https://www.comet.com/opik/api", // Only required if you are using Opik Cloud
+    apiKey: "your-api-key",
+    projectName: "your-project-name",
+    workspaceName: "your-workspace-name", // Only required if you are using Opik Cloud
+    });
+
+    const threadId = "your-thread-id"; // any unique string per conversation
+
+    // Option A: set on trace creation
+    const trace = client.trace({
+        name: "chat turn",
+        input: { user: "Hi there" },
+        output: { assistant: "Hello!" },
+        threadId
+    });
+    ```
+
+    ```python title="Python decorators" language="python"
     import opik
     from opik import opik_context
 
     @opik.track
-    def chat_message(input, thread_id):
+    def chat_message(input):
+        return "Opik is an Open Source GenAI platform"
+
+    chat_message("What is Opik ?", opik_args={"trace": {"thread_id": "f174a"}})
+
+    # Alternatively, using the opik_context module
+    @opik.track
+    def chat_message(input):
+        thread_id = "f174a"
         opik_context.update_current_trace(
             thread_id=thread_id
         )
         return "Opik is an Open Source GenAI platform"
 
-    thread_id = "f174a"
     chat_message("What is Opik ?", thread_id)
-    chat_message("Repeat the previous message", thread_id)
     ```
-    </Tab>
-    <Tab title="Low level SDK" value="Low level SDK">
-    ```python
+
+    ```python title="Python SDK"
     import opik
 
     opik_client = opik.Opik()
@@ -53,18 +78,9 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
         output="Opik is an Open Source GenAI platform",
         thread_id=thread_id
     )
-
-    # Log a second message
-    trace = opik_client.trace(
-        name="chat_conversation",
-        input="Can you track chat conversations in Opik",
-        output="Yes, of course !",
-        thread_id=thread_id
-    )
     ```
-    </Tab>
-    <Tab title="LangGraph integration" value="LangGraph integration">
-    ```python
+
+    ```python title="LangGraph integration"
     # LangGraph automatically uses its thread_id as Opik thread_id
     from langgraph.graph import StateGraph
     from opik.integrations.langchain import OpikTracer
@@ -92,9 +108,8 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
         config=config
     )
     ```
-    </Tab>
-    <Tab title="ADK integration" value="ADK integration">
-    ```python
+
+    ```python title="ADK integration"
     # ADK automatically maps session_id to thread_id
     from opik.integrations.adk import OpikTracer
     from google.adk import sessions as adk_sessions, runners as adk_runners
@@ -128,9 +143,8 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
         new_message="Can you give me an example?"
     )
     ```
-    </Tab>
-    <Tab title="OpenAI Agents" value="OpenAI Agents">
-    ```python
+
+    ```python title="OpenAI Agents"
     # Using trace context manager with group_id for threading
     import uuid
     from opik import trace
@@ -151,9 +165,8 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
         result2 = await Runner.run(agent, new_input)
         print(result2.final_output)
     ```
-    </Tab>
 
-</Tabs>
+</CodeBlocks>
 
 <Note>
   The input to each trace will be displayed as the user message while the output will be displayed as the AI assistant
@@ -166,9 +179,8 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
 
 Choose a thread ID strategy that fits your application:
 
-<Tabs>
-    <Tab title="User session based" value="User session based">
-    ```python
+<CodeBlocks>
+    ```python title="User session based"
     import uuid
     import opik
 
@@ -179,14 +191,12 @@ Choose a thread ID strategy that fits your application:
 
     @opik.track
     def process_user_message(message, user_id):
-        from opik import opik_context
-        opik_context.update_current_trace(thread_id=thread_id)
-        # Process message
         return "Response to: " + message
+
+    process_user_message("What is Opik ?", opik_args={"trace": {"thread_id": thread_id}})
     ```
-    </Tab>
-    <Tab title="UUID based" value="UUID based">
-    ```python
+
+    ```python title="UUID based"
     import uuid
     import opik
 
@@ -195,13 +205,12 @@ Choose a thread ID strategy that fits your application:
 
     @opik.track
     def start_conversation(initial_message):
-        from opik import opik_context
-        opik_context.update_current_trace(thread_id=thread_id)
         return f"Processing: {initial_message}"
+
+    start_conversation("What is Opik ?", opik_args={"trace": {"thread_id": thread_id}})
     ```
-    </Tab>
-    <Tab title="Timestamp based" value="Timestamp based">
-    ```python
+
+    ```python title="Timestamp based"
     import time
     import opik
 
@@ -210,122 +219,100 @@ Choose a thread ID strategy that fits your application:
 
     @opik.track
     def handle_conversation_turn(message):
-        from opik import opik_context
-        opik_context.update_current_trace(thread_id=thread_id)
         return f"Response to: {message}"
-    ```
-    </Tab>
 
-</Tabs>
+    handle_conversation_turn("What is Opik ?", opik_args={"trace": {"thread_id": thread_id}})
+    ```
+
+</CodeBlocks>
 
 ### Integration-Specific Threading
 
 Different integrations handle thread IDs in various ways:
 
-#### LangChain Integration
+<CodeBlocks>
+    ```python title="LangChain"
+    from opik.integrations.langchain import OpikTracer
 
-```python
-from opik.integrations.langchain import OpikTracer
+    # Set thread_id at tracer level - applies to all traces
+    opik_tracer = OpikTracer(
+        project_name="my-chatbot",
+        thread_id="conversation-123"
+    )
 
-# Set thread_id at tracer level - applies to all traces
-opik_tracer = OpikTracer(
-    project_name="my-chatbot",
-    thread_id="conversation-123"
-)
-
-# Or pass dynamically via metadata
-chain.invoke(
-    {"input": "Hello"},
-    config={
-        "callbacks": [opik_tracer],
-        "metadata": {"thread_id": "dynamic-conversation-456"}
-    }
-)
-```
-
-#### LangGraph Integration
-
-```python
-from opik.integrations.langchain import OpikTracer
-
-# LangGraph automatically uses its thread_id as Opik thread_id
-thread_id = "langgraph-conversation-789"
-config = {
-    "callbacks": [OpikTracer()],
-    "configurable": {"thread_id": thread_id}
-}
-
-result = compiled_graph.invoke(input_data, config=config)
-```
-
-#### OpenAI Agents Integration
-
-```python
-import uuid
-from opik import trace
-
-# Use trace context manager with group_id for threading
-thread_id = str(uuid.uuid4())
-
-with trace(workflow_name="Agent Conversation", group_id=thread_id):
-    # All agent interactions within this context share the thread_id
-    result1 = await Runner.run(agent, "First question")
-    result2 = await Runner.run(agent, "Follow-up question")
-```
-
-### Thread Management in Production
-
-For production applications, consider these patterns:
-
-```python
-import opik
-from datetime import datetime, timedelta
-
-class ConversationManager:
-    def __init__(self):
-        self.active_threads = {}
-        self.opik_client = opik.Opik()
-
-    def get_or_create_thread_id(self, user_id: str, session_id: str = None) -> str:
-        """Generate or retrieve thread ID for user session"""
-        if session_id:
-            thread_id = f"{user_id}-{session_id}"
-        else:
-            thread_id = f"{user_id}-{datetime.now().isoformat()}"
-
-        self.active_threads[thread_id] = datetime.now()
-        return thread_id
-
-    @opik.track
-    def process_message(self, user_id: str, message: str, thread_id: str = None):
-        if not thread_id:
-            thread_id = self.get_or_create_thread_id(user_id)
-
-        # Update current trace with thread_id
-        opik_context.update_current_trace(
-            thread_id=thread_id,
-            metadata={
-                "user_id": user_id,
-                "timestamp": datetime.now().isoformat()
-            }
-        )
-
-        # Process the message
-        response = f"AI response to: {message}"
-        return response
-
-    def generate_response(self, message: str) -> str:
-        """Generate AI response to user message"""
-        return f"AI response to: {message}"
-
-    def cleanup_old_threads(self, hours: int = 24):
-        """Remove thread IDs older than specified hours"""
-        cutoff = datetime.now() - timedelta(hours=hours)
-        self.active_threads = {
-            tid: timestamp for tid, timestamp in self.active_threads.items()
-            if timestamp > cutoff
+    # Or pass dynamically via metadata
+    chain.invoke(
+        {"input": "Hello"},
+        config={
+            "callbacks": [opik_tracer],
+            "metadata": {"thread_id": "dynamic-conversation-456"}
         }
-```
+    )
+    ```
+
+    ```python title="LangGraph"
+    from opik.integrations.langchain import OpikTracer
+
+    # LangGraph automatically uses its thread_id as Opik thread_id
+    thread_id = "langgraph-conversation-789"
+    config = {
+        "callbacks": [OpikTracer()],
+        "configurable": {"thread_id": thread_id}
+    }
+
+    result = compiled_graph.invoke(input_data, config=config)
+    ```
+
+    ```python title="OpenAI Agents"
+    import uuid
+    from opik import trace
+
+    # Use trace context manager with group_id for threading
+    thread_id = str(uuid.uuid4())
+
+    with trace(workflow_name="Agent Conversation", group_id=thread_id):
+        # All agent interactions within this context share the thread_id
+        result1 = await Runner.run(agent, "First question")
+        result2 = await Runner.run(agent, "Follow-up question")
+    ```
+
+    ```python title="GenAI"
+    from google import genai
+    from opik.integrations.genai import track_genai
+
+    client = genai.Client()
+    gemini_client = track_genai(client, project_name="opik_args demo")
+
+    response = gemini_client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents="What is Opik?",
+        opik_args={"trace": {"thread_id": "f174a"}}
+    )
+    ```
+
+    ```python title="OpenAI"
+    import openai
+
+    from opik.integrations.openai import track_openai
+
+    client = openai.OpenAI()
+    wrapped_client = track_openai(
+        openai_client=client,
+        project_name="opik_args demo",
+    )
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "What is Opik?"},
+    ]
+
+    _ = wrapped_client.responses.create(
+        model="gpt-4o-mini",
+        input=messages,
+        opik_args={"trace": {"thread_id": "f174a"}}
+    )
+    ```
+
+</CodeBlocks>
 
 ## Reviewing conversations
 
@@ -424,66 +411,42 @@ Threads have a lifecycle that affects how you can interact with them:
 
 You can also manage threads programmatically using the Opik SDK:
 
-```python
-import opik
+<CodeBlocks>
+    ```python title="Python" language="python"
+    import opik
 
-# Initialize client
-client = opik.Opik()
+    # Initialize client
+    client = opik.Opik()
 
-# Search for threads by various criteria
-threads = client.search_traces(
-    project_name="my-chatbot",
-    filter_string='thread_id contains "user-session"'
-)
-
-# Get specific thread content
-for trace in threads:
-    if trace.thread_id:
-        thread_content = client.get_trace_content(trace.id)
-        print(f"Thread: {trace.thread_id}")
-        print(f"Input: {thread_content.input}")
-        print(f"Output: {thread_content.output}")
-
-# Add feedback scores to thread traces
-for trace in threads:
-    trace.log_feedback_score(
-        name="conversation_quality",
-        value=0.8,
-        reason="Good multi-turn conversation flow"
-    )
-```
-
-### Thread Metadata and Context
-
-Enhance your threads with rich metadata for better organization:
-
-```python
-import opik
-from opik import opik_context
-
-@opik.track
-def enhanced_conversation_turn(user_message, user_id, conversation_type):
-    thread_id = f"{user_id}-{conversation_type}-session"
-
-    opik_context.update_current_trace(
-        thread_id=thread_id,
-        metadata={
-            "user_id": user_id,
-            "conversation_type": conversation_type,
-            "channel": "web_chat",
-            "language": "en",
-            "session_start": "2024-01-15T10:30:00Z"
-        },
-        tags=["production", "customer-support", conversation_type]
+    # Search for threads by various criteria
+    threads = client.search_traces(
+        project_name="my-chatbot",
+        filter_string='thread_id contains "user-session"'
     )
 
-    # Process message and return response
-    return f"AI response to: {user_message}"
-```
+    # Get specific thread content
+    for trace in threads:
+        if trace.thread_id:
+            thread_content = client.get_trace_content(trace.id)
+            print(f"Thread: {trace.thread_id}")
+            print(f"Input: {thread_content.input}")
+            print(f"Output: {thread_content.output}")
 
-This enhanced metadata helps with:
+    # Add feedback scores to thread traces
+    for trace in threads:
+        trace.log_feedback_score(
+            name="conversation_quality",
+            value=0.8,
+            reason="Good multi-turn conversation flow"
+        )
+    ```
 
-- **Filtering**: Find conversations by type, channel, or language
-- **Analytics**: Analyze conversation patterns and user behavior
-- **Debugging**: Quickly identify problematic conversation flows
-- **Reporting**: Generate insights on conversation quality and outcomes
+</CodeBlocks>
+
+## Next steps
+
+Once you have added observability to your multi-turn agent, why not:
+
+1. [Run offline multi-turn conversation evaluation](/evaluation/evaluate_threads)
+2. [Create online evaluation rules](/production/rules) to score your multi-turn conversations in
+   production

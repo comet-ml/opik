@@ -308,14 +308,14 @@ def test__structured_output_compliance__with_few_shot_examples(model):
         FewShotExampleStructuredOutputCompliance(
             title="Valid JSON",
             output='{"name": "Alice", "age": 25}',
-            schema="User(name: str, age: int)",
+            output_schema="User(name: str, age: int)",
             score=True,
             reason="Valid JSON format",
         ),
         FewShotExampleStructuredOutputCompliance(
             title="Invalid JSON",
             output='{"name": "Bob", age: 30}',
-            schema="User(name: str, age: int)",
+            output_schema="User(name: str, age: int)",
             score=False,
             reason="Missing quotes around age value",
         ),

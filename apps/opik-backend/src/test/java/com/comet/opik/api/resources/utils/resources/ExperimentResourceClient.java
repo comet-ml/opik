@@ -9,6 +9,7 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.grouping.GroupBy;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -16,6 +17,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
@@ -25,7 +27,6 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import org.glassfish.jersey.client.ChunkedInput;
-import org.testcontainers.shaded.com.google.common.net.HttpHeaders;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -304,6 +305,23 @@ public class ExperimentResourceClient {
                 return response.readEntity(Experiment.ExperimentPage.class);
             }
             return null;
+        }
+    }
+
+    public Response updateExperiment(UUID experimentId, ExperimentUpdate experimentUpdate, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(experimentId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(experimentUpdate));
+    }
+
+    public void updateExperiment(UUID experimentId, ExperimentUpdate experimentUpdate, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (Response response = updateExperiment(experimentId, experimentUpdate, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 }

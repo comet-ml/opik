@@ -2,7 +2,7 @@ import contextlib
 from typing import Any, Dict, List, Optional, Union, Iterator
 
 import opik.llm_usage as llm_usage
-from opik.api_objects import span, trace, opik_client
+from opik.api_objects import span, trace, opik_client, prompt
 from opik.api_objects.attachment import Attachment
 from opik.types import (
     DistributedTraceHeadersDict,
@@ -68,6 +68,7 @@ def update_current_span(
     total_cost: Optional[float] = None,
     attachments: Optional[List[Attachment]] = None,
     error_info: Optional[ErrorInfoDict] = None,
+    prompts: Optional[List[prompt.Prompt]] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -90,9 +91,13 @@ def update_current_span(
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
         attachments: The list of attachments to be uploaded to the span.
         error_info: The error information of the span.
+        prompts: The list of prompts used in the span.
     """
     if not tracing_runtime_config.is_tracing_active():
         return
+
+    if prompts is not None:
+        prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
 
     new_params = {
         "name": name,
@@ -107,6 +112,7 @@ def update_current_span(
         "total_cost": total_cost,
         "attachments": attachments,
         "error_info": error_info,
+        "prompts": prompts,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:
@@ -124,6 +130,7 @@ def update_current_trace(
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     thread_id: Optional[str] = None,
     attachments: Optional[List[Attachment]] = None,
+    prompts: Optional[List[prompt.Prompt]] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -138,9 +145,13 @@ def update_current_trace(
         thread_id: Used to group multiple traces into a thread.
             The identifier is user-defined and has to be unique per project.
         attachments: The list of attachments to be uploaded to the trace.
+        prompts: The list of prompts used in the trace.
     """
     if not tracing_runtime_config.is_tracing_active():
         return
+
+    if prompts is not None:
+        prompts = [prompt.prompt.to_info_dict(p) for p in prompts]
 
     new_params = {
         "name": name,
@@ -151,6 +162,7 @@ def update_current_trace(
         "feedback_scores": feedback_scores,
         "thread_id": thread_id,
         "attachments": attachments,
+        "prompts": prompts,
     }
     current_trace_data = context_storage.get_trace_data()
     if current_trace_data is None:

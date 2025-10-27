@@ -5,6 +5,7 @@ INFRA_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-redis-1" "opik-minio-
 BACKEND_CONTAINERS=("opik-python-backend-1" "opik-backend-1")
 OPIK_CONTAINERS=("opik-frontend-1")
 GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
+LOCAL_BE_CONTAINERS=("opik-python-backend-1" "opik-frontend-1")
 
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead
 CONTAINERS=()
@@ -14,6 +15,8 @@ set_containers_for_profile() {
     CONTAINERS=("${INFRA_CONTAINERS[@]}")
   elif [[ "$BACKEND" == "true" ]]; then
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${BACKEND_CONTAINERS[@]}")
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    CONTAINERS=("${INFRA_CONTAINERS[@]}" "${LOCAL_BE_CONTAINERS[@]}")
   else
     # Full Opik (default)
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${BACKEND_CONTAINERS[@]}" "${OPIK_CONTAINERS[@]}")
@@ -31,6 +34,8 @@ get_verify_cmd() {
     cmd="$cmd --infra"
   elif [[ "$BACKEND" == "true" ]]; then
     cmd="$cmd --backend"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    cmd="$cmd --local-be"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
@@ -53,6 +58,8 @@ get_start_cmd() {
     cmd="$cmd --infra"
   elif [[ "$BACKEND" == "true" ]]; then
     cmd="$cmd --backend"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    cmd="$cmd --local-be"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
@@ -72,18 +79,73 @@ debugLog() {
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
 }
 
+get_system_info() {
+  # Function to gather system info without failing the script
+  # All commands wrapped with error handling and fallbacks
+  
+  # OS detection - safe with fallback
+  local os_info="unknown"
+  if command -v uname >/dev/null 2>&1; then
+    os_info=$(uname -s 2>/dev/null || echo "unknown")
+    if [[ "$os_info" == "Darwin" ]]; then
+      local os_version=$(sw_vers -productVersion 2>/dev/null || echo "")
+      [[ -n "$os_version" ]] && os_info="macOS ${os_version}" || os_info="macOS"
+    elif [[ "$os_info" == "Linux" ]]; then
+      if [[ -f /etc/os-release ]]; then
+        local distro=$(grep -E '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "Linux")
+        [[ -n "$distro" ]] && os_info="$distro" || os_info="Linux"
+      fi
+    fi
+  fi
+  
+  # Docker version - safe with fallback
+  local docker_version="unknown"
+  if command -v docker >/dev/null 2>&1; then
+    local docker_output=$(docker --version 2>/dev/null || echo "")
+    if [[ -n "$docker_output" ]]; then
+      # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
+      docker_version=$(echo "$docker_output" | sed -n 's/^Docker version \([^,]*\).*/\1/p' || echo "unknown")
+      [[ -z "$docker_version" ]] && docker_version="unknown"
+    fi
+  fi
+  
+  # Docker Compose version - safe with fallback
+  # Try both V2 (docker compose) and V1 (docker-compose) commands
+  local docker_compose_version="unknown"
+  if command -v docker >/dev/null 2>&1; then
+    # Try Docker Compose V2 (plugin)
+    local compose_output=$(docker compose version 2>/dev/null || echo "")
+    if [[ -n "$compose_output" ]]; then
+      # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
+      docker_compose_version=$(echo "$compose_output" | sed -n 's/^Docker Compose version \(.*\)$/\1/p' || echo "unknown")
+      [[ -z "$docker_compose_version" ]] && docker_compose_version="unknown"
+    fi
+  fi
+  
+  # If V2 failed, try Docker Compose V1 (standalone)
+  if [[ "$docker_compose_version" == "unknown" ]] && command -v docker-compose >/dev/null 2>&1; then
+    docker_compose_version=$(docker-compose version --short 2>/dev/null || echo "unknown")
+  fi
+  
+  # Return as tab-delimited string (tabs are extremely unlikely in version strings)
+  printf "%s\t%s\t%s" "$os_info" "$docker_version" "$docker_compose_version"
+}
+
 get_docker_compose_cmd() {
   local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
-  
+
   # Add profiles based on the selected mode (accumulative)
   if [[ "$INFRA" == "true" ]]; then
     # No profile needed - infrastructure services start by default
     :
   elif [[ "$BACKEND" == "true" ]]; then
     cmd="$cmd --profile backend"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be.yaml"
+    cmd="$cmd --profile local-be"
   else
     # Full Opik (default) - includes all dependencies
     cmd="$cmd --profile opik"
@@ -134,6 +196,7 @@ print_usage() {
   echo "  --port-mapping  Enable port mapping for all containers by using the override file (can be combined with other flags)"
   echo "  --infra         Start only infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.)"
   echo "  --backend       Start only infrastructure + backend services (Backend, Python Backend etc.)"
+  echo "  --local-be      Start all services EXCEPT backend (for local backend development)"
   echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
   echo "  --help          Show this help message"
   echo ""
@@ -289,6 +352,17 @@ print_banner() {
   elif [[ "$BACKEND" == "true" ]]; then
     echo "║  ✅ Backend services started successfully!                      ║"
     echo "║                                                                 ║"
+  elif [[ "$LOCAL_BE" == "true" ]]; then
+    echo "║  ✅ Local backend mode services started successfully!           ║"
+    echo "║                                                                 ║"
+    echo "║  ⚙️  Backend Configuration:                                      ║"
+    echo "║     Backend is NOT running in Docker                            ║"
+    echo "║     Start your local backend on port 8080                       ║"
+    echo "║     Frontend will proxy to: http://localhost:8080               ║"
+    echo "║                                                                 ║"
+    echo "║  📊 Access the UI (start backend first):                        ║"
+    echo "║     $ui_url                                       ║"
+    echo "║                                                                 ║"
   else
     echo "║  ✅ All services started successfully!                          ║"
     echo "║                                                                 ║"
@@ -312,6 +386,14 @@ send_install_report() {
   uuid="$1"
   event_completed="$2"  # Pass "true" to send opik_os_install_completed
   start_time="$3"  # Optional: start time in ISO 8601 format
+
+  # Configure usage reporting based on deployment mode
+  # $PROFILE_COUNT: if > 0, it's a partial profile; if = 0, it's full Opik
+  if [[ $PROFILE_COUNT -gt 0 ]]; then
+    # Partial profile mode - disable reporting
+    export OPIK_USAGE_REPORT_ENABLED=false
+    debugLog "[DEBUG] Disabling usage reporting due to not starting the full Opik suite"
+  fi
 
   if [ "$OPIK_USAGE_REPORT_ENABLED" != "true" ] && [ "$OPIK_USAGE_REPORT_ENABLED" != "" ]; then
     debugLog "[DEBUG] Usage reporting is disabled. Skipping install report."
@@ -356,6 +438,13 @@ EOF
 )
   else
     event_type="opik_os_install_started"
+    
+    # Get system info safely - wrapped to prevent script failure
+    system_info=$(get_system_info 2>/dev/null || printf "unknown\tunknown\tunknown")
+    IFS=$'\t' read -r os_info docker_ver docker_compose_ver <<< "$system_info"
+    
+    debugLog "[DEBUG] System info: OS=$os_info, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
+    
     json_payload=$(cat <<EOF
 {
   "anonymous_id": "$uuid",
@@ -363,7 +452,10 @@ EOF
   "event_properties": {
     "start_time": "$start_time",
     "event_ver": "1",
-    "script_type": "sh"
+    "script_type": "sh",
+    "os": "$os_info",
+    "docker_version": "$docker_ver",
+    "docker_compose_version": "$docker_compose_ver"
   }
 }
 EOF
@@ -402,6 +494,7 @@ export OPIK_FRONTEND_FLAVOR=default
 # Default: full opik (all profiles)
 INFRA=false
 BACKEND=false
+LOCAL_BE=false
 
 if [[ "$*" == *"--build"* ]]; then
   BUILD_MODE=true
@@ -431,25 +524,44 @@ fi
 
 if [[ "$*" == *"--backend"* ]]; then
   BACKEND=true
+  # Enable CORS for frontend development
+  export CORS=true
   # Remove the flag from arguments
   set -- ${@/--backend/}
+fi
+
+if [[ "$*" == *"--local-be"* ]]; then
+  LOCAL_BE=true
+  export OPIK_FRONTEND_FLAVOR=local_be
+  # Remove the flag from arguments
+  set -- ${@/--local-be/}
 fi
 
 # Check for guardrails flag
 if [[ "$*" == *"--guardrails"* ]]; then
   GUARDRAILS_ENABLED=true
-  export OPIK_FRONTEND_FLAVOR=guardrails
+  # Only override flavor if not already set by local-be
+  if [[ "$OPIK_FRONTEND_FLAVOR" == "default" ]]; then
+    export OPIK_FRONTEND_FLAVOR=guardrails
+  fi
   export TOGGLE_GUARDRAILS_ENABLED=true
   # Remove the flag from arguments
   set -- ${@/--guardrails/}
 fi
 
+# Count active partial profiles
+PROFILE_COUNT=0
+[[ "$INFRA" == "true" ]] && ((PROFILE_COUNT++))
+[[ "$BACKEND" == "true" ]] && ((PROFILE_COUNT++))
+[[ "$LOCAL_BE" == "true" ]] && ((PROFILE_COUNT++))
+
 # Validate mutually exclusive profile flags
-if [[ "$INFRA" == "true" && "$BACKEND" == "true" ]]; then
-  echo "❌ Error: --infra and --backend flags are mutually exclusive."
+if [[ $PROFILE_COUNT -gt 1 ]]; then
+  echo "❌ Error: --infra, --backend, and --local-be flags are mutually exclusive."
   echo "   Choose one of the following:"
   echo "   • ./opik.sh --infra      (infrastructure services only)"
   echo "   • ./opik.sh --backend    (infrastructure + backend services)"
+  echo "   • ./opik.sh --local-be   (all services except backend - for local backend development)"
   echo "   • ./opik.sh              (full Opik suite - default)"
   exit 1
 fi

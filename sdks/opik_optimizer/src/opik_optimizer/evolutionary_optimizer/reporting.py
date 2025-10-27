@@ -1,23 +1,35 @@
 from contextlib import contextmanager
 from io import StringIO
-from typing import Any, List
+from typing import Any
 
 from rich.panel import Panel
 from rich.text import Text
 
 from ..optimization_config import chat_prompt
-from ..reporting_utils import (
+from ..reporting_utils import (  # noqa: F401
     convert_tqdm_to_rich,
-    display_configuration,  # noqa: F401
-    display_header,  # noqa: F401
-    display_messages,  # noqa: F401
-    display_result,  # noqa: F401
+    display_configuration,
+    display_header,
+    display_messages,
+    display_result,
     get_console,
     suppress_opik_logs,
 )
 
 PANEL_WIDTH = 70
 console = get_console()
+
+
+def display_tool_description(description: str, title: str, style: str) -> None:
+    panel = Panel(
+        Text(description),
+        title=title,
+        title_align="left",
+        border_style=style,
+        width=PANEL_WIDTH,
+        padding=(1, 2),
+    )
+    console.print(panel)
 
 
 @contextmanager
@@ -117,6 +129,16 @@ def initializing_population(verbose: int = 1) -> Any:
                     f"│    Generating {num_fresh_starts} fresh prompts based on the task description."
                 )
 
+        def failed_fresh_prompts(self, num_fresh_starts: int, error: str) -> None:
+            if verbose >= 1:
+                console.print(
+                    Text(
+                        f"│       Failed to generate {num_fresh_starts} fresh prompts: {error}",
+                        style="dim red",
+                    )
+                )
+                console.print("│")
+
         def success_fresh_prompts(self, num_fresh_starts: int) -> None:
             if verbose >= 1:
                 console.print(
@@ -155,7 +177,7 @@ def initializing_population(verbose: int = 1) -> Any:
                 )
                 console.print("│")
 
-        def end(self, population_prompts: List[chat_prompt.ChatPrompt]) -> None:
+        def end(self, population_prompts: list[chat_prompt.ChatPrompt]) -> None:
             if verbose >= 1:
                 console.print(
                     f"│ Successfully initialized population with {len(population_prompts)} prompts."
@@ -205,11 +227,13 @@ def evaluate_initial_population(verbose: int = 1) -> Any:
             if verbose >= 1:
                 if score >= baseline_score:
                     console.print(
-                        Text(f"\r  Prompt {index+1} score was: {score}.", style="green")
+                        Text(
+                            f"\r  Prompt {index + 1} score was: {score}.", style="green"
+                        )
                     )
                 else:
                     console.print(
-                        Text(f"\r  Prompt {index+1} score was: {score}.", style="dim")
+                        Text(f"\r  Prompt {index + 1} score was: {score}.", style="dim")
                     )
 
     # Use our log suppression context manager and yield the reporter

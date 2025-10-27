@@ -1,65 +1,95 @@
+import argparse
 import inspect
 import re
-from typing import Any, Dict, List, Optional, get_type_hints
-import opik_optimizer
+from pathlib import Path
+from typing import Any, get_type_hints
 
+import opik_optimizer
 from pydantic import BaseModel
 
 
 class ParameterInfo(BaseModel):
     path: str
-    type: Optional[str]
-    default: Optional[Any]
+    type: str | None
+    default: Any | None
     required: bool
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class MethodInfo(BaseModel):
     name: str
-    docstring: Optional[str]
-    parameters: List[ParameterInfo]
+    docstring: str | None
+    parameters: list[ParameterInfo]
 
 
 class ClassInfo(BaseModel):
-    class_docstring: Optional[str]
-    init_parameters: List[ParameterInfo]
-    public_methods: List[MethodInfo]
+    class_docstring: str | None
+    init_parameters: list[ParameterInfo]
+    public_methods: list[MethodInfo]
 
 
 class ClassInspector:
     def __init__(self, cls: type):
         self.cls = cls
 
-    def get_docstring(self) -> Optional[str]:
+    def get_docstring(self) -> str | None:
         return inspect.getdoc(self.cls)
 
-    def parse_param_descriptions(self, docstring: str) -> Dict[str, str]:
+    def parse_param_descriptions(self, docstring: str) -> dict[str, str]:
         """
         Parses the 'Args:' section of a docstring and extracts parameter descriptions.
+        Handles multi-line descriptions by continuing until the next parameter or end of Args section.
         """
-        param_desc: Dict[str, str] = {}
+        param_desc: dict[str, str] = {}
         if not docstring:
             return param_desc
 
         lines = docstring.splitlines()
         in_args_section = False
+        current_param = None
+        current_description_lines = []
 
         for line in lines:
             stripped = line.strip()
+
+            # Check if we're entering the Args section
             if stripped.startswith("Args:") or stripped.startswith("Arguments:"):
                 in_args_section = True
                 continue
+
             if in_args_section:
-                if stripped == "" or not re.match(r"^\**\w+:", stripped):
-                    break
+                # Check if this is a new parameter (starts with word followed by colon)
                 match = re.match(r"^(\**\w+):\s*(.*)", stripped)
                 if match:
+                    # Save previous parameter if exists
+                    if current_param:
+                        param_desc[current_param] = " ".join(current_description_lines)
+
+                    # Start new parameter
                     param_name, description = match.groups()
-                    param_desc[param_name] = description
+                    current_param = param_name
+                    current_description_lines = [description] if description else []
+                elif stripped == "":
+                    # Empty line might indicate end of Args section
+                    # But only if we haven't started a parameter yet, or if next non-empty line doesn't continue
+                    continue
+                elif current_param and stripped:
+                    # Continuation of current parameter description
+                    current_description_lines.append(stripped)
+                elif not stripped and current_param:
+                    # Empty line while processing a parameter - might be end of Args
+                    continue
+                else:
+                    # Non-parameter line that doesn't match expected format - end of Args section
+                    break
+
+        # Don't forget to save the last parameter
+        if current_param:
+            param_desc[current_param] = " ".join(current_description_lines)
 
         return param_desc
 
-    def get_pydantic_model_fields(self) -> List[ParameterInfo]:
+    def get_pydantic_model_fields(self) -> list[ParameterInfo]:
         fields = []
         for name, model_field in self.cls.model_fields.items():  # type: ignore
             default = model_field.default if model_field.default is not None else None
@@ -87,8 +117,8 @@ class ClassInspector:
     def parse_signature(
         self,
         func: Any,
-        docstring: Optional[str] = None,
-    ) -> List[ParameterInfo]:
+        docstring: str | None = None,
+    ) -> list[ParameterInfo]:
         sig = inspect.signature(func)
         try:
             type_hints = get_type_hints(func, globalns=vars(inspect.getmodule(func)))
@@ -125,7 +155,7 @@ class ClassInspector:
 
         return parameters
 
-    def get_public_methods(self) -> List[MethodInfo]:
+    def get_public_methods(self) -> list[MethodInfo]:
         if issubclass(self.cls, BaseModel):
             return []
 
@@ -139,6 +169,17 @@ class ClassInspector:
             if name == "__init__":
                 continue  # Handled separately
 
+            # Skip methods that are not defined in this class if they raise NotImplementedError
+            # (inherited from base and not overridden)
+            if not self._is_method_defined_in_class(name):
+                if self._method_raises_not_implemented(func):
+                    continue
+
+            # Skip methods that are defined in this class but immediately raise NotImplementedError
+            if self._is_method_defined_in_class(name):
+                if self._method_raises_not_implemented(func):
+                    continue
+
             doc = inspect.getdoc(func) or ""
             parameters = self.parse_signature(func, doc)
 
@@ -148,13 +189,84 @@ class ClassInspector:
 
         return public_methods_info
 
+    def _is_method_defined_in_class(self, method_name: str) -> bool:
+        """Check if a method is defined in the class itself, not just inherited."""
+        return method_name in self.cls.__dict__
+
+    def _method_raises_not_implemented(self, func: Any) -> bool:
+        """Check if a method only raises NotImplementedError without doing anything else."""
+        try:
+            source = inspect.getsource(func)
+            lines = source.split("\n")
+
+            # Find where the function body starts (after the def line and parameters)
+            body_start = 0
+            in_signature = True
+            for i, line in enumerate(lines):
+                if in_signature:
+                    # Look for the closing of the function signature
+                    if ")" in line and ":" in line:
+                        body_start = i + 1
+                        in_signature = False
+                        break
+
+            # Parse the body to find actual code (skip docstrings)
+            body_lines = lines[body_start:]
+            in_docstring = False
+            docstring_char = None
+            actual_code_lines = []
+
+            for line in body_lines:
+                stripped = line.strip()
+
+                # Handle docstring start/end
+                if not in_docstring:
+                    if stripped.startswith('"""') or stripped.startswith("'''"):
+                        docstring_char = stripped[:3]
+                        in_docstring = True
+                        # Check if docstring ends on same line
+                        if stripped.endswith(docstring_char):
+                            in_docstring = False
+                        continue
+                else:
+                    # We're in a docstring, check if it ends
+                    if docstring_char is not None and docstring_char in stripped:
+                        in_docstring = False
+                    continue
+
+                # Skip empty lines and comments
+                if not stripped or stripped.startswith("#"):
+                    continue
+
+                # This is actual code
+                actual_code_lines.append(stripped)
+
+                # Stop after finding a few lines of actual code
+                if len(actual_code_lines) >= 5:
+                    break
+
+            # If the only actual code is raising NotImplementedError, skip this method
+            if actual_code_lines:
+                # Check if first line is raise NotImplementedError
+                if actual_code_lines[0].startswith("raise NotImplementedError"):
+                    return True
+
+            return False
+        except (OSError, TypeError):
+            # Can't get source, assume it's implemented
+            return False
+
     def inspect(self) -> ClassInfo:
         if issubclass(self.cls, BaseModel):
             init_params = self.get_pydantic_model_fields()
         else:
             init_func = getattr(self.cls, "__init__", None)
-            init_doc = inspect.getdoc(init_func) if init_func else None
-            init_params = self.parse_signature(init_func, init_doc) if init_func else []
+            # Use class docstring for parameter descriptions, not __init__ docstring
+            # This is because Python conventionally puts parameter docs in the class docstring
+            class_doc = self.get_docstring()
+            init_params = (
+                self.parse_signature(init_func, class_doc) if init_func else []
+            )
 
         return ClassInfo(
             class_docstring=self.get_docstring(),
@@ -167,7 +279,7 @@ class ClassInspector:
         if not param.required:
             field += " optional={true}"
         if param.default is not None and param.default != inspect._empty:
-            field += f' defaultValue="{param.default}"'
+            field += f' default="{param.default}"'
 
         if param.description:
             field += f">{param.description}</ParamField>"
@@ -177,7 +289,7 @@ class ClassInspector:
         return field
 
     def format_method_signature(
-        self, name: str, parameters: List[ParameterInfo]
+        self, name: str, parameters: list[ParameterInfo]
     ) -> str:
         if len(parameters) == 0:
             lines = [f"{name}()"]
@@ -237,11 +349,15 @@ class ClassInspector:
 
 
 classes_to_document = [
+    opik_optimizer.ParameterOptimizer,
     opik_optimizer.FewShotBayesianOptimizer,
     opik_optimizer.MetaPromptOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
+    opik_optimizer.GepaOptimizer,
+    opik_optimizer.HierarchicalReflectiveOptimizer,
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
+    opik_optimizer.OptimizableAgent,
     # opik_optimizer.datasets
 ]
 
@@ -249,11 +365,102 @@ classes_to_document = [
 res = """---
 title: "Opik Agent Optimizer API Reference"
 subtitle: "Technical SDK reference guide"
-pytest_codeblocks_skip: true
 ---
 
-The Opik Agent Optimizer SDK provides a set of tools for optimizing LLM prompts. This reference
-guide will help you understand the available APIs and how to use them effectively.
+The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
+
+## Key Features
+
+- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+- **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, MIPRO, and GEPA
+- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+- **Backward Compatibility**: All original parameters preserved through kwargs extraction
+- **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
+
+## Core Classes
+
+The SDK provides several optimizer classes that all inherit from `BaseOptimizer` and implement the same standardized interface:
+
+- **ParameterOptimizer**: Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
+- **FewShotBayesianOptimizer**: Uses few-shot learning with Bayesian optimization
+- **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
+- **MiproOptimizer**: Implements MIPRO (Multi-Input Prompt Optimization) algorithm
+- **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
+- **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
+- **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
+
+## Standardized Method Signatures
+
+All optimizers implement these core methods with identical signatures:
+
+### optimize_prompt()
+```python
+def optimize_prompt(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    **kwargs: Any,
+) -> OptimizationResult
+```
+
+### optimize_mcp()
+```python
+def optimize_mcp(
+    self,
+    prompt: ChatPrompt,
+    dataset: Dataset,
+    metric: Callable,
+    *,
+    tool_name: str,
+    second_pass: Any,
+    experiment_config: dict | None = None,
+    n_samples: int | None = None,
+    auto_continue: bool = False,
+    agent_class: type[OptimizableAgent] | None = None,
+    fallback_invoker: Callable[[dict[str, Any]], str] | None = None,
+    fallback_arguments: Callable[[Any], dict[str, Any]] | None = None,
+    allow_tool_use_on_second_pass: bool = False,
+    **kwargs: Any,
+) -> OptimizationResult
+```
+
+## Deprecation Warnings
+
+The following parameters are deprecated and will be removed in future versions:
+
+### Constructor Parameters
+
+- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
+- **`num_threads`** in optimizer constructors: Use `n_threads` instead
+
+### Example Migration
+
+```python
+# ❌ Deprecated
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    project_name="my-project",  # Deprecated
+    num_threads=16,             # Deprecated
+)
+
+# ✅ Correct
+optimizer = FewShotBayesianOptimizer(
+    model="gpt-4o-mini",
+    n_threads=16,  # Use n_threads instead
+)
+
+prompt = ChatPrompt(
+    project_name="my-project",  # Set here instead
+    messages=[...]
+)
+```
 
 """
 
@@ -261,4 +468,46 @@ for class_obj in classes_to_document:
     inspector = ClassInspector(class_obj)
     res += f"{inspector.to_render_string()}\n"
 
-print(res)
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate Fern documentation for Opik Optimizer API"
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write output to Fern docs file (default: print to stdout)",
+    )
+    args = parser.parse_args()
+
+    if args.write:
+        # Path to Fern docs
+        script_dir = Path(__file__).parent
+        repo_root = script_dir.parent.parent.parent  # Go up to repo root
+        fern_docs_path = (
+            repo_root
+            / "apps"
+            / "opik-documentation"
+            / "documentation"
+            / "fern"
+            / "docs"
+            / "agent_optimization"
+            / "opik_optimizer"
+            / "reference.mdx"
+        )
+
+        # Verify the file exists before overwriting
+        if not fern_docs_path.exists():
+            print(f"⚠️  Warning: Target file does not exist: {fern_docs_path}")
+            print("Creating new file...")
+            fern_docs_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write the file
+        fern_docs_path.write_text(res, encoding="utf-8")
+        print(f"✅ Documentation written to: {fern_docs_path}")
+    else:
+        print(res)
+
+
+if __name__ == "__main__":
+    main()

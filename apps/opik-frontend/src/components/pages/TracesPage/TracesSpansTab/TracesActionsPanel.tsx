@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Database, Tag, Trash } from "lucide-react";
+import { Tag, Trash } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
+import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -17,7 +17,8 @@ import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDi
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
-  rows: Array<Trace | Span>;
+  getDataForExport: () => Promise<Array<Trace | Span>>;
+  selectedRows: Array<Trace | Span>;
   columnsToExport: string[];
   projectName: string;
   projectId: string;
@@ -25,7 +26,8 @@ type TracesActionsPanelProps = {
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
-  rows,
+  getDataForExport,
+  selectedRows,
   type,
   columnsToExport,
   projectName,
@@ -35,18 +37,18 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
-  const tracesBatchDeleteMutation = useTracesBatchDeleteMutation();
-  const disabled = !rows?.length;
+  const { mutate } = useTracesBatchDeleteMutation();
+  const disabled = !selectedRows?.length;
 
   const deleteTracesHandler = useCallback(() => {
-    tracesBatchDeleteMutation.mutate({
+    mutate({
       projectId,
-      ids: rows.map((row) => row.id),
+      ids: selectedRows.map((row) => row.id),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, rows]);
+  }, [projectId, selectedRows, mutate]);
 
-  const mapRowData = useCallback(() => {
+  const mapRowData = useCallback(async () => {
+    const rows = await getDataForExport();
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         // we need split by dot to parse feedback_scores into correct structure
@@ -70,7 +72,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         return acc;
       }, {});
     });
-  }, [rows, columnsToExport]);
+  }, [getDataForExport, columnsToExport]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {
@@ -83,12 +85,6 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   return (
     <div className="flex items-center gap-2">
-      <AddToDatasetDialog
-        key={`dataset-${resetKeyRef.current}`}
-        rows={rows}
-        open={open === 1}
-        setOpen={setOpen}
-      />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 2}
@@ -101,27 +97,19 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       />
       <AddTagDialog
         key={`tag-${resetKeyRef.current}`}
-        rows={rows}
+        rows={selectedRows}
         open={open === 3}
         setOpen={setOpen}
         projectId={projectId}
         type={type}
         onSuccess={onClearSelection}
       />
-      <TooltipWrapper content="Add to dataset">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setOpen(1);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Database className="mr-2 size-4" />
-          Add to dataset
-        </Button>
-      </TooltipWrapper>
+      <AddToDropdown
+        getDataForExport={getDataForExport}
+        selectedRows={selectedRows}
+        disabled={disabled}
+        dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+      />
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"

@@ -87,8 +87,11 @@ public class OpikConfiguration extends JobConfiguration {
     private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
 
     @Valid @NotNull @JsonProperty
-    private FeedbackScoresConfig feedbackScores = new FeedbackScoresConfig();
+    private ResponseFormattingConfig responseFormatting = new ResponseFormattingConfig();
 
     @Valid @NotNull @JsonProperty
-    private ResponseFormattingConfig responseFormatting = new ResponseFormattingConfig();
+    private WebhookConfig webhook = new WebhookConfig();
+
+    @Valid @JsonProperty
+    private QueuesConfig queues = new QueuesConfig();
 }

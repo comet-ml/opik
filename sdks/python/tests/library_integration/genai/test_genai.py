@@ -182,6 +182,71 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
 
 
 @retry_with_waiting_on_rate_limit_errors
+@pytest.mark.asyncio
+async def test_genai_client__async_generate_content__opik_args__happyflow(fake_backend):
+    client = genai.Client(
+        vertexai=True,
+        http_options=HttpOptions(api_version="v1"),
+    )
+    client = track_genai(client)
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    _ = await client.aio.models.generate_content(
+        model=MODEL,
+        contents="What is the capital of Belarus?",
+        opik_args=args_dict,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name=ANY_STRING.starting_with(f"async_generate_content: {MODEL}"),
+        input={"contents": "What is the capital of Belarus?"},
+        output={"candidates": ANY_LIST},
+        tags=["genai", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name=ANY_STRING.starting_with(f"async_generate_content: {MODEL}"),
+                input={"contents": "What is the capital of Belarus?"},
+                output={"candidates": ANY_LIST},
+                tags=["genai", "span_tag"],
+                metadata=ANY_DICT.containing({"span_key": "span_value"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
+                spans=[],
+                model=ANY_STRING.starting_with(MODEL),
+                provider="google_vertexai",
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+@retry_with_waiting_on_rate_limit_errors
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -581,4 +646,84 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+@retry_with_waiting_on_rate_limit_errors
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("genai-integration-test", "genai-integration-test"),
+    ],
+)
+def test_genai_client__generate_content__opik_args__happyflow(
+    fake_backend, project_name, expected_project_name
+):
+    # test that opik_args are passed to the logged traces and spans
+    client = genai.Client(
+        vertexai=True,
+        http_options=HttpOptions(api_version="v1"),
+    )
+    client = track_genai(client, project_name=project_name)
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    client.models.generate_content(
+        model=MODEL,
+        contents="What is the capital of Belarus?",
+        config=GenerateContentConfig(max_output_tokens=10),
+        opik_args=args_dict,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name=ANY_STRING.starting_with(f"generate_content: {MODEL}"),
+        input={"contents": "What is the capital of Belarus?", "config": ANY_BUT_NONE},
+        output={"candidates": ANY_LIST},
+        tags=["genai", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name=ANY_STRING.starting_with(f"generate_content: {MODEL}"),
+                input={
+                    "contents": "What is the capital of Belarus?",
+                    "config": ANY_BUT_NONE,
+                },
+                output={"candidates": ANY_LIST},
+                tags=["genai", "span_tag"],
+                metadata=ANY_DICT.containing({"span_key": "span_value"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT,
+                project_name=expected_project_name,
+                spans=[],
+                model=ANY_STRING.starting_with(MODEL),
+                provider="google_vertexai",
+            )
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
     _assert_metadata_contains_required_keys(llm_span_metadata)

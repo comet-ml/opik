@@ -9,10 +9,17 @@ metadata:
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+  {{- if .Values.global.useHelmHooks }}
   annotations:
+  {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "0"
+  {{- else }}
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "5"
-    helm.sh/hook-delete-policy: before-hook-creation
+    "helm.sh/hook-delete-policy": hook-succeeded
+  {{- end }}
+  {{- end }}
 spec:
   template:
     metadata:

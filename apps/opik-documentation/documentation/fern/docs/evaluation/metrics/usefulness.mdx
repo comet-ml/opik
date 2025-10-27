@@ -1,6 +1,5 @@
 ---
 description: Describes the Usefulness metric
-pytest_codeblocks_skip: true
 ---
 
 # Usefulness
@@ -11,21 +10,39 @@ The usefulness metric allows you to evaluate how useful an LLM response is given
 
 You can use the `Usefulness` metric as follows:
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import Usefulness
 
 metric = Usefulness()
 
 result = metric.score(
-    input="How can I optimize the performance of my Python web application?",
-    output="To optimize your Python web application's performance, focus on these key areas:\n1. Database optimization: Use connection pooling, index frequently queried fields, and cache common queries\n2. Caching strategy: Implement Redis or Memcached for session data and frequently accessed content\n3. Asynchronous operations: Use async/await for I/O-bound operations to handle more concurrent requests\n4. Code profiling: Use tools like cProfile to identify bottlenecks in your application\n5. Load balancing: Distribute traffic across multiple server instances for better scalability",
+input="How can I optimize the performance of my Python web application?",
+output="To optimize your Python web application's performance, focus on these key areas:\n1. Database optimization: Use connection pooling, index frequently queried fields, and cache common queries\n2. Caching strategy: Implement Redis or Memcached for session data and frequently accessed content\n3. Asynchronous operations: Use async/await for I/O-bound operations to handle more concurrent requests\n4. Code profiling: Use tools like cProfile to identify bottlenecks in your application\n5. Load balancing: Distribute traffic across multiple server instances for better scalability",
 )
 
-print(result.value)  # A float between 0.0 and 1.0
-print(result.reason)  # Explanation for the score
-```
+print(result.value) # A float between 0.0 and 1.0
+print(result.reason) # Explanation for the score
 
-Asynchronous scoring is also supported with the `ascore` scoring method.
+````
+
+```typescript title="TypeScript" language="typescript"
+import { Usefulness } from 'opik';
+
+const metric = new Usefulness();
+
+const result = await metric.score({
+    input: "How can I optimize the performance of my Python web application?",
+    output: "To optimize your Python web application's performance, focus on these key areas:\n1. Database optimization: Use connection pooling, index frequently queried fields, and cache common queries\n2. Caching strategy: Implement Redis or Memcached for session data and frequently accessed content\n3. Asynchronous operations: Use async/await for I/O-bound operations to handle more concurrent requests\n4. Code profiling: Use tools like cProfile to identify bottlenecks in your application\n5. Load balancing: Distribute traffic across multiple server instances for better scalability",
+});
+
+console.log(result.value);  // A float between 0.0 and 1.0
+console.log(result.reason);  // Explanation for the score
+````
+
+</CodeBlocks>
+
+Asynchronous scoring is also supported with the `ascore` method in Python and `score` method in TypeScript (which is always async).
 
 ## Understanding the scores
 

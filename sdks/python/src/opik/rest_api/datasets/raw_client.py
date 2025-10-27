@@ -19,6 +19,7 @@ from ..types.dataset_item_write import DatasetItemWrite
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.page_columns import PageColumns
+from ..types.project_stats_public import ProjectStatsPublic
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_visibility import DatasetWriteVisibility
 
@@ -622,6 +623,57 @@ class RawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ProjectStatsPublic]:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ProjectStatsPublic]
+            Experiment items stats resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items/stats",
+            method="GET",
+            params={
+                "experiment_ids": experiment_ids,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[DatasetItemPublic]:
@@ -666,6 +718,7 @@ class RawDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DatasetItemPagePublic]:
@@ -679,6 +732,8 @@ class RawDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -696,6 +751,7 @@ class RawDatasetsClient:
             params={
                 "page": page,
                 "size": size,
+                "filters": filters,
                 "truncate": truncate,
             },
             request_options=request_options,
@@ -1421,6 +1477,57 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def get_dataset_experiment_items_stats(
+        self,
+        id: str,
+        *,
+        experiment_ids: str,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ProjectStatsPublic]:
+        """
+        Get experiment items stats for dataset
+
+        Parameters
+        ----------
+        id : str
+
+        experiment_ids : str
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ProjectStatsPublic]
+            Experiment items stats resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/items/experiments/items/stats",
+            method="GET",
+            params={
+                "experiment_ids": experiment_ids,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ProjectStatsPublic,
+                    parse_obj_as(
+                        type_=ProjectStatsPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[DatasetItemPublic]:
@@ -1465,6 +1572,7 @@ class AsyncRawDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DatasetItemPagePublic]:
@@ -1478,6 +1586,8 @@ class AsyncRawDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1495,6 +1605,7 @@ class AsyncRawDatasetsClient:
             params={
                 "page": page,
                 "size": size,
+                "filters": filters,
                 "truncate": truncate,
             },
             request_options=request_options,

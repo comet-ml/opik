@@ -89,6 +89,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .ifPresent(builder::customHeaders);
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
         return builder.build();
     }

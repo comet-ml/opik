@@ -229,17 +229,16 @@ This approach is particularly useful when:
 
 Opik currently calculates costs automatically for all LLM calls in the following Python SDK integrations:
 
-- [Google ADK Integration](/tracing/integrations/adk)
-- [AWS Bedrock Integration](/tracing/integrations/bedrock)
-- [LangChain Integration](/tracing/integrations/langchain)
-- [OpenAI Integration](/tracing/integrations/openai)
+- [Google ADK Integration](/integrations/adk)
+- [AWS Bedrock Integration](/integrations/bedrock)
+- [LangChain Integration](/integrations/langchain)
+- [OpenAI Integration](/integrations/openai)
 - [LiteLLM Integration](https://docs.litellm.ai/docs/observability/opik_integration)
-- [Anthropic Integration](/tracing/integrations/anthropic)
-- [CrewAI Integration](/tracing/integrations/crewai)
-- [Google AI Integration](/tracing/integrations/genai)
-- [Haystack Integration](/tracing/integrations/haystack)
-- [LlamaIndex Integration](/tracing/integrations/llama_index)
-
+- [Anthropic Integration](/integrations/anthropic)
+- [CrewAI Integration](/integrations/crewai)
+- [Google AI Integration](/integrations/gemini)
+- [Haystack Integration](/integrations/haystack)
+- [LlamaIndex Integration](/integrations/llama_index)
 
 ### Supported Providers
 
@@ -253,11 +252,10 @@ Cost tracking is supported for the following LLM providers (as defined in `opik.
 - **AWS Bedrock** (`bedrock`) - Models hosted by AWS Bedrock (https://aws.amazon.com/bedrock)
 - **Groq** (`groq`) - Models hosted by Groq (https://groq.com)
 
+You can find a complete list of supported models for these providers in the
+[model_prices_and_context_window.json file](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/model_prices_and_context_window.json).
+
 <Tip>
   We are actively expanding our cost tracking support. Need support for additional models or providers? Please [open a
   feature request](https://github.com/comet-ml/opik/issues) to help us prioritize development.
 </Tip>
-
-## Complete Model List
-
-For a comprehensive list of all supported models with detailed pricing information, visit the [Supported Models](/tracing/supported_models) page. This page is automatically generated from the latest model pricing data and includes:

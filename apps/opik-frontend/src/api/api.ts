@@ -12,6 +12,7 @@ axiosInstance.defaults.withCredentials = true;
 export const CODE_EXECUTOR_SERVICE_URL = import.meta.env
   .VITE_GET_STARTED_API_URL;
 export const FEATURE_TOGGLES_REST_ENDPOINT = "/v1/private/toggles/";
+export const WELCOME_WIZARD_REST_ENDPOINT = "/v1/private/welcome-wizard";
 export const PROJECTS_REST_ENDPOINT = "/v1/private/projects/";
 export const DATASETS_REST_ENDPOINT = "/v1/private/datasets/";
 export const EXPERIMENTS_REST_ENDPOINT = "/v1/private/experiments/";
@@ -25,6 +26,7 @@ export const ALERTS_REST_ENDPOINT = "/v1/private/alerts/";
 export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
 export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
 export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/optimizations/";
+export const ANNOTATION_QUEUES_REST_ENDPOINT = "/v1/private/annotation-queues/";
 export const WORKSPACES_REST_ENDPOINT = "/v1/private/workspaces/";
 export const WORKSPACE_CONFIG_REST_ENDPOINT =
   "/v1/private/workspaces/configurations/";
@@ -44,6 +46,8 @@ export const PROJECTS_KEY = "projects";
 export const PROJECT_STATISTICS_KEY = "project-statistics";
 export const OPTIMIZATIONS_KEY = "optimizations";
 export const OPTIMIZATION_KEY = "optimization";
+export const ANNOTATION_QUEUES_KEY = "annotation-queues";
+export const ANNOTATION_QUEUE_KEY = "annotation-queue";
 export const WORKSPACE_CONFIG_KEY = "workspace-config";
 export const TRACE_AI_ASSISTANT_KEY = "trace-analyzer-history";
 

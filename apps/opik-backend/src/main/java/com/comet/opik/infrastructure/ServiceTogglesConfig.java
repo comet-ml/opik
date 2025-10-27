@@ -16,5 +16,7 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean opikAIEnabled;
     @JsonProperty
-    @NotNull boolean humanAnnotationEnabled;
+    @NotNull boolean alertsEnabled;
+    @JsonProperty
+    @NotNull boolean welcomeWizardEnabled;
 }

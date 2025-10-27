@@ -67,9 +67,9 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         // This is crucial for logging purposes to identify the rule and trace
         try (var logContext = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                "workspace_id", message.workspaceId(),
-                "trace_id", trace.id().toString(),
-                "rule_id", message.ruleId().toString()))) {
+                UserLog.WORKSPACE_ID, message.workspaceId(),
+                UserLog.TRACE_ID, trace.id().toString(),
+                UserLog.RULE_ID, message.ruleId().toString()))) {
 
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 

@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -47,8 +48,6 @@ public interface DatasetItemDAO {
 
     Mono<Long> delete(List<UUID> ids);
 
-    Mono<DatasetItemPage> getItems(UUID datasetId, int page, int size, boolean truncate);
-
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
     Mono<DatasetItem> get(UUID id);
@@ -60,12 +59,27 @@ public interface DatasetItemDAO {
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
 
     Mono<List<Column>> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
+
+    Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters);
 }
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetItemDAOImpl implements DatasetItemDAO {
+
+    /**
+     * Maximum decimal value bound for duration statistics in ClickHouse Decimal64(9).
+     * This ensures values stay within the precision limits while handling extreme values.
+     */
+    private static final String MAX_DECIMAL_BOUND = "999999999.999999999";
+
+    /**
+     * Minimum decimal value bound for duration statistics in ClickHouse Decimal64(9).
+     * This ensures values stay within the precision limits while handling extreme values.
+     */
+    private static final String MIN_DECIMAL_BOUND = "-999999999.999999999";
 
     private static final String INSERT_DATASET_ITEM = """
             INSERT INTO dataset_items (
@@ -150,6 +164,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit OFFSET :offset
@@ -180,6 +195,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
+                <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
                 ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS lastRows
@@ -520,7 +536,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    arrayStringConcat(reasons, ', ') AS reason,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
                         authors,
@@ -665,14 +681,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
                 LEFT JOIN comments_final AS c ON t.id = c.entity_id
                 LEFT JOIN (
-                    SELECT
-                        trace_id,
-                        SUM(total_estimated_cost) AS total_estimated_cost,
-                        sumMap(usage) AS usage
-                    FROM spans final
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                    GROUP BY workspace_id, project_id, trace_id
+                SELECT
+                    trace_id,
+                    SUM(total_estimated_cost) AS total_estimated_cost,
+                    sumMap(usage) AS usage
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
+                GROUP BY workspace_id, trace_id
                 ) s ON t.id = s.trace_id
                 GROUP BY
                     t.id,
@@ -738,8 +754,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         arrayFlatten(
                             groupArray(
                                 arrayMap(
-                                    key -> map(key, [toString(JSONType(JSONExtractRaw(output, key)))]),
-                                    JSONExtractKeys(output)
+                                    key_type -> map(tupleElement(key_type, 1), [tupleElement(key_type, 2)]),
+                                    output_keys
                                 )
                             )
                         )
@@ -751,13 +767,188 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             INNER JOIN (
                 SELECT
                     id,
-                    output
+                    output_keys
                 FROM traces final
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT trace_id FROM experiment_items_final)
             ) as t ON t.id = ei.trace_id
             ;
             """;
+
+    private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
+            """
+                    WITH feedback_scores_combined_raw AS (
+                        SELECT workspace_id,
+                               project_id,
+                               entity_id,
+                               name,
+                               value,
+                               last_updated_at,
+                               feedback_scores.last_updated_by AS author
+                        FROM feedback_scores FINAL
+                        WHERE entity_type = 'trace'
+                          AND workspace_id = :workspace_id
+                        UNION ALL
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            value,
+                            last_updated_at,
+                            author
+                        FROM authored_feedback_scores FINAL
+                        WHERE entity_type = 'trace'
+                           AND workspace_id = :workspace_id
+                    ), feedback_scores_with_ranking AS (
+                        SELECT workspace_id,
+                               project_id,
+                               entity_id,
+                               name,
+                               value,
+                               last_updated_at,
+                               author,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY workspace_id, project_id, entity_id, name, author
+                                   ORDER BY last_updated_at DESC
+                               ) as rn
+                        FROM feedback_scores_combined_raw
+                    ), feedback_scores_combined AS (
+                        SELECT workspace_id,
+                               project_id,
+                               entity_id,
+                               name,
+                               value,
+                               last_updated_at,
+                               author
+                        FROM feedback_scores_with_ranking
+                        WHERE rn = 1
+                    ),                     feedback_scores_final AS (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                            max(last_updated_at) AS last_updated_at
+                        FROM feedback_scores_combined
+                        GROUP BY workspace_id, project_id, entity_id, name
+                    )<if(feedback_scores_empty_filters)>,
+                    fsc AS (
+                        SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                        FROM (
+                            SELECT *
+                            FROM feedback_scores_final
+                         )
+                         GROUP BY entity_id
+                         HAVING <feedback_scores_empty_filters>
+                    )
+                    <endif>,
+                    experiment_items_filtered AS (
+                        SELECT
+                            ei.id,
+                            ei.experiment_id,
+                            ei.dataset_item_id,
+                            ei.trace_id
+                        FROM experiment_items ei
+                        WHERE ei.workspace_id = :workspace_id
+                        AND ei.dataset_item_id IN (
+                            SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
+                        )
+                        <if(experiment_ids)>
+                        AND ei.experiment_id IN :experiment_ids
+                        <endif>
+                        <if(experiment_item_filters)>
+                        AND ei.trace_id IN (
+                            SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
+                        )
+                        <endif>
+                        <if(feedback_scores_empty_filters)>
+                        AND ei.trace_id IN (
+                            SELECT id
+                            FROM traces
+                            LEFT JOIN fsc ON fsc.entity_id = traces.id
+                            WHERE workspace_id = :workspace_id
+                            AND fsc.feedback_scores_count = 0
+                        )
+                        <endif>
+                        <if(feedback_scores_filters)>
+                        AND ei.trace_id IN (
+                            SELECT entity_id
+                            FROM feedback_scores_final
+                            GROUP BY entity_id, name
+                            HAVING <feedback_scores_filters>
+                        )
+                        <endif>
+                        <if(dataset_item_filters)>
+                        AND ei.dataset_item_id IN (
+                            SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND <dataset_item_filters>
+                        )
+                        <endif>
+                    ), traces_with_cost_and_duration AS (
+                        SELECT DISTINCT
+                            eif.trace_id as trace_id,
+                            t.duration as duration,
+                            s.total_estimated_cost as total_estimated_cost
+                        FROM experiment_items_filtered eif
+                        LEFT JOIN (
+                            SELECT
+                                id,
+                                if(end_time IS NOT NULL AND start_time IS NOT NULL
+                                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                                    NULL) as duration
+                            FROM traces final
+                            WHERE workspace_id = :workspace_id
+                            AND id IN (SELECT trace_id FROM experiment_items_filtered)
+                        ) AS t ON eif.trace_id = t.id
+                        LEFT JOIN (
+                            SELECT
+                                trace_id,
+                                sum(total_estimated_cost) as total_estimated_cost
+                            FROM spans final
+                            WHERE workspace_id = :workspace_id
+                            AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
+                            GROUP BY workspace_id, project_id, trace_id
+                        ) AS s ON eif.trace_id = s.trace_id
+                    ), feedback_scores_agg AS (
+                        SELECT
+                            entity_id,
+                            mapFromArrays(
+                                groupArray(name),
+                                groupArray(value)
+                            ) AS feedback_scores
+                        FROM feedback_scores_final
+                        WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                        GROUP BY workspace_id, project_id, entity_id
+                    )
+                    SELECT
+                        count(DISTINCT ei.id) as experiment_items_count,
+                        count(DISTINCT tc.trace_id) as trace_count,
+                        mapFromArrays(
+                            ['p50', 'p90', 'p99'],
+                            arrayMap(
+                              v -> toDecimal64(
+                                     greatest(
+                                       least(if(isFinite(v), v, 0),  %s),
+                                       %s
+                                     ),
+                                     9
+                                   ),
+                              quantiles(0.5, 0.9, 0.99)(tc.duration)
+                            )
+                        ) AS duration,
+                        avgMap(f.feedback_scores) AS feedback_scores,
+                        avgIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_,
+                        toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                        sumIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                        toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
+                    FROM experiment_items_filtered ei
+                    LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
+                    LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
+                    ;
+                    """,
+            MAX_DECIMAL_BOUND, MIN_DECIMAL_BOUND);
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -957,45 +1148,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
-    @Override
-    @WithSpan
-    public Mono<DatasetItemPage> getItems(@NonNull UUID datasetId, int page, int size, boolean truncate) {
-
-        Segment segmentCount = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page_count");
-
-        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> Flux
-                .from(connection.createStatement(SELECT_DATASET_ITEMS_COUNT)
-                        .bind("datasetId", datasetId)
-                        .bind("workspace_id", workspaceId)
-                        .execute())
-                .doFinally(signalType -> endSegment(segmentCount))
-                .flatMap(results -> DatasetItemResultMapper.mapCountAndColumns(results, "data"))
-                .reduce(DatasetItemResultMapper::groupResults)
-                .flatMap(result -> {
-
-                    Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_page");
-
-                    long total = result.getKey();
-                    Set<Column> columns = result.getValue();
-
-                    ST template = ImageUtils.addTruncateToTemplate(new ST(SELECT_DATASET_ITEMS), truncate);
-                    template = template.add("truncationSize",
-                            configuration.getResponseFormatting().getTruncationSize());
-
-                    return Flux.from(connection.createStatement(template.render())
-                            .bind("workspace_id", workspaceId)
-                            .bind("datasetId", datasetId)
-                            .bind("limit", size)
-                            .bind("offset", (page - 1) * size)
-                            .execute())
-                            .flatMap(DatasetItemResultMapper::mapItem)
-                            .collectList()
-                            .flatMap(items -> Mono
-                                    .just(new DatasetItemPage(items, page, items.size(), total, columns)))
-                            .doFinally(signalType -> endSegment(segment));
-                })));
-    }
-
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
         var template = new ST(query);
 
@@ -1033,11 +1185,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @WithSpan
     public Mono<DatasetItemPage> getItems(
             @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size) {
-        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
-                datasetItemSearchCriteria, page, size);
 
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE,
-                "select_dataset_items_experiments_filters_summary");
+        boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
+
+        // Choose the appropriate query and segment names based on experiment IDs
+        String query = hasExperimentIds ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS : SELECT_DATASET_ITEMS;
+        String summarySegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters_summary"
+                : "select_dataset_items_filters_summary";
+        String contentSegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters"
+                : "select_dataset_items_filters";
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, summarySegmentName);
 
         Mono<Set<Column>> columnsMono = mapColumnsField(datasetItemSearchCriteria);
         Mono<Long> countMono = getCount(datasetItemSearchCriteria);
@@ -1046,11 +1206,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .doFinally(signalType -> endSegment(segment))
                 .flatMap(results -> asyncTemplate.nonTransaction(connection -> {
 
-                    Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE,
-                            "select_dataset_items_experiments_filters");
+                    Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE, contentSegmentName);
 
-                    ST selectTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS,
-                            datasetItemSearchCriteria);
+                    ST selectTemplate = newFindTemplate(query, datasetItemSearchCriteria);
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
                     selectTemplate = selectTemplate.add("truncationSize",
@@ -1058,10 +1216,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     var selectStatement = connection.createStatement(selectTemplate.render())
                             .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                            .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
-                            .bind("entityType", datasetItemSearchCriteria.entityType().getType())
                             .bind("limit", size)
                             .bind("offset", (page - 1) * size);
+
+                    // Only bind experimentIds and entityType if we have experiment IDs
+                    if (hasExperimentIds) {
+                        selectStatement = selectStatement.bind("experimentIds",
+                                datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new))
+                                .bind("entityType", datasetItemSearchCriteria.entityType().getType());
+                    }
 
                     bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
 
@@ -1079,16 +1242,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {
+        // Choose the appropriate count query based on whether we have experiment IDs
+        boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
+        String countQuery = hasExperimentIds
+                ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT
+                : SELECT_DATASET_ITEMS_COUNT;
+
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST countTemplate = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT,
-                    datasetItemSearchCriteria);
+            ST countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
 
             var statement = connection.createStatement(countTemplate.render())
-                    .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                    .bind("experimentIds", datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new));
+                    .bind("datasetId", datasetItemSearchCriteria.datasetId());
+
+            // Only bind experimentIds if we have them
+            if (hasExperimentIds) {
+                statement = statement.bind("experimentIds",
+                        datasetItemSearchCriteria.experimentIds().toArray(UUID[]::new));
+            }
 
             bindSearchCriteria(datasetItemSearchCriteria, statement);
 
@@ -1116,5 +1289,81 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.just(defaultValue);
         }
         return Mono.error(e);
+    }
+
+    @WithSpan
+    public Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(
+            @NonNull UUID datasetId,
+            @NonNull Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters) {
+        log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
+                experimentIds, filters);
+
+        ST template = new ST(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS);
+        template.add("dataset_id", datasetId);
+        if (!experimentIds.isEmpty()) {
+            template.add("experiment_ids", true);
+        }
+
+        applyFiltersToTemplate(template, filters);
+
+        String sql = template.render();
+        log.debug("Experiment items stats query: '{}'", sql);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Statement statement = connection.createStatement(sql);
+            bindStatementParameters(statement, datasetId, experimentIds, filters);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map(
+                            (row, rowMetadata) -> com.comet.opik.domain.stats.StatsMapper.mapExperimentItemsStats(row)))
+                    .singleOrEmpty();
+        })
+                .doOnError(error -> log.error("Failed to get experiment items stats", error));
+    }
+
+    private void applyFiltersToTemplate(ST template, List<ExperimentsComparisonFilter> filters) {
+        Optional.ofNullable(filters)
+                .ifPresent(filtersParam -> {
+                    filterQueryBuilder.toAnalyticsDbFilters(filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.EXPERIMENT_ITEM)
+                            .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
+                                    experimentItemFilters));
+
+                    filterQueryBuilder.toAnalyticsDbFilters(filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.FEEDBACK_SCORES)
+                            .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters",
+                                    feedbackScoresFilters));
+
+                    filterQueryBuilder.toAnalyticsDbFilters(filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                            .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
+                                    feedbackScoresEmptyFilters));
+
+                    filterQueryBuilder.toAnalyticsDbFilters(filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM)
+                            .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                                    datasetItemFilters));
+                });
+    }
+
+    private void bindStatementParameters(Statement statement, UUID datasetId, Set<UUID> experimentIds,
+            List<ExperimentsComparisonFilter> filters) {
+        statement.bind("dataset_id", datasetId);
+        if (!experimentIds.isEmpty()) {
+            statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+        }
+
+        Optional.ofNullable(filters)
+                .ifPresent(filtersParam -> {
+                    filterQueryBuilder.bind(statement, filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.EXPERIMENT_ITEM);
+                    filterQueryBuilder.bind(statement, filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.FEEDBACK_SCORES);
+                    filterQueryBuilder.bind(statement, filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    filterQueryBuilder.bind(statement, filtersParam,
+                            com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
+                });
     }
 }

@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.DatasetFilter;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
@@ -46,7 +47,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -70,6 +70,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -303,15 +304,27 @@ public class DatasetsResource {
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
+        var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
+
+        var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
+                .datasetId(id)
+                .experimentIds(Set.of()) // Empty set for regular dataset items
+                .filters(queryFilters)
+                .entityType(EntityType.TRACE)
+                .truncate(truncate)
+                .build();
+
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
-                workspaceId);
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size, truncate)
+        log.info("Finding dataset items by id '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'", id, page,
+                size, filters, workspaceId);
+
+        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
+        log.info("Found dataset items by id '{}', count '{}', page '{}', size '{}' on workspace_id '{}'", id,
                 datasetItemPage.content().size(), page, size, workspaceId);
 
         return Response.ok(datasetItemPage).build();
@@ -402,11 +415,18 @@ public class DatasetsResource {
             @PathParam("id") UUID datasetId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
+            @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+
+        if (experimentIds.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
+                            "experiment_ids cannot be empty"))
+                    .build();
+        }
 
         var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
 
@@ -431,6 +451,42 @@ public class DatasetsResource {
                 "Found dataset items with experiment items by '{}', count '{}', page '{}', size '{}' on workspaceId '{}'",
                 datasetItemSearchCriteria, datasetItemPage.content().size(), page, size, workspaceId);
         return Response.ok(datasetItemPage).build();
+    }
+
+    @Timed
+    @GET
+    @Path("/{id}/items/experiments/items/stats")
+    @Operation(operationId = "getDatasetExperimentItemsStats", summary = "Get experiment items stats for dataset", description = "Get experiment items stats for dataset", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment items stats resource", content = @Content(schema = @Schema(implementation = com.comet.opik.api.ProjectStats.class)))
+    })
+    @JsonView({com.comet.opik.api.ProjectStats.ProjectStatItem.View.Public.class})
+    @SuppressWarnings("unchecked")
+    public Response getDatasetExperimentItemsStats(
+            @PathParam("id") UUID datasetId,
+            @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
+            @QueryParam("filters") String filters) {
+
+        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+
+        if (experimentIds.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
+                            "experiment_ids cannot be empty"))
+                    .build();
+        }
+
+        List<ExperimentsComparisonFilter> queryFilters = (List<ExperimentsComparisonFilter>) filtersFactory
+                .newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+
+        log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'",
+                datasetId, experimentIds, filters);
+        var stats = itemService.getExperimentItemsStats(datasetId, experimentIds, queryFilters)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got experiment items stats for dataset '{}' and experiments '{}', count '{}'", datasetId,
+                experimentIds, stats.stats().size());
+        return Response.ok(stats).build();
     }
 
     @GET

@@ -17,6 +17,7 @@ import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
+import com.comet.opik.api.TraceThreadBatchIdentifier;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -41,7 +42,6 @@ import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
-import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -77,6 +77,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
@@ -122,7 +123,8 @@ public class TracesResource {
             @QueryParam("project_name") String projectName,
             @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude) {
 
@@ -143,6 +145,7 @@ public class TracesResource {
                 .projectId(projectId)
                 .filters(traceFilters)
                 .truncate(truncate)
+                .stripAttachments(stripAttachments)
                 .sortingFields(sortingFields)
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .build();
@@ -194,6 +197,7 @@ public class TracesResource {
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
                 .truncate(request.truncate())
+                .stripAttachments(request.stripAttachments())
                 .sortingFields(List.of())
                 .build();
 
@@ -220,13 +224,16 @@ public class TracesResource {
     @Operation(operationId = "getTraceById", summary = "Get trace by id", description = "Get trace by id", responses = {
             @ApiResponse(responseCode = "200", description = "Trace resource", content = @Content(schema = @Schema(implementation = Trace.class)))})
     @JsonView(Trace.View.Public.class)
-    public Response getById(@PathParam("id") UUID id) {
+    public Response getById(
+            @PathParam("id") UUID id,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting trace by id '{}' on workspace_id '{}'", id, workspaceId);
+        log.info("Getting trace by id '{}' on workspace_id '{}', stripAttachments '{}'", id,
+                workspaceId, stripAttachments);
 
-        Trace trace = service.get(id)
+        Trace trace = service.get(id, stripAttachments)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -556,7 +563,8 @@ public class TracesResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("project_name") String projectName,
             @QueryParam("project_id") UUID projectId,
-            @QueryParam("truncate") @Schema(description = "Truncate image included in the messages") boolean truncate,
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting) {
 
@@ -577,6 +585,7 @@ public class TracesResource {
                 .projectId(projectId)
                 .filters(traceFilters)
                 .truncate(truncate)
+                .stripAttachments(stripAttachments)
                 .sortingFields(sortingFields)
                 .build();
 
@@ -628,6 +637,7 @@ public class TracesResource {
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
                 .truncate(request.truncate())
+                .stripAttachments(request.stripAttachments())
                 .sortingFields(List.of())
                 .build();
 
@@ -651,12 +661,13 @@ public class TracesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        UUID projectId = validateProjectIdentifier(identifier, workspaceId);
+        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
+                workspaceId);
 
-        log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}'", projectId,
-                identifier.threadId(), workspaceId);
+        log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}' with truncate '{}'",
+                identifier.threadId(), projectId, workspaceId, identifier.truncate());
 
-        TraceThread thread = service.getThreadById(projectId, identifier.threadId())
+        TraceThread thread = service.getThreadById(projectId, identifier.threadId(), identifier.truncate())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -664,20 +675,6 @@ public class TracesResource {
                 projectId, workspaceId);
 
         return Response.ok(thread).build();
-    }
-
-    private UUID validateProjectIdentifier(TraceThreadIdentifier identifier, String workspaceId) {
-        // Verify project visibility
-        if (identifier.projectId() != null) {
-            return projectService.get(identifier.projectId()).id();
-        }
-
-        // If the project name is provided, find the project by name
-        return projectService.findByNames(workspaceId, List.of(identifier.projectName()))
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> ErrorUtils.failWithNotFoundName("Project", identifier.projectName()))
-                .id();
     }
 
     @POST
@@ -711,7 +708,8 @@ public class TracesResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         // Validate project identifier and get projectId
-        UUID projectId = validateProjectIdentifier(identifier, workspaceId);
+        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
+                workspaceId);
 
         log.info("Open trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
                 projectId, workspaceId);
@@ -728,26 +726,32 @@ public class TracesResource {
 
     @PUT
     @Path("/threads/close")
-    @Operation(operationId = "closeTraceThread", summary = "Close trace thread", description = "Close trace thread", responses = {
+    @Operation(operationId = "closeTraceThread", summary = "Close trace thread(s)", description = "Close one or multiple trace threads. Supports both single thread_id and multiple thread_ids for batch operations.", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response closeTraceThread(
-            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadIdentifier.class))) @NotNull @Valid TraceThreadIdentifier identifier) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadBatchIdentifier.class))) @NotNull @Valid TraceThreadBatchIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         // Validate project identifier and get projectId
-        UUID projectId = validateProjectIdentifier(identifier, workspaceId);
+        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
+                workspaceId);
 
-        log.info("Close trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
+        // Handle both single and batch operations
+        Set<String> threadIds = CollectionUtils.isNotEmpty(identifier.threadIds())
+                ? Set.copyOf(identifier.threadIds())
+                : Set.of(identifier.threadId());
+
+        log.info("Close trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
                 projectId, workspaceId);
 
-        traceThreadService.closeThread(projectId, identifier.threadId())
+        traceThreadService.closeThreads(projectId, threadIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Closed trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
+        log.info("Closed trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
                 projectId, workspaceId);
 
         return Response.noContent().build();

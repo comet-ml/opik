@@ -22,6 +22,14 @@ Answer Relevance, Context Precision/Recall and more. You can learn more about th
   all, or a subset, of your production traces.
 </Tip>
 
+<Note>
+  **New: Multi-Value Feedback Scores** - Opik now supports collaborative
+  evaluation where multiple team members can score the same traces and spans.
+  This reduces bias and provides more reliable evaluation results through
+  automatic score aggregation. [Learn more
+  →](/tracing/annotate_traces#multi-value-feedback-scores)
+</Note>
+
 ## Running an Evaluation
 
 Each evaluation is defined by a dataset, an evaluation task and a set of evaluation metrics:
@@ -148,6 +156,41 @@ In the experiment pages, you will be able to:
 2. Deep dive into each sample by clicking on the `item ID`
 3. Review the experiment configuration to know how the experiment was Run
 4. Compare multiple experiments side by side
+
+
+### Analyzing Evaluation Results in Python
+
+To analyze the evaluation results in Python, you can use the `EvaluationResult.aggregate_evaluation_scores()` method
+to retrieve the aggregated score statistics:
+
+```python
+import opik
+from opik.evaluation import evaluate_prompt
+from opik.evaluation.metrics import Hallucination
+
+# Create a dataset that contains the samples you want to evaluate
+opik_client = opik.Opik()
+dataset = opik_client.get_or_create_dataset("Evaluation test dataset")
+dataset.insert([
+    {"input": "Hello, world!", "expected_output": "Hello, world!"},
+    {"input": "What is the capital of France?", "expected_output": "Paris"},
+])
+# Run the evaluation
+result = evaluate_prompt(
+    dataset=dataset,
+    messages=[{"role": "user", "content": "Translate the following text to French: {{input}}"}],
+    model="gpt-5",  # or model that you want to evaluate
+    scoring_metrics=[Hallucination()],
+    verbose=2,  # print detailed statistics report for every metric
+)
+
+# Retrieve and print the aggregated scores statistics (mean, min, max, std) per metric
+scores = result.aggregate_evaluation_scores()
+for metric_name, statistics in scores.aggregated_scores.items():
+    print(f"{metric_name}: {statistics}")
+```
+
+You can use aggregated scores to compare the performance of different models or different versions of the same model.
 
 ## Learn more
 

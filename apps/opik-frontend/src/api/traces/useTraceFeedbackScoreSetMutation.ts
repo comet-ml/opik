@@ -18,6 +18,7 @@ import {
   setTraceCache,
   setTracesCache,
 } from "@/lib/feedback-scores";
+import { useLoggedInUserName } from "@/store/AppStore";
 
 type UseTraceFeedbackScoreSetMutationParams = {
   categoryName?: string;
@@ -31,6 +32,7 @@ type UseTraceFeedbackScoreSetMutationParams = {
 const useTraceFeedbackScoreSetMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const currentUserName = useLoggedInUserName();
 
   return useMutation({
     mutationFn: async ({
@@ -73,13 +75,16 @@ const useTraceFeedbackScoreSetMutation = () => {
         traceId: params.traceId,
       };
 
-      const updateMutation = generateUpdateMutation({
-        name: params.name,
-        category_name: params.categoryName,
-        value: params.value,
-        source: FEEDBACK_SCORE_TYPE.ui,
-        reason: params.reason,
-      });
+      const updateMutation = generateUpdateMutation(
+        {
+          name: params.name,
+          category_name: params.categoryName,
+          value: params.value,
+          source: FEEDBACK_SCORE_TYPE.ui,
+          reason: params.reason,
+        },
+        currentUserName,
+      );
 
       if (params.spanId) {
         // make optimistic update for spans
@@ -116,6 +121,9 @@ const useTraceFeedbackScoreSetMutation = () => {
       await queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
       await queryClient.invalidateQueries({ queryKey: ["traces-columns"] });
       await queryClient.invalidateQueries({ queryKey: ["traces-statistic"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["experiment-items-statistic"],
+      });
 
       await queryClient.invalidateQueries({
         queryKey: [TRACE_KEY, { traceId: variables.traceId }],

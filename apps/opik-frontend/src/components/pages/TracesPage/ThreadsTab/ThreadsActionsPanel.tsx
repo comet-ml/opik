@@ -1,19 +1,21 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash } from "lucide-react";
 import get from "lodash/get";
+import first from "lodash/first";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
 import { Thread } from "@/types/traces";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useThreadBatchDeleteMutation from "@/api/traces/useThreadBatchDeleteMutation";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
+import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
-import first from "lodash/first";
 
 type ThreadsActionsPanelProps = {
-  rows: Thread[];
+  getDataForExport: () => Promise<Thread[]>;
+  selectedRows: Thread[];
   columnsToExport: string[];
   projectName: string;
   projectId: string;
@@ -21,21 +23,28 @@ type ThreadsActionsPanelProps = {
 
 const ThreadsActionsPanel: React.FunctionComponent<
   ThreadsActionsPanelProps
-> = ({ rows, columnsToExport, projectName, projectId }) => {
+> = ({
+  getDataForExport,
+  selectedRows,
+  columnsToExport,
+  projectName,
+  projectId,
+}) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
 
   const { mutate } = useThreadBatchDeleteMutation();
-  const disabled = !rows?.length;
+  const disabled = !selectedRows?.length;
 
   const deleteThreadsHandler = useCallback(() => {
     mutate({
       projectId,
-      ids: rows.map((row) => row.id),
+      ids: selectedRows.map((row) => row.id),
     });
-  }, [projectId, mutate, rows]);
+  }, [projectId, mutate, selectedRows]);
 
-  const mapRowData = useCallback(() => {
+  const mapRowData = useCallback(async () => {
+    const rows = await getDataForExport();
     return rows.map((row) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
         // we need split by dot to parse feedback_scores into correct structure
@@ -59,7 +68,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         return acc;
       }, {});
     });
-  }, [rows, columnsToExport]);
+  }, [getDataForExport, columnsToExport]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {
@@ -79,6 +88,12 @@ const ThreadsActionsPanel: React.FunctionComponent<
         description="Deleting threads will also remove all linked traces and their data. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
+      />
+      <AddToDropdown
+        getDataForExport={getDataForExport}
+        selectedRows={selectedRows}
+        disabled={disabled}
+        dataType="threads"
       />
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}

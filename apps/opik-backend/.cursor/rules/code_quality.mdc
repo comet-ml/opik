@@ -1,7 +1,7 @@
 ---
 description: Code Quality guidelines
-globs:
-alwaysApply: true
+globs: apps/opik-backend/**/*
+alwaysApply: false
 ---
 
 # Code Quality Guidelines
@@ -246,6 +246,71 @@ public void createUser(UserCreateRequest request) {
     if (request.getName().length() > 255) { // Magic number
         throw new ValidationException("Name too long");
     }
+}
+```
+
+### **String Constants and Templates**
+
+**Rule**: When you have repeated string prefixes or patterns, define them as constants with string formatting templates.
+
+```java
+// ❌ BAD: Hardcoded Repeated String Patterns
+private static final Map<AutomationRuleEvaluatorField, String> FIELD_MAP = new EnumMap<>(
+    ImmutableMap.<AutomationRuleEvaluatorField, String>builder()
+        .put(AutomationRuleEvaluatorField.ID, "rule." + ID_DB)
+        .put(AutomationRuleEvaluatorField.NAME, "rule." + NAME_DB)
+        .put(AutomationRuleEvaluatorField.TYPE, "evaluator." + TYPE_DB)
+        .put(AutomationRuleEvaluatorField.ENABLED, "evaluator." + ENABLED_DB)
+        .put(AutomationRuleEvaluatorField.PROJECT_ID, "evaluator." + PROJECT_ID_DB)
+        .build());
+
+// ✅ GOOD: String Template Constants
+// Define templates at the top of the class
+private static final String RULE_PREFIX = "rule.%s";
+private static final String EVALUATOR_PREFIX = "evaluator.%s";
+
+private static final Map<AutomationRuleEvaluatorField, String> FIELD_MAP = new EnumMap<>(
+    ImmutableMap.<AutomationRuleEvaluatorField, String>builder()
+        .put(AutomationRuleEvaluatorField.ID, RULE_PREFIX.formatted(ID_DB))
+        .put(AutomationRuleEvaluatorField.NAME, RULE_PREFIX.formatted(NAME_DB))
+        .put(AutomationRuleEvaluatorField.TYPE, EVALUATOR_PREFIX.formatted(TYPE_DB))
+        .put(AutomationRuleEvaluatorField.ENABLED, EVALUATOR_PREFIX.formatted(ENABLED_DB))
+        .put(AutomationRuleEvaluatorField.PROJECT_ID, EVALUATOR_PREFIX.formatted(PROJECT_ID_DB))
+        .build());
+```
+
+**Benefits**:
+- Single source of truth for prefixes
+- Easier to refactor if prefix changes
+- More maintainable and readable
+- Less error-prone when adding new mappings
+
+### **Constants Organization**
+
+Group related constants by category with clear comments:
+
+```java
+public class FilterQueryBuilder {
+    
+    // Database column names - base fields
+    private static final String ID_DB = "id";
+    private static final String NAME_DB = "name";
+    private static final String TYPE_DB = "type";
+    
+    // Database column names - timestamps
+    private static final String CREATED_AT_DB = "created_at";
+    private static final String LAST_UPDATED_AT_DB = "last_updated_at";
+    
+    // Database column names - audit fields
+    private static final String CREATED_BY_DB = "created_by";
+    private static final String LAST_UPDATED_BY_DB = "last_updated_by";
+    
+    // Table prefixes
+    private static final String RULE_PREFIX = "rule.%s";
+    private static final String EVALUATOR_PREFIX = "evaluator.%s";
+    
+    // Sensitive fields (DO NOT expose in API)
+    // private static final String WEBHOOK_SECRET_TOKEN_DB = "webhook_secret_token"; // REMOVED
 }
 ```
 

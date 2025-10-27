@@ -1,60 +1,43 @@
-from typing import Optional
+from typing import Callable, Optional, TypeVar
 
 from . import litellm_completion_decorator
+from . import completion_chunks_aggregator
 
-import litellm
+F = TypeVar("F", bound=Callable)
 
 
-def track_litellm(
+def track_completion(
     project_name: Optional[str] = None,
-) -> None:
-    """Adds Opik tracking wrappers to LiteLLM completion functions.
+) -> Callable[[F], F]:
+    """Decorator for tracking LiteLLM function calls with Opik.
 
-    The functions are always patched; however every wrapped call checks
-    `opik.decorator.tracing_runtime_config.is_tracing_active()` before emitting
-    any telemetry. If tracing is disabled at call time, the wrapped function
-    executes normally but no span/trace is sent.
+    Can be used within other Opik-tracked functions to create proper span hierarchy.
 
-    Tracks calls to:
-    * `litellm.completion()`
-    * `litellm.acompletion()`
+    Supported (streaming and non-streaming modes):
+    * `litellm.completion`
+    * `litellm.acompletion`
 
-    Note: Streaming is not currently supported
+    Example:
+        ```python
+        import litellm
+        from opik.integrations.litellm import track_completion
 
-    Can be used within other Opik-tracked functions.
+        tracked_completion = track_completion(project_name="my-project")(litellm.completion)
+        response = tracked_completion(model="gpt-3.5-turbo", messages=[...])
+        ```
 
     Args:
         project_name: The name of the project to log data.
 
     Returns:
-        None - modifies the global litellm module functions.
+        Decorator function that wraps the completion function with Opik tracking.
     """
 
-    if hasattr(litellm, "opik_tracked"):
-        return
-
-    litellm.opik_tracked = True
-
-    _patch_litellm_completion(project_name)
-
-
-def _patch_litellm_completion(
-    project_name: Optional[str] = None,
-) -> None:
-    """Patch LiteLLM completion functions with Opik tracking."""
     decorator_factory = litellm_completion_decorator.LiteLLMCompletionTrackDecorator()
 
-    completion_decorator = decorator_factory.track(
+    return decorator_factory.track(  # type: ignore
         type="llm",
-        name="completion",
+        name=None,  # Use the function's name (completion or acompletion)
         project_name=project_name,
+        generations_aggregator=completion_chunks_aggregator.aggregate,
     )
-    acompletion_decorator = decorator_factory.track(
-        type="llm",
-        name="acompletion",
-        project_name=project_name,
-    )
-
-    # Patch the global functions
-    litellm.completion = completion_decorator(litellm.completion)
-    litellm.acompletion = acompletion_decorator(litellm.acompletion)

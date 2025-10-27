@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogAutoScrollBody,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import cursorLogo from "/images/integrations/cursor.png";
 import copilotLogo from "/images/integrations/copilot.png";
 import windsurfLogo from "/images/integrations/windsurf.png";
@@ -85,7 +86,7 @@ After verifying language compatibility, perform a full codebase scan with the fo
 
 ### Step 3: Discover Available Integrations
 
-After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/tracing/integrations/overview.md
+After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/integrations/overview.md
 
 ### Step 4: Deep Analysis Confirmed files for LLM Frameworks & SDKs
 
@@ -128,6 +129,9 @@ If issues are reported:
 `;
 
 const QUICKSTART_DOCS_LINK = "https://www.comet.com/docs/opik/quickstart";
+const CURSOR_PROMPT_URL = `https://cursor.com/link/prompt?text=${encodeURIComponent(
+  AI_ASSISTANT_PROMPT,
+)}`;
 
 type QuickInstallDialogProps = {
   open: boolean;
@@ -179,7 +183,7 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
                 href={QUICKSTART_DOCS_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
               >
                 Read the full guide
                 <ExternalLink className="size-3" />
@@ -193,13 +197,28 @@ const QuickInstallDialog: React.FunctionComponent<QuickInstallDialogProps> = ({
               className="mb-6"
             >
               <div className="relative overflow-hidden rounded-md bg-primary-foreground">
-                <div className="absolute right-2 top-0.5 z-10">
-                  <CopyButton
-                    message="Successfully copied code"
-                    text={AI_ASSISTANT_PROMPT}
-                    tooltipText="Copy code"
-                    className="mr-2 text-muted-slate"
-                  />
+                <div className="flex items-center justify-between gap-2 border-b border-b-border p-2">
+                  <div className="comet-body-s-accented px-2 text-foreground">
+                    AI assistant prompt
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="xs" asChild>
+                      <a
+                        href={CURSOR_PROMPT_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Try in Cursor
+                        <ExternalLink className="ml-1.5 size-3" />
+                      </a>
+                    </Button>
+                    <CopyButton
+                      message="Successfully copied code"
+                      text={AI_ASSISTANT_PROMPT}
+                      tooltipText="Copy code"
+                      className="text-muted-slate"
+                    />
+                  </div>
                 </div>
                 <pre className="max-h-[300px] select-all overflow-auto whitespace-pre-wrap p-4 font-code text-sm">
                   {AI_ASSISTANT_PROMPT}

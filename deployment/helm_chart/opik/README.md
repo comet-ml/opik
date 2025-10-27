@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.0 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
@@ -135,7 +135,13 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.livenessProbe.failureThreshold | int | `10` |  |
+| clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.livenessProbe.initialDelaySeconds | int | `60` |  |
+| clickhouse.livenessProbe.periodSeconds | int | `30` |  |
+| clickhouse.livenessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
@@ -159,6 +165,12 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
+| clickhouse.readinessProbe.failureThreshold | int | `30` |  |
+| clickhouse.readinessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.readinessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.readinessProbe.initialDelaySeconds | int | `30` |  |
+| clickhouse.readinessProbe.periodSeconds | int | `10` |  |
+| clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
@@ -249,8 +261,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
-| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
@@ -316,7 +328,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
+| global.argocd | bool | `false` |  |
 | global.security.allowInsecureImages | bool | `true` |  |
+| global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
