@@ -218,7 +218,7 @@ export const formatTools = (tools: Tool[]): string => {
     // Add null checks for safety
     if (!tool.function) {
       lines.push(`**Unknown Tool**`);
-      lines.push("Invalid tool structure");
+      lines.push("Invalid tool call structure");
       lines.push("");
       continue;
     }
