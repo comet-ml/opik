@@ -7,6 +7,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.ImplementedBy;
@@ -55,16 +56,19 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final OnlineScorePublisher onlineScorePublisher;
     private final TraceService traceService;
+    private final ProjectService projectService;
     private final ServiceTogglesConfig serviceTogglesConfig;
 
     @Inject
     public ManualEvaluationServiceImpl(@NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull TraceService traceService,
+            @NonNull ProjectService projectService,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.traceService = traceService;
+        this.projectService = projectService;
         this.serviceTogglesConfig = serviceTogglesConfig;
     }
 
@@ -143,7 +147,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         Mono<Void> spanLevelMono = Mono.empty();
         if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
             spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules, spanLevelPythonRules,
-                    workspaceId, userName);
+                    projectId, workspaceId, userName);
         }
 
         // Handle trace-thread evaluators - can use IDs directly
@@ -171,9 +175,12 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     private Mono<Void> enqueueSpanLevelEvaluations(List<UUID> traceIds,
             List<AutomationRuleEvaluatorLlmAsJudge> llmAsJudgeRules,
             List<AutomationRuleEvaluatorUserDefinedMetricPython> pythonRules,
-            String workspaceId, String userName) {
+            UUID projectId, String workspaceId, String userName) {
 
         log.info("Fetching '{}' traces for span-level evaluation", traceIds.size());
+
+        // Fetch project to get project name
+        var project = projectService.get(projectId, workspaceId);
 
         // Fetch all traces reactively
         return Flux.fromIterable(traceIds)
@@ -195,7 +202,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     llmAsJudgeRules.forEach(rule -> {
                         List<TraceToScoreLlmAsJudge> messages = traces.stream()
                                 .map(trace -> TraceToScoreLlmAsJudge.builder()
-                                        .trace(trace)
+                                        .trace(trace.toBuilder().projectName(project.name()).build())
                                         .ruleId(rule.getId())
                                         .ruleName(rule.getName())
                                         .llmAsJudgeCode(rule.getCode())
@@ -218,7 +225,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
                         List<TraceToScoreUserDefinedMetricPython> messages = traces.stream()
                                 .map(trace -> TraceToScoreUserDefinedMetricPython.builder()
-                                        .trace(trace)
+                                        .trace(trace.toBuilder().projectName(project.name()).build())
                                         .ruleId(rule.getId())
                                         .ruleName(rule.getName())
                                         .code(rule.getCode())
