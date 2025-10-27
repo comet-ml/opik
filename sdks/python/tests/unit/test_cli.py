@@ -23,7 +23,7 @@ class TestDownloadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["export", "default", "dataset", "--help"])
         assert result.exit_code == 0
-        assert "Export datasets matching the given name pattern" in result.output
+        assert "Export a dataset by exact name" in result.output
         assert "--force" in result.output
 
     def test_export_project_help(self):
@@ -31,7 +31,7 @@ class TestDownloadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["export", "default", "project", "--help"])
         assert result.exit_code == 0
-        assert "Export projects matching the given name pattern" in result.output
+        assert "Export a project by exact name" in result.output
         assert "NAME" in result.output
 
     def test_export_experiment_help(self):
@@ -39,7 +39,7 @@ class TestDownloadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["export", "default", "experiment", "--help"])
         assert result.exit_code == 0
-        assert "Export experiments matching the given name pattern" in result.output
+        assert "Export an experiment by exact name" in result.output
         assert "NAME" in result.output
 
 

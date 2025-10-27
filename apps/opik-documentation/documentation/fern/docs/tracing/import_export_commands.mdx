@@ -4,10 +4,10 @@ toc_max_heading_level: 4
 
 The export/import command-line functions enable you to:
 
-- **Export**: Export all traces, spans, datasets, prompts, experiments, and evaluation rules from a project to local JSON or CSV files
+- **Export**: Export specific traces, spans, datasets, prompts, and experiments from a project to local JSON or CSV files
 - **Import**: Import data from local JSON files into a project
 - **Migrate**: Move data between projects or environments, including experiments and prompts
-- **Backup**: Create local backups of your project data
+- **Backup**: Create local backups of specific project data
 
 ## `opik export WORKSPACE TYPE NAME`
 
@@ -16,7 +16,7 @@ Exports specific data types from the specified workspace to local files.
 **Arguments:**
 - `WORKSPACE`: The workspace name to export from
 - `TYPE`: The type of data to export (`dataset`, `project`, `experiment`, or `prompt`)
-- `NAME`: Python regex pattern to match item names
+- `NAME`: Exact name of the item to export
 
 **Options:**
 - `--path, -p`: Directory to save exported data (default: `./`)
@@ -32,44 +32,44 @@ Exports specific data types from the specified workspace to local files.
 
 **Examples:**
 ```bash
-# Export datasets matching pattern
-opik export my-workspace dataset "test.*"
+# Export specific dataset by exact name
+opik export my-workspace dataset "my-test-dataset"
 
-# Export projects matching pattern
-opik export my-workspace project "project-.*" --filter "status = 'completed'"
+# Export specific project by exact name
+opik export my-workspace project "my-project" --filter "status = 'completed'"
 
-# Export experiments matching pattern
-opik export my-workspace experiment "exp-.*" --force
+# Export specific experiment by exact name
+opik export my-workspace experiment "my-experiment" --force
 
-# Export experiments with dataset filtering
-opik export my-workspace experiment "exp-.*" --dataset "my-dataset"
+# Export experiment with dataset filtering
+opik export my-workspace experiment "my-experiment" --dataset "my-dataset"
 
-# Export experiments with trace limit
-opik export my-workspace experiment "exp-.*" --max-traces 100
+# Export experiment with trace limit
+opik export my-workspace experiment "my-experiment" --max-traces 100
 
-# Export prompts matching pattern
-opik export my-workspace prompt "template-.*"
+# Export specific prompt by exact name
+opik export my-workspace prompt "my-template"
 
 # Export with custom output directory
-opik export my-workspace dataset ".*" --path ./backup_data
+opik export my-workspace dataset "my-dataset" --path ./backup_data
 
 # Export with filter and limit
-opik export my-workspace project ".*" --filter "start_time >= '2024-01-01T00:00:00Z'" --max-results 100
+opik export my-workspace project "my-project" --filter "start_time >= '2024-01-01T00:00:00Z'" --max-results 100
 
 # Export traces in CSV format for analysis
-opik export my-workspace project ".*" --format csv --path ./csv_data
+opik export my-workspace project "my-project" --format csv --path ./csv_data
 
 # Export with debug output
-opik export my-workspace dataset ".*" --debug --force
+opik export my-workspace dataset "my-dataset" --debug --force
 
 # Export datasets in CSV format for analysis
-opik export my-workspace dataset "test-.*" --format csv --path ./analysis_data
+opik export my-workspace dataset "my-dataset" --format csv --path ./analysis_data
 
 # Export prompts in CSV format for analysis
-opik export my-workspace prompt "template-.*" --format csv --path ./analysis_data
+opik export my-workspace prompt "my-template" --format csv --path ./analysis_data
 
 # Export experiments in CSV format for analysis
-opik export my-workspace experiment "evaluation-.*" --format csv --path ./analysis_data
+opik export my-workspace experiment "my-experiment" --format csv --path ./analysis_data
 ```
 
 ## `opik import WORKSPACE TYPE WORKSPACE_FOLDER`
@@ -83,7 +83,7 @@ Imports specific data types from local files to the specified workspace.
 
 **Options:**
 - `--dry-run`: Show what would be imported without actually importing
-- `--name`: Filter items by name using Python regex patterns
+- `--name`: Filter items by name using substring matching (case-insensitive)
 - `--debug`: Enable debug output to show detailed information about the import process
 
 **Note:** Experiment imports automatically recreate experiments where possible. No additional flags are needed.
@@ -103,7 +103,7 @@ opik import my-workspace experiment ./exported_data
 opik import my-workspace prompt ./exported_data
 
 # Import with filtering
-opik import my-workspace dataset ./exported_data --name "test.*"
+opik import my-workspace dataset ./exported_data --name "test"
 
 # Dry run to see what would be imported
 opik import my-workspace project ./exported_data --dry-run
@@ -294,10 +294,10 @@ opik import my-workspace project ./migration_data
 
 ### 2. Data Backup
 ```bash
-# Create backup of all data types
-opik export my-workspace dataset ".*" --path ./backup_$(date +%Y%m%d)
-opik export my-workspace project ".*" --path ./backup_$(date +%Y%m%d)
-opik export my-workspace experiment ".*" --path ./backup_$(date +%Y%m%d)
+# Create backup of specific data (requires knowing exact names)
+opik export my-workspace dataset "my-dataset" --path ./backup_$(date +%Y%m%d)
+opik export my-workspace project "my-project" --path ./backup_$(date +%Y%m%d)
+opik export my-workspace experiment "my-experiment" --path ./backup_$(date +%Y%m%d)
 ```
 
 ### 3. Environment Sync
@@ -316,8 +316,8 @@ opik export my-workspace project "my-project" --filter "start_time >= '2024-01-0
 
 ### 5. Dataset Management
 ```bash
-# Export datasets from a workspace
-opik export my-workspace dataset ".*"
+# Export specific dataset from a workspace
+opik export my-workspace dataset "my-dataset"
 
 # Import datasets to another workspace
 opik import my-workspace dataset ./exported_data
@@ -329,13 +329,13 @@ opik import my-workspace dataset ./exported_data
 opik export my-workspace project "my-project" --format csv --path ./analysis_data
 
 # Export datasets in CSV format for analysis
-opik export my-workspace dataset "test-.*" --format csv --path ./analysis_data
+opik export my-workspace dataset "my-dataset" --format csv --path ./analysis_data
 
 # Export experiments in CSV format for analysis
-opik export my-workspace experiment "evaluation-.*" --format csv --path ./analysis_data
+opik export my-workspace experiment "my-experiment" --format csv --path ./analysis_data
 
 # Export prompts in CSV format for analysis
-opik export my-workspace prompt "template-.*" --format csv --path ./analysis_data
+opik export my-workspace prompt "my-template" --format csv --path ./analysis_data
 
 # Open in Excel or Google Sheets for analysis
 # Or use with pandas in Python:
@@ -345,29 +345,29 @@ opik export my-workspace prompt "template-.*" --format csv --path ./analysis_dat
 
 ### 7. Prompt Management
 ```bash
-# Export all prompts from a workspace
-opik export my-workspace prompt ".*" --path ./prompt_backup
+# Export specific prompt from a workspace
+opik export my-workspace prompt "my-template" --path ./prompt_backup
 
-# Export specific prompt templates
-opik export my-workspace prompt "template-.*" --path ./templates
+# Export another prompt template
+opik export my-workspace prompt "system-prompt" --path ./templates
 
 # Import prompts to another workspace
 opik import my-workspace prompt ./prompt_backup
 
 # Import with filtering
-opik import my-workspace prompt ./prompt_backup --name "production-.*"
+opik import my-workspace prompt ./prompt_backup --name "production"
 ```
 
 ### 8. Experiment Migration
 ```bash
-# Export experiments from source workspace
-opik export my-workspace experiment ".*" --path ./experiment_data
+# Export specific experiment from source workspace
+opik export my-workspace experiment "my-experiment" --path ./experiment_data
 
-# Export experiments with dataset filtering (server-side filtering for efficiency)
-opik export my-workspace experiment "evaluation-.*" --dataset "test-dataset"
+# Export experiment with dataset filtering (server-side filtering for efficiency)
+opik export my-workspace experiment "evaluation-exp" --dataset "test-dataset"
 
-# Export experiments with trace limit (useful for large experiments)
-opik export my-workspace experiment "large-exp-.*" --max-traces 50
+# Export experiment with trace limit (useful for large experiments)
+opik export my-workspace experiment "large-experiment" --max-traces 50
 
 # Import experiments (automatically recreates experiments)
 opik import my-workspace experiment ./experiment_data
@@ -375,31 +375,6 @@ opik import my-workspace experiment ./experiment_data
 # Filter experiments by name during import
 opik import my-workspace experiment ./experiment_data --name "evaluation"
 ```
-
-## Error Handling
-
-The commands include comprehensive error handling:
-- **Network errors**: Automatic retry with user feedback
-- **Authentication errors**: Clear error messages with setup instructions
-- **File system errors**: Proper directory creation and permission handling
-- **Data validation**: JSON format validation and error reporting
-- **Pattern matching**: Clear error messages for invalid regex patterns with helpful hints
-- **Missing items**: When items aren't found, the system shows available options to help users
-- **Dataset filtering**: Clear error messages when specified datasets aren't found, with suggestions
-
-## Progress Tracking
-
-Both commands show progress indicators:
-- **Export**: Shows number of traces found and export progress
-- **Import**: Shows number of files found and import progress
-- **Rich output**: Color-coded status messages and progress bars
-
-## Limitations
-
-- **Large datasets**: For projects with many traces, consider using filters to limit exports
-- **Network dependency**: Requires active connection to Opik server
-- **Authentication**: Must be properly configured with API keys
-- **File size**: Large trace files may take time to process
 
 ## Troubleshooting
 
@@ -420,15 +395,15 @@ Both commands show progress indicators:
    - Check your Python environment
    - Verify the installation with `opik healthcheck`
 
-4. **"Invalid regex pattern"**
-   - Use proper regex syntax (e.g., `.*` instead of `*`)
-   - Check the pattern with online regex testers
+4. **"Dataset/Project/Experiment/Prompt not found"**
+   - Check that the exact name is correct
+   - Verify you have access to the item
    - Use `--debug` for more detailed error information
 
-5. **"No datasets/projects found matching pattern"**
-   - The system will show available items to help you choose the right pattern
-   - Use `.*` to match all items
+5. **"No datasets/projects found"**
+   - The system will show available items to help you choose the right name
    - Check spelling and case sensitivity
+   - Ensure the item exists in the workspace
 
 6. **"Dataset not found"**
    - The system will show datasets used by matching experiments
@@ -455,14 +430,14 @@ Here's a complete example of exporting and importing trace data:
 
 ### JSON Format Workflow
 ```bash
-# 1. Export all data from source workspace (JSON format)
-opik export my-workspace dataset ".*" --path ./temp_data
-opik export my-workspace project ".*" --path ./temp_data
-opik export my-workspace experiment ".*" --path ./temp_data
-opik export my-workspace prompt ".*" --path ./temp_data
+# 1. Export specific data from source workspace (JSON format)
+opik export my-workspace dataset "my-dataset" --path ./temp_data
+opik export my-workspace project "my-project" --path ./temp_data
+opik export my-workspace experiment "my-experiment" --path ./temp_data
+opik export my-workspace prompt "my-template" --path ./temp_data
 
-# Alternative: Export experiments with specific dataset filtering
-opik export my-workspace experiment "evaluation-.*" --dataset "test-dataset" --max-traces 100 --path ./temp_data
+# Alternative: Export experiment with specific dataset filtering
+opik export my-workspace experiment "evaluation-exp" --dataset "test-dataset" --max-traces 100 --path ./temp_data
 
 # 2. Inspect the exported data
 ls ./temp_data/my-workspace/datasets/
@@ -491,9 +466,9 @@ rm -rf ./temp_data
 ```bash
 # 1. Export data in CSV format for analysis
 opik export my-workspace project "my-source-project" --format csv --path ./csv_data
-opik export my-workspace dataset "test-.*" --format csv --path ./csv_data
-opik export my-workspace experiment "evaluation-.*" --format csv --path ./csv_data
-opik export my-workspace prompt "template-.*" --format csv --path ./csv_data
+opik export my-workspace dataset "my-dataset" --format csv --path ./csv_data
+opik export my-workspace experiment "my-experiment" --format csv --path ./csv_data
+opik export my-workspace prompt "my-template" --format csv --path ./csv_data
 
 # 2. Inspect the CSV files
 ls ./csv_data/my-workspace/projects/my-source-project/
@@ -520,13 +495,3 @@ print('Dataset columns:', df_datasets.columns.tolist())
 ```
 
 This workflow ensures you can safely migrate all data including experiments and prompts between workspaces while maintaining data integrity and providing visibility into the process. The CSV format is particularly useful for data analysis and reporting, while the JSON format preserves the complete structure needed for experiment and prompt recreation. The new command structure provides better organization with separate commands for datasets, projects, experiments, and prompts, making it easier to manage specific data types.
-
-**Key improvements in the latest version:**
-- **Unified format option**: Use `--format` for all data types (datasets, projects, experiments, prompts)
-- **CSV support for all types**: Export any data type in CSV format for analysis
-- **Server-side filtering**: Use `--dataset NAME` for efficient experiment filtering
-- **Trace limiting**: Use `--max-traces INTEGER` to limit large experiment exports
-- **Better error messages**: Clear feedback when items aren't found, with available options
-- **Automatic experiment recreation**: No need for special flags during import
-- **Pattern validation**: Early validation of regex patterns with helpful hints
-- **Prompt management**: Full support for exporting and importing prompts with version history
