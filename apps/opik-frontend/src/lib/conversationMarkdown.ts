@@ -18,6 +18,15 @@ export interface ToolCall {
   };
 }
 
+// Flexible tool call type for real-world data
+interface FlexibleToolCall {
+  id?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+}
+
 export interface ConversationData {
   model?: string;
   messages: ConversationMessage[];
@@ -177,12 +186,15 @@ export const convertConversationToMarkdown = (
       if (hasToolCalls) {
         for (const toolCall of toolCalls) {
           // Skip tool calls that don't have a function property at all
-          if (!isObject(toolCall) || !(toolCall as any).function) {
+          if (!isObject(toolCall) || !(toolCall as FlexibleToolCall).function) {
             continue;
           }
 
+          const flexibleToolCall = toolCall as FlexibleToolCall;
           const functionName =
-            (toolCall as any).function.name || (toolCall as any).id || "unknown name";
+            flexibleToolCall.function?.name ||
+            flexibleToolCall.id ||
+            "unknown name";
 
           lines.push(`<details style="margin-left: 20px;">`);
           lines.push(
@@ -192,13 +204,14 @@ export const convertConversationToMarkdown = (
           lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;**Function:** ${functionName}`);
           lines.push(
             `&nbsp;&nbsp;&nbsp;&nbsp;**Arguments:** ${
-              (toolCall as any).function?.arguments || "N/A"
+              flexibleToolCall.function?.arguments || "N/A"
             }`,
           );
 
           // Look for the corresponding tool response
           const toolResponse = conversationData.messages.find(
-            (msg) => msg.role === "tool" && msg.tool_call_id === (toolCall as any).id,
+            (msg) =>
+              msg.role === "tool" && msg.tool_call_id === flexibleToolCall.id,
           );
 
           if (toolResponse && toolResponse.content) {
