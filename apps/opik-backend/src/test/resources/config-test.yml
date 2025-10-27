@@ -316,6 +316,12 @@ s3Config:
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: true
 
+# Attachments configuration
+attachmentsConfig:
+  # Description: Minimum size (bytes) for base64 strings to be considered attachments
+  # For tests, use 5KB (same as local dev default)
+  stripMinSize: 5000
+
 # Python evaluator configuration
 pythonEvaluator:
   # Default: http://localhost:8000
@@ -430,6 +436,10 @@ webhook:
     # Default: {}
     # Description: Period for events aggregation before sending to webhook endpoint
     windowSize: 1s
+
+# Jackson JSON processing configuration
+jacksonConfig:
+  maxStringLength: 262144000 
 
 # Workspace settings
 workspaceSettings:
