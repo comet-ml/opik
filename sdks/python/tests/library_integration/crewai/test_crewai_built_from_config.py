@@ -11,14 +11,11 @@ from ...testlib import (
     assert_equal,
 )
 
-from . import constants
-
 
 def test_crewai__happyflow(
     fake_backend,
 ):
     project_name = "crewai-test"
-
 
     inputs = {"topic": "AI Agents"}
     crew_builder = LatestAiDevelopmentCrew()

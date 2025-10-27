@@ -1,19 +1,19 @@
+import importlib.metadata
+import logging
 from typing import Optional
 
-from crewai import Crew
-from crewai import Agent
-from crewai import Task
+import crewai
 
-import litellm
+import opik.semantic_version
 
-from opik.integrations.litellm import track_completion
+from . import crewai_decorator, patchers
 
-from . import crewai_decorator, flow_patchers
+LOGGER = logging.getLogger(__name__)
 
 
 def track_crewai(
     project_name: Optional[str] = None,
-    crew: Optional[Crew] = None,
+    crew: Optional[crewai.Crew] = None,
 ) -> None:
     """
     Tracks CrewAI activities by enabling tracking decorators for various critical methods.
@@ -26,6 +26,7 @@ def track_crewai(
 
     Parameters:
         project_name: The name of the project to associate with the tracking.
+        crew: The Crew instance to track. Required for CrewAI v1.0.0+ to properly track LLM calls.
     """
 
     decorator_factory = crewai_decorator.CrewAITrackDecorator()
@@ -34,46 +35,31 @@ def track_crewai(
         project_name=project_name,
     )
 
-    Crew.kickoff = crewai_wrapper(Crew.kickoff)
-    Crew.kickoff_for_each = crewai_wrapper(Crew.kickoff_for_each)
-    Agent.execute_task = crewai_wrapper(Agent.execute_task)
-    Task.execute_sync = crewai_wrapper(Task.execute_sync)
+    crewai.Crew.kickoff = crewai_wrapper(crewai.Crew.kickoff)
+    crewai.Crew.kickoff_for_each = crewai_wrapper(crewai.Crew.kickoff_for_each)
+    crewai.Agent.execute_task = crewai_wrapper(crewai.Agent.execute_task)
+    crewai.Task.execute_sync = crewai_wrapper(crewai.Task.execute_sync)
 
     # Patch LiteLLM functions used by CrewAI
-    _patch_litellm_completion(project_name=project_name)
+    patchers.patch_litellm_completion(project_name=project_name)
 
-    flow_patchers.patch_flow_init(project_name=project_name)
-    flow_patchers.patch_flow_kickoff_async(project_name=project_name)
+    # Patch Flow class (v1.0.0+)
+    patchers.patch_flow(project_name=project_name)
 
+    # Patch LLM clients used by CrewAI agents (v1.0.0+)
     if crew is not None:
-        import crewai.llms.providers.openai.completion
-        import crewai.llms.providers.anthropic.completion
-        import crewai.llms.providers.gemini.completion
-        import crewai.llms.providers.bedrock.completion
-
-        # patch LLM clients used by CrewAI (openai, anthropic, gemini, bedrock) using
-        # existing Opik integration
-        # Note: only azure ai is not supported yet.
-        for agent in crew.agents:
-            if isinstance(agent.llm, crewai.llms.providers.openai.completion.OpenAICompletion):
-                from opik.integrations.openai import track_openai
-                agent.llm.client = track_openai(agent.llm.client, project_name=project_name)
-            elif isinstance(agent.llm, crewai.llms.providers.anthropic.completion.AnthropicCompletion):
-                from opik.integrations.anthropic import track_anthropic
-                agent.llm.client = track_anthropic(agent.llm.client, project_name=project_name)
-            elif isinstance(agent.llm, crewai.llms.providers.gemini.completion.GeminiCompletion):
-                from opik.integrations.genai import track_genai
-                agent.llm.client = track_genai(agent.llm.client, project_name=project_name)
-            elif isinstance(agent.llm, crewai.llms.providers.bedrock.completion.BedrockCompletion):
-                from opik.integrations.bedrock import track_bedrock
-                agent.llm.client = track_bedrock(agent.llm.client, project_name=project_name)
+        patchers.patch_llm_client(crew, project_name)
 
 
-    return None
+def _is_crewai_v1() -> bool:
+    """
+    Checks if CrewAI v1.0.0+ is installed.
 
-
-def _patch_litellm_completion(project_name: Optional[str] = None) -> None:
-    litellm.completion = track_completion(project_name=project_name)(litellm.completion)
-    litellm.acompletion = track_completion(project_name=project_name)(
-        litellm.acompletion
-    )
+    Returns:
+        True if CrewAI v1.0.0+ is detected, False otherwise.
+    """
+    try:
+        version_str = importlib.metadata.version("crewai")
+        return opik.semantic_version.SemanticVersion.parse(version_str) >= "1.0.0"  # type: ignore
+    except Exception:
+        return False
