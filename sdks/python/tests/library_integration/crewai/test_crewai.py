@@ -39,7 +39,6 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
     fake_backend,
     model,
     opik_provider,
-    # model, opik_provider
 ):
     researcher = Agent(
         role="Test Researcher",
