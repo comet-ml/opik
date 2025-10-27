@@ -281,4 +281,54 @@ class RemoteAuthService implements AuthService {
         log.warn("Unexpected error while getting workspace id: {}", response.getStatus());
         throw new InternalServerErrorException();
     }
+
+    @Override
+    public java.util.List<com.comet.opik.api.WorkspaceListResponse.WorkspaceInfo> getUserWorkspaces(
+            String apiKey, Cookie sessionToken, String organizationId) {
+        try {
+            var request = client.target(URI.create(reactServiceUrl.url()))
+                    .path("workspaces")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON);
+
+            if (organizationId != null && !organizationId.isEmpty()) {
+                request = request.queryParam("organizationId", organizationId);
+            }
+            request = request.queryParam("withoutExtendedData", "true");
+
+            if (sessionToken != null && sessionToken.getValue() != null && !sessionToken.getValue().isEmpty()) {
+                request = request.cookie(sessionToken);
+            } else if (apiKey != null && !apiKey.isEmpty()) {
+                request = request.header(HttpHeaders.AUTHORIZATION, apiKey);
+            } else {
+                log.warn("No session token or API key provided for getting user workspaces");
+                return java.util.List.of();
+            }
+
+            try (var response = request.get()) {
+                return getUserWorkspacesFromResponse(response);
+            }
+        } catch (Exception e) {
+            log.error("Error getting user workspaces: {}", e.getMessage(), e);
+            return java.util.List.of();
+        }
+    }
+
+    private java.util.List<com.comet.opik.api.WorkspaceListResponse.WorkspaceInfo> getUserWorkspacesFromResponse(Response response) {
+        if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL) {
+            var workspaces = response.readEntity(
+                    new jakarta.ws.rs.core.GenericType<java.util.List<com.comet.opik.api.WorkspaceListResponse.WorkspaceInfo>>() {});
+            return workspaces != null ? workspaces : java.util.List.of();
+        } else if (response.getStatus() == Response.Status.UNAUTHORIZED.getStatusCode()) {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            log.warn("Unauthorized to get user workspaces: {}", errorResponse.msg());
+            return java.util.List.of();
+        } else if (response.getStatus() == Response.Status.FORBIDDEN.getStatusCode()) {
+            var errorResponse = response.readEntity(ReactServiceErrorResponse.class);
+            log.warn("Forbidden to get user workspaces: {}", errorResponse.msg());
+            return java.util.List.of();
+        }
+        log.warn("Unexpected error while getting user workspaces: {}", response.getStatus());
+        return java.util.List.of();
+    }
 }

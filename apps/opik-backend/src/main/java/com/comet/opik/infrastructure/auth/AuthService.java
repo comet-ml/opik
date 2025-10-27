@@ -16,6 +16,15 @@ public interface AuthService {
 
     void authenticate(HttpHeaders headers, Cookie sessionToken, ContextInfoHolder contextInfo);
     void authenticateSession(Cookie sessionToken);
+    
+    /**
+     * Get list of workspaces accessible to the current user.
+     * Returns empty list for local installations.
+     */
+    default java.util.List<com.comet.opik.api.WorkspaceListResponse.WorkspaceInfo> getUserWorkspaces(
+            String apiKey, Cookie sessionToken, String organizationId) {
+        return java.util.List.of();
+    }
 }
 
 @RequiredArgsConstructor
