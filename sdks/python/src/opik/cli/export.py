@@ -2,11 +2,10 @@
 
 import csv
 import json
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import click
 from rich.console import Console
@@ -15,6 +14,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import opik
 from opik.api_objects.dataset.dataset import Dataset
 from opik.api_objects.experiment import Experiment
+from opik.api_objects.prompt.prompt import Prompt
+from opik.rest_api.types.project_public import ProjectPublic
 
 console = Console()
 
@@ -24,24 +25,25 @@ MAX_EXPERIMENT_ITEMS_PER_FETCH = 1000  # Maximum items to fetch per experiment
 
 
 def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
-    """Check if a name matches the given regex pattern."""
+    """Check if a name matches the given pattern using simple string matching."""
     if pattern is None:
         return True
-    try:
-        return bool(re.search(pattern, name))
-    except re.error as e:
-        console.print(f"[red]Invalid regex pattern '{pattern}': {e}[/red]")
-        console.print(
-            "[yellow]Hint: Use '.*' to match any characters, not '*'[/yellow]"
-        )
-        return False
+    # Simple string matching - check if pattern is contained in name (case-insensitive)
+    return pattern.lower() in name.lower()
 
 
 def _is_experiment_id(pattern: str) -> bool:
     """Check if the pattern looks like an experiment ID (UUID format)."""
-    # UUID pattern: 8-4-4-4-12 hexadecimal digits
-    uuid_pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-    return bool(re.match(uuid_pattern, pattern, re.IGNORECASE))
+    # Simple UUID format check: 8-4-4-4-12 hexadecimal digits with dashes
+    if len(pattern) != 36:
+        return False
+    if pattern.count("-") != 4:
+        return False
+    # Check that all characters are hex digits or dashes
+    for char in pattern:
+        if char not in "0123456789abcdefABCDEF-":
+            return False
+    return True
 
 
 def _serialize_experiment_item(item: Any) -> Dict[str, Any]:
@@ -106,6 +108,7 @@ def _export_experiment_prompts(
     output_dir: Path,
     force: bool,
     debug: bool,
+    format: str = "json",
 ) -> int:
     """Export prompts referenced by an experiment."""
     try:
@@ -118,10 +121,7 @@ def _export_experiment_prompts(
         exported_count = 0
         for prompt_version in experiment.prompt_versions:
             try:
-                if debug:
-                    console.print(
-                        f"[blue]Exporting prompt: {prompt_version.prompt_id}[/blue]"
-                    )
+                _debug_print(f"Exporting prompt: {prompt_version.prompt_id}", debug)
 
                 # Get the prompt
                 prompt = client.get_prompt(prompt_version.prompt_id)
@@ -168,11 +168,20 @@ def _export_experiment_prompts(
                     "downloaded_at": datetime.now().isoformat(),
                 }
 
-                # Save prompt data
-                prompt_file = prompts_dir / f"prompt_{prompt.name or prompt.id}.json"
+                # Save prompt data using the appropriate format
+                if format.lower() == "csv":
+                    prompt_file = (
+                        prompts_dir / f"prompts_{prompt.name or prompt.id}.csv"
+                    )
+                else:
+                    prompt_file = (
+                        prompts_dir / f"prompt_{prompt.name or prompt.id}.json"
+                    )
                 if not prompt_file.exists() or force:
-                    with open(prompt_file, "w", encoding="utf-8") as f:
-                        json.dump(prompt_data, f, indent=2, default=str)
+                    if format.lower() == "csv":
+                        _write_csv_data(prompt_data, prompt_file, _prompt_to_csv_rows)
+                    else:
+                        _write_json_data(prompt_data, prompt_file)
 
                     if debug:
                         console.print(
@@ -180,10 +189,9 @@ def _export_experiment_prompts(
                         )
                     exported_count += 1
                 else:
-                    if debug:
-                        console.print(
-                            f"[blue]Skipping prompt {prompt.name} (already exists)[/blue]"
-                        )
+                    _debug_print(
+                        f"Skipping prompt {prompt.name} (already exists)", debug
+                    )
                     exported_count += 1  # Count as exported even if skipped
 
             except Exception as e:
@@ -203,7 +211,7 @@ def _export_experiment_prompts(
         return 0
 
 
-def _print_export_summary(stats: Dict[str, int]) -> None:
+def _print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
     """Print a nice summary table of export statistics."""
     from rich.table import Table
 
@@ -219,41 +227,53 @@ def _print_export_summary(stats: Dict[str, int]) -> None:
     if stats.get("experiments", 0) > 0 or stats.get("experiments_skipped", 0) > 0:
         exported = stats.get("experiments", 0)
         skipped = stats.get("experiments_skipped", 0)
+        experiment_file_pattern = (
+            "experiments_*.csv" if format.lower() == "csv" else "experiment_*.json"
+        )
         table.add_row(
             "🧪 Experiments",
             str(exported),
             str(skipped) if skipped > 0 else "",
-            "experiment_*.json",
+            experiment_file_pattern,
         )
 
     if stats.get("datasets", 0) > 0 or stats.get("datasets_skipped", 0) > 0:
         exported = stats.get("datasets", 0)
         skipped = stats.get("datasets_skipped", 0)
+        dataset_file_pattern = (
+            "datasets_*.csv" if format.lower() == "csv" else "dataset_*.json"
+        )
         table.add_row(
             "📊 Datasets",
             str(exported),
             str(skipped) if skipped > 0 else "",
-            "dataset_*.json",
+            dataset_file_pattern,
         )
 
     if stats.get("traces", 0) > 0 or stats.get("traces_skipped", 0) > 0:
         exported = stats.get("traces", 0)
         skipped = stats.get("traces_skipped", 0)
+        trace_file_pattern = (
+            "traces_*.csv" if format.lower() == "csv" else "trace_*.json"
+        )
         table.add_row(
             "🔍 Traces",
             str(exported),
             str(skipped) if skipped > 0 else "",
-            "trace_*.json",
+            trace_file_pattern,
         )
 
     if stats.get("prompts", 0) > 0 or stats.get("prompts_skipped", 0) > 0:
         exported = stats.get("prompts", 0)
         skipped = stats.get("prompts_skipped", 0)
+        prompt_file_pattern = (
+            "prompts_*.csv" if format.lower() == "csv" else "prompt_*.json"
+        )
         table.add_row(
             "💬 Prompts",
             str(exported),
             str(skipped) if skipped > 0 else "",
-            "prompt_*.json",
+            prompt_file_pattern,
         )
 
     if stats.get("projects", 0) > 0 or stats.get("projects_skipped", 0) > 0:
@@ -307,6 +327,7 @@ def _export_related_prompts_by_name(
     output_dir: Path,
     force: bool,
     debug: bool,
+    format: str = "json",
 ) -> int:
     """Export prompts that might be related to the experiment by name or content."""
     try:
@@ -315,10 +336,7 @@ def _export_related_prompts_by_name(
 
         # Get all prompts in the workspace
         all_prompts = client.search_prompts()
-        if debug:
-            console.print(
-                f"[blue]Found {len(all_prompts)} total prompts in workspace[/blue]"
-            )
+        _debug_print(f"Found {len(all_prompts)} total prompts in workspace", debug)
 
         # Look for prompts that might be related to this experiment
         related_prompts = []
@@ -352,8 +370,7 @@ def _export_related_prompts_by_name(
                     )
 
         if not related_prompts:
-            if debug:
-                console.print("[blue]No related prompts found by name matching[/blue]")
+            _debug_print("No related prompts found by name matching", debug)
             return 0
 
         console.print(
@@ -364,10 +381,7 @@ def _export_related_prompts_by_name(
         # Export each related prompt
         for prompt in related_prompts:
             try:
-                if debug:
-                    console.print(
-                        f"[blue]Exporting related prompt: {prompt.name}[/blue]"
-                    )
+                _debug_print(f"Exporting related prompt: {prompt.name}", debug)
 
                 # Get prompt history
                 prompt_history = client.get_prompt_history(prompt.name)
@@ -400,21 +414,25 @@ def _export_related_prompts_by_name(
                     "related_to_experiment": experiment.name or experiment.id,
                 }
 
-                # Save prompt data
-                prompt_file = prompts_dir / f"prompt_{prompt.name}.json"
+                # Save prompt data using the appropriate format
+                if format.lower() == "csv":
+                    prompt_file = prompts_dir / f"prompts_{prompt.name}.csv"
+                else:
+                    prompt_file = prompts_dir / f"prompt_{prompt.name}.json"
                 if not prompt_file.exists() or force:
-                    with open(prompt_file, "w", encoding="utf-8") as f:
-                        json.dump(prompt_data, f, indent=2, default=str)
+                    if format.lower() == "csv":
+                        _write_csv_data(prompt_data, prompt_file, _prompt_to_csv_rows)
+                    else:
+                        _write_json_data(prompt_data, prompt_file)
 
                     console.print(
                         f"[green]Exported related prompt: {prompt.name}[/green]"
                     )
                     exported_count += 1
                 else:
-                    if debug:
-                        console.print(
-                            f"[blue]Skipping prompt {prompt.name} (already exists)[/blue]"
-                        )
+                    _debug_print(
+                        f"Skipping prompt {prompt.name} (already exists)", debug
+                    )
                     exported_count += 1  # Count as exported even if skipped
 
             except Exception as e:
@@ -450,12 +468,126 @@ def _flatten_dict_with_prefix(data: Dict, prefix: str = "") -> Dict:
     return flattened
 
 
+def _should_skip_file(file_path: Path, force: bool) -> bool:
+    """Check if a file should be skipped based on existence and force flag."""
+    return file_path.exists() and not force
+
+
+def _write_csv_data(
+    data: Dict[str, Any],
+    file_path: Path,
+    csv_row_converter_func: Callable[[Dict[str, Any]], List[Dict]],
+) -> None:
+    """Write data to CSV file using the provided row converter function."""
+    csv_rows = csv_row_converter_func(data)
+    if csv_rows:
+        with open(file_path, "w", newline="", encoding="utf-8") as csv_file_handle:
+            csv_fieldnames = list(csv_rows[0].keys())
+            csv_writer = csv.DictWriter(csv_file_handle, fieldnames=csv_fieldnames)
+            csv_writer.writeheader()
+            csv_writer.writerows(csv_rows)
+
+
+def _write_json_data(data: Dict[str, Any], file_path: Path) -> None:
+    """Write data to JSON file."""
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, default=str)
+
+
+def _debug_print(message: str, debug: bool) -> None:
+    """Print debug message only if debug is enabled."""
+    if debug:
+        console.print(f"[blue]{message}[/blue]")
+
+
+def _create_experiment_data_structure(
+    experiment: Any, experiment_items: List[Any]
+) -> Dict[str, Any]:
+    """Create a comprehensive experiment data structure for export."""
+    return {
+        "experiment": {
+            "id": experiment.id,
+            "name": experiment.name,
+            "dataset_name": experiment.dataset_name,
+            "metadata": experiment.metadata,
+            "type": experiment.type,
+            "status": experiment.status,
+            "created_at": experiment.created_at,
+            "last_updated_at": experiment.last_updated_at,
+            "created_by": experiment.created_by,
+            "last_updated_by": experiment.last_updated_by,
+            "trace_count": experiment.trace_count,
+            "total_estimated_cost": experiment.total_estimated_cost,
+            "total_estimated_cost_avg": experiment.total_estimated_cost_avg,
+            "usage": experiment.usage,
+            "feedback_scores": experiment.feedback_scores,
+            "comments": experiment.comments,
+            "duration": experiment.duration,
+            "prompt_version": experiment.prompt_version,
+            "prompt_versions": experiment.prompt_versions,
+        },
+        "items": [_serialize_experiment_item(item) for item in experiment_items],
+        "downloaded_at": datetime.now().isoformat(),
+    }
+
+
+def _export_experiment_datasets(
+    client: opik.Opik,
+    datasets_to_export: set,
+    datasets_dir: Path,
+    format: str,
+    debug: bool,
+) -> int:
+    """Export datasets related to an experiment."""
+    exported_count = 0
+    for dataset_name in datasets_to_export:
+        try:
+            dataset_obj = Dataset(
+                name=dataset_name,
+                description=None,  # Description not available from experiment
+                rest_client=client.rest_client,
+            )
+            dataset_items = dataset_obj.get_items()
+
+            dataset_data = {
+                "dataset": {
+                    "name": dataset_name,
+                    "id": getattr(dataset_obj, "id", None),
+                },
+                "items": [_serialize_experiment_item(item) for item in dataset_items],
+                "downloaded_at": datetime.now().isoformat(),
+            }
+
+            # Use format parameter to determine file extension and save method
+            if format.lower() == "csv":
+                dataset_file = datasets_dir / f"datasets_{dataset_name}.csv"
+            else:
+                dataset_file = datasets_dir / f"dataset_{dataset_name}.json"
+            datasets_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save to file using the appropriate format
+            if format.lower() == "csv":
+                _write_csv_data(dataset_data, dataset_file, _dataset_to_csv_rows)
+            else:
+                _write_json_data(dataset_data, dataset_file)
+
+            console.print(f"[green]Exported dataset: {dataset_name}[/green]")
+            exported_count += 1
+        except Exception as e:
+            if debug:
+                console.print(
+                    f"[yellow]Warning: Could not export dataset {dataset_name}: {e}[/yellow]"
+                )
+    return exported_count
+
+
 def _dump_to_file(
     data: dict,
     file_path: Path,
     file_format: str,
     csv_writer: Optional[csv.DictWriter] = None,
     csv_fieldnames: Optional[List[str]] = None,
+    data_type: str = "trace",
 ) -> tuple:
     """
     Helper function to dump data to file in the specified format.
@@ -466,13 +598,24 @@ def _dump_to_file(
         file_format: Format to use ("json" or "csv")
         csv_writer: Existing CSV writer (for CSV format)
         csv_fieldnames: Existing CSV fieldnames (for CSV format)
+        data_type: Type of data ("trace", "dataset", "prompt", "experiment")
 
     Returns:
         Tuple of (csv_writer, csv_fieldnames) for CSV format, or (None, None) for JSON
     """
     if file_format.lower() == "csv":
-        # Convert to CSV rows
-        csv_rows = _trace_to_csv_rows(data)
+        # Convert to CSV rows based on data type
+        if data_type == "trace":
+            csv_rows = _trace_to_csv_rows(data)
+        elif data_type == "dataset":
+            csv_rows = _dataset_to_csv_rows(data)
+        elif data_type == "prompt":
+            csv_rows = _prompt_to_csv_rows(data)
+        elif data_type == "experiment":
+            csv_rows = _experiment_to_csv_rows(data)
+        else:
+            # Fallback to trace format for unknown types
+            csv_rows = _trace_to_csv_rows(data)
 
         # Initialize CSV writer if not already done
         if csv_writer is None and csv_rows:
@@ -525,6 +668,68 @@ def _trace_to_csv_rows(trace_data: dict) -> List[Dict]:
     return rows
 
 
+def _dataset_to_csv_rows(dataset_data: dict) -> List[Dict]:
+    """Convert dataset data to CSV rows format."""
+    rows = []
+
+    # Flatten dataset metadata
+    dataset_flat = _flatten_dict_with_prefix(
+        {
+            "name": dataset_data.get("name"),
+            "description": dataset_data.get("description"),
+            "downloaded_at": dataset_data.get("downloaded_at"),
+        },
+        "dataset",
+    )
+
+    # Create a row for each dataset item
+    items = dataset_data.get("items", [])
+    for i, item in enumerate(items):
+        # Flatten item data
+        item_flat = _flatten_dict_with_prefix(
+            {
+                "input": item.get("input"),
+                "expected_output": item.get("expected_output"),
+                "metadata": item.get("metadata"),
+            },
+            "item",
+        )
+
+        # Combine dataset and item data
+        row = {**dataset_flat, **item_flat}
+        row["item_index"] = i  # Add index for ordering
+        rows.append(row)
+
+    return rows
+
+
+def _prompt_to_csv_rows(prompt_data: dict) -> List[Dict]:
+    """Convert prompt data to CSV rows format."""
+    # Flatten prompt data
+    prompt_flat = _flatten_dict_with_prefix(prompt_data, "prompt")
+
+    # Create a single row for the prompt
+    return [prompt_flat]
+
+
+def _experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
+    """Convert experiment data to CSV rows format."""
+    # Flatten experiment metadata
+    experiment_flat = _flatten_dict_with_prefix(
+        {
+            "name": experiment_data.get("name"),
+            "description": experiment_data.get("description"),
+            "created_at": experiment_data.get("created_at"),
+            "last_updated_at": experiment_data.get("last_updated_at"),
+            "downloaded_at": experiment_data.get("downloaded_at"),
+        },
+        "experiment",
+    )
+
+    # Create a single row for the experiment
+    return [experiment_flat]
+
+
 def _export_data_type(
     data_type: str,
     client: opik.Opik,
@@ -561,7 +766,7 @@ def _export_data_type(
     elif data_type == "prompts":
         if debug:
             console.print("[blue]Downloading prompts...[/blue]")
-        return _export_prompts(client, output_dir, max_results, name_pattern)
+        return _export_prompts(client, output_dir, max_results, name_pattern, debug)
     elif data_type == "experiments":
         if debug:
             console.print("[blue]Downloading experiments...[/blue]")
@@ -580,7 +785,7 @@ def _export_traces(
     max_results: int,
     filter_string: Optional[str],
     name_pattern: Optional[str] = None,
-    trace_format: str = "json",
+    format: str = "json",
     debug: bool = False,
     force: bool = False,
 ) -> tuple[int, int]:
@@ -705,29 +910,42 @@ def _export_traces(
                             "project_name": project_name,
                         }
 
-                        # Determine file path based on format
-                        if trace_format.lower() == "csv":
-                            file_path = project_dir / f"traces_{project_name}.csv"
+                        # For CSV format, we need to handle this differently
+                        # CSV creates a single consolidated file, not individual files
+                        if format.lower() == "csv":
+                            # For CSV, we only check the consolidated file once
+                            csv_file_path = project_dir / f"traces_{project_name}.csv"
+                            if _should_skip_file(csv_file_path, force):
+                                if debug:
+                                    console.print(
+                                        f"[blue]Skipping CSV export (traces_{project_name}.csv already exists)[/blue]"
+                                    )
+                                # For CSV, if the file exists, we skip the entire export
+                                return (
+                                    0,
+                                    1,
+                                )  # 0 exported, 1 skipped (the consolidated file)
+                            file_path = csv_file_path
                         else:
+                            # For JSON, check each individual trace file
                             file_path = project_dir / f"trace_{trace.id}.json"
-
-                        # Check if file already exists and force is not set
-                        if file_path.exists() and not force:
-                            if debug:
-                                console.print(
-                                    f"[blue]Skipping trace {trace.id} (already exists)[/blue]"
-                                )
-                            skipped_count += 1
-                            total_processed += 1
-                            continue
+                            if _should_skip_file(file_path, force):
+                                if debug:
+                                    console.print(
+                                        f"[blue]Skipping trace {trace.id} (already exists)[/blue]"
+                                    )
+                                skipped_count += 1
+                                total_processed += 1
+                                continue
 
                         # Use helper function to dump data
                         csv_writer, csv_fieldnames = _dump_to_file(
                             trace_data,
                             file_path,
-                            trace_format,
+                            format,
                             csv_writer,
                             csv_fieldnames,
+                            "trace",
                         )
 
                         exported_count += 1
@@ -773,7 +991,7 @@ def _export_specific_traces(
     project_name: str,
     project_dir: Path,
     trace_ids: List[str],
-    trace_format: str = "json",
+    format: str = "json",
     debug: bool = False,
     force: bool = False,
 ) -> tuple[int, int]:
@@ -837,13 +1055,13 @@ def _export_specific_traces(
                     }
 
                     # Determine file path based on format
-                    if trace_format.lower() == "csv":
+                    if format.lower() == "csv":
                         file_path = project_dir / f"traces_{project_name}.csv"
                     else:
                         file_path = project_dir / f"trace_{trace_id}.json"
 
                     # Check if file already exists and force is not set
-                    if file_path.exists() and not force:
+                    if _should_skip_file(file_path, force):
                         if debug:
                             console.print(
                                 f"[blue]Skipping trace {trace_id} (already exists)[/blue]"
@@ -856,9 +1074,10 @@ def _export_specific_traces(
                     csv_writer, csv_fieldnames = _dump_to_file(
                         trace_data,
                         file_path,
-                        trace_format,
+                        format,
                         csv_writer,
                         csv_fieldnames,
+                        "trace",
                     )
 
                     exported_count += 1
@@ -889,27 +1108,48 @@ def _export_datasets(
     max_results: int,
     name_pattern: Optional[str] = None,
     debug: bool = False,
+    format: str = "json",
 ) -> int:
     """Export datasets."""
     try:
-        datasets = client.get_datasets(max_results=max_results, sync_items=True)
+        # For exact name matches, use direct lookup
+        if name_pattern and "*" not in name_pattern and "?" not in name_pattern:
+            try:
+                dataset = client.get_dataset(name_pattern)
+                datasets = [dataset]
+                if debug:
+                    console.print(
+                        f"[blue]Found dataset by direct lookup: {dataset.name}[/blue]"
+                    )
+            except Exception as e:
+                if debug:
+                    console.print(
+                        f"[yellow]Direct lookup failed, falling back to search: {e}[/yellow]"
+                    )
+                datasets = []
+        else:
+            datasets = []
 
+        # If we don't have datasets yet, use the search method
         if not datasets:
-            console.print("[yellow]No datasets found in the project.[/yellow]")
-            return 0
+            datasets = client.get_datasets(max_results=max_results, sync_items=True)
 
-        # Filter datasets by name pattern if specified
-        if name_pattern:
-            original_count = len(datasets)
-            datasets = [
-                dataset
-                for dataset in datasets
-                if _matches_name_pattern(dataset.name, name_pattern)
-            ]
-            if len(datasets) < original_count:
-                console.print(
-                    f"[blue]Filtered to {len(datasets)} datasets matching pattern '{name_pattern}'[/blue]"
-                )
+            if not datasets:
+                console.print("[yellow]No datasets found in the project.[/yellow]")
+                return 0
+
+            # Filter datasets by name pattern if specified
+            if name_pattern:
+                original_count = len(datasets)
+                datasets = [
+                    dataset
+                    for dataset in datasets
+                    if _matches_name_pattern(dataset.name, name_pattern)
+                ]
+                if len(datasets) < original_count:
+                    console.print(
+                        f"[blue]Filtered to {len(datasets)} datasets matching pattern '{name_pattern}'[/blue]"
+                    )
 
         if not datasets:
             console.print(
@@ -921,10 +1161,7 @@ def _export_datasets(
         for dataset in datasets:
             try:
                 # Get dataset items using the get_items method
-                if debug:
-                    console.print(
-                        f"[blue]Getting items for dataset: {dataset.name}[/blue]"
-                    )
+                _debug_print(f"Getting items for dataset: {dataset.name}", debug)
                 dataset_items = dataset.get_items()
 
                 # Convert dataset items to the expected format for import
@@ -945,10 +1182,13 @@ def _export_datasets(
                     "downloaded_at": datetime.now().isoformat(),
                 }
 
-                # Save to file
-                dataset_file = project_dir / f"dataset_{dataset.name}.json"
-                with open(dataset_file, "w", encoding="utf-8") as f:
-                    json.dump(dataset_data, f, indent=2, default=str)
+                # Save to file using the appropriate format
+                if format.lower() == "csv":
+                    dataset_file = project_dir / f"datasets_{dataset.name}.csv"
+                    _write_csv_data(dataset_data, dataset_file, _dataset_to_csv_rows)
+                else:
+                    dataset_file = project_dir / f"dataset_{dataset.name}.json"
+                    _write_json_data(dataset_data, dataset_file)
 
                 exported_count += 1
 
@@ -970,27 +1210,52 @@ def _export_prompts(
     project_dir: Path,
     max_results: int,
     name_pattern: Optional[str] = None,
+    debug: bool = False,
+    format: str = "json",
 ) -> int:
     """Export prompts."""
     try:
-        prompts = client.search_prompts()
+        # For exact name matches, use direct lookup
+        if name_pattern and "*" not in name_pattern and "?" not in name_pattern:
+            try:
+                prompt = client.get_prompt(name_pattern)
+                if prompt:
+                    prompts = [prompt]
+                    if debug:
+                        console.print(
+                            f"[blue]Found prompt by direct lookup: {prompt.name}[/blue]"
+                        )
+                else:
+                    prompts = []
+            except Exception as e:
+                if debug:
+                    console.print(
+                        f"[yellow]Direct lookup failed, falling back to search: {e}[/yellow]"
+                    )
+                prompts = []
+        else:
+            prompts = []
 
+        # If we don't have prompts yet, use the search method
         if not prompts:
-            console.print("[yellow]No prompts found in the project.[/yellow]")
-            return 0
+            prompts = client.search_prompts()
 
-        # Filter prompts by name pattern if specified
-        if name_pattern:
-            original_count = len(prompts)
-            prompts = [
-                prompt
-                for prompt in prompts
-                if _matches_name_pattern(prompt.name, name_pattern)
-            ]
-            if len(prompts) < original_count:
-                console.print(
-                    f"[blue]Filtered to {len(prompts)} prompts matching pattern '{name_pattern}'[/blue]"
-                )
+            if not prompts:
+                console.print("[yellow]No prompts found in the project.[/yellow]")
+                return 0
+
+            # Filter prompts by name pattern if specified
+            if name_pattern:
+                original_count = len(prompts)
+                prompts = [
+                    prompt
+                    for prompt in prompts
+                    if _matches_name_pattern(prompt.name, name_pattern)
+                ]
+                if len(prompts) < original_count:
+                    console.print(
+                        f"[blue]Filtered to {len(prompts)} prompts matching pattern '{name_pattern}'[/blue]"
+                    )
 
         if not prompts:
             console.print(
@@ -1029,12 +1294,17 @@ def _export_prompts(
                     "downloaded_at": datetime.now().isoformat(),
                 }
 
-                # Save to file
-                prompt_file = (
-                    project_dir / f"prompt_{prompt.name.replace('/', '_')}.json"
-                )
-                with open(prompt_file, "w", encoding="utf-8") as f:
-                    json.dump(prompt_data, f, indent=2, default=str)
+                # Save to file using the appropriate format
+                if format.lower() == "csv":
+                    prompt_file = (
+                        project_dir / f"prompts_{prompt.name.replace('/', '_')}.csv"
+                    )
+                    _write_csv_data(prompt_data, prompt_file, _prompt_to_csv_rows)
+                else:
+                    prompt_file = (
+                        project_dir / f"prompt_{prompt.name.replace('/', '_')}.json"
+                    )
+                    _write_json_data(prompt_data, prompt_file)
 
                 exported_count += 1
 
@@ -1056,6 +1326,7 @@ def _export_prompts_with_pattern(
     name_pattern: str,
     force: bool,
     debug: bool,
+    format: str = "json",
 ) -> int:
     """Export prompts with pattern matching."""
     try:
@@ -1064,19 +1335,42 @@ def _export_prompts_with_pattern(
                 f"[blue]Searching for prompts matching pattern: {name_pattern}[/blue]"
             )
 
-        # Search for prompts
-        prompts = client.search_prompts()
+        # For exact name matches, use direct lookup
+        if "*" not in name_pattern and "?" not in name_pattern:
+            try:
+                prompt = client.get_prompt(name_pattern)
+                if prompt:
+                    filtered_prompts = [prompt]
+                    if debug:
+                        console.print(
+                            f"[blue]Found prompt by direct lookup: {prompt.name}[/blue]"
+                        )
+                else:
+                    filtered_prompts = []
+            except Exception as e:
+                if debug:
+                    console.print(
+                        f"[yellow]Direct lookup failed, falling back to search: {e}[/yellow]"
+                    )
+                filtered_prompts = []
+        else:
+            filtered_prompts = []
 
-        if not prompts:
-            console.print("[yellow]No prompts found in the workspace.[/yellow]")
-            return 0
+        # If we don't have prompts yet, use the search method
+        if not filtered_prompts:
+            # Search for prompts
+            prompts = client.search_prompts()
 
-        # Filter prompts by name pattern
-        filtered_prompts = [
-            prompt
-            for prompt in prompts
-            if _matches_name_pattern(prompt.name, name_pattern)
-        ]
+            if not prompts:
+                console.print("[yellow]No prompts found in the workspace.[/yellow]")
+                return 0
+
+            # Filter prompts by name pattern
+            filtered_prompts = [
+                prompt
+                for prompt in prompts
+                if _matches_name_pattern(prompt.name, name_pattern)
+            ]
 
         if not filtered_prompts:
             console.print(
@@ -1094,10 +1388,15 @@ def _export_prompts_with_pattern(
         for prompt in filtered_prompts[:max_results]:
             try:
                 # Check if file already exists and force is not set
-                prompt_file = (
-                    target_dir / f"prompt_{prompt.name.replace('/', '_')}.json"
-                )
-                if prompt_file.exists() and not force:
+                if format.lower() == "csv":
+                    prompt_file = (
+                        target_dir / f"prompts_{prompt.name.replace('/', '_')}.csv"
+                    )
+                else:
+                    prompt_file = (
+                        target_dir / f"prompt_{prompt.name.replace('/', '_')}.json"
+                    )
+                if _should_skip_file(prompt_file, force):
                     if debug:
                         console.print(
                             f"[blue]Skipping {prompt.name} (already exists)[/blue]"
@@ -1129,9 +1428,11 @@ def _export_prompts_with_pattern(
                     "downloaded_at": datetime.now().isoformat(),
                 }
 
-                # Save to file
-                with open(prompt_file, "w", encoding="utf-8") as f:
-                    json.dump(prompt_data, f, indent=2, default=str)
+                # Save to file using the appropriate format
+                if format.lower() == "csv":
+                    _write_csv_data(prompt_data, prompt_file, _prompt_to_csv_rows)
+                else:
+                    _write_json_data(prompt_data, prompt_file)
 
                 if debug:
                     console.print(f"[blue]Exported prompt: {prompt.name}[/blue]")
@@ -1151,7 +1452,7 @@ def _export_prompts_with_pattern(
             "prompts_skipped": skipped_count,
             "projects": 0,
         }
-        _print_export_summary(stats)
+        _print_export_summary(stats, format)
 
         return exported_count
 
@@ -1171,33 +1472,25 @@ def _export_by_type(
     filter_string: Optional[str] = None,
     dataset: Optional[str] = None,
     max_traces: Optional[int] = None,
-    trace_format: str = "json",
+    format: str = "json",
 ) -> None:
     """
-    Export data by type (dataset, project, experiment) with pattern matching.
+    Export data by type (dataset, project, experiment, prompt) with pattern matching.
 
     Args:
-        export_type: Type of data to export ("dataset", "project", "experiment")
-        name_pattern: Python regex pattern to match names
+        export_type: Type of data to export ("dataset", "project", "experiment", "prompt")
+        name_pattern: String pattern to match names (case-insensitive substring matching)
         workspace: Workspace name
         output_path: Base output directory
         max_results: Maximum number of items to export
         force: Whether to re-download existing items
         debug: Enable debug output
-        filter: Optional OQL filter string
-        trace_format: Format for trace exports (json/csv)
+        filter_string: Optional OQL filter string
+        dataset: Optional dataset name for experiment filtering
+        max_traces: Optional maximum number of traces for experiments
+        format: Format for exports (json/csv)
     """
     try:
-        # Validate regex pattern early to avoid multiple error messages
-        try:
-            re.compile(name_pattern)
-        except re.error as e:
-            console.print(f"[red]Invalid regex pattern '{name_pattern}': {e}[/red]")
-            console.print(
-                "[yellow]Hint: Use '.*' to match any characters, not '*'[/yellow]"
-            )
-            return
-
         if debug:
             console.print(
                 f"[blue]DEBUG: Starting {export_type} export with pattern: {name_pattern}[/blue]"
@@ -1231,7 +1524,7 @@ def _export_by_type(
 
         if export_type == "dataset":
             exported_count = _export_datasets_with_pattern(
-                client, target_dir, max_results, name_pattern, force, debug
+                client, target_dir, max_results, name_pattern, force, debug, format
             )
         elif export_type == "project":
             exported_count = _export_projects_with_pattern(
@@ -1242,7 +1535,7 @@ def _export_by_type(
                 filter_string,
                 force,
                 debug,
-                trace_format,
+                format,
             )
         elif export_type == "experiment":
             exported_count = _export_experiments_with_pattern(
@@ -1254,11 +1547,11 @@ def _export_by_type(
                 max_traces,
                 force,
                 debug,
-                trace_format,
+                format,
             )
         elif export_type == "prompt":
             exported_count = _export_prompts_with_pattern(
-                client, target_dir, max_results, name_pattern, force, debug
+                client, target_dir, max_results, name_pattern, force, debug, format
             )
 
         if exported_count > 0:
@@ -1282,33 +1575,57 @@ def _export_datasets_with_pattern(
     name_pattern: str,
     force: bool,
     debug: bool,
+    format: str = "json",
 ) -> int:
     """Export datasets matching the name pattern."""
     try:
-        datasets = client.get_datasets(max_results=max_results, sync_items=True)
+        # For exact name matches, use direct lookup
+        if "*" not in name_pattern and "?" not in name_pattern:
+            try:
+                dataset = client.get_dataset(name_pattern)
+                matching_datasets = [dataset]
+                if debug:
+                    console.print(
+                        f"[blue]Found dataset by direct lookup: {dataset.name}[/blue]"
+                    )
+            except Exception as e:
+                if debug:
+                    console.print(
+                        f"[yellow]Direct lookup failed, falling back to search: {e}[/yellow]"
+                    )
+                matching_datasets = []
+        else:
+            matching_datasets = []
 
-        if not datasets:
-            console.print("[yellow]No datasets found in the workspace.[/yellow]")
-            return 0
+        # If we don't have datasets yet, use the search method
+        if not matching_datasets:
+            datasets = client.get_datasets(max_results=max_results, sync_items=True)
 
-        # Filter datasets by name pattern
-        matching_datasets = [
-            dataset
-            for dataset in datasets
-            if _matches_name_pattern(dataset.name, name_pattern)
-        ]
+            if not datasets:
+                console.print("[yellow]No datasets found in the workspace.[/yellow]")
+                return 0
+
+            # Filter datasets by name pattern
+            matching_datasets = [
+                dataset
+                for dataset in datasets
+                if _matches_name_pattern(dataset.name, name_pattern)
+            ]
 
         if not matching_datasets:
             console.print(
                 f"[yellow]No datasets found matching pattern '{name_pattern}'[/yellow]"
             )
-            if datasets:
-                dataset_names = [
-                    d.name for d in datasets[:10]
-                ]  # Show first 10 datasets
-                console.print(
-                    f"[blue]Available datasets: {dataset_names}{'...' if len(datasets) > 10 else ''}[/blue]"
-                )
+            # Try to show available datasets for debugging
+            try:
+                all_datasets = client.get_datasets(max_results=10, sync_items=False)
+                if all_datasets:
+                    dataset_names = [d.name for d in all_datasets]
+                    console.print(
+                        f"[blue]Available datasets: {dataset_names}{'...' if len(all_datasets) == 10 else ''}[/blue]"
+                    )
+            except Exception:
+                pass
             return 0
 
         if debug:
@@ -1321,7 +1638,10 @@ def _export_datasets_with_pattern(
         for dataset in matching_datasets:
             try:
                 # Check if already exists and force is not set
-                dataset_file = output_dir / f"dataset_{dataset.name}.json"
+                if format.lower() == "csv":
+                    dataset_file = output_dir / f"datasets_{dataset.name}.csv"
+                else:
+                    dataset_file = output_dir / f"dataset_{dataset.name}.json"
                 if dataset_file.exists() and not force:
                     if debug:
                         console.print(
@@ -1355,9 +1675,11 @@ def _export_datasets_with_pattern(
                     "downloaded_at": datetime.now().isoformat(),
                 }
 
-                # Save to file
-                with open(dataset_file, "w", encoding="utf-8") as f:
-                    json.dump(dataset_data, f, indent=2, default=str)
+                # Save to file using the appropriate format
+                if format.lower() == "csv":
+                    _write_csv_data(dataset_data, dataset_file, _dataset_to_csv_rows)
+                else:
+                    _write_json_data(dataset_data, dataset_file)
 
                 exported_count += 1
                 if debug:
@@ -1393,7 +1715,7 @@ def _export_datasets_with_pattern(
             "prompts": 0,
             "projects": 0,
         }
-        _print_export_summary(stats)
+        _print_export_summary(stats, format)
 
         return exported_count
 
@@ -1410,7 +1732,7 @@ def _export_projects_with_pattern(
     filter_string: Optional[str],
     force: bool,
     debug: bool,
-    trace_format: str,
+    format: str,
 ) -> int:
     """Export projects matching the name pattern."""
     try:
@@ -1464,18 +1786,43 @@ def _export_projects_with_pattern(
                     max_results,
                     filter_string,
                     None,  # No additional name pattern for traces
-                    trace_format,
+                    format,
                     debug,
                     force,
                 )
 
-                if traces_exported > 0 or traces_skipped > 0:
+                # Export related datasets for this project
+                datasets_exported = _export_datasets(
+                    client,
+                    project_dir,
+                    max_results,
+                    None,  # No additional name pattern for datasets
+                    debug,
+                    format,
+                )
+
+                # Export related prompts for this project
+                prompts_exported = _export_prompts(
+                    client,
+                    project_dir,
+                    max_results,
+                    None,  # No additional name pattern for prompts
+                    debug,
+                    format,
+                )
+
+                if (
+                    traces_exported > 0
+                    or traces_skipped > 0
+                    or datasets_exported > 0
+                    or prompts_exported > 0
+                ):
                     exported_count += 1
                     total_traces_exported += traces_exported
                     total_traces_skipped += traces_skipped
                     if debug:
                         console.print(
-                            f"[green]Exported project: {project.name} with {traces_exported} traces exported, {traces_skipped} skipped[/green]"
+                            f"[green]Exported project: {project.name} with {traces_exported} traces, {datasets_exported} datasets, {prompts_exported} prompts exported[/green]"
                         )
 
             except Exception as e:
@@ -1485,13 +1832,13 @@ def _export_projects_with_pattern(
         # Print export summary
         stats = {
             "experiments": 0,
-            "datasets": 0,
+            "datasets": 0,  # Will be updated with actual counts if needed
             "traces": total_traces_exported,
             "traces_skipped": total_traces_skipped,
-            "prompts": 0,
+            "prompts": 0,  # Will be updated with actual counts if needed
             "projects": exported_count,
         }
-        _print_export_summary(stats)
+        _print_export_summary(stats, format)
 
         return exported_count
 
@@ -1508,7 +1855,7 @@ def _export_specific_experiment_by_id(
     max_traces: Optional[int],
     force: bool,
     debug: bool,
-    trace_format: str,
+    format: str,
 ) -> int:
     """Export a specific experiment by ID, including related datasets and traces."""
     try:
@@ -1553,9 +1900,14 @@ def _export_specific_experiment_by_id(
             datasets_to_export.add(experiment.dataset_name)
 
         # Check if already exists and force is not set
-        experiment_file = (
-            output_dir / f"experiment_{experiment.name or experiment.id}.json"
-        )
+        if format.lower() == "csv":
+            experiment_file = (
+                output_dir / f"experiments_{experiment.name or experiment.id}.csv"
+            )
+        else:
+            experiment_file = (
+                output_dir / f"experiment_{experiment.name or experiment.id}.json"
+            )
         skip_experiment_export = experiment_file.exists() and not force
         if skip_experiment_export:
             if debug:
@@ -1578,36 +1930,18 @@ def _export_specific_experiment_by_id(
         )
 
         # Create comprehensive experiment data structure
-        experiment_data: Dict[str, Any] = {
-            "experiment": {
-                "id": experiment.id,
-                "name": experiment.name,
-                "dataset_name": experiment.dataset_name,
-                "metadata": experiment.metadata,
-                "type": experiment.type,
-                "status": experiment.status,
-                "created_at": experiment.created_at,
-                "last_updated_at": experiment.last_updated_at,
-                "created_by": experiment.created_by,
-                "last_updated_by": experiment.last_updated_by,
-                "trace_count": experiment.trace_count,
-                "total_estimated_cost": experiment.total_estimated_cost,
-                "total_estimated_cost_avg": experiment.total_estimated_cost_avg,
-                "usage": experiment.usage,
-                "feedback_scores": experiment.feedback_scores,
-                "comments": experiment.comments,
-                "duration": experiment.duration,
-                "prompt_version": experiment.prompt_version,
-                "prompt_versions": experiment.prompt_versions,
-            },
-            "items": [_serialize_experiment_item(item) for item in experiment_items],
-            "downloaded_at": datetime.now().isoformat(),
-        }
+        experiment_data = _create_experiment_data_structure(
+            experiment, experiment_items
+        )
 
         # Save experiment data (only if not skipping)
         if not skip_experiment_export:
-            with open(experiment_file, "w") as f:
-                json.dump(experiment_data, f, indent=2, default=str)
+            if format.lower() == "csv":
+                _write_csv_data(
+                    experiment_data, experiment_file, _experiment_to_csv_rows
+                )
+            else:
+                _write_json_data(experiment_data, experiment_file)
 
             console.print(
                 f"[green]Exported experiment: {experiment.name or experiment.id}[/green]"
@@ -1630,13 +1964,13 @@ def _export_specific_experiment_by_id(
         if experiment.prompt_versions:
             console.print("[blue]Exporting related prompts...[/blue]")
             stats["prompts"] = _export_experiment_prompts(
-                client, experiment, output_dir, force, debug
+                client, experiment, output_dir, force, debug, format
             )
         else:
             # Check for prompts that might be related by name/content even if not explicitly linked
             console.print("[blue]Checking for related prompts...[/blue]")
             stats["prompts"] = _export_related_prompts_by_name(
-                client, experiment, output_dir, force, debug
+                client, experiment, output_dir, force, debug, format
             )
 
         # Export related datasets and traces (same logic as the original function)
@@ -1648,39 +1982,9 @@ def _export_specific_experiment_by_id(
 
         if datasets_to_export:
             console.print("[blue]Exporting related datasets...[/blue]")
-            for dataset_name in datasets_to_export:
-                try:
-                    dataset_obj = Dataset(
-                        name=dataset_name,
-                        description=None,  # Description not available from experiment
-                        rest_client=client.rest_client,
-                    )
-                    dataset_items = dataset_obj.get_items()
-
-                    dataset_data = {
-                        "dataset": {
-                            "name": dataset_name,
-                            "id": getattr(dataset_obj, "id", None),
-                        },
-                        "items": [
-                            _serialize_experiment_item(item) for item in dataset_items
-                        ],
-                        "downloaded_at": datetime.now().isoformat(),
-                    }
-
-                    dataset_file = datasets_dir / f"dataset_{dataset_name}.json"
-                    datasets_dir.mkdir(parents=True, exist_ok=True)
-
-                    with open(dataset_file, "w") as f:
-                        json.dump(dataset_data, f, indent=2, default=str)
-
-                    console.print(f"[green]Exported dataset: {dataset_name}[/green]")
-                    stats["datasets"] += 1
-                except Exception as e:
-                    if debug:
-                        console.print(
-                            f"[yellow]Warning: Could not export dataset {dataset_name}: {e}[/yellow]"
-                        )
+            stats["datasets"] = _export_experiment_datasets(
+                client, datasets_to_export, datasets_dir, format, debug
+            )
 
         # Export traces (default to exporting all if max_traces is None)
         if max_traces is None or max_traces > 0:
@@ -1748,7 +2052,7 @@ def _export_specific_experiment_by_id(
                             project_name,
                             project_dir,
                             project_trace_ids_list,
-                            trace_format,
+                            format,
                             debug,
                             force,
                         )
@@ -1771,7 +2075,7 @@ def _export_specific_experiment_by_id(
                 stats["projects"] = len(traces_by_project)
 
         # Print export summary
-        _print_export_summary(stats)
+        _print_export_summary(stats, format)
 
         return 1
 
@@ -1789,7 +2093,7 @@ def _export_experiments_with_pattern(
     max_traces: Optional[int],
     force: bool,
     debug: bool,
-    trace_format: str,
+    format: str,
 ) -> int:
     """Export experiments matching the name pattern, including related datasets and traces."""
     try:
@@ -1815,27 +2119,20 @@ def _export_experiments_with_pattern(
                 max_traces,
                 force,
                 debug,
-                trace_format,
+                format,
             )
 
         # For exact name matches, try to find the experiment directly first
-        if not name_pattern.startswith(".*") and not name_pattern.endswith(".*"):
+        # Check if this looks like an exact name (no wildcard characters)
+        if "*" not in name_pattern and "?" not in name_pattern:
             console.print("[blue]Trying direct name lookup first...[/blue]")
             try:
-                # Try to get experiments and look for exact name match
-                experiments_response = client.rest_client.experiments.find_experiments(
-                    page=1, size=50
-                )
-                experiments = experiments_response.content or []
+                # Use the direct name lookup API instead of paginating
+                experiments = client.get_experiments_by_name(name_pattern)
 
-                # Look for exact name match
-                exact_match = None
-                for experiment in experiments:
-                    if experiment.name == name_pattern:
-                        exact_match = experiment
-                        break
-
-                if exact_match:
+                if experiments:
+                    # Use the first experiment found (there should typically be only one)
+                    exact_match = experiments[0]
                     console.print(
                         f"[green]Found exact match: {exact_match.name}[/green]"
                     )
@@ -1847,7 +2144,7 @@ def _export_experiments_with_pattern(
                         max_traces,
                         force,
                         debug,
-                        trace_format,
+                        format,
                     )
             except Exception as e:
                 if debug:
@@ -1867,7 +2164,7 @@ def _export_experiments_with_pattern(
             max_traces,
             force,
             debug,
-            trace_format,
+            format,
         )
 
     except Exception as e:
@@ -1884,17 +2181,46 @@ def _export_experiments_by_name(
     max_traces: Optional[int],
     force: bool,
     debug: bool,
-    trace_format: str,
+    format: str,
 ) -> int:
     """Simple experiment export by name pattern."""
     try:
         # Simple search - get experiments and filter by name
         # Handle validation errors from malformed API responses
         try:
-            experiments_response = client.rest_client.experiments.find_experiments(
-                page=1, size=max_results
-            )
-            experiments = experiments_response.content or []
+            # For exact name matches, use direct lookup
+            if "*" not in name_pattern and "?" not in name_pattern:
+                try:
+                    experiments = client.get_experiments_by_name(name_pattern)
+                except Exception:
+                    # If direct lookup fails, fall back to pagination
+                    experiments = []
+            else:
+                # For pattern matching, use pagination
+                experiments = []
+
+            # If we don't have experiments yet, use pagination
+            if not experiments:
+                page = 1
+                page_size = 100
+                max_pages = max(1, (max_results + page_size - 1) // page_size)
+
+                while page <= max_pages and len(experiments) < max_results:
+                    experiments_response = (
+                        client.rest_client.experiments.find_experiments(
+                            page=page, size=page_size
+                        )
+                    )
+                    page_experiments = experiments_response.content or []
+
+                    if not page_experiments:
+                        break
+
+                    experiments.extend(page_experiments)
+                    page += 1
+
+                # Limit to max_results
+                experiments = experiments[:max_results]
         except Exception as api_error:
             if "validation errors" in str(api_error) and "dataset_name" in str(
                 api_error
@@ -1962,10 +2288,24 @@ def _export_experiments_by_name(
             if _matches_name_pattern(experiment.name or "", name_pattern)
         ]
 
+        if debug:
+            console.print(
+                f"[blue]DEBUG: Found {len(experiments)} total experiments[/blue]"
+            )
+            console.print(f"[blue]DEBUG: Looking for pattern '{name_pattern}'[/blue]")
+            for i, exp in enumerate(experiments[:10]):  # Show first 10
+                console.print(
+                    f"[blue]DEBUG: Experiment {i+1}: '{exp.name}' (matches: {_matches_name_pattern(exp.name or '', name_pattern)})[/blue]"
+                )
+
         if not matching_experiments:
             console.print(
                 f"[yellow]No experiments found matching pattern '{name_pattern}'[/yellow]"
             )
+            if experiments:
+                console.print(
+                    f"[blue]Available experiments: {[exp.name for exp in experiments[:5]]}{'...' if len(experiments) > 5 else ''}[/blue]"
+                )
             return 0
 
         console.print(
@@ -1985,7 +2325,7 @@ def _export_experiments_by_name(
                     max_traces,
                     force,
                     debug,
-                    trace_format,
+                    format,
                 )
                 if result > 0:
                     exported_count += 1
@@ -2273,6 +2613,449 @@ def _export_experiments(
         return 0
 
 
+def _export_project_by_name(
+    name: str,
+    workspace: str,
+    output_path: str,
+    filter_string: Optional[str],
+    max_results: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+) -> None:
+    """Export a project by exact name."""
+    try:
+        if debug:
+            console.print(f"[blue]Exporting project: {name}[/blue]")
+
+        # Initialize client
+        client = opik.Opik(workspace=workspace)
+
+        # Create output directory
+        output_dir = Path(output_path) / workspace / "projects"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        if debug:
+            console.print(f"[blue]Target directory: {output_dir}[/blue]")
+
+        # Get projects and find exact match
+        projects_response = client.rest_client.projects.find_projects()
+        projects = projects_response.content or []
+        matching_project = None
+
+        for project in projects:
+            if project.name == name:
+                matching_project = project
+                break
+
+        if not matching_project:
+            console.print(f"[red]Project '{name}' not found[/red]")
+            return
+
+        if debug:
+            console.print(
+                f"[blue]Found project by exact match: {matching_project.name}[/blue]"
+            )
+
+        # Export the project
+        exported_count = _export_single_project(
+            client,
+            matching_project,
+            output_dir,
+            filter_string,
+            max_results,
+            force,
+            debug,
+            format,
+        )
+
+        if exported_count > 0:
+            console.print(
+                f"[green]Successfully exported project '{name}' to {output_dir}[/green]"
+            )
+        else:
+            console.print(
+                f"[yellow]Project '{name}' already exists (use --force to re-download)[/yellow]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error exporting project: {e}[/red]")
+        sys.exit(1)
+
+
+def _export_single_project(
+    client: opik.Opik,
+    project: ProjectPublic,
+    output_dir: Path,
+    filter_string: Optional[str],
+    max_results: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+) -> int:
+    """Export a single project."""
+    try:
+        # Check if already exists and force is not set
+        project_file = output_dir / f"project_{project.name}.json"
+
+        if project_file.exists() and not force:
+            if debug:
+                console.print(f"[blue]Skipping {project.name} (already exists)[/blue]")
+            return 0
+
+        # Create project-specific directory for traces
+        project_traces_dir = output_dir / project.name
+        project_traces_dir.mkdir(parents=True, exist_ok=True)
+
+        # Export related traces for this project
+        traces_exported, traces_skipped = _export_traces(
+            client,
+            project.name,
+            project_traces_dir,
+            max_results or 1000,  # Use provided max_results or default to 1000
+            filter_string,
+            None,  # name_pattern
+            format,
+            debug,
+            force,
+        )
+
+        # Export related datasets for this project
+        datasets_exported = _export_datasets(
+            client,
+            output_dir,
+            1000,  # max_results
+            None,  # name_pattern
+            debug,
+            format,
+        )
+
+        # Export related prompts for this project
+        prompts_exported = _export_prompts(
+            client,
+            output_dir,
+            1000,  # max_results
+            None,  # name_pattern
+            debug,
+            format,
+        )
+
+        if (
+            traces_exported > 0
+            or traces_skipped > 0
+            or datasets_exported > 0
+            or prompts_exported > 0
+        ):
+            if debug:
+                console.print(f"[blue]Exported project: {project.name}[/blue]")
+            return 1
+        else:
+            return 0
+
+    except Exception as e:
+        console.print(f"[red]Error exporting project {project.name}: {e}[/red]")
+        return 0
+
+
+def _export_prompt_by_name(
+    name: str,
+    workspace: str,
+    output_path: str,
+    max_results: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+) -> None:
+    """Export a prompt by exact name."""
+    try:
+        if debug:
+            console.print(f"[blue]Exporting prompt: {name}[/blue]")
+
+        # Initialize client
+        client = opik.Opik(workspace=workspace)
+
+        # Create output directory
+        output_dir = Path(output_path) / workspace / "prompts"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        if debug:
+            console.print(f"[blue]Target directory: {output_dir}[/blue]")
+
+        # Try to get prompt by exact name
+        try:
+            prompt = client.get_prompt(name)
+            if not prompt:
+                console.print(f"[red]Prompt '{name}' not found[/red]")
+                return
+
+            if debug:
+                console.print(
+                    f"[blue]Found prompt by direct lookup: {prompt.name}[/blue]"
+                )
+        except Exception as e:
+            console.print(f"[red]Prompt '{name}' not found: {e}[/red]")
+            return
+
+        # Export the prompt
+        exported_count = _export_single_prompt(
+            client, prompt, output_dir, max_results, force, debug, format
+        )
+
+        if exported_count > 0:
+            console.print(
+                f"[green]Successfully exported prompt '{name}' to {output_dir}[/green]"
+            )
+        else:
+            console.print(
+                f"[yellow]Prompt '{name}' already exists (use --force to re-download)[/yellow]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error exporting prompt: {e}[/red]")
+        sys.exit(1)
+
+
+def _export_single_prompt(
+    client: opik.Opik,
+    prompt: Prompt,
+    output_dir: Path,
+    max_results: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+) -> int:
+    """Export a single prompt."""
+    try:
+        # Check if already exists and force is not set
+        if format.lower() == "csv":
+            prompt_file = output_dir / f"prompts_{prompt.name.replace('/', '_')}.csv"
+        else:
+            prompt_file = output_dir / f"prompt_{prompt.name.replace('/', '_')}.json"
+
+        if prompt_file.exists() and not force:
+            if debug:
+                console.print(f"[blue]Skipping {prompt.name} (already exists)[/blue]")
+            return 0
+
+        # Get prompt history
+        prompt_history = client.get_prompt_history(prompt.name)
+
+        # Create prompt data structure
+        prompt_data = {
+            "name": prompt.name,
+            "current_version": {
+                "prompt": prompt.prompt,
+                "metadata": prompt.metadata,
+                "type": prompt.type if prompt.type else None,
+                "commit": prompt.commit,
+            },
+            "history": [
+                {
+                    "prompt": version.prompt,
+                    "metadata": version.metadata,
+                    "type": version.type if version.type else None,
+                    "commit": version.commit,
+                }
+                for version in prompt_history
+            ],
+            "downloaded_at": datetime.now().isoformat(),
+        }
+
+        # Save to file using the appropriate format
+        if format.lower() == "csv":
+            _write_csv_data(prompt_data, prompt_file, _prompt_to_csv_rows)
+        else:
+            _write_json_data(prompt_data, prompt_file)
+
+        if debug:
+            console.print(f"[blue]Exported prompt: {prompt.name}[/blue]")
+        return 1
+
+    except Exception as e:
+        console.print(f"[red]Error exporting prompt {prompt.name}: {e}[/red]")
+        return 0
+
+
+def _export_experiment_by_name(
+    name: str,
+    workspace: str,
+    output_path: str,
+    dataset: Optional[str],
+    max_traces: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+) -> None:
+    """Export an experiment by exact name."""
+    try:
+        if debug:
+            console.print(f"[blue]Exporting experiment: {name}[/blue]")
+
+        # Initialize client
+        client = opik.Opik(workspace=workspace)
+
+        # Create output directory
+        output_dir = Path(output_path) / workspace / "experiments"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        if debug:
+            console.print(f"[blue]Target directory: {output_dir}[/blue]")
+
+        # Try to get experiment by exact name
+        try:
+            experiments = client.get_experiments_by_name(name)
+            if not experiments:
+                console.print(f"[red]Experiment '{name}' not found[/red]")
+                return
+
+            experiment = experiments[0]  # Should be only one with exact name
+            if debug:
+                console.print(
+                    f"[blue]Found experiment by direct lookup: {experiment.name}[/blue]"
+                )
+        except Exception as e:
+            console.print(f"[red]Experiment '{name}' not found: {e}[/red]")
+            return
+
+        # Export the experiment
+        exported_count = _export_specific_experiment_by_id(
+            client,
+            output_dir,
+            experiment.id,
+            dataset,
+            max_traces,
+            force,
+            debug,
+            format,
+        )
+
+        if exported_count > 0:
+            console.print(
+                f"[green]Successfully exported experiment '{name}' to {output_dir}[/green]"
+            )
+        else:
+            console.print(
+                f"[yellow]Experiment '{name}' already exists (use --force to re-download)[/yellow]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error exporting experiment: {e}[/red]")
+        sys.exit(1)
+
+
+def _export_dataset_by_name(
+    name: str,
+    workspace: str,
+    output_path: str,
+    max_results: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+) -> None:
+    """Export a dataset by exact name."""
+    try:
+        if debug:
+            console.print(f"[blue]Exporting dataset: {name}[/blue]")
+
+        # Initialize client
+        client = opik.Opik(workspace=workspace)
+
+        # Create output directory
+        output_dir = Path(output_path) / workspace / "datasets"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        if debug:
+            console.print(f"[blue]Target directory: {output_dir}[/blue]")
+
+        # Try to get dataset by exact name
+        try:
+            dataset = client.get_dataset(name)
+            if debug:
+                console.print(
+                    f"[blue]Found dataset by direct lookup: {dataset.name}[/blue]"
+                )
+        except Exception as e:
+            console.print(f"[red]Dataset '{name}' not found: {e}[/red]")
+            return
+
+        # Export the dataset
+        exported_count = _export_single_dataset(
+            dataset, output_dir, max_results, force, debug, format
+        )
+
+        if exported_count > 0:
+            console.print(
+                f"[green]Successfully exported dataset '{name}' to {output_dir}[/green]"
+            )
+        else:
+            console.print(
+                f"[yellow]Dataset '{name}' already exists (use --force to re-download)[/yellow]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]Error exporting dataset: {e}[/red]")
+        sys.exit(1)
+
+
+def _export_single_dataset(
+    dataset: Dataset,
+    output_dir: Path,
+    max_results: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+) -> int:
+    """Export a single dataset."""
+    try:
+        # Check if already exists and force is not set
+        if format.lower() == "csv":
+            dataset_file = output_dir / f"datasets_{dataset.name}.csv"
+        else:
+            dataset_file = output_dir / f"dataset_{dataset.name}.json"
+
+        if dataset_file.exists() and not force:
+            if debug:
+                console.print(f"[blue]Skipping {dataset.name} (already exists)[/blue]")
+            return 0
+
+        # Get dataset items
+        if debug:
+            console.print(f"[blue]Getting items for dataset: {dataset.name}[/blue]")
+        dataset_items = dataset.get_items()
+
+        # Format items for export
+        formatted_items = []
+        for item in dataset_items:
+            formatted_item = {
+                "input": item.get("input"),
+                "expected_output": item.get("expected_output"),
+                "metadata": item.get("metadata"),
+            }
+            formatted_items.append(formatted_item)
+
+        # Create dataset data structure
+        dataset_data = {
+            "name": dataset.name,
+            "description": dataset.description,
+            "items": formatted_items,
+            "downloaded_at": datetime.now().isoformat(),
+        }
+
+        # Save to file using the appropriate format
+        if format.lower() == "csv":
+            _write_csv_data(dataset_data, dataset_file, _dataset_to_csv_rows)
+        else:
+            _write_json_data(dataset_data, dataset_file)
+
+        if debug:
+            console.print(f"[blue]Exported dataset: {dataset.name}[/blue]")
+        return 1
+
+    except Exception as e:
+        console.print(f"[red]Error exporting dataset {dataset.name}: {e}[/red]")
+        return 0
+
+
 @click.group(name="export")
 @click.argument("workspace", type=str)
 @click.pass_context
@@ -2285,17 +3068,16 @@ def export_group(ctx: click.Context, workspace: str) -> None:
 @export_group.command(name="dataset")
 @click.argument("name", type=str)
 @click.option(
+    "--max-results",
+    type=int,
+    help="Maximum number of datasets to export. Limits the total number of datasets downloaded.",
+)
+@click.option(
     "--path",
     "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
     default="./",
     help="Directory to save exported data. Defaults to current directory.",
-)
-@click.option(
-    "--max-results",
-    type=int,
-    default=1000,
-    help="Maximum number of items to download. Defaults to 1000.",
 )
 @click.option(
     "--force",
@@ -2307,19 +3089,26 @@ def export_group(ctx: click.Context, workspace: str) -> None:
     is_flag=True,
     help="Enable debug output to show detailed information about the export process.",
 )
+@click.option(
+    "--format",
+    type=click.Choice(["json", "csv"], case_sensitive=False),
+    default="json",
+    help="Format for exporting data. Defaults to json.",
+)
 @click.pass_context
 def export_dataset(
     ctx: click.Context,
     name: str,
+    max_results: Optional[int],
     path: str,
-    max_results: int,
     force: bool,
     debug: bool,
+    format: str,
 ) -> None:
-    """Export datasets matching the given name pattern to workspace/datasets."""
+    """Export a dataset by exact name to workspace/datasets."""
     # Get workspace from context
     workspace = ctx.obj["workspace"]
-    _export_by_type("dataset", name, workspace, path, max_results, force, debug)
+    _export_dataset_by_name(name, workspace, path, max_results, force, debug, format)
 
 
 @export_group.command(name="project")
@@ -2330,17 +3119,16 @@ def export_dataset(
     help="Filter string to narrow down traces using Opik Query Language (OQL).",
 )
 @click.option(
+    "--max-results",
+    type=int,
+    help="Maximum number of traces to export. Limits the total number of traces downloaded.",
+)
+@click.option(
     "--path",
     "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
     default="./",
     help="Directory to save exported data. Defaults to current directory.",
-)
-@click.option(
-    "--max-results",
-    type=int,
-    default=1000,
-    help="Maximum number of items to download. Defaults to 1000.",
 )
 @click.option(
     "--force",
@@ -2353,37 +3141,27 @@ def export_dataset(
     help="Enable debug output to show detailed information about the export process.",
 )
 @click.option(
-    "--trace-format",
+    "--format",
     type=click.Choice(["json", "csv"], case_sensitive=False),
     default="json",
-    help="Format for exporting traces. Defaults to json.",
+    help="Format for exporting data. Defaults to json.",
 )
 @click.pass_context
 def export_project(
     ctx: click.Context,
     name: str,
     filter: Optional[str],
+    max_results: Optional[int],
     path: str,
-    max_results: int,
     force: bool,
     debug: bool,
-    trace_format: str,
+    format: str,
 ) -> None:
-    """Export projects matching the given name pattern to workspace/projects."""
+    """Export a project by exact name to workspace/projects."""
     # Get workspace from context
     workspace = ctx.obj["workspace"]
-    _export_by_type(
-        "project",
-        name,
-        workspace,
-        path,
-        max_results,
-        force,
-        debug,
-        filter,
-        None,
-        None,
-        trace_format,
+    _export_project_by_name(
+        name, workspace, path, filter, max_results, force, debug, format
     )
 
 
@@ -2407,12 +3185,6 @@ def export_project(
     help="Directory to save exported data. Defaults to current directory.",
 )
 @click.option(
-    "--max-results",
-    type=int,
-    default=1000,
-    help="Maximum number of items to download. Defaults to 1000.",
-)
-@click.option(
     "--force",
     is_flag=True,
     help="Re-download items even if they already exist locally.",
@@ -2423,10 +3195,10 @@ def export_project(
     help="Enable debug output to show detailed information about the export process.",
 )
 @click.option(
-    "--trace-format",
+    "--format",
     type=click.Choice(["json", "csv"], case_sensitive=False),
     default="json",
-    help="Format for exporting traces. Defaults to json.",
+    help="Format for exporting data. Defaults to json.",
 )
 @click.pass_context
 def export_experiment(
@@ -2435,43 +3207,31 @@ def export_experiment(
     dataset: Optional[str],
     max_traces: Optional[int],
     path: str,
-    max_results: int,
     force: bool,
     debug: bool,
-    trace_format: str,
+    format: str,
 ) -> None:
-    """Export experiments matching the given name pattern to workspace/experiments."""
+    """Export an experiment by exact name to workspace/experiments."""
     # Get workspace from context
     workspace = ctx.obj["workspace"]
-    _export_by_type(
-        "experiment",
-        name,
-        workspace,
-        path,
-        max_results,
-        force,
-        debug,
-        None,
-        dataset,
-        max_traces,
-        trace_format,
+    _export_experiment_by_name(
+        name, workspace, path, dataset, max_traces, force, debug, format
     )
 
 
 @export_group.command(name="prompt")
 @click.argument("name", type=str)
 @click.option(
+    "--max-results",
+    type=int,
+    help="Maximum number of prompts to export. Limits the total number of prompts downloaded.",
+)
+@click.option(
     "--path",
     "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
     default="./",
     help="Directory to save exported data. Defaults to current directory.",
-)
-@click.option(
-    "--max-results",
-    type=int,
-    default=1000,
-    help="Maximum number of items to download. Defaults to 1000.",
 )
 @click.option(
     "--force",
@@ -2483,16 +3243,23 @@ def export_experiment(
     is_flag=True,
     help="Enable debug output to show detailed information about the export process.",
 )
+@click.option(
+    "--format",
+    type=click.Choice(["json", "csv"], case_sensitive=False),
+    default="json",
+    help="Format for exporting data. Defaults to json.",
+)
 @click.pass_context
 def export_prompt(
     ctx: click.Context,
     name: str,
+    max_results: Optional[int],
     path: str,
-    max_results: int,
     force: bool,
     debug: bool,
+    format: str,
 ) -> None:
-    """Export prompts matching the given name pattern to workspace/prompts."""
+    """Export a prompt by exact name to workspace/prompts."""
     # Get workspace from context
     workspace = ctx.obj["workspace"]
-    _export_by_type("prompt", name, workspace, path, max_results, force, debug)
+    _export_prompt_by_name(name, workspace, path, max_results, force, debug, format)

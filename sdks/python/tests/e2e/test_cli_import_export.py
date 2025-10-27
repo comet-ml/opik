@@ -282,7 +282,7 @@ class TestCLIImportExport:
     ):
         """Test the complete export/import flow for datasets."""
         # Step 1: Prepare test data
-        self._create_test_dataset(opik_client, source_project_name)
+        dataset_name = self._create_test_dataset(opik_client, source_project_name)
 
         # Verify dataset was created
         datasets = opik_client.get_datasets(max_results=100)
@@ -293,7 +293,7 @@ class TestCLIImportExport:
             "export",
             "default",
             "dataset",
-            ".*",  # Export all datasets
+            dataset_name,  # Use exact dataset name
             "--path",
             str(test_data_dir),
         ]
@@ -357,7 +357,7 @@ class TestCLIImportExport:
             "export",
             "default",
             "prompt",
-            f".*{prompt_name.split('-')[-1]}.*",  # Use the unique part of the name
+            prompt_name,  # Use exact prompt name
             "--path",
             str(test_data_dir),
         ]
@@ -409,8 +409,8 @@ class TestCLIImportExport:
         """Test the complete export/import flow for all data types."""
         # Step 1: Prepare test data (minimal)
         self._create_test_traces(opik_client, source_project_name)
-        self._create_test_dataset(opik_client, source_project_name)
-        self._create_test_prompt(opik_client, source_project_name)
+        dataset_name = self._create_test_dataset(opik_client, source_project_name)
+        prompt_name = self._create_test_prompt(opik_client, source_project_name)
 
         # Step 2: Export all data types with limited results
         # Export projects (traces)
@@ -433,7 +433,7 @@ class TestCLIImportExport:
             "export",
             "default",
             "dataset",
-            ".*",  # Export all datasets
+            dataset_name,  # Use exact dataset name
             "--path",
             str(test_data_dir),
             "--max-results",
@@ -448,7 +448,7 @@ class TestCLIImportExport:
             "export",
             "default",
             "prompt",
-            ".*",  # Export all prompts
+            prompt_name,  # Use exact prompt name
             "--path",
             str(test_data_dir),
             "--max-results",

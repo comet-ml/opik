@@ -1,7 +1,6 @@
 """Upload command for Opik CLI."""
 
 import json
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -24,14 +23,11 @@ DEFAULT_PROJECT_NAME = "default"
 
 
 def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
-    """Check if a name matches the given regex pattern."""
+    """Check if a name matches the given pattern using simple string matching."""
     if pattern is None:
         return True
-    try:
-        return bool(re.search(pattern, name))
-    except re.error as e:
-        console.print(f"[red]Invalid regex pattern '{pattern}': {e}[/red]")
-        return False
+    # Simple string matching - check if pattern is contained in name (case-insensitive)
+    return pattern.lower() in name.lower()
 
 
 def _json_to_trace_data(
@@ -613,7 +609,7 @@ def _import_by_type(
         workspace_folder: Base workspace folder containing the data
         workspace: Target workspace name
         dry_run: Whether to show what would be imported without importing
-        name_pattern: Optional regex pattern to filter items by name
+        name_pattern: Optional string pattern to filter items by name (case-insensitive substring matching)
         debug: Enable debug output
         recreate_experiments: Whether to recreate experiments after importing
     """
@@ -1071,7 +1067,7 @@ def import_group(ctx: click.Context, workspace: str) -> None:
 @click.option(
     "--name",
     type=str,
-    help="Filter datasets by name using Python regex patterns.",
+    help="Filter datasets by name using string pattern matching (case-insensitive).",
 )
 @click.option(
     "--debug",
@@ -1103,7 +1099,7 @@ def import_dataset(
 @click.option(
     "--name",
     type=str,
-    help="Filter projects by name using Python regex patterns.",
+    help="Filter projects by name using string pattern matching (case-insensitive).",
 )
 @click.option(
     "--debug",
@@ -1149,7 +1145,7 @@ def import_project(
 @click.option(
     "--name",
     type=str,
-    help="Filter experiments by name using Python regex patterns.",
+    help="Filter experiments by name using string pattern matching (case-insensitive).",
 )
 @click.option(
     "--debug",
@@ -1184,7 +1180,7 @@ def import_experiment(
 @click.option(
     "--name",
     type=str,
-    help="Filter prompts by name using Python regex patterns.",
+    help="Filter prompts by name using string pattern matching (case-insensitive).",
 )
 @click.option(
     "--debug",
