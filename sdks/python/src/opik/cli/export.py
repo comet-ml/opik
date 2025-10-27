@@ -138,15 +138,21 @@ def _export_experiment_prompts(
                 # Create prompt data structure
                 prompt_data = {
                     "prompt": {
-                        "id": prompt.id,
+                        "id": getattr(prompt, "id", None),
                         "name": prompt.name,
                         "description": getattr(prompt, "description", None),
                         "created_at": (
-                            prompt.created_at.isoformat() if prompt.created_at else None
+                            created_at.isoformat()
+                            if (created_at := getattr(prompt, "created_at", None))
+                            else None
                         ),
                         "last_updated_at": (
-                            prompt.last_updated_at.isoformat()
-                            if prompt.last_updated_at
+                            last_updated_at.isoformat()
+                            if (
+                                last_updated_at := getattr(
+                                    prompt, "last_updated_at", None
+                                )
+                            )
                             else None
                         ),
                     },
@@ -171,11 +177,13 @@ def _export_experiment_prompts(
                 # Save prompt data using the appropriate format
                 if format.lower() == "csv":
                     prompt_file = (
-                        prompts_dir / f"prompts_{prompt.name or prompt.id}.csv"
+                        prompts_dir
+                        / f"prompts_{prompt.name or getattr(prompt, 'id', 'unknown')}.csv"
                     )
                 else:
                     prompt_file = (
-                        prompts_dir / f"prompt_{prompt.name or prompt.id}.json"
+                        prompts_dir
+                        / f"prompt_{prompt.name or getattr(prompt, 'id', 'unknown')}.json"
                     )
                 if not prompt_file.exists() or force:
                     if format.lower() == "csv":
@@ -185,7 +193,7 @@ def _export_experiment_prompts(
 
                     if debug:
                         console.print(
-                            f"[green]Exported prompt: {prompt.name or prompt.id}[/green]"
+                            f"[green]Exported prompt: {prompt.name or getattr(prompt, 'id', 'unknown')}[/green]"
                         )
                     exported_count += 1
                 else:
