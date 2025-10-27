@@ -10,6 +10,7 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -61,6 +62,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetService datasetService;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
+    private final @NonNull SortingFactoryDatasets sortingFactory;
 
     @Override
     @WithSpan
@@ -231,7 +233,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
         return dao.getItems(datasetItemSearchCriteria, page, size)
-                .defaultIfEmpty(DatasetItemPage.empty(page));
+                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
