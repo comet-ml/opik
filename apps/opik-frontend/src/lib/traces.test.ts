@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { prettifyMessage } from "./traces";
+import { convertConversationToMarkdown } from "./conversationMarkdown";
 
 /**
  * `prettifyMessage` takes a message object, string, or undefined, and transforms it
@@ -468,9 +469,10 @@ describe("prettifyMessage", () => {
       prettified: true,
       renderType: "text",
     });
-    // Should handle gracefully without crashing - malformed tool call should be skipped
+    // Should handle gracefully without crashing - tool call with missing name should show tool_call_id
     expect(result.message).toBeDefined();
-    expect(result.message).not.toContain("call_789");
+    expect(result.message).toContain("Tool call: call_789");
+    expect(result.message).toContain("**Function:** call_789");
   });
 
   describe("config parameter behavior", () => {
@@ -629,5 +631,163 @@ describe("prettifyMessage", () => {
         });
       });
     });
+  });
+});
+
+describe("convertConversationToMarkdown", () => {
+  it("shows 'No information available' for empty role sections", () => {
+    const conversationData = {
+      messages: [
+        { role: "assistant" as const, content: "" },
+        { role: "user" as const, content: "" },
+        { role: "assistant" as const, content: "Hello there!" },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should contain "No information available" for empty sections
+    expect(result).toContain("*No information available*");
+
+    // Should still contain the content for non-empty sections
+    expect(result).toContain("Hello there!");
+
+    // Should contain role headers
+    expect(result).toContain("<summary><strong>Assistant</strong></summary>");
+    expect(result).toContain("<summary><strong>User</strong></summary>");
+  });
+
+  it("handles conversation with tool calls and content", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "I'll help you with that.",
+          tool_calls: [
+            {
+              id: "call_1",
+              function: {
+                name: "search_wikipedia",
+                arguments: '{"query": "test"}',
+              },
+            },
+          ],
+        },
+        { role: "user" as const, content: "What is the capital of France?" },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should contain the content
+    expect(result).toContain("I'll help you with that.");
+    expect(result).toContain("What is the capital of France?");
+
+    // Should contain tool call information
+    expect(result).toContain("Tool call: search_wikipedia");
+    expect(result).toContain("**Function:** search_wikipedia");
+    expect(result).toContain('**Arguments:** {"query": "test"}');
+  });
+
+  it("handles tool calls with missing function names", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [
+            {
+              id: "call_1",
+              function: {
+                // Missing name
+                arguments: '{"query": "test"}',
+              },
+            },
+            {
+              id: "call_2",
+              // Missing function entirely - should be skipped
+            },
+            {
+              function: {
+                // Missing both id and function name
+                arguments: '{"other": "data"}',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should show tool_call_id when function name is missing
+    expect(result).toContain("Tool call: call_1");
+    expect(result).toContain("**Function:** call_1");
+    expect(result).toContain('**Arguments:** {"query": "test"}');
+
+    // Should show "unknown name" for tool call with no id or function name
+    expect(result).toContain("Tool call: unknown name");
+    expect(result).toContain("**Function:** unknown name");
+    expect(result).toContain('**Arguments:** {"other": "data"}');
+
+    // Should NOT show tool calls without function property
+    expect(result).not.toContain("Tool call: call_2");
+  });
+
+  it("handles tool_calls as string instead of array", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: "ValidatorIterator(index=1, schema=Some(Union(...)))",
+        },
+        {
+          role: "assistant" as const,
+          content: "Some content",
+          tool_calls: "Another string tool call",
+        },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should show the string tool_calls as formatted content
+    expect(result).toContain("**Tool Call Details:**");
+    expect(result).toContain(
+      "ValidatorIterator(index=1, schema=Some(Union(...)))",
+    );
+    expect(result).toContain("Some content");
+    expect(result).toContain("**Tool Call:**");
+    expect(result).toContain("Another string tool call");
+
+    // Should NOT show "No information available" since there is content
+    expect(result).not.toContain("*No information available*");
+  });
+
+  it("formats ValidatorIterator strings nicely", () => {
+    const conversationData = {
+      messages: [
+        {
+          role: "assistant" as const,
+          content: "",
+          tool_calls:
+            'ValidatorIterator(index=1, schema=Some(Union(UnionValidator { mode: Smart, choices: [(DefinitionRef(DefinitionRefValidator { definition: "typed-dict" }), None), (DefinitionRef(DefinitionRefValidator { definition: "typed-dict" }), None)], custom_error: None, strict: false, name: "union[typed-dict,typed-dict]" })))',
+        },
+      ],
+    };
+
+    const result = convertConversationToMarkdown(conversationData);
+
+    // Should format ValidatorIterator with proper markdown
+    expect(result).toContain("**Tool Call Details:**");
+    expect(result).toContain("```");
+    expect(result).toContain(
+      "ValidatorIterator(index=1, schema=Some(Union(UnionValidator",
+    );
+    expect(result).toContain("```");
+
+    // Should NOT show "No information available" since there is content
+    expect(result).not.toContain("*No information available*");
   });
 });
