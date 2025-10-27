@@ -2,15 +2,23 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
+import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
+import com.comet.opik.domain.TraceService;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.HashSet;
 import java.util.List;
@@ -41,12 +49,24 @@ public interface ManualEvaluationService {
 }
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
-    private final @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService;
-    private final @NonNull OnlineScorePublisher onlineScorePublisher;
+    private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    private final OnlineScorePublisher onlineScorePublisher;
+    private final TraceService traceService;
+    private final ServiceTogglesConfig serviceTogglesConfig;
+
+    @Inject
+    public ManualEvaluationServiceImpl(@NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
+            @NonNull OnlineScorePublisher onlineScorePublisher,
+            @NonNull TraceService traceService,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
+        this.automationRuleEvaluatorService = automationRuleEvaluatorService;
+        this.onlineScorePublisher = onlineScorePublisher;
+        this.traceService = traceService;
+        this.serviceTogglesConfig = serviceTogglesConfig;
+    }
 
     @Override
     public Mono<ManualEvaluationResponse> evaluate(@NonNull ManualEvaluationRequest request, @NonNull UUID projectId,
@@ -97,27 +117,117 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
     /**
      * Evaluates traces by enqueueing evaluation messages for each rule.
-     * Does not validate trace existence - evaluation will fail later if traces don't exist.
+     * Handles both span-level evaluators (which need full trace objects) and trace-thread evaluators (which need only IDs).
      */
     private Mono<Integer> evaluateTraces(List<UUID> traceIds, List<AutomationRuleEvaluator<?>> rules, UUID projectId,
             String workspaceId, String userName) {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
         return Mono.fromCallable(() -> {
-            // Convert trace IDs to strings for enqueueing
-            List<String> traceIdStrings = traceIds.stream()
-                    .map(UUID::toString)
+            // Separate rules by type
+            List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = rules.stream()
+                    .filter(rule -> rule instanceof AutomationRuleEvaluatorLlmAsJudge)
+                    .map(rule -> (AutomationRuleEvaluatorLlmAsJudge) rule)
                     .toList();
 
-            // Enqueue messages for each rule
-            rules.forEach(rule -> {
-                log.info("Enqueueing evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
-                        traceIdStrings.size());
-                onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule.getId(), projectId, workspaceId,
+            List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = rules.stream()
+                    .filter(rule -> rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython)
+                    .map(rule -> (AutomationRuleEvaluatorUserDefinedMetricPython) rule)
+                    .toList();
+
+            List<AutomationRuleEvaluator<?>> traceThreadRules = rules.stream()
+                    .filter(rule -> !(rule instanceof AutomationRuleEvaluatorLlmAsJudge)
+                            && !(rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython))
+                    .toList();
+
+            // Handle span-level evaluators - need to fetch full traces
+            if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
+                enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules, spanLevelPythonRules, workspaceId,
                         userName);
-            });
+            }
+
+            // Handle trace-thread evaluators - can use IDs directly
+            if (!traceThreadRules.isEmpty()) {
+                List<String> traceIdStrings = traceIds.stream()
+                        .map(UUID::toString)
+                        .toList();
+
+                traceThreadRules.forEach(rule -> {
+                    log.info("Enqueueing trace-thread evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
+                            traceIdStrings.size());
+                    onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule.getId(), projectId, workspaceId,
+                            userName);
+                });
+            }
 
             return traceIds.size();
+        });
+    }
+
+    /**
+     * Enqueues span-level evaluations by fetching full trace objects and creating messages.
+     */
+    private void enqueueSpanLevelEvaluations(List<UUID> traceIds,
+            List<AutomationRuleEvaluatorLlmAsJudge> llmAsJudgeRules,
+            List<AutomationRuleEvaluatorUserDefinedMetricPython> pythonRules,
+            String workspaceId, String userName) {
+
+        log.info("Fetching '{}' traces for span-level evaluation", traceIds.size());
+
+        // Fetch all traces
+        List<Trace> traces = Flux.fromIterable(traceIds)
+                .flatMap(traceId -> traceService.get(traceId)
+                        .onErrorResume(throwable -> {
+                            log.warn("Failed to fetch trace '{}' for evaluation, skipping", traceId, throwable);
+                            return Mono.empty();
+                        }))
+                .collectList()
+                .block();
+
+        if (traces == null || traces.isEmpty()) {
+            log.warn("No traces found to enqueue for span-level evaluation");
+            return;
+        }
+
+        log.info("Successfully fetched '{}' traces for span-level evaluation", traces.size());
+
+        // Enqueue LLM as Judge evaluations
+        llmAsJudgeRules.forEach(rule -> {
+            List<TraceToScoreLlmAsJudge> messages = traces.stream()
+                    .map(trace -> TraceToScoreLlmAsJudge.builder()
+                            .trace(trace)
+                            .ruleId(rule.getId())
+                            .ruleName(rule.getName())
+                            .llmAsJudgeCode(rule.getCode())
+                            .workspaceId(workspaceId)
+                            .userName(userName)
+                            .build())
+                    .toList();
+
+            onlineScorePublisher.enqueueMessage(messages, rule.getType());
+            log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'", messages.size(), rule.getId());
+        });
+
+        // Enqueue Python evaluations (if enabled)
+        pythonRules.forEach(rule -> {
+            if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                log.warn("Span-level Python evaluator is disabled, skipping rule '{}'", rule.getId());
+                return;
+            }
+
+            List<TraceToScoreUserDefinedMetricPython> messages = traces.stream()
+                    .map(trace -> TraceToScoreUserDefinedMetricPython.builder()
+                            .trace(trace)
+                            .ruleId(rule.getId())
+                            .ruleName(rule.getName())
+                            .code(rule.getCode())
+                            .workspaceId(workspaceId)
+                            .userName(userName)
+                            .build())
+                    .toList();
+
+            onlineScorePublisher.enqueueMessage(messages, rule.getType());
+            log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(), rule.getId());
         });
     }
 
