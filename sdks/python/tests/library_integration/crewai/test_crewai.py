@@ -15,6 +15,14 @@ from . import constants
 import pytest
 
 
+pytestmark = [
+    pytest.mark.usefixtures("ensure_openai_configured"),
+    pytest.mark.usefixtures("ensure_vertexai_configured"),
+    pytest.mark.usefixtures("ensure_aws_bedrock_configured"),
+    pytest.mark.usefixtures("ensure_anthropic_configured"),
+]
+
+
 @pytest.mark.parametrize(
     "model, opik_provider",
     [
