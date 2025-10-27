@@ -415,7 +415,8 @@ webhook:
   poolingInterval: 1s
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling duration)
-  longPollingDuration: 5s
+  # Note: In tests, set this <= poolingInterval to avoid backpressure drops
+  longPollingDuration: 500ms
   # Default: 3
   # Description: Maximum number of retry attempts for failed webhooks (1-10)
   maxRetries: 3
@@ -438,4 +439,10 @@ webhook:
 
 # Jackson JSON processing configuration
 jacksonConfig:
-  maxStringLength: 262144000  # 250MB
+  maxStringLength: 262144000 
+
+# Workspace settings
+workspaceSettings:
+  # Default: -1 (no limit)
+  # Description: Maximum workspace size in GB to allow dynamic sorting. Set to -1 to disable the limit (allow sorting for all workspace sizes)
+  maxSizeToAllowSorting: -1

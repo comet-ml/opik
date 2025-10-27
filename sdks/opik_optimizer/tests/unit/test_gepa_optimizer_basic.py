@@ -9,14 +9,14 @@ from opik_optimizer.optimization_config.chat_prompt import ChatPrompt  # noqa: E
 
 
 def test_extract_system_text_prefers_system_message() -> None:
-    opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o")
+    opt = GepaOptimizer(model="openai/gpt-4o-mini")
     prompt = ChatPrompt(system="You are system.", user="{q}")
     got = opt._extract_system_text(prompt)
     assert got == "You are system."
 
 
 def test_extract_system_text_falls_back_to_user() -> None:
-    opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o")
+    opt = GepaOptimizer(model="openai/gpt-4o-mini")
     prompt = ChatPrompt(user="{q}")
     got = opt._extract_system_text(prompt)
     assert "helpful assistant" in got.lower()
@@ -31,7 +31,7 @@ def test_infer_dataset_keys_heuristics() -> None:
                 {"id": "1", "question": "Q?", "answer": "A", "metadata": {}},
             ]
 
-    opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o")
+    opt = GepaOptimizer(model="openai/gpt-4o-mini")
     inp, out = opt._infer_dataset_keys(DummyDataset())
     # Should pick a non-output as input and one of known output keys
     assert out in ("label", "answer", "output", "expected_output")
@@ -43,7 +43,7 @@ def test_build_data_insts_mapping() -> None:
         {"question": "Q1", "answer": "A1", "metadata": {"context": "C1"}},
         {"question": "Q2", "answer": "A2"},
     ]
-    opt = GepaOptimizer(model="openai/gpt-4o-mini", reflection_model="openai/gpt-4o")
+    opt = GepaOptimizer(model="openai/gpt-4o-mini")
     converted = opt._build_data_insts(items, input_key="question", output_key="answer")
     assert len(converted) == 2
     assert converted[0].input_text == "Q1"

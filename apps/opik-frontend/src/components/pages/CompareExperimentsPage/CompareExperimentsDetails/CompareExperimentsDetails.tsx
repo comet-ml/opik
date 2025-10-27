@@ -179,6 +179,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
           resource={RESOURCE_TYPE.dataset}
           asTag
         />
+        {experiment?.prompt_versions &&
+          experiment.prompt_versions.length > 0 && (
+            <ResourceLink
+              id={experiment.prompt_versions[0].prompt_id}
+              name={`Prompt ${experiment.prompt_versions[0].commit}`}
+              resource={RESOURCE_TYPE.prompt}
+              asTag
+            />
+          )}
       </div>
       {renderSubSection()}
       {renderCharts()}

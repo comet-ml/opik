@@ -17,6 +17,11 @@ export interface Project {
   name: string;
 }
 
+export interface Dataset {
+  id: string;
+  name: string;
+}
+
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -154,6 +159,90 @@ export class TestHelperClient {
       }
     } catch (error) {
       throw this.handleError(error, 'Failed to wait for project deletion');
+    }
+  }
+
+  async createDataset(name: string): Promise<Dataset> {
+    try {
+      const response = await this.client.post('/api/datasets/create', {
+        name,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create dataset');
+    }
+  }
+
+  async findDataset(name: string): Promise<Dataset | null> {
+    try {
+      const response = await this.client.post('/api/datasets/find', {
+        name,
+      });
+
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return null;
+      }
+      throw this.handleError(error, 'Failed to find dataset');
+    }
+  }
+
+  async deleteDataset(name: string): Promise<void> {
+    try {
+      await this.client.delete('/api/datasets/delete', {
+        data: {
+          name,
+        },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete dataset');
+    }
+  }
+
+  async updateDataset(name: string, newName: string): Promise<Dataset> {
+    try {
+      const response = await this.client.post('/api/datasets/update', {
+        name,
+        newName,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to update dataset');
+    }
+  }
+
+  async waitForDatasetVisible(name: string, timeout: number = 10): Promise<Dataset> {
+    try {
+      const response = await this.client.post('/api/datasets/wait-for-visible', {
+        name,
+        timeout,
+      });
+
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to wait for dataset visibility');
+    }
+  }
+
+  async waitForDatasetDeleted(name: string, timeout: number = 10): Promise<void> {
+    try {
+      const response = await this.client.post('/api/datasets/wait-for-deleted', {
+        name,
+        timeout,
+      });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Dataset still exists after timeout');
+      }
+    } catch (error) {
+      throw this.handleError(error, 'Failed to wait for dataset deletion');
     }
   }
 

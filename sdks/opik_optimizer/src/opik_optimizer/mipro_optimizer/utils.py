@@ -67,6 +67,7 @@ def create_dspy_training_set(
     output = []
 
     if n_samples is not None:
+        n_samples = min(n_samples, len(data))
         data = random.sample(data, n_samples)
 
     for example in data:
