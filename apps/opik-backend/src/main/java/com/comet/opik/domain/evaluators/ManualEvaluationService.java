@@ -9,6 +9,7 @@ import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.threads.TraceThreadIdService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -57,6 +58,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     private final OnlineScorePublisher onlineScorePublisher;
     private final TraceService traceService;
     private final ProjectService projectService;
+    private final TraceThreadIdService traceThreadIdService;
     private final ServiceTogglesConfig serviceTogglesConfig;
 
     @Inject
@@ -64,11 +66,13 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull TraceService traceService,
             @NonNull ProjectService projectService,
+            @NonNull TraceThreadIdService traceThreadIdService,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.traceService = traceService;
         this.projectService = projectService;
+        this.traceThreadIdService = traceThreadIdService;
         this.serviceTogglesConfig = serviceTogglesConfig;
     }
 
@@ -245,27 +249,36 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
     /**
      * Evaluates threads by enqueueing evaluation messages for each rule.
-     * Does not validate thread existence - evaluation will fail later if threads don't exist.
+     * Resolves thread model IDs to thread ID strings before enqueueing.
      */
-    private Mono<Integer> evaluateThreads(List<UUID> threadIds, List<AutomationRuleEvaluator<?>> rules, UUID projectId,
+    private Mono<Integer> evaluateThreads(List<UUID> threadModelIds, List<AutomationRuleEvaluator<?>> rules,
+            UUID projectId,
             String workspaceId, String userName) {
-        log.info("Evaluating '{}' threads with '{}' rules", threadIds.size(), rules.size());
+        log.info("Evaluating '{}' threads with '{}' rules", threadModelIds.size(), rules.size());
 
-        return Mono.fromCallable(() -> {
-            // Convert thread model IDs to strings for enqueueing
-            List<String> threadIdStrings = threadIds.stream()
-                    .map(UUID::toString)
-                    .toList();
+        // Fetch thread IDs from thread model IDs
+        return traceThreadIdService.getTraceThreadIdsByThreadModelIds(threadModelIds)
+                .flatMap(threadModelIdToThreadIdMap -> {
+                    if (threadModelIdToThreadIdMap == null || threadModelIdToThreadIdMap.isEmpty()) {
+                        log.warn("No thread IDs found to enqueue for thread evaluation");
+                        return Mono.just(0);
+                    }
 
-            // Enqueue messages for each rule
-            rules.forEach(rule -> {
-                log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
-                        threadIdStrings.size());
-                onlineScorePublisher.enqueueThreadMessage(threadIdStrings, rule.getId(), projectId, workspaceId,
-                        userName);
-            });
+                    log.info("Successfully resolved '{}' thread IDs for thread evaluation",
+                            threadModelIdToThreadIdMap.size());
 
-            return threadIds.size();
-        });
+                    // Extract thread ID strings
+                    List<String> threadIds = List.copyOf(threadModelIdToThreadIdMap.values());
+
+                    // Enqueue messages for each rule
+                    rules.forEach(rule -> {
+                        log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
+                                threadIds.size());
+                        onlineScorePublisher.enqueueThreadMessage(threadIds, rule.getId(), projectId, workspaceId,
+                                userName);
+                    });
+
+                    return Mono.just(threadModelIds.size());
+                });
     }
 }

@@ -23,13 +23,15 @@ import java.time.Instant;
 import java.util.UUID;
 
 @ImplementedBy(TraceThreadIdServiceImpl.class)
-interface TraceThreadIdService {
+public interface TraceThreadIdService {
 
     Mono<TraceThreadIdModel> getOrCreateTraceThreadId(String workspaceId, UUID projectId, String threadId);
 
     Mono<UUID> getThreadModelId(String workspaceId, UUID projectId, String threadId);
 
     Mono<TraceThreadIdModel> getTraceThreadIdByThreadModelId(UUID threadModelId);
+
+    Mono<java.util.Map<UUID, String>> getTraceThreadIdsByThreadModelIds(java.util.List<UUID> threadModelIds);
 
 }
 
@@ -79,6 +81,26 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
                 handle -> handle.attach(TraceThreadIdDAO.class).findByThreadModelId(threadModelId)))
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<java.util.Map<UUID, String>> getTraceThreadIdsByThreadModelIds(
+            @NonNull java.util.List<UUID> threadModelIds) {
+        Preconditions.checkArgument(!threadModelIds.isEmpty(),
+                "Thread model IDs cannot be null or empty");
+
+        return Mono.fromCallable(() -> {
+            var threadModels = transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
+                    handle -> handle.attach(TraceThreadIdDAO.class).findByThreadModelIds(threadModelIds));
+
+            log.info("Fetched '{}' thread models for '{}' thread model IDs", threadModels.size(),
+                    threadModelIds.size());
+
+            return threadModels.stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            TraceThreadIdModel::id,
+                            TraceThreadIdModel::threadId));
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<TraceThreadIdModel> getTraceThreadId(String threadId, UUID projectId) {
