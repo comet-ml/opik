@@ -1,6 +1,6 @@
 import opik
 from opik.integrations.crewai import track_crewai
-from crewai import Agent, Crew, Process, Task, LLM
+from crewai import Agent, Crew, Process, Task
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
