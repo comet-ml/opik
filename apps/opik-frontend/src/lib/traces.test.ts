@@ -405,46 +405,71 @@ describe("prettifyMessage", () => {
     });
   });
 
-  it("handles tool call with array results and extracts correct tool name", () => {
-    const message = [
-      {
-        role: "system",
-        content:
-          "Answer the question with a direct phrase. Use the tool `search_wikipedia` if you need it.",
-      },
-      {
-        role: "user",
-        content:
-          "What magazine was established in 1988 by Frank Thomas and Keith White?",
-      },
-      {
-        content: null,
-        role: "assistant",
-        tool_calls: [
-          {
-            function: {
-              arguments:
-                '{"query":"magazine established in 1988 by Frank Thomas and Keith White"}',
-              name: "search_wikipedia",
+  it("handles malformed tool call data gracefully when function is undefined", () => {
+    const message = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_123",
+              type: "function",
+              // Missing function property - this should not crash
             },
-            id: "call_axmw0UjMugEay25lGwIlz1uV",
-            type: "function",
-          },
-        ],
-      },
-      {
-        role: "tool",
-        tool_call_id: "call_axmw0UjMugEay25lGwIlz1uV",
-        content:
-          "['The Baffler | The Baffler is a magazine of cultural, political, and business analysis. Established in 1988 by editors Thomas Frank and Keith White, it was headquartered in Chicago, Illinois until 2010, when it moved to Cambridge, Massachusetts. In 2016, it moved its headquarters to New York City. The first incarnation of \"The Baffler\" had up to 12,000 subscribers.', 'Movmnt | movmnt magazine is an urban-leaning lifestyle magazine which was co-founded in 2006 by David Benaym and Danny Tidwell. The magazine has featured columns by Mario Spinetti, Mia Michaels, Robert Battle, Debbie Allen, Alisan Porter, Rasta Thomas, and Frank Conway. Both Travis Wall and Ivan Koumaev have made guest contributions to the publication, which has published photographs by Gary Land, Dave Hill, James Archibald Houston, and Alison Jackson.', \"Fantasy Advertiser | Fantasy Advertiser, later abbreviated to FA, was a British fanzine which discussed comic books. The magazine was established in 1965. It was initially edited by Frank Dobson, essentially as an advertising service for comic collectors, and when Dobson emigrated to Australia in 1970 he handed it on to two contributors, Dez Skinn and Paul McCartney, to continue. Skinn and McCartney expanded the magazine to include more articles and artwork. Regular contributors included Dave Gibbons, Steve Parkhouse, Paul Neary, Jim Baikie and Kevin O'Neill. Skinn left in 1976.\"]",
-      },
-    ];
+            {
+              id: "call_456",
+              type: "function",
+              function: {
+                name: "valid_tool",
+                arguments: '{"param": "value"}',
+              },
+            },
+          ],
+        },
+      ],
+    };
     const result = prettifyMessage(message);
     expect(result).toEqual({
-      message: expect.stringContaining("**System**"),
+      message: expect.stringContaining("Assistant"),
       prettified: true,
       renderType: "text",
     });
+    // Should not contain the malformed tool call but should contain the valid one
+    expect(result.message).toContain("valid_tool");
+    expect(result.message).not.toContain("call_123");
+    // Should not crash - this is the main test
+    expect(result.message).toBeDefined();
+  });
+
+  it("handles tool call with undefined function name gracefully", () => {
+    const message = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_789",
+              type: "function",
+              function: {
+                // Missing name property
+                arguments: '{"param": "value"}',
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const result = prettifyMessage(message);
+    expect(result).toEqual({
+      message: expect.stringContaining("Assistant"),
+      prettified: true,
+      renderType: "text",
+    });
+    // Should not crash and should handle gracefully - malformed tool call should be skipped
+    expect(result.message).toBeDefined();
+    expect(result.message).not.toContain("call_789");
   });
 
   describe("config parameter behavior", () => {

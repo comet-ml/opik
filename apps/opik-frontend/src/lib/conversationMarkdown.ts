@@ -117,6 +117,11 @@ export const convertConversationToMarkdown = (
       message.tool_calls.length > 0
     ) {
       for (const toolCall of message.tool_calls) {
+        // Skip tool calls that don't have the expected structure
+        if (!toolCall.function || !toolCall.function.name) {
+          continue;
+        }
+
         lines.push(`<details style="margin-left: 20px;">`);
         lines.push(
           `<summary><strong>Tool call: ${toolCall.function.name}</strong></summary>`,
@@ -126,7 +131,9 @@ export const convertConversationToMarkdown = (
           `&nbsp;&nbsp;&nbsp;&nbsp;**Function:** ${toolCall.function.name}`,
         );
         lines.push(
-          `&nbsp;&nbsp;&nbsp;&nbsp;**Arguments:** ${toolCall.function.arguments}`,
+          `&nbsp;&nbsp;&nbsp;&nbsp;**Arguments:** ${
+            toolCall.function.arguments || "N/A"
+          }`,
         );
 
         // Look for the corresponding tool response
@@ -184,8 +191,13 @@ const capitalizeFirst = (str: string): string => {
 export const formatToolCall = (toolCall: ToolCall): string => {
   const lines: string[] = [];
 
-  lines.push(`**Function:** ${toolCall.function.name}`);
-  lines.push(`**Arguments:** ${toolCall.function.arguments}`);
+  // Add null checks for safety
+  if (!toolCall.function) {
+    return "**Function:** Invalid tool call structure";
+  }
+
+  lines.push(`**Function:** ${toolCall.function.name || "Unknown"}`);
+  lines.push(`**Arguments:** ${toolCall.function.arguments || "N/A"}`);
 
   return lines.join("\n");
 };
@@ -203,8 +215,16 @@ export const formatTools = (tools: Tool[]): string => {
   const lines: string[] = [];
 
   for (const tool of tools) {
-    lines.push(`**${tool.function.name}**`);
-    lines.push(tool.function.description);
+    // Add null checks for safety
+    if (!tool.function) {
+      lines.push(`**Unknown Tool**`);
+      lines.push("Invalid tool structure");
+      lines.push("");
+      continue;
+    }
+
+    lines.push(`**${tool.function.name || "Unknown"}**`);
+    lines.push(tool.function.description || "No description available");
     lines.push("");
 
     if (tool.function.parameters) {
