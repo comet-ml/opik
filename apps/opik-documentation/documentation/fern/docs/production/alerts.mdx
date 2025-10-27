@@ -45,7 +45,6 @@ Opik provides three destination types for alerts:
      - For Slack: Use your Slack Incoming Webhook URL (e.g., `https://hooks.slack.com/services/...`)
      - For PagerDuty: Use your PagerDuty Events API v2 integration URL (e.g., `https://events.pagerduty.com/v2/enqueue`)
      - For General: Use any HTTP endpoint that can receive POST requests
-   - **Routing Key** (appears when PagerDuty is selected): Enter your PagerDuty Integration Key
 
 4. **Advanced webhook settings** (optional)
    - **Secret token**: Add a secret token to verify webhook authenticity (recommended for General destination)
@@ -129,7 +128,7 @@ Opik provides native PagerDuty integration that automatically formats alert even
    - Give your alert a descriptive name
    - Select **PagerDuty** as the destination type
    - Enter the PagerDuty Events API v2 endpoint: `https://events.pagerduty.com/v2/enqueue`
-   - In the **Routing Key** field (appears when PagerDuty is selected), enter your PagerDuty Integration Key
+   - In the **Routing Key** field, enter your PagerDuty Integration Key (this field appears when PagerDuty is selected as the destination)
    - Add triggers for the events you want to monitor
    - Click "Test connection" to verify
    - Click "Create alert"
