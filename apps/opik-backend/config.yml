@@ -441,9 +441,9 @@ workspaceSettings:
   # Default: 50
   # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
     maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
-  # Default: 5
+  # Default: 50
   # Description: Maximum size of a project in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
-    maxProjectSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_PROJECT_SIZE_IN_GB_TO_ALLOW_SORTING:-5}
+    maxProjectSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_PROJECT_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
 
 # Configuration AWS S3
 s3Config:
