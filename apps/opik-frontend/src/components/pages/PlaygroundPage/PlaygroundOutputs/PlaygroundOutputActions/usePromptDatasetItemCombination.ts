@@ -69,6 +69,7 @@ interface UsePromptDatasetItemCombinationArgs {
   isToStop: boolean;
   workspaceName: string;
   datasetName: string | null;
+  selectedRuleIds: string[] | null;
   addAbortController: (key: string, value: AbortController) => void;
   deleteAbortController: (key: string) => void;
 }
@@ -78,6 +79,7 @@ const usePromptDatasetItemCombination = ({
   isToStop,
   workspaceName,
   datasetName,
+  selectedRuleIds,
   addAbortController,
   deleteAbortController,
 }: UsePromptDatasetItemCombinationArgs) => {
@@ -174,6 +176,7 @@ const usePromptDatasetItemCombination = ({
           promptId: prompt.id,
           datasetName,
           datasetItemId: datasetItemId,
+          selectedRuleIds,
         });
 
         if (

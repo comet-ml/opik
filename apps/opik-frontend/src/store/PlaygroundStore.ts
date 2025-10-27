@@ -89,6 +89,7 @@ export type PlaygroundStore = {
   outputMap: PlaygroundOutputMap;
   datasetVariables: string[];
   providerValidationTrigger: number;
+  selectedRuleIds: string[] | null;
 
   setPromptMap: (
     promptIds: string[],
@@ -108,6 +109,7 @@ export type PlaygroundStore = {
   ) => void;
   setDatasetVariables: (variables: string[]) => void;
   triggerProviderValidation: () => void;
+  setSelectedRuleIds: (ruleIds: string[] | null) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -118,6 +120,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       outputMap: {},
       datasetVariables: [],
       providerValidationTrigger: 0,
+      selectedRuleIds: null,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -228,6 +231,14 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setSelectedRuleIds: (ruleIds) => {
+        set((state) => {
+          return {
+            ...state,
+            selectedRuleIds: ruleIds,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -323,5 +334,11 @@ export const useProviderValidationTrigger = () =>
 
 export const useTriggerProviderValidation = () =>
   usePlaygroundStore((state) => state.triggerProviderValidation);
+
+export const useSelectedRuleIds = () =>
+  usePlaygroundStore((state) => state.selectedRuleIds);
+
+export const useSetSelectedRuleIds = () =>
+  usePlaygroundStore((state) => state.setSelectedRuleIds);
 
 export default usePlaygroundStore;
