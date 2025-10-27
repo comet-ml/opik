@@ -468,7 +468,7 @@ describe("prettifyMessage", () => {
       prettified: true,
       renderType: "text",
     });
-    // Should not crash and should handle gracefully - malformed tool call should be skipped
+    // Should handle gracefully without crashing - malformed tool call should be skipped
     expect(result.message).toBeDefined();
     expect(result.message).not.toContain("call_789");
   });
