@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { EvaluatorsRule } from "@/types/automations";
-import { Badge } from "@/components/ui/badge";
+import { Tag } from "@/components/ui/tag";
 
 interface MetricSelectorProps {
   rules: EvaluatorsRule[];
@@ -109,9 +109,9 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   )}
                 />
                 <span className="font-medium">Select All</span>
-                <Badge variant="secondary" className="ml-auto">
+                <Tag variant="primary" size="sm" className="ml-auto">
                   {rules.length}
-                </Badge>
+                </Tag>
               </CommandItem>
             </CommandGroup>
             <CommandGroup heading="Metrics">
