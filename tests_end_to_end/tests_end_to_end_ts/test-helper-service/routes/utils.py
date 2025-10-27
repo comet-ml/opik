@@ -27,19 +27,14 @@ def get_opik_api_client():
 
 def build_error_response(exception: HTTPException, status_code: int):
     """Build standardized error response"""
-    return jsonify({
-        "success": False,
-        "error": str(exception),
-        "type": type(exception).__name__
-    }), status_code
+    return jsonify(
+        {"success": False, "error": str(exception), "type": type(exception).__name__}
+    ), status_code
 
 
 def success_response(data: dict, status_code: int = 200):
     """Create standardized success response"""
-    return jsonify({
-        "success": True,
-        **data
-    }), status_code
+    return jsonify({"success": True, **data}), status_code
 
 
 def validate_required_fields(data: dict, required_fields: list[str]):

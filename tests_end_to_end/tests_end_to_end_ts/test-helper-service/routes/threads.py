@@ -3,7 +3,12 @@
 from flask import Blueprint, request
 from werkzeug.exceptions import HTTPException
 from opik import opik_context, track
-from .utils import get_opik_client, build_error_response, success_response, validate_required_fields
+from .utils import (
+    get_opik_client,
+    build_error_response,
+    success_response,
+    validate_required_fields,
+)
 
 threads_bp = Blueprint("threads", __name__)
 
@@ -28,7 +33,9 @@ def create_threads_decorator():
 
     response_map = {}
     for thread in thread_configs:
-        response_map[thread["thread_id"]] = dict(zip(thread["inputs"], thread["outputs"]))
+        response_map[thread["thread_id"]] = dict(
+            zip(thread["inputs"], thread["outputs"])
+        )
 
     @track(project_name=project_name)
     def chat_message(input_msg, thread_id):
@@ -39,10 +46,9 @@ def create_threads_decorator():
         for input_msg in thread["inputs"]:
             chat_message(input_msg, thread["thread_id"])
 
-    return success_response({
-        "threads_created": len(thread_configs),
-        "thread_configs": thread_configs
-    })
+    return success_response(
+        {"threads_created": len(thread_configs), "thread_configs": thread_configs}
+    )
 
 
 @threads_bp.route("/create-threads-client", methods=["POST"])
@@ -64,7 +70,6 @@ def create_threads_client():
                 project_name=project_name,
             )
 
-    return success_response({
-        "threads_created": len(thread_configs),
-        "thread_configs": thread_configs
-    })
+    return success_response(
+        {"threads_created": len(thread_configs), "thread_configs": thread_configs}
+    )

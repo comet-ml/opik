@@ -5,7 +5,13 @@ from werkzeug.exceptions import HTTPException
 import os
 import time
 from opik import opik_context, track, Attachment
-from .utils import get_opik_client, get_opik_api_client, build_error_response, success_response, validate_required_fields
+from .utils import (
+    get_opik_client,
+    get_opik_api_client,
+    build_error_response,
+    success_response,
+    validate_required_fields,
+)
 
 traces_bp = Blueprint("traces", __name__)
 
@@ -67,9 +73,7 @@ def create_traces_client():
             output={"output": "test output"},
         )
         _ = client_trace.span(
-            name="span",
-            input={"input": "test input"},
-            output={"output": "test output"}
+            name="span", input={"input": "test input"}, output={"output": "test output"}
         )
 
     return success_response({"traces_created": traces_number})
@@ -106,10 +110,7 @@ def create_traces_with_spans_client():
             )
 
             for score in span_config.get("feedback_scores", []):
-                client_span.log_feedback_score(
-                    name=score["name"],
-                    value=score["value"]
-                )
+                client_span.log_feedback_score(name=score["name"], value=score["value"])
 
     return success_response({"traces_created": trace_config["count"]})
 
@@ -219,10 +220,9 @@ def create_trace_with_span_attachment():
         attachments=[Attachment(data=attachment_path)],
     )
 
-    return success_response({
-        "attachment_name": os.path.basename(attachment_path),
-        "span_name": span_name
-    })
+    return success_response(
+        {"attachment_name": os.path.basename(attachment_path), "span_name": span_name}
+    )
 
 
 @traces_bp.route("/get-traces", methods=["POST"])
@@ -235,8 +235,7 @@ def get_traces():
     client = get_opik_api_client()
 
     traces_response = client.traces.get_traces_by_project(
-        project_name=project_name,
-        size=size
+        project_name=project_name, size=size
     )
 
     return success_response({"traces": traces_response.dict()["content"]})
@@ -271,8 +270,7 @@ def wait_for_traces_visible():
 
     while time.time() - start_time < timeout:
         traces_response = client.traces.get_traces_by_project(
-            project_name=project_name,
-            size=expected_count
+            project_name=project_name, size=expected_count
         )
         traces = traces_response.dict()["content"]
 
