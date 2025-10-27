@@ -42,26 +42,21 @@ const ColumnsButton = <TColumnData,>({
 }: ColumnsButtonProps<TColumnData>) => {
   const [search, setSearch] = useState("");
 
-  const getAllColumnsIds = () =>
-    (sections || []).reduce<string[]>(
-      (acc, { columns = [] }) => acc.concat(columns.map((c) => c.id)),
-      columns.map((c) => c.id),
-    );
+  const allColumnsIds = useMemo(
+    () =>
+      [{ columns: columns }, ...(sections || [])].flatMap(
+        ({ columns: columnGroup = [] }) =>
+          columnGroup.map((column) => column.id),
+      ),
+    [columns, sections],
+  );
 
   const allColumnsSelected = useMemo(() => {
-    const allColumnIds = (sections || []).reduce<string[]>(
-      (acc, { columns: sectionColumns = [] }) =>
-        acc.concat(sectionColumns.map((c) => c.id)),
-      columns.map((c) => c.id),
-    );
-    return (
-      allColumnIds.length > 0 &&
-      allColumnIds.every((id) => selectedColumns.includes(id))
-    );
-  }, [selectedColumns, columns, sections]);
+    return selectedColumns.length === allColumnsIds.length;
+  }, [selectedColumns.length, allColumnsIds]);
 
   const toggleColumns = (value: boolean) => {
-    onSelectionChange(value ? getAllColumnsIds() : []);
+    onSelectionChange(value ? allColumnsIds : []);
   };
 
   const filteredColumns = useMemo(() => {
@@ -138,7 +133,7 @@ const ColumnsButton = <TColumnData,>({
         <DropdownMenuSeparator />
         <DropdownMenuCustomCheckboxItem
           checked={allColumnsSelected}
-          onCheckedChange={(checked) => toggleColumns(!!checked)}
+          onCheckedChange={toggleColumns}
           onSelect={(event) => event.preventDefault()}
         >
           Select all
