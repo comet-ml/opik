@@ -193,7 +193,7 @@ export const formatToolCall = (toolCall: ToolCall): string => {
 
   // Add null checks for safety
   if (!toolCall.function) {
-    return "**Function:** Invalid tool call structure";
+    return "**Function:** Tool call missing required 'function' property";
   }
 
   lines.push(`**Function:** ${toolCall.function.name || "Unknown"}`);
