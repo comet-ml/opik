@@ -15,8 +15,18 @@ if [[ "${OPIK_OTEL_SDK_ENABLED}" == "true" && "${OTEL_VERSION}" != "" && "${OTEL
     echo "Downloading Open Telemetry Java Agent"
     export OTEL_RESOURCE_ATTRIBUTES="service.name=opik-backend,service.version=${OPIK_VERSION}"
     curl -L -o /tmp/opentelemetry-javaagent.jar https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_VERSION}/opentelemetry-javaagent.jar
-    JAVA_OPTS="$JAVA_OPTS -javaagent:/tmp/opentelemetry-javaagent.jar"
-    echo "Successfully downloaded Open Telemetry Java Agent"
+
+    # Add Opik telemetry extension to the agent
+    if [ -f "/opt/opik/opik-telemetry-extension.jar" ]; then
+        echo "Adding Opik telemetry extension to OpenTelemetry agent"
+        JAVA_OPTS="$JAVA_OPTS -javaagent:/tmp/opentelemetry-javaagent.jar"
+        JAVA_OPTS="$JAVA_OPTS -Dotel.javaagent.extensions=/opt/opik/opik-telemetry-extension.jar"
+    else
+        echo "Opik telemetry extension not found, using standard OpenTelemetry agent"
+        JAVA_OPTS="$JAVA_OPTS -javaagent:/tmp/opentelemetry-javaagent.jar"
+    fi
+
+    echo "Successfully configured Open Telemetry Java Agent with Opik extensions"
 else
     echo "Skipping download of the Open Telemetry Java Agent"
 fi
