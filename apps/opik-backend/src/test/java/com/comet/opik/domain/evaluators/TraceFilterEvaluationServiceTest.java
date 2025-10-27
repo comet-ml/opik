@@ -6,6 +6,7 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +27,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import static com.comet.opik.utils.JsonUtils.MAPPER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -419,7 +419,7 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithMetadataField() {
             // Given
-            ObjectNode metadata = MAPPER.createObjectNode();
+            ObjectNode metadata = JsonUtils.createObjectNode();
             metadata.put("environment", "production");
             metadata.put("version", "1.0.0");
 
@@ -443,7 +443,7 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithInputField() {
             // Given
-            ObjectNode input = MAPPER.createObjectNode();
+            ObjectNode input = JsonUtils.createObjectNode();
             input.put("query", "What is AI?");
             input.put("context", "machine learning");
 
@@ -467,7 +467,7 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesFilterWithMetadataDirectKey() {
             // Given
-            ObjectNode metadata = MAPPER.createObjectNode();
+            ObjectNode metadata = JsonUtils.createObjectNode();
             metadata.put("model", "gpt-4");
             metadata.put("temperature", "0.7");
 
@@ -612,14 +612,14 @@ class TraceFilterEvaluationServiceTest {
         @Test
         void matchesAllFiltersWithComplexTrace() {
             // Given
-            ObjectNode input = MAPPER.createObjectNode();
+            ObjectNode input = JsonUtils.createObjectNode();
             input.put("query", "What is machine learning?");
             input.put("context", "AI and technology");
 
-            ObjectNode output = MAPPER.createObjectNode();
+            ObjectNode output = JsonUtils.createObjectNode();
             output.put("answer", "Machine learning is a subset of AI");
 
-            ObjectNode metadata = MAPPER.createObjectNode();
+            ObjectNode metadata = JsonUtils.createObjectNode();
             metadata.put("model", "gpt-4");
             metadata.put("temperature", "0.7");
 

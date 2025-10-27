@@ -68,7 +68,7 @@ interface AutomationModelEvaluatorMapper {
             return List.of();
         }
         try {
-            return JsonUtils.MAPPER.readValue(filtersJson, TraceFilter.LIST_TYPE_REFERENCE);
+            return JsonUtils.getMapper().readValue(filtersJson, TraceFilter.LIST_TYPE_REFERENCE);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to parse filters JSON", e);
         }
@@ -79,7 +79,7 @@ interface AutomationModelEvaluatorMapper {
             return null;
         }
         try {
-            return JsonUtils.MAPPER.writeValueAsString(filters);
+            return JsonUtils.getMapper().writeValueAsString(filters);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize filters to JSON", e);
         }

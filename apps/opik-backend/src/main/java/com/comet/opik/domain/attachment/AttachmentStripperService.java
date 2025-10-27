@@ -6,6 +6,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.events.AttachmentUploadRequested;
+import com.comet.opik.infrastructure.AttachmentsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -54,6 +55,7 @@ public class AttachmentStripperService {
 
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull S3Config s3Config;
+    private final @NonNull AttachmentsConfig attachmentsConfig;
     private final @NonNull EventBus eventBus;
 
     // OpenTelemetry metrics for monitoring attachment detection and event posting
@@ -70,7 +72,7 @@ public class AttachmentStripperService {
     private final Pattern base64Pattern;
 
     // Minimum base64 size to look for
-    private final int minBase64Size;
+    private final long minBase64Size;
 
     @Inject
     public AttachmentStripperService(@NonNull ObjectMapper objectMapper,
@@ -78,6 +80,7 @@ public class AttachmentStripperService {
             @NonNull EventBus eventBus) {
         this.objectMapper = objectMapper;
         this.s3Config = opikConfig.getS3Config();
+        this.attachmentsConfig = opikConfig.getAttachmentsConfig();
         this.eventBus = eventBus;
 
         // Initialize OpenTelemetry metrics using global instance
@@ -103,11 +106,10 @@ public class AttachmentStripperService {
                 .build();
 
         // Compile the regex pattern once during construction based on configuration
-        int minLength = s3Config.getStripAttachmentsMinSize();
-        this.minBase64Size = minLength;
-        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minLength + ",}={0,2})");
+        this.minBase64Size = attachmentsConfig.getStripMinSize();
+        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minBase64Size + ",}={0,2})");
 
-        log.info("AttachmentStripperService initialized with minBase64Length: {}", minLength);
+        log.info("AttachmentStripperService initialized with minBase64Length: {}", minBase64Size);
     }
 
     /**

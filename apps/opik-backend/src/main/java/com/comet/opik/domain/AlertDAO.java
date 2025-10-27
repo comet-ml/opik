@@ -420,7 +420,7 @@ interface AlertDAO {
                         return JsonUtils.readValue(configStr, MapFlatArgumentFactory.TYPE_REFERENCE);
                     }
                 } else if (configValueNode.isObject()) {
-                    return JsonUtils.MAPPER.convertValue(configValueNode, MapFlatArgumentFactory.TYPE_REFERENCE);
+                    return JsonUtils.convertValue(configValueNode, MapFlatArgumentFactory.TYPE_REFERENCE);
                 }
             } catch (Exception e) {
                 log.warn("Failed to parse config value: '{}'", configValueNode, e);

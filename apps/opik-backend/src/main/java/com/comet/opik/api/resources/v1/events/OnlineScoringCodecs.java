@@ -16,7 +16,7 @@ import java.util.Arrays;
 @Getter
 public enum OnlineScoringCodecs {
 
-    JAVA(Constants.JAVA, new CompositeCodec(new LZ4CodecV2(), new JsonJacksonCodec(JsonUtils.MAPPER))),
+    JAVA(Constants.JAVA, new CompositeCodec(new LZ4CodecV2(), new JsonJacksonCodec(JsonUtils.getMapper()))),
     JSON(Constants.JSON, StringCodec.INSTANCE);
 
     private final String name;
