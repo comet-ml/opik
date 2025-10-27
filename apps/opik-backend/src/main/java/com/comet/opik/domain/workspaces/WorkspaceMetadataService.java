@@ -15,6 +15,8 @@ public interface WorkspaceMetadataService {
     Mono<WorkspaceMetadata> getWorkspaceMetadata(String workspaceId);
 
     Mono<ProjectMetadata> getProjectMetadata(String workspaceId, UUID projectId);
+
+    Mono<ProjectMetadata> getProjectMetadataByProjectIdentifier(String workspaceId, UUID projectId, String projectName);
 }
 
 @Singleton
@@ -22,6 +24,7 @@ public interface WorkspaceMetadataService {
 class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
 
     private final @NonNull WorkspaceMetadataDAO workspaceMetadataDAO;
+    private final @NonNull com.comet.opik.domain.ProjectService projectService;
 
     @Override
     @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId", returnType = WorkspaceMetadata.class)
@@ -33,5 +36,17 @@ class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
     @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ProjectMetadata.class)
     public Mono<ProjectMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
         return workspaceMetadataDAO.getProjectMetadata(workspaceId, projectId);
+    }
+
+    @Override
+    public Mono<ProjectMetadata> getProjectMetadataByProjectIdentifier(@NonNull String workspaceId, UUID projectId,
+            String projectName) {
+        return Mono.defer(() -> {
+            if (projectId != null) {
+                return getProjectMetadata(workspaceId, projectId);
+            }
+            return projectService.resolveProjectIdAndVerifyVisibility(projectId, projectName)
+                    .flatMap(resolvedProjectId -> getProjectMetadata(workspaceId, resolvedProjectId));
+        });
     }
 }

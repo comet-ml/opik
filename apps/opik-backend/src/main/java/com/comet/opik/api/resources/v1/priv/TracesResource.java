@@ -135,15 +135,9 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // Resolve projectId first if needed
-        UUID resolvedProjectId = projectId != null
-                ? projectId
-                : projectService.resolveProjectIdAndVerifyVisibility(projectId, projectName)
-                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                        .block();
-
         ProjectMetadata projectMetadata = workspaceMetadataService
-                .getProjectMetadata(workspaceId, resolvedProjectId)
+                .getProjectMetadataByProjectIdentifier(workspaceId, projectId, projectName)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         if (!sortingFields.isEmpty() && !projectMetadata.canUseDynamicSorting()) {
@@ -160,8 +154,7 @@ public class TracesResource {
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .build();
 
-        log.info("Get traces by '{}' on workspaceId '{}', projectId '{}'", searchCriteria, workspaceId,
-                resolvedProjectId);
+        log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
         TracePage tracePage = service.find(page, size, searchCriteria)
                 .map(it -> {
@@ -174,8 +167,8 @@ public class TracesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Found traces by '{}', count '{}' on workspaceId '{}', projectId '{}'", searchCriteria,
-                tracePage.size(), workspaceId, resolvedProjectId);
+        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(),
+                workspaceId);
 
         return Response.ok(tracePage).build();
     }
