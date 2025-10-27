@@ -1,0 +1,28 @@
+{
+  "name": "opik-typescript-e2e-tests",
+  "version": "1.0.0",
+  "description": "TypeScript E2E tests for Opik using Playwright and Python SDK via Flask helper service",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "test:trace": "playwright show-trace"
+  },
+  "keywords": [
+    "opik",
+    "e2e",
+    "playwright",
+    "testing"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  }
+}

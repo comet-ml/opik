@@ -64,4 +64,12 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
                 ? streamConfig.getPoolingInterval()
                 : onlineScoringConfig.getPoolingInterval();
     }
+
+    @Override
+    public Duration getLongPollingDuration() {
+        // Use stream-specific value if present, otherwise fall back to global value
+        return streamConfig.getLongPollingDuration() != null
+                ? streamConfig.getLongPollingDuration()
+                : onlineScoringConfig.getLongPollingDuration();
+    }
 }

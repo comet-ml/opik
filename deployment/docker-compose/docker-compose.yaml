@@ -41,7 +41,7 @@ services:
         chown -R 1000:1000 /config
       "
   clickhouse:
-    image: clickhouse/clickhouse-server:24.3.6.48-alpine
+    image: clickhouse/clickhouse-server:25.3.6.56-alpine
     pull_policy: always
     hostname: clickhouse
     environment:
@@ -160,6 +160,8 @@ services:
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
       TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
       CORS: ${CORS:-false}
+      ATTACHMENTS_STRIP_MIN_SIZE: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
+      JACKSON_MAX_STRING_LENGTH: ${JACKSON_MAX_STRING_LENGTH:-104857600}
     ports:
       - "3003" # OpenAPI specification port
     healthcheck:

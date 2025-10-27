@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.domain.AlertService;
+import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -20,7 +22,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -50,6 +51,8 @@ public class AlertJob extends Job {
     private final @NonNull WebhookPublisher webhookPublisher;
     private final @NonNull @Config WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
+    private final @NonNull WorkspaceNameService workspaceNameService;
+    @NonNull private final OpikConfiguration config;
 
     @Override
     public void doJob(JobExecutionContext context) {
@@ -99,6 +102,7 @@ public class AlertJob extends Job {
                             .flatMap(bucketData -> processAlertBucket(
                                     alertId,
                                     bucketData.workspaceId(),
+                                    bucketData.workspaceName(),
                                     eventType,
                                     bucketData.eventIds(),
                                     bucketData.payloads(),
@@ -116,6 +120,7 @@ public class AlertJob extends Job {
      *
      * @param alertId the alert ID
      * @param workspaceId the workspace ID for the alert
+     * @param workspaceName the workspace name for the alert
      * @param eventType the event type
      * @param eventIds the set of aggregated event IDs
      * @param payloads the set of aggregated event payloads
@@ -124,17 +129,19 @@ public class AlertJob extends Job {
     private Mono<Void> processAlertBucket(
             @NonNull UUID alertId,
             @NonNull String workspaceId,
+            @NonNull String workspaceName,
             @NonNull AlertEventType eventType,
             @NonNull List<String> eventIds,
             @NonNull List<String> payloads,
             @NonNull List<String> userNames) {
 
         log.info(
-                "Processing alert bucket: alertId='{}', workspaceId='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
-                alertId, workspaceId, eventType, eventIds.size(), payloads.size());
+                "Processing alert bucket: alertId='{}', workspaceId='{}', workspaceName='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
+                alertId, workspaceId, workspaceName, eventType, eventIds.size(), payloads.size());
 
         return Mono.fromCallable(() -> alertService.getByIdAndWorkspace(alertId, workspaceId))
-                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds, payloads, userNames))
+                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, workspaceName, eventType, eventIds, payloads,
+                        userNames))
                 .doOnSuccess(
                         __ -> log.info("Successfully sent webhook for alert '{}' with '{}' events and '{}' payloads",
                                 alertId, eventIds.size(), payloads.size()))
@@ -147,6 +154,7 @@ public class AlertJob extends Job {
      *
      * @param alert the alert configuration
      * @param workspaceId the workspace ID
+     * @param workspaceName the workspace name
      * @param eventType the event type
      * @param eventIds the set of aggregated event IDs
      * @param payloads the set of aggregated event payloads
@@ -155,6 +163,7 @@ public class AlertJob extends Job {
     private Mono<Void> createAndSendWebhook(
             @NonNull Alert alert,
             @NonNull String workspaceId,
+            @NonNull String workspaceName,
             @NonNull AlertEventType eventType,
             @NonNull List<String> eventIds,
             @NonNull List<String> payloads,
@@ -192,12 +201,13 @@ public class AlertJob extends Job {
         // Send via WebhookPublisher with data from alert configuration
         return webhookPublisher.publishWebhookEvent(
                 eventType,
-                alert.id(),
+                alert,
                 workspaceId,
-                alert.webhook().url(),
+                StringUtils.isBlank(workspaceName)
+                        ? workspaceNameService.getWorkspaceName(workspaceId,
+                                config.getAuthentication().getReactService().url())
+                        : workspaceName,
                 payload,
-                Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()),
-                alert.webhook().secretToken(),
                 webhookConfig.getMaxRetries()) // maxRetries
                 .doOnSuccess(webhookId -> log.info(
                         "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",

@@ -14,6 +14,7 @@ on:
           - opik-openai
           - opik-gemini
           - opik-langchain
+          - opik-vercel
       version:
         type: string
         required: false

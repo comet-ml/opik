@@ -24,7 +24,7 @@ public class WebhookConfig implements StreamConfiguration {
     public static final String PAYLOAD_FIELD = "message";
 
     private static final CompositeCodec CODEC = new CompositeCodec(new LZ4CodecV2(),
-            new JsonJacksonCodec(JsonUtils.MAPPER));
+            new JsonJacksonCodec(JsonUtils.getMapper()));
 
     @Valid @JsonProperty
     private boolean enabled = false;
@@ -41,6 +41,11 @@ public class WebhookConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval = Duration.seconds(1);
+
+    @Valid @JsonProperty
+    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
+    private Duration longPollingDuration;
 
     // Webhook-specific configuration
     @Valid @JsonProperty

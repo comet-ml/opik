@@ -7,6 +7,8 @@ import { useNavigate } from "@tanstack/react-router";
 import useAlertsList from "@/api/alerts/useAlertsList";
 import AlertsRowActionsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsRowActionsCell";
 import AlertsEventsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsEventsCell";
+import AlertTypeCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertTypeCell";
+import { ALERT_TYPE_LABELS } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -17,7 +19,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
-import { Alert } from "@/types/alerts";
+import { Alert, ALERT_TYPE } from "@/types/alerts";
 import {
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
@@ -57,6 +59,12 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: "alert_type",
+    label: "Destination",
+    type: COLUMN_TYPE.string,
+    cell: AlertTypeCell as never,
   },
   {
     id: "webhook_url",
@@ -110,6 +118,11 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "alert_type",
+    label: "Destination",
+    type: COLUMN_TYPE.category,
+  },
+  {
     id: "webhook_url",
     label: "Endpoint",
     type: COLUMN_TYPE.string,
@@ -137,6 +150,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "alert_type",
   "webhook_url",
   "triggers",
   "created_by",
@@ -172,6 +186,23 @@ const AlertsTab: React.FunctionComponent = () => {
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        alert_type: {
+          keyComponentProps: {
+            options: Object.values(ALERT_TYPE).map((type) => ({
+              value: type,
+              label: ALERT_TYPE_LABELS[type],
+            })),
+            placeholder: "Select type",
+          },
+        },
+      } as Record<string, { keyComponentProps: Record<string, unknown> }>,
+    }),
+    [],
+  );
 
   const { data, isPending } = useAlertsList(
     {
@@ -286,6 +317,7 @@ const AlertsTab: React.FunctionComponent = () => {
             columns={FILTERS_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            config={filtersConfig}
           />
         </div>
 

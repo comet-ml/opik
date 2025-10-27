@@ -397,14 +397,15 @@ class ExperimentDAO {
                 SELECT
                     dataset_id,
                     metadata,
-                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids,
+                    created_at
                 FROM experiments final
                 WHERE workspace_id = :workspace_id
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND <filters> <endif>
             )
-            SELECT <groupSelects>
+            SELECT <groupSelects>, max(created_at) AS last_created_experiment_at
             FROM experiments_filtered
             GROUP BY <groupBy>
             ;
@@ -1229,6 +1230,7 @@ class ExperimentDAO {
 
             return ExperimentGroupItem.builder()
                     .groupValues(groupValues)
+                    .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
                     .build();
         });
     }

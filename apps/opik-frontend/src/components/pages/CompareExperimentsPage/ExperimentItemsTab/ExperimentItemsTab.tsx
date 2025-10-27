@@ -15,6 +15,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import {
   ColumnDef,
   ColumnPinningState,
+  ColumnSort,
   createColumnHelper,
   RowSelectionState,
 } from "@tanstack/react-table";
@@ -33,12 +34,16 @@ import {
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
+import {
+  EXPERIMENT_ITEM_OUTPUT_PREFIX,
+  EXPERIMENT_ITEM_DATASET_PREFIX,
+} from "@/constants/experiments";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsOutputCell from "@/components/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
@@ -60,6 +65,7 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
+  isColumnSortable,
   mapColumnDataFields,
 } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
@@ -82,6 +88,10 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import {
+  USER_FEEDBACK_COLUMN_ID,
+  USER_FEEDBACK_NAME,
+} from "@/constants/shared";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -101,8 +111,24 @@ const COLUMNS_SCORES_ORDER_KEY = "compare-experiments-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
 const PAGINATION_SIZE_KEY = "compare-experiments-pagination-size";
 const ROW_HEIGHT_KEY = "compare-experiments-row-height";
+const SORTING_KEY = "compare-experiments-sorting";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID (Dataset item)",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: COLUMN_DURATION_ID,
+    label: "Duration",
+    type: COLUMN_TYPE.duration,
+  },
+  {
+    id: COLUMN_COMMENTS_ID,
+    label: "Comments",
+    type: COLUMN_TYPE.string,
+  },
   {
     id: "output",
     label: "Evaluation task",
@@ -120,7 +146,11 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", COLUMN_COMMENTS_ID];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "id",
+  COLUMN_COMMENTS_ID,
+  USER_FEEDBACK_COLUMN_ID,
+];
 
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
@@ -178,6 +208,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
+  const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
   const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
@@ -229,6 +263,15 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     defaultValue: [],
   });
 
+  const [sorting, setSorting] = useQueryParamAndLocalStorageState<ColumnSort[]>(
+    {
+      localStorageKey: SORTING_KEY,
+      queryKey: "sorting",
+      defaultValue: [],
+      queryParamConfig: JsonParam,
+    },
+  );
+
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const { data, isPending } = useCompareExperimentsList(
@@ -237,6 +280,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       datasetId,
       experimentsIds,
       filters,
+      sorting,
+      search: search as string,
       truncate: false,
       page: page as number,
       size: size as number,
@@ -260,6 +305,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     {
       enabled: false,
     },
+  );
+
+  const sortableColumns = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
   );
 
   const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
@@ -311,7 +361,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return (data?.columns ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
-        id: c.name,
+        id: `${EXPERIMENT_ITEM_DATASET_PREFIX}.${c.name}`,
         label: c.name,
         columnType: mapDynamicColumnTypesToColumnType(c.types),
       }));
@@ -407,15 +457,34 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Comments",
         type: COLUMN_TYPE.string,
         cell: CommentsCell.Compare as never,
+        sortable: isColumnSortable(COLUMN_COMMENTS_ID, sortableColumns),
         customMeta: {
           experimentsIds,
         },
       } as ColumnData<ExperimentsCompare>,
     ];
-  }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
+  }, [
+    dynamicOutputColumns,
+    experiments,
+    experimentsIds,
+    setTraceId,
+    sortableColumns,
+  ]);
 
   const scoresColumnsData = useMemo(() => {
-    return dynamicScoresColumns.map(
+    // Always include "User feedback" column, even if it has no data
+    const userFeedbackColumn: DynamicColumn = {
+      id: USER_FEEDBACK_COLUMN_ID,
+      label: USER_FEEDBACK_NAME,
+      columnType: COLUMN_TYPE.number,
+    };
+
+    // Filter out "User feedback" from dynamic columns to avoid duplicates
+    const otherDynamicColumns = dynamicScoresColumns.filter(
+      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
+    );
+
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -423,7 +492,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
           header: FeedbackScoreHeader as never,
           cell: CompareExperimentsFeedbackScoreCell as never,
-          statisticKey: `feedback_scores.${label}`,
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
           customMeta: {
             experimentsIds,
             feedbackKey: label,
@@ -478,6 +547,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           asId: true,
         },
         size: 180,
+        sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
       }),
     ];
@@ -496,6 +566,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           >(datasetColumnsData, {
             selectedColumns,
             columnsOrder,
+            sortableColumns,
           }),
         }),
       );
@@ -545,6 +616,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           >(outputColumnsData, {
             selectedColumns,
             columnsOrder: outputColumnsOrder,
+            sortableColumns,
           }),
         }),
       );
@@ -564,6 +636,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           >(scoresColumnsData, {
             selectedColumns,
             columnsOrder: scoresColumnsOrder,
+            sortableColumns,
           }),
         }),
       );
@@ -582,6 +655,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     experimentsIds,
     outputColumnsOrder,
     scoresColumnsOrder,
+    sortableColumns,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -608,9 +682,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
         }),
       ),
+      ...sortBy(dynamicOutputColumns, "label").map(({ id, label }) => ({
+        id,
+        label: `${label} (Output)`,
+        type: COLUMN_TYPE.string,
+      })),
       ...FILTER_COLUMNS,
     ];
-  }, [dynamicDatasetColumns]);
+  }, [dynamicDatasetColumns, dynamicOutputColumns]);
 
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
@@ -690,6 +769,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         setExpandedCommentSections([String(idx)]);
       },
       columnsStatistic,
+      enableUserFeedbackEditing: true,
     }),
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
@@ -712,6 +792,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <SearchInput
+            searchText={search!}
+            setSearchText={setSearch}
+            placeholder="Search dataset items"
+            className="w-[320px]"
+            dimension="sm"
+          />
           <FiltersButton
             columns={filterColumns}
             config={filtersConfig as never}
@@ -750,6 +837,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         selectionConfig={{
           rowSelection,
           setRowSelection,
+        }}
+        sortConfig={{
+          enabled: true,
+          sorting,
+          setSorting,
         }}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
