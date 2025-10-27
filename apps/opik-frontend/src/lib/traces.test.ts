@@ -415,7 +415,8 @@ describe("prettifyMessage", () => {
             {
               id: "call_123",
               type: "function",
-              // Missing function property - this should not crash
+              // Intentionally omitting the 'function' property to test that prettifyMessage handles malformed tool call data gracefully.
+              // The absence of the 'function' property should be ignored and not cause a crash; only valid tool calls should be processed.
             },
             {
               id: "call_456",
