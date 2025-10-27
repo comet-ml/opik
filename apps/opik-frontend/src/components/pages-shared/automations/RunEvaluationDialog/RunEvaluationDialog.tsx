@@ -14,7 +14,7 @@ import useRulesList from "@/api/automations/useRulesList";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
 import useAppStore from "@/store/AppStore";
 import { EvaluatorsRule } from "@/types/automations";
-import { Loader } from "@/components/ui/loader";
+import Loader from "@/components/shared/Loader/Loader";
 
 type ManualEvaluationEntityType = "trace" | "thread";
 
