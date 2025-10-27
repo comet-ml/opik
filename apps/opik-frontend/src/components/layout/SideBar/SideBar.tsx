@@ -6,6 +6,7 @@ import {
   Database,
   FlaskConical,
   GraduationCap,
+  LayoutDashboard,
   LayoutGrid,
   MessageCircleQuestion,
   FileTerminal,
@@ -26,6 +27,7 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
+import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -69,6 +71,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: LayoutGrid,
         label: "Projects",
         count: "projects",
+      },
+      {
+        id: "dashboards",
+        path: "/$workspaceName/dashboards",
+        type: MENU_ITEM_TYPE.router,
+        icon: LayoutDashboard,
+        label: "Dashboards",
+        count: "dashboards",
       },
     ],
   },
@@ -262,6 +272,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: dashboardsData } = useDashboardsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -270,6 +292,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     rules: rulesData?.total,
     optimizations: optimizationsData?.total,
     annotation_queues: annotationQueuesData?.total,
+    dashboards: dashboardsData?.total,
   };
 
   const logo = LogoComponent ? (

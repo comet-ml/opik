@@ -15,3 +15,4 @@ public record ChartPreviewRequest(
         @NotNull @Valid @Schema(description = "Chart configuration for preview") DashboardChart chart,
         @NotNull @Valid @Schema(description = "Time range and interval settings") ChartDataRequest chartDataRequest) {
 }
+

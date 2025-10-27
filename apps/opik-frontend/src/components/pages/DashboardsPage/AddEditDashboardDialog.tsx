@@ -2,6 +2,7 @@ import React, { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useParams } from "@tanstack/react-router";
 
 import {
   Dialog,
@@ -25,7 +26,6 @@ import useDashboardById from "@/api/dashboards/useDashboardById";
 import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import useAppStore from "@/store/AppStore";
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 
 const formSchema = z.object({
   name: z.string().min(1, "Dashboard name is required"),
@@ -42,7 +42,8 @@ const AddEditDashboardDialog: React.FunctionComponent<
   AddEditDashboardDialogProps
 > = ({ open, setOpen, dashboardId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const projectId = useProjectIdFromURL();
+  const params = useParams({ strict: false });
+  const projectId = params.projectId as string | undefined;
   const isEdit = Boolean(dashboardId);
 
   const { data: dashboard } = useDashboardById(

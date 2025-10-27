@@ -10,6 +10,7 @@ import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardChart;
 import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.SortingFactoryDashboards;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.ChartDataService;
 import com.comet.opik.domain.DashboardChartService;
@@ -67,6 +68,7 @@ public class DashboardsResource {
     private final @NonNull DashboardChartService chartService;
     private final @NonNull ChartDataService chartDataService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull SortingFactoryDashboards sortingFactory;
 
     @GET
     @Operation(operationId = "findDashboards", summary = "Find dashboards", description = "Find dashboards", responses = {
@@ -83,8 +85,7 @@ public class DashboardsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // Parse sorting if provided
-        List<SortingField> sortingFields = List.of();
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
         log.info("Finding dashboards with filters - projectId: '{}', name: '{}', type: '{}' on workspaceId '{}'",
                 projectId, name, type, workspaceId);

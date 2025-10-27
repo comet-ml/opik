@@ -228,6 +228,21 @@ const chartConfigEditRoute = createRoute({
   },
 });
 
+// ----------- dashboards (workspace-level)
+const dashboardsWorkspaceRoute = createRoute({
+  path: "/dashboards",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Dashboards",
+  },
+});
+
+const dashboardsWorkspaceListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => dashboardsWorkspaceRoute,
+  component: DashboardsPage,
+});
+
 // ----------- experiments
 const experimentsRoute = createRoute({
   path: "/experiments",
@@ -504,6 +519,9 @@ const routeTree = rootRoute.addChildren([
             chartConfigEditRoute,
           ]),
         ]),
+      ]),
+      dashboardsWorkspaceRoute.addChildren([
+        dashboardsWorkspaceListRoute,
       ]),
       experimentsRoute.addChildren([
         experimentsListRoute,

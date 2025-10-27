@@ -65,3 +65,4 @@ public class DashboardChartRowMapper implements RowMapper<DashboardChart> {
                 .build();
     }
 }
+
