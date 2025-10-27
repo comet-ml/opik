@@ -2,7 +2,7 @@ import type { AttributeValue, Tracer } from "@opentelemetry/api";
 import type { ExportResultCode } from "@opentelemetry/core";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import type { Span, Trace } from "opik";
-import { logger, Opik } from "opik";
+import { Opik, logger } from "opik";
 
 type SpanExporter = NodeSDKConfiguration["traceExporter"];
 type ExportFunction = SpanExporter["export"];

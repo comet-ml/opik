@@ -337,6 +337,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return asyncTemplate.nonTransaction(connection -> {
@@ -355,9 +356,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .doOnSuccess(cnt -> {
                         switch (entityType) {
                             case TRACE ->
-                                publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId, userName);
+                                publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId, workspaceName,
+                                        userName);
                             case THREAD ->
-                                publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId, userName);
+                                publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId,
+                                        workspaceName, userName);
                             default -> {
                                 // no-op
                             }
@@ -367,7 +370,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType,
-            String workspaceId, String userName) {
+            String workspaceId, String workspaceName, String userName) {
         if (CollectionUtils.isEmpty(scores)) {
             return;
         }
@@ -385,6 +388,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         eventBus.post(AlertEvent.builder()
                 .eventType(eventType)
                 .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
                 .userName(userName)
                 .projectId(scores.getFirst().projectId())
                 .payload(scoresWithAuthor)
