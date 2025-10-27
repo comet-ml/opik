@@ -571,11 +571,11 @@ public class TracesResource {
         var traceFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceThreadSortingFactory.newSorting(sorting);
 
-        var workspaceMetadata = workspaceMetadataService
+        var metadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
                 .block();
 
-        if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -595,7 +595,7 @@ public class TracesResource {
         TraceThreadPage traceThreadPage = service.getTraceThreads(page, size, searchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                    if (!metadata.canUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;
