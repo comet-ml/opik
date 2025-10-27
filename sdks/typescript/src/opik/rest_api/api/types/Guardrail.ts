@@ -10,6 +10,7 @@ export interface Guardrail {
     secondaryId: string;
     /** If null, the default project is used */
     projectName?: string;
+    projectId?: string;
     name: OpikApi.GuardrailName;
     result: OpikApi.GuardrailResult;
     config: OpikApi.JsonNode;

@@ -233,6 +233,8 @@ from .function import Function
 from .function_call import FunctionCall
 from .group_content import GroupContent
 from .group_content_with_aggregations import GroupContentWithAggregations
+from .group_detail import GroupDetail
+from .group_details import GroupDetails
 from .guardrail import Guardrail
 from .guardrail_batch import GuardrailBatch
 from .guardrail_name import GuardrailName
@@ -626,6 +628,8 @@ __all__ = [
     "FunctionCall",
     "GroupContent",
     "GroupContentWithAggregations",
+    "GroupDetail",
+    "GroupDetails",
     "Guardrail",
     "GuardrailBatch",
     "GuardrailName",
