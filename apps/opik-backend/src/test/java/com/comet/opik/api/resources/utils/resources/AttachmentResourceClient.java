@@ -152,7 +152,7 @@ public class AttachmentResourceClient {
 
     public void uploadFile(StartMultipartUploadResponse startUploadResponse, byte[] data, String apiKey,
             String workspaceName) {
-        try (var response = client.target(startUploadResponse.preSignUrls().getFirst())
+        try (var response = externatClient.target(startUploadResponse.preSignUrls().getFirst())
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
