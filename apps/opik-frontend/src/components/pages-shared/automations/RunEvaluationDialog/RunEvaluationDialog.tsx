@@ -13,10 +13,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import useRulesList from "@/api/automations/useRulesList";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
 import useAppStore from "@/store/AppStore";
-import { EvaluatorsRule } from "@/types/automations";
+import {
+  EVALUATORS_RULE_TYPE,
+  EvaluatorsRule,
+} from "@/types/automations";
 import Loader from "@/components/shared/Loader/Loader";
 
 type ManualEvaluationEntityType = "trace" | "thread";
+
+const STALE_TIME = 5 * 60 * 1000; // 5 minutes - rules don't change frequently
 
 type RunEvaluationDialogProps = {
   open: boolean;
@@ -44,15 +49,34 @@ const RunEvaluationDialog: React.FunctionComponent<
     {
       enabled: open,
       placeholderData: keepPreviousData,
+      staleTime: STALE_TIME,
     },
   );
 
   const manualEvaluationMutation = useManualEvaluationMutation();
 
-  // Get all rules (including disabled ones to allow testing before enabling)
+  // Filter rules based on entity type
+  // Trace rules: llm_as_judge, user_defined_metric_python
+  // Thread rules: trace_thread_llm_as_judge, trace_thread_user_defined_metric_python
   const rules = useMemo(() => {
-    return data?.content || [];
-  }, [data?.content]);
+    const allRules = data?.content || [];
+    
+    if (entityType === "trace") {
+      return allRules.filter(
+        (rule) =>
+          rule.type === EVALUATORS_RULE_TYPE.llm_judge ||
+          rule.type === EVALUATORS_RULE_TYPE.python_code,
+      );
+    } else if (entityType === "thread") {
+      return allRules.filter(
+        (rule) =>
+          rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge ||
+          rule.type === EVALUATORS_RULE_TYPE.thread_python_code,
+      );
+    } else {
+      throw new Error(`Unknown entity type: ${entityType}`);
+    }
+  }, [data?.content, entityType]);
 
   const handleCheckboxChange = useCallback((ruleId: string) => {
     setSelectedRuleIds((prev) => {
