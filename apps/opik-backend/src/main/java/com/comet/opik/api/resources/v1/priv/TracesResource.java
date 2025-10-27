@@ -37,8 +37,6 @@ import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
-import com.comet.opik.domain.workspaces.ProjectMetadata;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -133,14 +131,13 @@ public class TracesResource {
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceSortingFactory.newSorting(sorting);
 
-        String workspaceId = requestContext.get().getWorkspaceId();
+        var workspaceId = requestContext.get().getWorkspaceId();
 
-        ProjectMetadata projectMetadata = workspaceMetadataService
+        var metadata = workspaceMetadataService
                 .getProjectMetadataByProjectIdentifier(workspaceId, projectId, projectName)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        if (!sortingFields.isEmpty() && !projectMetadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -158,8 +155,8 @@ public class TracesResource {
 
         TracePage tracePage = service.find(page, size, searchCriteria)
                 .map(it -> {
-                    // Remove sortableBy fields if dynamic sorting is disabled due to project size
-                    if (!projectMetadata.canUseDynamicSorting()) {
+                    // Remove sortableBy fields if dynamic sorting is disabled due to size
+                    if (!metadata.canUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;
@@ -167,8 +164,7 @@ public class TracesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(),
-                workspaceId);
+        log.info("Found traces by '{}', count '{}' on workspaceId '{}'", searchCriteria, tracePage.size(), workspaceId);
 
         return Response.ok(tracePage).build();
     }
@@ -575,7 +571,7 @@ public class TracesResource {
         var traceFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceThreadSortingFactory.newSorting(sorting);
 
-        WorkspaceMetadata workspaceMetadata = workspaceMetadataService
+        var workspaceMetadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
                 .block();
 

@@ -13,9 +13,9 @@ import java.util.UUID;
 
 @ImplementedBy(WorkspaceMetadataDAOImpl.class)
 interface WorkspaceMetadataDAO {
-    Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId);
+    Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId);
 
-    Mono<ProjectMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId);
+    Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId);
 }
 
 @Singleton
@@ -115,33 +115,35 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
         this.workspaceSettings = workspaceSettings;
     }
 
-    public Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
+    public Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(GET_WORKSPACE_METADATA)
                         .bind("workspace_id", workspaceId)
                         .bind("database_name", databaseName)
                         .execute())
-                .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceMetadata(
+                .flatMap(result -> result.map((row, rowMetadata) -> new ScopeMetadata(
                         row.get("workspace_size_gb", Double.class),
                         row.get("total_table_size_gb", Double.class),
                         row.get("percentage_of_table", Double.class),
-                        workspaceSettings)))
-                .single(new WorkspaceMetadata(0, 0, 0, workspaceSettings));
+                        workspaceSettings,
+                        ScopeMetadata.ScopeType.WORKSPACE)))
+                .single(new ScopeMetadata(0, 0, 0, workspaceSettings, ScopeMetadata.ScopeType.WORKSPACE));
     }
 
-    public Mono<ProjectMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
+    public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(GET_PROJECT_METADATA)
                         .bind("workspace_id", workspaceId)
                         .bind("project_id", projectId)
                         .bind("database_name", databaseName)
                         .execute())
-                .flatMap(result -> result.map((row, rowMetadata) -> new ProjectMetadata(
+                .flatMap(result -> result.map((row, rowMetadata) -> new ScopeMetadata(
                         row.get("project_size_gb", Double.class),
                         row.get("total_table_size_gb", Double.class),
                         row.get("percentage_of_table", Double.class),
-                        workspaceSettings)))
-                .single(new ProjectMetadata(0, 0, 0, workspaceSettings));
+                        workspaceSettings,
+                        ScopeMetadata.ScopeType.PROJECT)))
+                .single(new ScopeMetadata(0, 0, 0, workspaceSettings, ScopeMetadata.ScopeType.PROJECT));
     }
 
 }

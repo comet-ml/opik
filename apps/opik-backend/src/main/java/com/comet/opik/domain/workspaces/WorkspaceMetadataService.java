@@ -12,11 +12,11 @@ import java.util.UUID;
 
 @ImplementedBy(WorkspaceMetadataServiceImpl.class)
 public interface WorkspaceMetadataService {
-    Mono<WorkspaceMetadata> getWorkspaceMetadata(String workspaceId);
+    Mono<ScopeMetadata> getWorkspaceMetadata(String workspaceId);
 
-    Mono<ProjectMetadata> getProjectMetadata(String workspaceId, UUID projectId);
+    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId);
 
-    Mono<ProjectMetadata> getProjectMetadataByProjectIdentifier(String workspaceId, UUID projectId, String projectName);
+    Mono<ScopeMetadata> getProjectMetadataByProjectIdentifier(String workspaceId, UUID projectId, String projectName);
 }
 
 @Singleton
@@ -27,19 +27,19 @@ class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
     private final @NonNull com.comet.opik.domain.ProjectService projectService;
 
     @Override
-    @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId", returnType = WorkspaceMetadata.class)
-    public Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
+    @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId", returnType = ScopeMetadata.class)
+    public Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
         return workspaceMetadataDAO.getWorkspaceMetadata(workspaceId);
     }
 
     @Override
-    @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ProjectMetadata.class)
-    public Mono<ProjectMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
+    @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ScopeMetadata.class)
+    public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
         return workspaceMetadataDAO.getProjectMetadata(workspaceId, projectId);
     }
 
     @Override
-    public Mono<ProjectMetadata> getProjectMetadataByProjectIdentifier(@NonNull String workspaceId, UUID projectId,
+    public Mono<ScopeMetadata> getProjectMetadataByProjectIdentifier(@NonNull String workspaceId, UUID projectId,
             String projectName) {
         return Mono.defer(() -> {
             if (projectId != null) {
