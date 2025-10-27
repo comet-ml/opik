@@ -7,21 +7,23 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @ImplementedBy(WorkspaceMetadataDAOImpl.class)
 interface WorkspaceMetadataDAO {
-    Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId);
+    Mono<ScopeMetadata> getWorkspaceMetadata(String workspaceId);
 
-    Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId);
+    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId);
 }
 
 @Singleton
 class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
 
-    private static final String GET_SCOPE_METADATA_TEMPLATE = """
+    private static final String CALCULATE_METADATA = """
             WITH
                 query_result AS (
                     SELECT AVG(query_size) AS query_size
@@ -30,19 +32,21 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                                 output_length +
                                 metadata_length +
                                 OCTET_LENGTH(error_info) +
-                                (OCTET_LENGTH(tags) * 10) +
+                                OCTET_LENGTH(toJSONString(tags)) +
                                 OCTET_LENGTH(toJSONString(usage)) as query_size
                         FROM spans
                         WHERE workspace_id = :workspace_id
-                        %s
+                        <if(project_id)>AND project_id = :project_id<endif>
                         ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC
                         LIMIT 1000
                     )
                 ),
             	total_spans AS (
-            			SELECT count(distinct id) as total_count FROM spans
+            			SELECT
+            			    count(distinct id) as total_count
+            			FROM spans
             			WHERE workspace_id = :workspace_id
-            			%s
+            			<if(project_id)>AND project_id = :project_id<endif>
             	),
                 table_size AS (
                     SELECT
@@ -77,37 +81,40 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
     }
 
     public Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
-        return getScopeMetadata(workspaceId, null);
+        return getMetadata(workspaceId, null)
+                .map(metadata -> metadata.toBuilder()
+                        .limitSizeGb(workspaceSettings.maxSizeToAllowSorting())
+                        .build());
     }
 
     public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
-        return getScopeMetadata(workspaceId, projectId);
+        return getMetadata(workspaceId, projectId)
+                .map(metadata -> metadata.toBuilder()
+                        .limitSizeGb(workspaceSettings.maxProjectSizeToAllowSorting())
+                        .build());
     }
 
-    private Mono<ScopeMetadata> getScopeMetadata(@NonNull String workspaceId, UUID projectId) {
-        var scopeType = projectId != null ? ScopeMetadata.ScopeType.PROJECT : ScopeMetadata.ScopeType.WORKSPACE;
-        var projectFilter = projectId != null ? "AND project_id = :project_id" : "";
-        var query = GET_SCOPE_METADATA_TEMPLATE.formatted(projectFilter, projectFilter);
-
+    private Mono<ScopeMetadata> getMetadata(String workspaceId, UUID projectId) {
+        var template = new ST(CALCULATE_METADATA);
+        if (projectId != null) {
+            template.add("project_id", projectId);
+        }
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(query)
+                    var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
                             .bind("database_name", databaseName);
-
                     if (projectId != null) {
                         statement.bind("project_id", projectId);
                     }
-
                     return statement.execute();
                 })
-                .flatMap(result -> result.map((row, rowMetadata) -> new ScopeMetadata(
-                        row.get("size_gb", Double.class),
-                        row.get("total_table_size_gb", Double.class),
-                        row.get("percentage_of_table", Double.class),
-                        workspaceSettings,
-                        scopeType)))
-                .single(new ScopeMetadata(0, 0, 0, workspaceSettings, scopeType));
+                .flatMap(result -> result.map((row, rowMetadata) -> ScopeMetadata.builder()
+                        .sizeGb(Optional.ofNullable(row.get("size_gb", Double.class)).orElse(0.0))
+                        .totalTableSizeGb(Optional.ofNullable(row.get("total_table_size_gb", Double.class)).orElse(0.0))
+                        .percentageOfTable(
+                                Optional.ofNullable(row.get("percentage_of_table", Double.class)).orElse(0.0))
+                        .build()))
+                .single(ScopeMetadata.builder().build());
     }
-
 }

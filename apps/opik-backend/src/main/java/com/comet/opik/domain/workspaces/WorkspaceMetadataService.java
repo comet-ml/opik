@@ -1,6 +1,8 @@
 package com.comet.opik.domain.workspaces;
 
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.cache.Cacheable;
+import com.comet.opik.utils.ValidationUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
@@ -14,9 +16,7 @@ import java.util.UUID;
 public interface WorkspaceMetadataService {
     Mono<ScopeMetadata> getWorkspaceMetadata(String workspaceId);
 
-    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId);
-
-    Mono<ScopeMetadata> getProjectMetadataByProjectIdentifier(String workspaceId, UUID projectId, String projectName);
+    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId, String projectName);
 }
 
 @Singleton
@@ -24,7 +24,7 @@ public interface WorkspaceMetadataService {
 class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
 
     private final @NonNull WorkspaceMetadataDAO workspaceMetadataDAO;
-    private final @NonNull com.comet.opik.domain.ProjectService projectService;
+    private final @NonNull ProjectService projectService;
 
     @Override
     @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId", returnType = ScopeMetadata.class)
@@ -33,20 +33,14 @@ class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
     }
 
     @Override
-    @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ScopeMetadata.class)
-    public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
-        return workspaceMetadataDAO.getProjectMetadata(workspaceId, projectId);
+    public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, UUID projectId, String projectName) {
+        ValidationUtils.validateProjectNameAndProjectId(projectName, projectId);
+        return projectService.resolveProjectIdAndVerifyVisibility(projectId, projectName)
+                .flatMap(resolvedProjectId -> getProjectMetadata(workspaceId, resolvedProjectId));
     }
 
-    @Override
-    public Mono<ScopeMetadata> getProjectMetadataByProjectIdentifier(@NonNull String workspaceId, UUID projectId,
-            String projectName) {
-        return Mono.defer(() -> {
-            if (projectId != null) {
-                return getProjectMetadata(workspaceId, projectId);
-            }
-            return projectService.resolveProjectIdAndVerifyVisibility(projectId, projectName)
-                    .flatMap(resolvedProjectId -> getProjectMetadata(workspaceId, resolvedProjectId));
-        });
+    @Cacheable(name = "project_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ScopeMetadata.class)
+    private Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId) {
+        return workspaceMetadataDAO.getProjectMetadata(workspaceId, projectId);
     }
 }

@@ -440,7 +440,7 @@ public class DatasetsResource {
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
                 .block();
 
-        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -462,7 +462,7 @@ public class DatasetsResource {
         var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!metadata.canUseDynamicSorting()) {
+                    if (metadata.cannotUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;

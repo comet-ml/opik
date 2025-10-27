@@ -119,11 +119,13 @@ public class SpansResource {
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var sortingFields = sortingFactory.newSorting(sorting);
 
-        var metadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        var workspaceMetadata = workspaceMetadataService
+                .getProjectMetadata(workspaceId, projectId, projectName)
                 .block();
 
-        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && workspaceMetadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -139,13 +141,11 @@ public class SpansResource {
                 .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
                 .build();
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
         SpanPage spans = spanService.find(page, size, spanSearchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!metadata.canUseDynamicSorting()) {
+                    if (workspaceMetadata.cannotUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;

@@ -113,11 +113,6 @@ redis:
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
 
-# Queues configuration for tests
-queues:
-  enabled: true
-  defaultJobTtl: 14 days
-
 openTelemetry:
   # Default: 3h
   # Description: how long it takes to expire non-used keys
@@ -153,6 +148,16 @@ server:
   applicationConnectors:
     - type: http
       maxRequestHeaderSize: 16KB
+
+# Jackson JSON processing configuration
+# Controls limits for JSON deserialization to prevent memory exhaustion
+jacksonConfig:
+  # Default: 104857600 (100MB)
+  # Description: Maximum size for individual string values during JSON deserialization. 
+  #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
+  #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
+  #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
+  maxStringLength: 262144000 
 
 # Configuration for batch operations
 batchOperations:
@@ -304,6 +309,14 @@ clickHouseLogAppender:
   # Description: Time interval after which the log messages are sent to ClickHouse if the batch size is not reached
   flushIntervalDuration: PT0.500S
 
+workspaceSettings:
+  # Default: -1 (no limit)
+  # Description: Maximum workspace size in GB to allow dynamic sorting. Set to -1 to disable the limit (allow sorting for all workspace sizes)
+  maxSizeToAllowSorting: -1
+  # Default: 50
+  # Description: Maximum size of a project in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
+  maxProjectSizeToAllowSorting: -1
+
 # Configuration AWS S3
 s3Config:
   s3Region: 'us-east-1'
@@ -390,11 +403,26 @@ jobTimeout:
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: 30
 
-# Configuration for feedback scores
-feedbackScores:
-  # Default: false
-  # Description: Whether to write feedback scores by their author or not
-  writeToAuthored: false
+# Response formatting configuration
+responseFormatting:
+  # Default: 10001
+  # Description: Maximum size of input/output/metadata fields in responses (FE limit + 1)
+  truncationSize: 10001
+
+# Queue configuration for Python RQ workers
+queues:
+  # Default: true
+  # Description: Whether queue functionality is enabled
+  enabled: true
+  # Default: 14 days
+  # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
+  defaultJobTtl: 14 days
+  # Per-queue specific configurations
+  queues:
+    # Optimizer cloud queue configuration
+    opik:optimizer-cloud:
+      # Job TTL for optimizer jobs
+      jobTTl: 1 day
 
 # Webhook configuration
 webhook:
@@ -436,13 +464,3 @@ webhook:
     # Default: {}
     # Description: Period for events aggregation before sending to webhook endpoint
     windowSize: 1s
-
-# Jackson JSON processing configuration
-jacksonConfig:
-  maxStringLength: 262144000 
-
-# Workspace settings
-workspaceSettings:
-  # Default: -1 (no limit)
-  # Description: Maximum workspace size in GB to allow dynamic sorting. Set to -1 to disable the limit (allow sorting for all workspace sizes)
-  maxSizeToAllowSorting: -1

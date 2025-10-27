@@ -134,10 +134,10 @@ public class TracesResource {
         var workspaceId = requestContext.get().getWorkspaceId();
 
         var metadata = workspaceMetadataService
-                .getProjectMetadataByProjectIdentifier(workspaceId, projectId, projectName)
+                .getProjectMetadata(workspaceId, projectId, projectName)
                 .block();
 
-        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -156,7 +156,7 @@ public class TracesResource {
         TracePage tracePage = service.find(page, size, searchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to size
-                    if (!metadata.canUseDynamicSorting()) {
+                    if (metadata.cannotUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;
@@ -571,11 +571,13 @@ public class TracesResource {
         var traceFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
         var sortingFields = traceThreadSortingFactory.newSorting(sorting);
 
+        var workspaceId = requestContext.get().getWorkspaceId();
+
         var metadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                .getProjectMetadata(workspaceId, projectId, projectName)
                 .block();
 
-        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -588,14 +590,12 @@ public class TracesResource {
                 .sortingFields(sortingFields)
                 .build();
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-
         log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
         TraceThreadPage traceThreadPage = service.getTraceThreads(page, size, searchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!metadata.canUseDynamicSorting()) {
+                    if (metadata.cannotUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;
