@@ -53,7 +53,7 @@ const ColumnsButton = <TColumnData,>({
 
   const allColumnsSelected = useMemo(() => {
     return selectedColumns.length === allColumnsIds.length;
-  }, [selectedColumns.length, allColumnsIds]);
+  }, [selectedColumns, allColumnsIds]);
 
   const toggleColumns = (value: boolean) => {
     onSelectionChange(value ? allColumnsIds : []);
