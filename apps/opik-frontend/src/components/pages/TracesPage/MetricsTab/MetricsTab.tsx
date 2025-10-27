@@ -9,6 +9,7 @@ import {
   useMetricDateRangeWithQuery,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
+import ProjectMetricsSection from "./ProjectMetricsSection";
 import ThreadMetricsSection from "./ThreadMetricsSection";
 import TraceMetricsSection from "./TraceMetricsSection";
 
@@ -71,7 +72,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
   }
 
   return (
-    <div className="px-6">
+    <div className="px-6 pb-6">
       <div className="flex items-center justify-between">
         <Button
           variant="outline"
@@ -88,6 +89,14 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
           maxDate={maxDate}
         />
       </div>
+
+      <ProjectMetricsSection
+        projectId={projectId}
+        interval={interval}
+        intervalStart={intervalStart}
+        intervalEnd={intervalEnd}
+        hasTraces={hasTraces}
+      />
 
       <ThreadMetricsSection
         projectId={projectId}

@@ -6,4 +6,5 @@ import * as OpikApi from "../index";
 
 export interface ExperimentGroupResponse {
     content?: Record<string, OpikApi.GroupContent>;
+    details?: OpikApi.GroupDetails;
 }

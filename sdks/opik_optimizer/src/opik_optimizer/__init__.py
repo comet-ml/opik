@@ -15,7 +15,6 @@ from .few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 from .gepa_optimizer import GepaOptimizer
 from .logging_config import setup_logging
 from .meta_prompt_optimizer import MetaPromptOptimizer
-from .mipro_optimizer import MiproOptimizer
 from .hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
 from .optimization_config.configs import TaskConfig
 from .optimization_result import OptimizationResult
@@ -40,7 +39,6 @@ __all__ = [
     "FewShotBayesianOptimizer",
     "GepaOptimizer",
     "MetaPromptOptimizer",
-    "MiproOptimizer",
     "EvolutionaryOptimizer",
     "HierarchicalReflectiveOptimizer",
     "ParameterOptimizer",

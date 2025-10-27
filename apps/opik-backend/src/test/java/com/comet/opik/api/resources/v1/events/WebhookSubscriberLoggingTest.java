@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -24,6 +25,7 @@ import io.r2dbc.spi.ConnectionFactory;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.core.MediaType;
+import org.awaitility.Awaitility;
 import org.eclipse.jetty.http.HttpHeader;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
@@ -37,7 +39,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
@@ -213,6 +214,8 @@ class WebhookSubscriberLoggingTest {
     private WebhookEvent<?> createWebhookEvent(String url, UUID alertId, String eventId) {
         return WebhookEvent.builder()
                 .id(eventId)
+                .alertName("Test Alert")
+                .alertType(AlertType.GENERAL)
                 .eventType(AlertEventType.PROMPT_CREATED)
                 .alertId(alertId)
                 .workspaceId(WORKSPACE_ID)

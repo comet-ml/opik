@@ -15,10 +15,9 @@ def test_few_shot_optimizer() -> None:
     # Initialize optimizer
     optimizer = FewShotBayesianOptimizer(
         model="openai/gpt-4",
-        temperature=0.1,
-        max_tokens=5000,
         min_examples=1,
         max_examples=2,
+        model_parameters={"temperature": 0.1, "max_tokens": 5000},
     )
 
     # Prepare dataset (using tiny_test for faster execution)
@@ -35,7 +34,7 @@ def test_few_shot_optimizer() -> None:
         messages=[
             {"role": "system", "content": "Provide an answer to the question."},
             {"role": "user", "content": "{text}"},  # Changed from "{question}"
-        ],
+        ]
     )
 
     # Run optimization with reduced parameters for faster testing
@@ -43,7 +42,7 @@ def test_few_shot_optimizer() -> None:
         dataset=dataset,
         metric=levenshtein_ratio,
         prompt=prompt,
-        n_trials=1,  # Reduced from 2
+        max_trials=1,  # Reduced from 2
     )
 
     # Enhanced OptimizationResult validation

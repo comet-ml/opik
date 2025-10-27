@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.events.webhooks;
 
+import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.WebhookConfig;
@@ -18,7 +20,6 @@ import reactor.core.scheduler.Schedulers;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Service for publishing webhook events to the Redis stream.
@@ -39,6 +40,7 @@ public class WebhookPublisher {
      * @param eventType    The type of event
      * @param alertId      The alert ID
      * @param workspaceId  The workspace ID associated with the event
+     * @param workspaceName The workspace name associated with the event
      * @param webhookUrl   The URL to send the webhook to
      * @param payload      The payload to include in the webhook
      * @param headers      Optional custom headers to include in the HTTP request
@@ -46,12 +48,10 @@ public class WebhookPublisher {
      * @return A Mono that completes when the event is published to the stream
      */
     public <T> Mono<String> publishWebhookEvent(@NonNull AlertEventType eventType,
-            @NonNull UUID alertId,
+            @NonNull Alert alert,
             @NonNull String workspaceId,
-            @NonNull String webhookUrl,
+            @NonNull String workspaceName,
             @NonNull T payload,
-            Map<String, String> headers,
-            String secretToken,
             int maxRetries) {
 
         if (!webhookConfig.isEnabled()) {
@@ -64,19 +64,23 @@ public class WebhookPublisher {
 
         var webhookEvent = WebhookEvent.builder()
                 .id(eventId)
-                .url(webhookUrl)
+                .url(alert.webhook().url())
                 .eventType(eventType)
-                .alertId(alertId)
+                .alertType(Optional.ofNullable(alert.alertType()).orElse(AlertType.GENERAL))
+                .alertId(alert.id())
+                .alertName(alert.name())
+                .alertMetadata(Optional.ofNullable(alert.metadata()).orElse(Map.of()))
                 .payload(payload)
-                .headers(Optional.ofNullable(headers).orElse(Map.of()))
-                .secret(secretToken)
+                .headers(Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()))
+                .secret(alert.webhook().secretToken())
                 .maxRetries(maxRetries)
                 .workspaceId(workspaceId)
+                .workspaceName(workspaceName)
                 .createdAt(Instant.now())
                 .build();
 
         log.info("Publishing webhook event: id='{}', type='{}', workspace='{}', url='{}'",
-                eventId, eventType, workspaceId, webhookUrl);
+                eventId, eventType, workspaceId, alert.webhook().url());
 
         return Mono.defer(() -> {
             RStreamReactive<String, WebhookEvent<?>> stream = redisson.getStream(

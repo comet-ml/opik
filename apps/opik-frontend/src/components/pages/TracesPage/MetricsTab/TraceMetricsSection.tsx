@@ -16,8 +16,6 @@ import {
   INTERVAL_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
-import { formatCost } from "@/lib/money";
 import { generateVisibilityFilters } from "@/lib/filters";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -34,9 +32,6 @@ import {
   renderDurationTooltipValue,
   durationYTickFormatter,
 } from "./utils";
-
-const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  formatCost(value as number);
 
 const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -234,7 +229,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
         />
       </div>
       <div
-        className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
         style={{ "--chart-height": "230px" } as React.CSSProperties}
       >
         <div>
@@ -267,7 +262,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             traceFilters={processedTracesFilters}
           />
         </div>
-        <div>
+        <div className="md:col-span-2">
           <MetricContainerChart
             chartId="duration_chart"
             key="duration_chart"
@@ -281,37 +276,6 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             renderValue={renderDurationTooltipValue}
             labelsMap={DURATION_LABELS_MAP}
             customYTickFormatter={durationYTickFormatter}
-            chartType="line"
-            traceFilters={processedTracesFilters}
-          />
-        </div>
-        <div>
-          <MetricContainerChart
-            chartId="token_usage_chart"
-            key="token_usage_chart"
-            name="Token usage"
-            description={INTERVAL_DESCRIPTIONS.TOTALS[interval]}
-            metricName={METRIC_NAME_TYPE.TOKEN_USAGE}
-            interval={interval}
-            intervalStart={intervalStart}
-            intervalEnd={intervalEnd}
-            projectId={projectId}
-            chartType="line"
-            traceFilters={processedTracesFilters}
-          />
-        </div>
-        <div className={isGuardrailsEnabled ? "" : "md:col-span-2"}>
-          <MetricContainerChart
-            chartId="estimated_cost_chart"
-            key="estimated_cost_chart"
-            name="Estimated cost"
-            description={INTERVAL_DESCRIPTIONS.COST[interval]}
-            metricName={METRIC_NAME_TYPE.COST}
-            interval={interval}
-            intervalStart={intervalStart}
-            intervalEnd={intervalEnd}
-            projectId={projectId}
-            renderValue={renderCostTooltipValue}
             chartType="line"
             traceFilters={processedTracesFilters}
           />

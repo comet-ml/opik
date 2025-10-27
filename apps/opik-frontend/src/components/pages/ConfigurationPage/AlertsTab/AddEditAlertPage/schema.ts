@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ALERT_EVENT_TYPE } from "@/types/alerts";
+import { ALERT_EVENT_TYPE, ALERT_TYPE } from "@/types/alerts";
 
 export const HeaderSchema = z.object({
   key: z.string().min(1, { message: "Header key is required" }),
@@ -17,6 +17,8 @@ export const AlertFormSchema = z
       .string({ required_error: "Alert name is required" })
       .min(1, { message: "Alert name is required" }),
     enabled: z.boolean().default(true),
+    alertType: z.nativeEnum(ALERT_TYPE).default(ALERT_TYPE.general),
+    routingKey: z.string().optional(),
     url: z
       .string({ required_error: "Endpoint URL is required" })
       .min(1, { message: "Endpoint URL is required" })
@@ -32,6 +34,19 @@ export const AlertFormSchema = z
     {
       message: "At least one trigger must be selected",
       path: ["triggers"],
+    },
+  )
+  .refine(
+    (data) => {
+      // If alert type is PagerDuty, routing_key is required
+      if (data.alertType === ALERT_TYPE.pagerduty) {
+        return data.routingKey && data.routingKey.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: "Routing key is required for PagerDuty integration",
+      path: ["routingKey"],
     },
   );
 

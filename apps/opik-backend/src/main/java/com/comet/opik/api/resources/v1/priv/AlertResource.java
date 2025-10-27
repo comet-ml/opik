@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertType;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.WebhookExamples;
 import com.comet.opik.api.WebhookTestResult;
@@ -45,8 +46,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.api.AlertType.GENERAL;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 
@@ -221,18 +224,18 @@ public class AlertResource {
 
     @GET
     @Path("/webhooks/examples")
-    @Operation(operationId = "getWebhookExamples", summary = "Get webhook payload examples", description = "Get webhook payload examples for all alert event types", responses = {
+    @Operation(operationId = "getWebhookExamples", summary = "Get webhook payload examples", description = "Get webhook payload examples for all alert event types, optionally filtered by alert type", responses = {
             @ApiResponse(responseCode = "200", description = "Webhook examples", content = @Content(schema = @Schema(implementation = WebhookExamples.class)))
     })
-    public Response getWebhookExamples() {
+    public Response getWebhookExamples(@QueryParam("alert_type") AlertType alertType) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting webhook examples on workspace_id '{}'", workspaceId);
+        log.info("Getting webhook examples on workspace_id '{}', alertType '{}'", workspaceId, alertType);
 
-        var examples = alertService.getWebhookExamples();
+        var examples = alertService.getWebhookExamples(Optional.ofNullable(alertType).orElse(GENERAL));
 
-        log.info("Got webhook examples on workspace_id '{}'", workspaceId);
+        log.info("Got webhook examples on workspace_id '{}', alertType '{}'", workspaceId, alertType);
 
         return Response.ok().entity(examples).build();
     }
