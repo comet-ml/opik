@@ -521,23 +521,23 @@ class TestCLIImportExport:
         # Create test data
         self._create_test_traces(opik_client, source_project_name)
 
-        # Test export with name filter
+        # Test export with name filter using new CLI structure
         export_cmd = [
             "export",
-            f"default/{source_project_name}",
+            "default",
+            "project",
+            source_project_name,
             "--path",
             str(test_data_dir),
-            "--include",
-            "traces",
-            "--name",
-            "test_function_1",
+            "--filter",
+            "name == 'test_function_1'",
         ]
 
         result = self._run_cli_command(export_cmd, "Export with name filter")
         assert result.returncode == 0, f"Export with filter failed: {result.stderr}"
 
         # Verify filtered export
-        project_dir = test_data_dir / "default" / source_project_name
+        project_dir = test_data_dir / "default" / "projects" / source_project_name
         if project_dir.exists():
             trace_files = list(project_dir.glob("trace_*.json"))
             # The exact number depends on the filter, but we should have some files
@@ -594,30 +594,28 @@ class TestCLIImportExport:
         self, opik_client: opik.Opik, test_data_dir: Path
     ):
         """Test error handling for invalid commands."""
-        # Test export with non-existent project
+        # Test export with non-existent project using new CLI structure
         export_cmd = [
             "export",
-            "default/non-existent-project",
+            "default",
+            "project",
+            "non-existent-project",
             "--path",
             str(test_data_dir),
-            "--include",
-            "traces",
         ]
 
         result = self._run_cli_command(export_cmd, "Export non-existent project")
-        # This might succeed with 0 results or fail, both are acceptable
-        assert result.returncode in [
-            0,
-            1,
-        ], f"Unexpected return code: {result.returncode}"
+        # This should fail with return code 1 (project not found)
+        assert (
+            result.returncode == 1
+        ), f"Expected return code 1 for non-existent project, got: {result.returncode}"
 
-        # Test import with non-existent directory
+        # Test import with non-existent directory using new CLI structure
         import_cmd = [
             "import",
+            "default",
+            "project",
             str(test_data_dir / "non-existent"),
-            "default/test-project",
-            "--include",
-            "traces",
         ]
 
         result = self._run_cli_command(import_cmd, "Import from non-existent directory")

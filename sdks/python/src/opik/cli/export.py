@@ -1131,14 +1131,14 @@ def _export_datasets(
                     )
             except Exception as e:
                 console.print(f"[red]Dataset '{name_pattern}' not found: {e}[/red]")
-                return 0
+                sys.exit(1)
         else:
             console.print("[red]Dataset name is required[/red]")
-            return 0
+            sys.exit(1)
 
         if not datasets:
             console.print(f"[red]Dataset '{name_pattern}' not found[/red]")
-            return 0
+            sys.exit(1)
 
         exported_count = 0
         for dataset in datasets:
@@ -1210,17 +1210,17 @@ def _export_prompts(
                         )
                 else:
                     console.print(f"[red]Prompt '{name_pattern}' not found[/red]")
-                    return 0
+                    sys.exit(1)
             except Exception as e:
                 console.print(f"[red]Prompt '{name_pattern}' not found: {e}[/red]")
-                return 0
+                sys.exit(1)
         else:
             console.print("[red]Prompt name is required[/red]")
-            return 0
+            sys.exit(1)
 
         if not prompts:
             console.print(f"[red]Prompt '{name_pattern}' not found[/red]")
-            return 0
+            sys.exit(1)
 
         exported_count = 0
         for prompt in prompts:
@@ -1819,7 +1819,7 @@ def _export_project_by_name(
 
         if not matching_project:
             console.print(f"[red]Project '{name}' not found[/red]")
-            return
+            sys.exit(1)
 
         if debug:
             console.print(
@@ -1889,34 +1889,12 @@ def _export_single_project(
             force,
         )
 
-        # Export related datasets for this project
-        datasets_exported = _export_datasets(
-            client,
-            output_dir,
-            1000,  # max_results
-            None,  # name_pattern
-            debug,
-            format,
-        )
-
-        # Export related prompts for this project
-        prompts_exported = _export_prompts(
-            client,
-            output_dir,
-            1000,  # max_results
-            None,  # name_pattern
-            debug,
-            format,
-        )
-
-        if (
-            traces_exported > 0
-            or traces_skipped > 0
-            or datasets_exported > 0
-            or prompts_exported > 0
-        ):
+        # Project export only exports traces - datasets and prompts must be exported separately
+        if traces_exported > 0 or traces_skipped > 0:
             if debug:
-                console.print(f"[blue]Exported project: {project.name}[/blue]")
+                console.print(
+                    f"[blue]Exported project: {project.name} with {traces_exported} traces[/blue]"
+                )
             return 1
         else:
             return 0
@@ -2075,7 +2053,7 @@ def _export_experiment_by_name(
             experiments = client.get_experiments_by_name(name)
             if not experiments:
                 console.print(f"[red]Experiment '{name}' not found[/red]")
-                return
+                sys.exit(1)
 
             experiment = experiments[0]  # Should be only one with exact name
             if debug:
@@ -2084,7 +2062,7 @@ def _export_experiment_by_name(
                 )
         except Exception as e:
             console.print(f"[red]Experiment '{name}' not found: {e}[/red]")
-            return
+            sys.exit(1)
 
         # Export the experiment
         exported_count = _export_specific_experiment_by_id(
@@ -2145,7 +2123,7 @@ def _export_dataset_by_name(
                 )
         except Exception as e:
             console.print(f"[red]Dataset '{name}' not found: {e}[/red]")
-            return
+            sys.exit(1)
 
         # Export the dataset
         exported_count = _export_single_dataset(

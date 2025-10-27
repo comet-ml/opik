@@ -638,10 +638,8 @@ def _import_by_type(
             return
 
         if not source_dir.exists():
-            console.print(
-                f"[yellow]Source directory {source_dir} does not exist[/yellow]"
-            )
-            return
+            console.print(f"[red]Source directory {source_dir} does not exist[/red]")
+            sys.exit(1)
 
         if debug:
             console.print(f"[blue]Source directory: {source_dir}[/blue]")
