@@ -1,9 +1,11 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ManualEvaluationEntityType;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -35,6 +37,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -461,6 +464,129 @@ class ManualEvaluationResourceTest {
             // Then
             assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
             assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should handle trace evaluation with span-level LLM_AS_JUDGE rule and store correct project_id")
+        void shouldHandleTraceEvaluationWithSpanLevelLlmAsJudgeRule(LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Create span-level LLM as Judge rule
+            var rule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .samplingRate(1f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .build();
+            var ruleId = evaluatorResourceClient.createEvaluator(rule, WORKSPACE_NAME, API_KEY);
+
+            var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
+                    .entityIds(List.of(traceId))
+                    .ruleIds(List.of(ruleId))
+                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .build();
+
+            // When
+            var evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(1);
+
+            // Wait for async scoring to complete and verify feedback score was stored with correct project_id
+            Awaitility.await().untilAsserted(() -> {
+                var retrievedTrace = traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY);
+                assertThat(retrievedTrace.feedbackScores()).isNotEmpty();
+
+                // Verify the feedback score has the correct project_id (not the default project)
+                FeedbackScore feedbackScore = retrievedTrace.feedbackScores().getFirst();
+                assertThat(feedbackScore.name()).isEqualTo("Relevance");
+                assertThat(feedbackScore.value()).isNotNull();
+
+                // The key assertion: verify trace's project_id matches the request's project_id
+                assertThat(retrievedTrace.projectId()).isEqualTo(projectId);
+            });
+        }
+
+        @Test
+        @DisplayName("should handle mixed rule types (span-level and trace-thread) and store correct project_id for all")
+        void shouldHandleMixedRuleTypes(LlmProviderFactory llmProviderFactory) {
+            // Given - Mock LLM response
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
+
+            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+            // Create span-level LLM as Judge rule
+            var spanLevelRule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectId(projectId)
+                    .samplingRate(1f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .build();
+            var spanLevelRuleId = evaluatorResourceClient.createEvaluator(spanLevelRule, WORKSPACE_NAME, API_KEY);
+
+            // Create trace-thread LLM as Judge rule
+            var traceThreadRule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .samplingRate(1f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .build();
+            var traceThreadRuleId = evaluatorResourceClient.createEvaluator(traceThreadRule, WORKSPACE_NAME, API_KEY);
+
+            var request = ManualEvaluationRequest.builder()
+                    .projectId(projectId)
+                    .entityIds(List.of(traceId))
+                    .ruleIds(List.of(spanLevelRuleId, traceThreadRuleId))
+                    .entityType(ManualEvaluationEntityType.TRACE)
+                    .build();
+
+            // When
+            var evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
+                    WORKSPACE_NAME);
+
+            // Then
+            assertThat(evaluationResponse.entitiesQueued()).isEqualTo(1);
+            assertThat(evaluationResponse.rulesApplied()).isEqualTo(2);
+
+            // Wait for async scoring to complete and verify feedback scores from both rule types
+            Awaitility.await().untilAsserted(() -> {
+                var retrievedTrace = traceResourceClient.getById(traceId, WORKSPACE_NAME, API_KEY);
+                assertThat(retrievedTrace.feedbackScores()).hasSizeGreaterThanOrEqualTo(1);
+
+                // The key assertion: verify trace's project_id matches the request's project_id
+                assertThat(retrievedTrace.projectId()).isEqualTo(projectId);
+            });
         }
     }
 }
