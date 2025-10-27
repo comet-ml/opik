@@ -57,11 +57,16 @@ const useManualEvaluationMutation = () => {
       return data;
     },
     onSuccess: (data, variables) => {
-      const entityLabel = variables.entityType === "trace" ? "traces" : "threads";
-      
+      const entityLabel =
+        variables.entityType === "trace" ? "traces" : "threads";
+
       toast({
         title: "Evaluation queued",
-        description: `${data.entities_queued} ${entityLabel} sent for evaluation with ${data.rules_applied} ${data.rules_applied === 1 ? "rule" : "rules"}`,
+        description: `${
+          data.entities_queued
+        } ${entityLabel} sent for evaluation with ${data.rules_applied} ${
+          data.rules_applied === 1 ? "rule" : "rules"
+        }`,
       });
     },
     onError: (error: AxiosError) => {
@@ -86,4 +91,3 @@ const useManualEvaluationMutation = () => {
 };
 
 export default useManualEvaluationMutation;
-

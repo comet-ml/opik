@@ -13,10 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import useRulesList from "@/api/automations/useRulesList";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
 import useAppStore from "@/store/AppStore";
-import {
-  EVALUATORS_RULE_TYPE,
-  EvaluatorsRule,
-} from "@/types/automations";
+import { EVALUATORS_RULE_TYPE, EvaluatorsRule } from "@/types/automations";
 import Loader from "@/components/shared/Loader/Loader";
 
 type ManualEvaluationEntityType = "trace" | "thread";
@@ -60,7 +57,7 @@ const RunEvaluationDialog: React.FunctionComponent<
   // Thread rules: trace_thread_llm_as_judge, trace_thread_user_defined_metric_python
   const rules = useMemo(() => {
     const allRules = data?.content || [];
-    
+
     if (entityType === "trace") {
       return allRules.filter(
         (rule) =>
@@ -193,7 +190,9 @@ const RunEvaluationDialog: React.FunctionComponent<
           >
             {manualEvaluationMutation.isPending
               ? "Running..."
-              : `Run evaluation with ${selectedRuleIds.size} ${selectedRuleIds.size === 1 ? "rule" : "rules"}`}
+              : `Run evaluation with ${selectedRuleIds.size} ${
+                  selectedRuleIds.size === 1 ? "rule" : "rules"
+                }`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -202,4 +201,3 @@ const RunEvaluationDialog: React.FunctionComponent<
 };
 
 export default RunEvaluationDialog;
-
