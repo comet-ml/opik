@@ -2,7 +2,6 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
-import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
@@ -16,6 +15,7 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.ListUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -123,30 +123,31 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             String workspaceId, String userName) {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
-        return Mono.fromCallable(() -> {
-            // Separate rules by type
-            List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = rules.stream()
-                    .filter(rule -> rule instanceof AutomationRuleEvaluatorLlmAsJudge)
-                    .map(rule -> (AutomationRuleEvaluatorLlmAsJudge) rule)
-                    .toList();
+        // Separate rules by type
+        List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = rules.stream()
+                .filter(rule -> rule instanceof AutomationRuleEvaluatorLlmAsJudge)
+                .map(rule -> (AutomationRuleEvaluatorLlmAsJudge) rule)
+                .toList();
 
-            List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = rules.stream()
-                    .filter(rule -> rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython)
-                    .map(rule -> (AutomationRuleEvaluatorUserDefinedMetricPython) rule)
-                    .toList();
+        List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = rules.stream()
+                .filter(rule -> rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython)
+                .map(rule -> (AutomationRuleEvaluatorUserDefinedMetricPython) rule)
+                .toList();
 
-            List<AutomationRuleEvaluator<?>> traceThreadRules = rules.stream()
-                    .filter(rule -> !(rule instanceof AutomationRuleEvaluatorLlmAsJudge)
-                            && !(rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython))
-                    .toList();
+        List<AutomationRuleEvaluator<?>> traceThreadRules = rules.stream()
+                .filter(rule -> !(rule instanceof AutomationRuleEvaluatorLlmAsJudge)
+                        && !(rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython))
+                .toList();
 
-            // Handle span-level evaluators - need to fetch full traces
-            if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
-                enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules, spanLevelPythonRules, workspaceId,
-                        userName);
-            }
+        // Handle span-level evaluators - need to fetch full traces
+        Mono<Void> spanLevelMono = Mono.empty();
+        if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
+            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules, spanLevelPythonRules,
+                    workspaceId, userName);
+        }
 
-            // Handle trace-thread evaluators - can use IDs directly
+        // Handle trace-thread evaluators - can use IDs directly
+        return spanLevelMono.then(Mono.fromCallable(() -> {
             if (!traceThreadRules.isEmpty()) {
                 List<String> traceIdStrings = traceIds.stream()
                         .map(UUID::toString)
@@ -161,74 +162,78 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             }
 
             return traceIds.size();
-        });
+        }));
     }
 
     /**
      * Enqueues span-level evaluations by fetching full trace objects and creating messages.
      */
-    private void enqueueSpanLevelEvaluations(List<UUID> traceIds,
+    private Mono<Void> enqueueSpanLevelEvaluations(List<UUID> traceIds,
             List<AutomationRuleEvaluatorLlmAsJudge> llmAsJudgeRules,
             List<AutomationRuleEvaluatorUserDefinedMetricPython> pythonRules,
             String workspaceId, String userName) {
 
         log.info("Fetching '{}' traces for span-level evaluation", traceIds.size());
 
-        // Fetch all traces
-        List<Trace> traces = Flux.fromIterable(traceIds)
+        // Fetch all traces reactively
+        return Flux.fromIterable(traceIds)
                 .flatMap(traceId -> traceService.get(traceId)
                         .onErrorResume(throwable -> {
                             log.warn("Failed to fetch trace '{}' for evaluation, skipping", traceId, throwable);
                             return Mono.empty();
                         }))
                 .collectList()
-                .block();
+                .flatMap(traces -> {
+                    if (ListUtils.emptyIfNull(traces).isEmpty()) {
+                        log.warn("No traces found to enqueue for span-level evaluation");
+                        return Mono.empty();
+                    }
 
-        if (traces == null || traces.isEmpty()) {
-            log.warn("No traces found to enqueue for span-level evaluation");
-            return;
-        }
+                    log.info("Successfully fetched '{}' traces for span-level evaluation", traces.size());
 
-        log.info("Successfully fetched '{}' traces for span-level evaluation", traces.size());
+                    // Enqueue LLM as Judge evaluations
+                    llmAsJudgeRules.forEach(rule -> {
+                        List<TraceToScoreLlmAsJudge> messages = traces.stream()
+                                .map(trace -> TraceToScoreLlmAsJudge.builder()
+                                        .trace(trace)
+                                        .ruleId(rule.getId())
+                                        .ruleName(rule.getName())
+                                        .llmAsJudgeCode(rule.getCode())
+                                        .workspaceId(workspaceId)
+                                        .userName(userName)
+                                        .build())
+                                .toList();
 
-        // Enqueue LLM as Judge evaluations
-        llmAsJudgeRules.forEach(rule -> {
-            List<TraceToScoreLlmAsJudge> messages = traces.stream()
-                    .map(trace -> TraceToScoreLlmAsJudge.builder()
-                            .trace(trace)
-                            .ruleId(rule.getId())
-                            .ruleName(rule.getName())
-                            .llmAsJudgeCode(rule.getCode())
-                            .workspaceId(workspaceId)
-                            .userName(userName)
-                            .build())
-                    .toList();
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'", messages.size(),
+                                rule.getId());
+                    });
 
-            onlineScorePublisher.enqueueMessage(messages, rule.getType());
-            log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'", messages.size(), rule.getId());
-        });
+                    // Enqueue Python evaluations (if enabled)
+                    pythonRules.forEach(rule -> {
+                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                            log.warn("Span-level Python evaluator is disabled, skipping rule '{}'", rule.getId());
+                            return;
+                        }
 
-        // Enqueue Python evaluations (if enabled)
-        pythonRules.forEach(rule -> {
-            if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
-                log.warn("Span-level Python evaluator is disabled, skipping rule '{}'", rule.getId());
-                return;
-            }
+                        List<TraceToScoreUserDefinedMetricPython> messages = traces.stream()
+                                .map(trace -> TraceToScoreUserDefinedMetricPython.builder()
+                                        .trace(trace)
+                                        .ruleId(rule.getId())
+                                        .ruleName(rule.getName())
+                                        .code(rule.getCode())
+                                        .workspaceId(workspaceId)
+                                        .userName(userName)
+                                        .build())
+                                .toList();
 
-            List<TraceToScoreUserDefinedMetricPython> messages = traces.stream()
-                    .map(trace -> TraceToScoreUserDefinedMetricPython.builder()
-                            .trace(trace)
-                            .ruleId(rule.getId())
-                            .ruleName(rule.getName())
-                            .code(rule.getCode())
-                            .workspaceId(workspaceId)
-                            .userName(userName)
-                            .build())
-                    .toList();
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(),
+                                rule.getId());
+                    });
 
-            onlineScorePublisher.enqueueMessage(messages, rule.getType());
-            log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(), rule.getId());
-        });
+                    return Mono.empty();
+                });
     }
 
     /**
