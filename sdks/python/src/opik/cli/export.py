@@ -722,20 +722,69 @@ def _prompt_to_csv_rows(prompt_data: dict) -> List[Dict]:
 
 def _experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
     """Convert experiment data to CSV rows format."""
+    rows = []
+
     # Flatten experiment metadata
     experiment_flat = _flatten_dict_with_prefix(
         {
-            "name": experiment_data.get("name"),
-            "description": experiment_data.get("description"),
-            "created_at": experiment_data.get("created_at"),
-            "last_updated_at": experiment_data.get("last_updated_at"),
+            "id": experiment_data.get("experiment", {}).get("id"),
+            "name": experiment_data.get("experiment", {}).get("name"),
+            "dataset_name": experiment_data.get("experiment", {}).get("dataset_name"),
+            "type": experiment_data.get("experiment", {}).get("type"),
+            "status": experiment_data.get("experiment", {}).get("status"),
+            "created_at": experiment_data.get("experiment", {}).get("created_at"),
+            "last_updated_at": experiment_data.get("experiment", {}).get(
+                "last_updated_at"
+            ),
+            "created_by": experiment_data.get("experiment", {}).get("created_by"),
+            "last_updated_by": experiment_data.get("experiment", {}).get(
+                "last_updated_by"
+            ),
+            "trace_count": experiment_data.get("experiment", {}).get("trace_count"),
+            "total_estimated_cost": experiment_data.get("experiment", {}).get(
+                "total_estimated_cost"
+            ),
             "downloaded_at": experiment_data.get("downloaded_at"),
         },
         "experiment",
     )
 
-    # Create a single row for the experiment
-    return [experiment_flat]
+    # Create a row for each experiment item
+    items = experiment_data.get("items", [])
+    for i, item in enumerate(items):
+        # Flatten item data
+        item_flat = _flatten_dict_with_prefix(
+            {
+                "id": item.get("id"),
+                "experiment_id": item.get("experiment_id"),
+                "dataset_item_id": item.get("dataset_item_id"),
+                "trace_id": item.get("trace_id"),
+                "input": item.get("input"),
+                "output": item.get("output"),
+                "feedback_scores": item.get("feedback_scores"),
+                "comments": item.get("comments"),
+                "total_estimated_cost": item.get("total_estimated_cost"),
+                "duration": item.get("duration"),
+                "usage": item.get("usage"),
+                "created_at": item.get("created_at"),
+                "last_updated_at": item.get("last_updated_at"),
+                "created_by": item.get("created_by"),
+                "last_updated_by": item.get("last_updated_by"),
+                "trace_visibility_mode": item.get("trace_visibility_mode"),
+            },
+            "item",
+        )
+
+        # Combine experiment and item data
+        row = {**experiment_flat, **item_flat}
+        row["item_index"] = i  # Add index for ordering
+        rows.append(row)
+
+    # If no items, return just the experiment metadata
+    if not items:
+        rows.append(experiment_flat)
+
+    return rows
 
 
 def _export_data_type(
@@ -1546,7 +1595,7 @@ def _export_experiments(
                 api_error
             ):
                 console.print(
-                    "[yellow]Warning: Some experiments have missing required fields (dataset_name). Skipping invalid experiments and continuing with valid ones.[/yellow]"
+                    "[yellow]Warning: Some experiments have a missing or empty required field (dataset_name). Skipping invalid experiments and continuing with valid ones.[/yellow]"
                 )
                 if debug:
                     console.print(f"[blue]Full error: {api_error}[/blue]")

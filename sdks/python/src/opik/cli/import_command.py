@@ -23,7 +23,7 @@ DEFAULT_PROJECT_NAME = "default"
 
 
 def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
-    """Check if a name matches the given pattern using simple string matching."""
+    """Check if a name matches the given pattern using case-insensitive substring matching."""
     if pattern is None:
         return True
     # Simple string matching - check if pattern is contained in name (case-insensitive)
@@ -385,11 +385,11 @@ def _create_dataset_item(dataset: Any, item_data: Dict[str, Any]) -> str:
             return item.get("id")
 
     dataset_name = getattr(dataset, "name", None)
+    dataset_info = f", Dataset: {dataset_name!r}" if dataset_name else ""
     raise Exception(
         f"Failed to create dataset item. "
         f"Input: {new_item.get('input')!r}, "
-        f"Expected Output: {new_item.get('expected_output')!r}"
-        + (f", Dataset: {dataset_name!r}" if dataset_name else "")
+        f"Expected Output: {new_item.get('expected_output')!r}{dataset_info}"
     )
 
 
