@@ -1,6 +1,6 @@
 import opik
 from opik.integrations.crewai import track_crewai
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, Process, Task, LLM
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
@@ -20,7 +20,7 @@ import pytest
     [
         ("openai/gpt-4o-mini", "openai"),
         (
-            "google/gemini-2.0-flash",
+            "gemini/gemini-2.0-flash",
             ANY_STRING.containing("google_"),
         ),  # google_vertexai or google_ai
         ("bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock"),
