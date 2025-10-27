@@ -148,7 +148,7 @@ const ChartConfigurationPage: React.FC = () => {
   // Add new data series
   const handleAddSeries = useCallback(() => {
     const newSeries: DataSeries = {
-      project_id: projects[0]?.id || "",
+      project_id: projectId || projects[0]?.id || "",
       metric_type: "TRACE_COUNT",
       name: `Series ${dataSeries.length + 1}`,
       filters: [],
@@ -156,7 +156,7 @@ const ChartConfigurationPage: React.FC = () => {
       order: dataSeries.length,
     };
     setDataSeries([...dataSeries, newSeries]);
-  }, [dataSeries, projects]);
+  }, [dataSeries, projectId, projects]);
 
   // Remove data series
   const handleRemoveSeries = useCallback(
