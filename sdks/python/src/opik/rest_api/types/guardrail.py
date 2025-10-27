@@ -18,6 +18,7 @@ class Guardrail(UniversalBaseModel):
     If null, the default project is used
     """
 
+    project_id: typing.Optional[str] = None
     name: GuardrailName
     result: GuardrailResult
     config: JsonNode

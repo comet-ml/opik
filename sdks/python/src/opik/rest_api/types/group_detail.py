@@ -4,13 +4,10 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .group_content import GroupContent
-from .group_details import GroupDetails
 
 
-class ExperimentGroupResponse(UniversalBaseModel):
-    content: typing.Optional[typing.Dict[str, GroupContent]] = None
-    details: typing.Optional[GroupDetails] = None
+class GroupDetail(UniversalBaseModel):
+    group_sorting: typing.Optional[typing.List[str]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
