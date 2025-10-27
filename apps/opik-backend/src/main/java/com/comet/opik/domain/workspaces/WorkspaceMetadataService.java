@@ -8,9 +8,13 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
+import java.util.UUID;
+
 @ImplementedBy(WorkspaceMetadataServiceImpl.class)
 public interface WorkspaceMetadataService {
     Mono<WorkspaceMetadata> getWorkspaceMetadata(String workspaceId);
+
+    Mono<ProjectMetadata> getProjectMetadata(String workspaceId, UUID projectId);
 }
 
 @Singleton
@@ -23,5 +27,11 @@ class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
     @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId", returnType = WorkspaceMetadata.class)
     public Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
         return workspaceMetadataDAO.getWorkspaceMetadata(workspaceId);
+    }
+
+    @Override
+    @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ProjectMetadata.class)
+    public Mono<ProjectMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return workspaceMetadataDAO.getProjectMetadata(workspaceId, projectId);
     }
 }

@@ -11,4 +11,7 @@ public class WorkspaceSettings {
     @Valid @NotNull @JsonProperty
     private double maxSizeToAllowSorting;
 
+    @Valid @NotNull @JsonProperty
+    private double maxProjectSizeToAllowSorting;
+
 }
