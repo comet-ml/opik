@@ -50,6 +50,7 @@ type ManageAIProviderDialogProps = {
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
   configuredProvidersList?: ProviderKey[];
+  defaultProvider?: PROVIDER_TYPE;
 };
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
@@ -59,8 +60,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onAddProvider,
   onDeleteProvider,
   configuredProvidersList,
+  defaultProvider,
 }) => {
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
+  const [isAddingCustomProvider, setIsAddingCustomProvider] = useState(false);
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
@@ -70,18 +73,23 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   >({
     resolver: zodResolver(AIProviderFormSchema),
     defaultValues: {
-      provider: providerKey?.provider || "",
+      // For custom providers being edited, use the provider ID instead of the provider type
+      provider:
+        providerKey?.provider === PROVIDER_TYPE.CUSTOM
+          ? providerKey.id
+          : providerKey?.provider || defaultProvider || "",
       apiKey: "",
-      // @ts-expect-error not to trigger type error when we have different schemas to different providers
       location: providerKey?.configuration?.location ?? "",
       url: providerKey?.base_url ?? "",
+      // Use provider_name for custom providers, keyName is just the display name
+      providerName: providerKey?.provider_name ?? providerKey?.keyName ?? "",
       models: convertCustomProviderModels(
         providerKey?.configuration?.models ?? "",
       ),
-    },
+    } as AIProviderFormType,
   });
 
-  const provider = form.watch("provider") as PROVIDER_TYPE | "";
+  const provider = form.watch("provider") as PROVIDER_TYPE | string | "";
 
   const configuredProviderKeys = useMemo(
     () => (configuredProvidersList || []).map((p) => p.provider),
@@ -89,8 +97,22 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   );
 
   const calculatedProviderKey = useMemo(() => {
+    // Don't auto-load existing provider when adding custom provider
+    if (isAddingCustomProvider) {
+      return undefined;
+    }
+
+    // If provider is a custom provider ID (not a PROVIDER_TYPE enum)
+    if (
+      provider &&
+      !Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE)
+    ) {
+      return configuredProvidersList?.find((p) => p.id === provider);
+    }
+
+    // Standard provider lookup
     return configuredProvidersList?.find((p) => provider === p.provider);
-  }, [configuredProvidersList, provider]);
+  }, [configuredProvidersList, provider, isAddingCustomProvider]);
 
   const isConfiguredProvider = Boolean(calculatedProviderKey);
   const isEdit = Boolean(providerKey || calculatedProviderKey);
@@ -104,59 +126,94 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       : "Add configuration"
     : "Done";
 
-  const cloudConfigHandler = useCallback(() => {
-    const apiKey = form.getValues("apiKey");
-    const url = form.getValues("url");
-    const location = form.getValues("location");
-    const models = convertCustomProviderModels(
-      form.getValues("models") ?? "",
-      true,
-    );
-    const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
-    const isCustom = provider === PROVIDER_TYPE.CUSTOM;
+  const cloudConfigHandler = useCallback(
+    (data: AIProviderFormType) => {
+      // Use the validated data passed from form.handleSubmit instead of form.getValues()
+      const apiKey = data.apiKey;
+      const url = "url" in data ? data.url : "";
+      const location = "location" in data ? data.location : "";
+      const providerName = "providerName" in data ? data.providerName : "";
+      const modelsRaw = "models" in data ? data.models ?? "" : "";
+      const models = convertCustomProviderModels(modelsRaw, true);
 
-    const configuration =
-      isVertex || isCustom
-        ? {
-            location: isVertex ? location : undefined,
-            models: isCustom ? models : undefined,
-          }
-        : undefined;
+      // Determine the actual provider type
+      // If isAddingCustomProvider is true, we know it's a custom provider
+      const actualProvider = isAddingCustomProvider
+        ? PROVIDER_TYPE.CUSTOM
+        : calculatedProviderKey?.provider ||
+          (Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE)
+            ? (provider as PROVIDER_TYPE)
+            : PROVIDER_TYPE.CUSTOM);
 
-    if (providerKey || calculatedProviderKey) {
-      updateMutate({
-        providerKey: {
-          id: providerKey?.id ?? calculatedProviderKey?.id,
-          apiKey,
-          base_url: isCustom ? url : undefined,
-          ...(configuration && { configuration }),
-        },
-      });
-    } else if (provider) {
-      if (isFunction(onAddProvider)) {
-        onAddProvider(provider);
+      const isVertex = actualProvider === PROVIDER_TYPE.VERTEX_AI;
+      const isCustom = actualProvider === PROVIDER_TYPE.CUSTOM;
+
+      const configuration =
+        isVertex || isCustom
+          ? {
+              location: isVertex ? location : undefined,
+              models: isCustom ? models : undefined,
+            }
+          : undefined;
+
+      if (providerKey || calculatedProviderKey) {
+        updateMutate({
+          providerKey: {
+            id: providerKey?.id ?? calculatedProviderKey?.id,
+            apiKey,
+            base_url: isCustom ? url : undefined,
+            keyName: isCustom ? providerName : undefined,
+            ...(configuration && { configuration }),
+          },
+        });
+      } else if (provider || isAddingCustomProvider) {
+        // Use provider from form or isAddingCustomProvider flag for new providers
+        if (isFunction(onAddProvider)) {
+          onAddProvider(actualProvider);
+        }
+
+        createMutate({
+          providerKey: {
+            apiKey,
+            provider: actualProvider,
+            base_url: isCustom ? url : undefined,
+            keyName: isCustom ? providerName : undefined,
+            ...(configuration && { configuration }),
+          },
+        });
+      }
+      setIsAddingCustomProvider(false);
+      setOpen(false);
+    },
+    [
+      provider,
+      providerKey,
+      calculatedProviderKey,
+      setOpen,
+      updateMutate,
+      onAddProvider,
+      createMutate,
+      isAddingCustomProvider,
+    ],
+  );
+
+  const handleSubmitClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+
+      // Ensure provider field is set before validation when adding custom provider
+      if (
+        isAddingCustomProvider &&
+        form.getValues("provider") !== PROVIDER_TYPE.CUSTOM
+      ) {
+        form.setValue("provider", PROVIDER_TYPE.CUSTOM);
       }
 
-      createMutate({
-        providerKey: {
-          apiKey,
-          provider,
-          base_url: isCustom ? url : undefined,
-          ...(configuration && { configuration }),
-        },
-      });
-    }
-    setOpen(false);
-  }, [
-    form,
-    provider,
-    providerKey,
-    calculatedProviderKey,
-    setOpen,
-    updateMutate,
-    onAddProvider,
-    createMutate,
-  ]);
+      // Trigger form submission with validation and pass validated data to handler
+      form.handleSubmit(cloudConfigHandler)();
+    },
+    [form, isAddingCustomProvider, cloudConfigHandler],
+  );
 
   const deleteProviderKeyHandler = useCallback(() => {
     if (calculatedProviderKey) {
@@ -170,16 +227,48 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     }
   }, [provider, calculatedProviderKey, onDeleteProvider, deleteMutate]);
 
+  const handleAddCustomProvider = useCallback(() => {
+    setIsAddingCustomProvider(true);
+    // Clear the provider field so it doesn't show the previously selected provider
+    form.setValue("provider", "", { shouldValidate: false });
+    // Clear other fields too
+    form.setValue("url", "");
+    form.setValue("providerName", "");
+    form.setValue("models", "");
+    form.setValue("location", "");
+  }, [form]);
+
+  // Reset isAddingCustomProvider when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setIsAddingCustomProvider(false);
+    }
+  }, [open]);
+
   const getProviderDetails = () => {
     if (provider === PROVIDER_TYPE.VERTEX_AI) {
       return <VertexAIProviderDetails form={form} />;
     }
 
-    if (provider === PROVIDER_TYPE.CUSTOM) {
+    // When adding a custom provider, the form.reset() might not have updated the watched
+    // provider value yet, so we need to check the isAddingCustomProvider flag
+    // Check if provider is CUSTOM_LLM type or a custom provider ID (UUID)
+    const isCustomProvider =
+      isAddingCustomProvider ||
+      provider === PROVIDER_TYPE.CUSTOM ||
+      (provider &&
+        !Object.values(PROVIDER_TYPE).includes(provider as PROVIDER_TYPE));
+
+    if (isCustomProvider) {
       return <CustomProviderDetails form={form} />;
     }
 
-    return <CloudAIProviderDetails provider={provider} form={form} />;
+    return (
+      <CloudAIProviderDetails
+        provider={provider as PROVIDER_TYPE}
+        form={form}
+      />
+    );
   };
 
   return (
@@ -210,29 +299,74 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                       <FormControl>
                         <ProviderSelect
                           disabled={Boolean(providerKey)}
-                          value={(field.value as PROVIDER_TYPE) || ""}
+                          value={(field.value as string) || ""}
+                          isAddingCustomProvider={isAddingCustomProvider}
                           onChange={(v) => {
-                            const p = v as PROVIDER_TYPE;
-                            const providerData = configuredProvidersList?.find(
-                              (c) => p === c.provider,
-                            );
+                            // Reset isAddingCustomProvider when user manually selects a provider
+                            setIsAddingCustomProvider(false);
 
-                            form.setValue("url", providerData?.base_url ?? "");
-                            form.setValue(
-                              "models",
-                              convertCustomProviderModels(
-                                providerData?.configuration?.models ?? "",
-                              ),
-                            );
-                            form.setValue(
-                              "location",
-                              providerData?.configuration?.location ?? "",
-                            );
+                            // Check if it's a custom provider ID
+                            const customProvider =
+                              configuredProvidersList?.find((c) => c.id === v);
 
-                            field.onChange(p);
+                            // For custom providers, store the ID in the provider field
+                            // The calculatedProviderKey will use this to find the actual provider
+                            if (customProvider) {
+                              // Store the custom provider ID so calculatedProviderKey can find it
+                              field.onChange(v);
+
+                              // Populate the form fields with the custom provider's data
+                              form.setValue(
+                                "url",
+                                customProvider.base_url ?? "",
+                              );
+                              form.setValue(
+                                "providerName",
+                                customProvider.provider_name ??
+                                  customProvider.keyName ??
+                                  "",
+                              );
+                              form.setValue(
+                                "models",
+                                convertCustomProviderModels(
+                                  customProvider.configuration?.models ?? "",
+                                ),
+                              );
+                              form.setValue("location", "");
+                            } else {
+                              // For standard providers, store the PROVIDER_TYPE
+                              const p = v as PROVIDER_TYPE;
+                              field.onChange(p);
+
+                              const providerData =
+                                configuredProvidersList?.find(
+                                  (c) => p === c.provider,
+                                );
+
+                              form.setValue(
+                                "url",
+                                providerData?.base_url ?? "",
+                              );
+                              form.setValue(
+                                "providerName",
+                                providerData?.keyName ?? "",
+                              );
+                              form.setValue(
+                                "models",
+                                convertCustomProviderModels(
+                                  providerData?.configuration?.models ?? "",
+                                ),
+                              );
+                              form.setValue(
+                                "location",
+                                providerData?.configuration?.location ?? "",
+                              );
+                            }
                           }}
                           configuredProviderKeys={configuredProviderKeys}
+                          configuredProvidersList={configuredProvidersList}
                           hasError={Boolean(validationErrors?.message)}
+                          onAddCustomProvider={handleAddCustomProvider}
                         />
                       </FormControl>
                       <FormMessage />
@@ -269,7 +403,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(cloudConfigHandler)}>
+          <Button type="submit" onClick={handleSubmitClick}>
             {buttonText}
           </Button>
         </DialogFooter>

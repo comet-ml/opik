@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { ColumnPinningState } from "@tanstack/react-table";
 
 import { convertColumnDataToColumn } from "@/lib/table";
-import { ProviderKey } from "@/types/providers";
+import { ProviderKey, PROVIDER_TYPE } from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useAppStore from "@/store/AppStore";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
@@ -26,7 +26,16 @@ export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => PROVIDERS[row.provider]?.apiKeyName,
+    accessorFn: (row) =>
+      row.provider === PROVIDER_TYPE.CUSTOM
+        ? row.keyName || "Custom Provider"
+        : PROVIDERS[row.provider]?.apiKeyName,
+  },
+  {
+    id: "base_url",
+    label: "URL",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.base_url || "-",
   },
   {
     id: "created_at",
@@ -75,9 +84,17 @@ const AIProvidersTab = () => {
     return providerKeys.filter((p) => {
       const providerDetails = PROVIDERS[p.provider];
 
+      // Handle custom providers differently - search by keyName
+      if (p.provider === PROVIDER_TYPE.CUSTOM) {
+        return (
+          p.keyName?.toLowerCase().includes(searchLowerCase) ||
+          p.base_url?.toLowerCase().includes(searchLowerCase)
+        );
+      }
+
       return (
-        providerDetails.apiKeyName.toLowerCase().includes(searchLowerCase) ||
-        providerDetails.value.toLowerCase().includes(searchLowerCase)
+        providerDetails?.apiKeyName?.toLowerCase().includes(searchLowerCase) ||
+        providerDetails?.value?.toLowerCase().includes(searchLowerCase)
       );
     });
   }, [providerKeys, search]);
@@ -125,7 +142,9 @@ const AIProvidersTab = () => {
         <Button
           onClick={handleAddConfigurationClick}
           size="sm"
-          disabled={areAllProvidersConfigured(providerKeys)}
+          disabled={areAllProvidersConfigured(
+            providerKeys.filter((pk) => pk.provider !== PROVIDER_TYPE.CUSTOM),
+          )}
         >
           Add configuration
         </Button>
@@ -145,6 +164,7 @@ const AIProvidersTab = () => {
           </DataTableNoData>
         }
       />
+
       <ManageAIProviderDialog
         configuredProvidersList={providerKeys}
         key={resetDialogKeyRef.current}

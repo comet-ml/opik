@@ -421,6 +421,7 @@ export interface ProviderKeyConfiguration {
 export interface ProviderKey {
   id: string;
   keyName: string;
+  provider_name?: string; // For custom providers, unique identifier used in model names
   created_at: string;
   provider: PROVIDER_TYPE;
   base_url?: string;
@@ -429,6 +430,17 @@ export interface ProviderKey {
 
 export interface ProviderKeyWithAPIKey extends ProviderKey {
   apiKey: string;
+}
+
+export interface ProviderOption {
+  value: string;
+  label?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  configured?: boolean;
+  isCustomProvider?: boolean;
+  description?: string;
+  isAddCustom?: boolean;
+  isSeparator?: boolean;
 }
 
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
