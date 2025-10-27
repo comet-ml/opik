@@ -14,6 +14,7 @@ export const GuardrailWrite: core.serialization.ObjectSchema<serializers.Guardra
         entityId: core.serialization.property("entity_id", core.serialization.string()),
         secondaryId: core.serialization.property("secondary_id", core.serialization.string()),
         projectName: core.serialization.property("project_name", core.serialization.string().optional()),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         name: GuardrailWriteName,
         result: GuardrailWriteResult,
         config: JsonNode,
@@ -25,6 +26,7 @@ export declare namespace GuardrailWrite {
         entity_id: string;
         secondary_id: string;
         project_name?: string | null;
+        project_id?: string | null;
         name: GuardrailWriteName.Raw;
         result: GuardrailWriteResult.Raw;
         config: JsonNode.Raw;

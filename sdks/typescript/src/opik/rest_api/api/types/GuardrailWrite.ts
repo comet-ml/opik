@@ -9,6 +9,7 @@ export interface GuardrailWrite {
     secondaryId: string;
     /** If null, the default project is used */
     projectName?: string;
+    projectId?: string;
     name: OpikApi.GuardrailWriteName;
     result: OpikApi.GuardrailWriteResult;
     config: OpikApi.JsonNode;

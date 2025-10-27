@@ -17,6 +17,7 @@ class GuardrailWrite(UniversalBaseModel):
     If null, the default project is used
     """
 
+    project_id: typing.Optional[str] = None
     name: GuardrailWriteName
     result: GuardrailWriteResult
     config: JsonNode

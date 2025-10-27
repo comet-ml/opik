@@ -8879,11 +8879,27 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/GroupContent"
+        details:
+          $ref: "#/components/schemas/GroupDetails"
     GroupContent:
       type: object
       properties:
         label:
           type: string
+    GroupDetail:
+      type: object
+      properties:
+        group_sorting:
+          type: array
+          items:
+            type: string
+    GroupDetails:
+      type: object
+      properties:
+        groups_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupDetail"
     AggregationData:
       type: object
       properties:
@@ -9443,6 +9459,9 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           type: string
           enum:
@@ -9499,6 +9518,9 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           type: string
           enum:
@@ -11080,6 +11102,9 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           minLength: 1
           type: string
@@ -11605,6 +11630,9 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           minLength: 1
           type: string

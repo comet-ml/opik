@@ -219,6 +219,8 @@ export * from "./JsonListStringPublic";
 export * from "./PromptVersionLinkPublic";
 export * from "./ExperimentGroupResponse";
 export * from "./GroupContent";
+export * from "./GroupDetail";
+export * from "./GroupDetails";
 export * from "./AggregationData";
 export * from "./ExperimentGroupAggregationsResponse";
 export * from "./GroupContentWithAggregations";
