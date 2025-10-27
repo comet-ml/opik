@@ -190,12 +190,12 @@ server:
 # Jackson JSON processing configuration
 # Controls limits for JSON deserialization to prevent memory exhaustion
 jacksonConfig:
-  # Default: 262144000 (250MB) for self-hosted installations (Cloud default is 100MB via MAX_JSON_STRING_LENGTH in docker-compose.yaml)
+  # Default: 104857600 (100MB)
   # Description: Maximum size for individual string values during JSON deserialization. 
   #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
-  maxStringLength: ${MAX_JSON_STRING_LENGTH:-262144000}
+  maxStringLength: ${JACKSON_MAX_STRING_LENGTH:-104857600}
 
 # Configuration for batch operations
 batchOperations:
@@ -453,9 +453,12 @@ s3Config:
   s3Url: ${S3_URL:-http://localhost:9001}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
+
+# Attachments configuration
+attachmentsConfig:
   # Description: Minimum size (bytes) for base64 strings to be considered attachments
-  # Default: 5000 (5KB) for local dev, 256000 (250KB) for production (set via STRIP_ATTACHMENTS_MIN_SIZE)
-  stripAttachmentsMinSize: ${STRIP_ATTACHMENTS_MIN_SIZE:-5000}
+  # Default: 256000 (256KB)
+  stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
 # Python evaluator configuration
 pythonEvaluator:

@@ -109,8 +109,8 @@ public class TraceFilterEvaluationService {
         try {
             return JsonUtils.getMapper().writeValueAsString(jsonValue);
         } catch (JsonProcessingException e) {
-            log.warn("Failed to convert JSON value to string: {}", e.getMessage());
-            return null;
+            log.warn("Failed to convert value to string: {}", e.getMessage());
+            return jsonValue.toString();
         }
     }
 

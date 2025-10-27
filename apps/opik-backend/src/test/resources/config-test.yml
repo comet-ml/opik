@@ -315,9 +315,12 @@ s3Config:
   s3Url: http://localhost:9000
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: true
+
+# Attachments configuration
+attachmentsConfig:
   # Description: Minimum size (bytes) for base64 strings to be considered attachments
   # For tests, use 5KB (same as local dev default)
-  stripAttachmentsMinSize: 5000
+  stripMinSize: 5000
 
 # Python evaluator configuration
 pythonEvaluator:

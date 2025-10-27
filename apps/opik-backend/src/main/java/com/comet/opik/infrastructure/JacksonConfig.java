@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,5 +24,5 @@ public class JacksonConfig {
      * Attachment stripping happens asynchronously after initial ingestion.
      */
     @JsonProperty
-    @Min(value = 1048576, message = "maxStringLength must be at least 1MB") private int maxStringLength = 20_000_000; // 20MB - Jackson default
+    @Min(value = 1048576, message = "maxStringLength must be at least 1MB") private int maxStringLength = StreamReadConstraints.DEFAULT_MAX_STRING_LEN;
 }

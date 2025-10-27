@@ -5,10 +5,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -35,7 +38,7 @@ public class JsonUtils {
      * Initialized with minimal defaults (20MB) and reconfigured by OpikApplication
      * during startup to match config.yml settings.
      */
-    private static ObjectMapper MAPPER;
+    private static volatile ObjectMapper MAPPER;
 
     static {
         // Initialize with minimal default (20MB - Jackson default) until OpikApplication configures it
@@ -70,6 +73,8 @@ public class JsonUtils {
         mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SnakeCaseStrategy.INSTANCE);
         mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
         mapper.configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
+        mapper.configure(SerializationFeature.INDENT_OUTPUT, false);
+        mapper.configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, false);
         mapper.enable(JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS.mappedFeature());
 
         // Register JavaTimeModule for proper date/time handling
@@ -81,8 +86,6 @@ public class JsonUtils {
         // Configure stream read constraints
         StreamReadConstraints readConstraints = StreamReadConstraints.builder()
                 .maxStringLength(maxStringLength)
-                .maxNestingDepth(1000)
-                .maxNumberLength(1000)
                 .build();
         mapper.getFactory().setStreamReadConstraints(readConstraints);
 
@@ -103,7 +106,7 @@ public class JsonUtils {
      *
      * @return A new ObjectNode instance
      */
-    public static com.fasterxml.jackson.databind.node.ObjectNode createObjectNode() {
+    public static ObjectNode createObjectNode() {
         return MAPPER.createObjectNode();
     }
 
@@ -112,7 +115,7 @@ public class JsonUtils {
      *
      * @return A new ArrayNode instance
      */
-    public static com.fasterxml.jackson.databind.node.ArrayNode createArrayNode() {
+    public static ArrayNode createArrayNode() {
         return MAPPER.createArrayNode();
     }
 
