@@ -5,6 +5,7 @@ import { Filter } from "@/types/filters";
 import { processFiltersArray } from "@/lib/filters";
 
 export enum METRIC_NAME_TYPE {
+  // Existing metrics
   FEEDBACK_SCORES = "FEEDBACK_SCORES",
   TRACE_COUNT = "TRACE_COUNT",
   TRACE_DURATION = "DURATION",
@@ -14,6 +15,30 @@ export enum METRIC_NAME_TYPE {
   THREAD_COUNT = "THREAD_COUNT",
   THREAD_DURATION = "THREAD_DURATION",
   THREAD_FEEDBACK_SCORES = "THREAD_FEEDBACK_SCORES",
+  
+  // Easy additions
+  ERROR_COUNT = "ERROR_COUNT",
+  SPAN_COUNT = "SPAN_COUNT",
+  LLM_SPAN_COUNT = "LLM_SPAN_COUNT",
+  
+  // Medium additions - token metrics
+  COMPLETION_TOKENS = "COMPLETION_TOKENS",
+  PROMPT_TOKENS = "PROMPT_TOKENS",
+  TOTAL_TOKENS = "TOTAL_TOKENS",
+  
+  // Medium additions - count metrics
+  INPUT_COUNT = "INPUT_COUNT",
+  OUTPUT_COUNT = "OUTPUT_COUNT",
+  METADATA_COUNT = "METADATA_COUNT",
+  TAGS_AVERAGE = "TAGS_AVERAGE",
+  
+  // Medium additions - calculated metrics
+  TRACE_WITH_ERRORS_PERCENT = "TRACE_WITH_ERRORS_PERCENT",
+  GUARDRAILS_PASS_RATE = "GUARDRAILS_PASS_RATE",
+  AVG_COST_PER_TRACE = "AVG_COST_PER_TRACE",
+  
+  // Medium additions - span duration
+  SPAN_DURATION = "SPAN_DURATION",
 }
 
 export enum INTERVAL_TYPE {

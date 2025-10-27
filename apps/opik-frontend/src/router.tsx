@@ -25,6 +25,11 @@ import TracesPage from "@/components/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/components/pages/PromptPage/PromptPage";
+import {
+  DashboardsPage,
+  DashboardViewPage,
+  ChartConfigurationPage,
+} from "@/components/pages/DashboardsPage";
 import RedirectProjects from "@/components/redirect/RedirectProjects";
 import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
@@ -182,6 +187,45 @@ const tracesRoute = createRoute({
   path: "/traces",
   getParentRoute: () => projectRoute,
   component: TracesPage,
+});
+
+// ----------- dashboards
+const dashboardsRoute = createRoute({
+  path: "/dashboards",
+  getParentRoute: () => projectRoute,
+  staticData: {
+    title: "Dashboards",
+  },
+});
+
+const dashboardsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardsPage,
+});
+
+const dashboardViewRoute = createRoute({
+  path: "/$dashboardId",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardViewPage,
+  staticData: {
+    param: "dashboardId",
+  },
+});
+
+const chartConfigNewRoute = createRoute({
+  path: "/$dashboardId/charts/new",
+  getParentRoute: () => dashboardsRoute,
+  component: ChartConfigurationPage,
+});
+
+const chartConfigEditRoute = createRoute({
+  path: "/$dashboardId/charts/$chartId/edit",
+  getParentRoute: () => dashboardsRoute,
+  component: ChartConfigurationPage,
+  staticData: {
+    param: "chartId",
+  },
 });
 
 // ----------- experiments
@@ -451,7 +495,15 @@ const routeTree = rootRoute.addChildren([
     workspaceRoute.addChildren([
       projectsRoute.addChildren([
         projectsListRoute,
-        projectRoute.addChildren([tracesRoute]),
+        projectRoute.addChildren([
+          tracesRoute,
+          dashboardsRoute.addChildren([
+            dashboardsListRoute,
+            dashboardViewRoute,
+            chartConfigNewRoute,
+            chartConfigEditRoute,
+          ]),
+        ]),
       ]),
       experimentsRoute.addChildren([
         experimentsListRoute,

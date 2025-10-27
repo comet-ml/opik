@@ -33,16 +33,41 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
             @NonNull ProjectService projectService) {
-        projectMetricHandler = Map.of(
-                MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount,
-                MetricType.THREAD_COUNT, projectMetricsDAO::getThreadCount,
-                MetricType.THREAD_DURATION, projectMetricsDAO::getThreadDuration,
-                MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores,
-                MetricType.THREAD_FEEDBACK_SCORES, projectMetricsDAO::getThreadFeedbackScores,
-                MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage,
-                MetricType.COST, projectMetricsDAO::getCost,
-                MetricType.DURATION, projectMetricsDAO::getDuration,
-                MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount);
+        projectMetricHandler = Map.ofEntries(
+                // Existing metrics
+                Map.entry(MetricType.TRACE_COUNT, projectMetricsDAO::getTraceCount),
+                Map.entry(MetricType.THREAD_COUNT, projectMetricsDAO::getThreadCount),
+                Map.entry(MetricType.THREAD_DURATION, projectMetricsDAO::getThreadDuration),
+                Map.entry(MetricType.FEEDBACK_SCORES, projectMetricsDAO::getFeedbackScores),
+                Map.entry(MetricType.THREAD_FEEDBACK_SCORES, projectMetricsDAO::getThreadFeedbackScores),
+                Map.entry(MetricType.TOKEN_USAGE, projectMetricsDAO::getTokenUsage),
+                Map.entry(MetricType.COST, projectMetricsDAO::getCost),
+                Map.entry(MetricType.DURATION, projectMetricsDAO::getDuration),
+                Map.entry(MetricType.GUARDRAILS_FAILED_COUNT, projectMetricsDAO::getGuardrailsFailedCount),
+
+                // Easy additions
+                Map.entry(MetricType.ERROR_COUNT, projectMetricsDAO::getErrorCount),
+                Map.entry(MetricType.SPAN_COUNT, projectMetricsDAO::getSpanCount),
+                Map.entry(MetricType.LLM_SPAN_COUNT, projectMetricsDAO::getLlmSpanCount),
+
+                // Medium additions - token metrics
+                Map.entry(MetricType.COMPLETION_TOKENS, projectMetricsDAO::getCompletionTokens),
+                Map.entry(MetricType.PROMPT_TOKENS, projectMetricsDAO::getPromptTokens),
+                Map.entry(MetricType.TOTAL_TOKENS, projectMetricsDAO::getTotalTokens),
+
+                // Medium additions - count metrics
+                Map.entry(MetricType.INPUT_COUNT, projectMetricsDAO::getInputCount),
+                Map.entry(MetricType.OUTPUT_COUNT, projectMetricsDAO::getOutputCount),
+                Map.entry(MetricType.METADATA_COUNT, projectMetricsDAO::getMetadataCount),
+                Map.entry(MetricType.TAGS_AVERAGE, projectMetricsDAO::getTagsAverage),
+
+                // Medium additions - calculated metrics
+                Map.entry(MetricType.TRACE_WITH_ERRORS_PERCENT, projectMetricsDAO::getTraceWithErrorsPercent),
+                Map.entry(MetricType.GUARDRAILS_PASS_RATE, projectMetricsDAO::getGuardrailsPassRate),
+                Map.entry(MetricType.AVG_COST_PER_TRACE, projectMetricsDAO::getAvgCostPerTrace),
+
+                // Medium additions - span duration
+                Map.entry(MetricType.SPAN_DURATION, projectMetricsDAO::getSpanDuration));
         this.projectService = projectService;
     }
 

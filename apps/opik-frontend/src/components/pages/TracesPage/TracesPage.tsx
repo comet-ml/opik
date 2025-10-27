@@ -1,5 +1,6 @@
 import React from "react";
 import { StringParam, useQueryParam } from "use-query-params";
+import { useNavigate } from "@tanstack/react-router";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,13 +13,16 @@ import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
 import { Button } from "@/components/ui/button";
-import { Construction } from "lucide-react";
+import { Construction, LayoutDashboard } from "lucide-react";
 import { useState } from "react";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useAppStore from "@/store/AppStore";
 
 const TracesPage = () => {
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const projectId = useProjectIdFromURL();
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
@@ -60,12 +64,27 @@ const TracesPage = () => {
           >
             {projectName}
           </h1>
-          {isGuardrailsEnabled && (
-            <Button variant="outline" size="sm" onClick={openGuardrailsDialog}>
-              <Construction className="mr-1.5 size-3.5" />
-              Set a guardrail
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigate({
+                  to: "/$workspaceName/projects/$projectId/dashboards",
+                  params: { workspaceName, projectId },
+                });
+              }}
+            >
+              <LayoutDashboard className="mr-1.5 size-3.5" />
+              Dashboards
             </Button>
-          )}
+            {isGuardrailsEnabled && (
+              <Button variant="outline" size="sm" onClick={openGuardrailsDialog}>
+                <Construction className="mr-1.5 size-3.5" />
+                Set a guardrail
+              </Button>
+            )}
+          </div>
         </PageBodyStickyContainer>
         {project?.description && (
           <PageBodyStickyContainer

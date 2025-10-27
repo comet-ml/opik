@@ -66,6 +66,30 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getCost(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
     Mono<List<Entry>> getGuardrailsFailedCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    // Easy additions - data already aggregated
+    Mono<List<Entry>> getErrorCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getLlmSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    // Medium additions - token metrics
+    Mono<List<Entry>> getCompletionTokens(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getPromptTokens(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getTotalTokens(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    // Medium additions - count metrics
+    Mono<List<Entry>> getInputCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getOutputCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getMetadataCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getTagsAverage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    // Medium additions - calculated metrics
+    Mono<List<Entry>> getTraceWithErrorsPercent(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getGuardrailsPassRate(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+    Mono<List<Entry>> getAvgCostPerTrace(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    // Medium additions - span duration
+    Mono<List<Entry>> getSpanDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 }
 
 @Slf4j
@@ -571,6 +595,318 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 STEP <step>;
             """.formatted(THREAD_FILTERED_PREFIX);
 
+    // EASY METRICS - Data already aggregated, just expose it
+
+    private static final String GET_ERROR_COUNT = """
+            %s, spans_with_errors AS (
+                SELECT t.start_time, t.id
+                FROM traces_filtered t
+                WHERE t.id IN (
+                    SELECT DISTINCT id
+                    FROM traces FINAL
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    AND error_info != ''
+                )
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(count(DISTINCT id), 0) as count
+            FROM spans_with_errors
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_SPAN_COUNT = """
+            %s, spans_dedup AS (
+                SELECT t.start_time,
+                       count(DISTINCT s.id) AS span_count
+                FROM traces_filtered t
+                JOIN (
+                    SELECT trace_id, id
+                    FROM spans final
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ) s ON s.trace_id = t.id
+                GROUP BY t.start_time, t.id
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(avg(span_count), 0) AS avg_span_count
+            FROM spans_dedup
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_LLM_SPAN_COUNT = """
+            %s, llm_spans_dedup AS (
+                SELECT t.start_time,
+                       countIf(DISTINCT s.id, s.type = 'llm') AS llm_span_count
+                FROM traces_filtered t
+                JOIN (
+                    SELECT trace_id, id, type
+                    FROM spans final
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ) s ON s.trace_id = t.id
+                GROUP BY t.start_time, t.id
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(avg(llm_span_count), 0) AS avg_llm_span_count
+            FROM llm_spans_dedup
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    // MEDIUM METRICS - Token metrics (extract specific keys from usage map)
+
+    private static final String GET_SPECIFIC_TOKEN_TYPE = """
+            %s, spans_dedup AS (
+                SELECT t.start_time as start_time,
+                       value
+                FROM traces_filtered t
+                JOIN (
+                    SELECT
+                        trace_id,
+                        usage
+                    FROM spans final
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ) s ON s.trace_id = t.id
+                ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
+                WHERE name = :token_type AND value > 0
+            )
+            SELECT <bucket> AS bucket,
+                    nullIf(sum(value), 0) AS value
+            FROM spans_dedup
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    // MEDIUM METRICS - Count metrics
+
+    private static final String GET_INPUT_COUNT = """
+            %s, traces_with_input AS (
+                SELECT t.start_time
+                FROM traces_filtered t
+                WHERE t.id IN (
+                    SELECT id
+                    FROM traces FINAL
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    AND input_length > 0
+                )
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(count(*), 0) as count
+            FROM traces_with_input
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_OUTPUT_COUNT = """
+            %s, traces_with_output AS (
+                SELECT t.start_time
+                FROM traces_filtered t
+                WHERE t.id IN (
+                    SELECT id
+                    FROM traces FINAL
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    AND output_length > 0
+                )
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(count(*), 0) as count
+            FROM traces_with_output
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_METADATA_COUNT = """
+            %s, traces_with_metadata AS (
+                SELECT t.start_time
+                FROM traces_filtered t
+                WHERE t.id IN (
+                    SELECT id
+                    FROM traces FINAL
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    AND metadata_length > 0
+                )
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(count(*), 0) as count
+            FROM traces_with_metadata
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_TAGS_AVERAGE = """
+            %s, traces_with_tags AS (
+                SELECT t.start_time,
+                       t2.tags_length
+                FROM traces_filtered t
+                JOIN (
+                    SELECT id, length(tags) as tags_length
+                    FROM traces FINAL
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ) t2 ON t2.id = t.id
+            )
+            SELECT <bucket> AS bucket,
+                   nullIf(avg(tags_length), 0) AS avg_tags
+            FROM traces_with_tags
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    // MEDIUM METRICS - Calculated metrics
+
+    private static final String GET_TRACE_WITH_ERRORS_PERCENT = """
+            %s, trace_stats AS (
+                SELECT
+                    <bucket> AS bucket,
+                    count(DISTINCT t.id) AS total_traces,
+                    countIf(DISTINCT t.id, te.id IS NOT NULL) AS error_traces
+                FROM traces_filtered t
+                LEFT JOIN (
+                    SELECT id
+                    FROM traces FINAL
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                    AND error_info != ''
+                ) te ON te.id = t.id
+                GROUP BY bucket
+            )
+            SELECT bucket,
+                   if(total_traces > 0, (error_traces * 100.0) / total_traces, 0) AS error_percent
+            FROM trace_stats
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_GUARDRAILS_PASS_RATE = """
+            %s, guardrails_stats AS (
+                SELECT
+                    <bucket> AS bucket,
+                    count(DISTINCT g.id) AS total_guardrails,
+                    countIf(DISTINCT g.id, g.result = 'passed') AS passed_guardrails
+                FROM traces_filtered t
+                JOIN guardrails g ON g.entity_id = t.id
+                WHERE g.entity_type = 'trace'
+                GROUP BY bucket
+            )
+            SELECT bucket,
+                   if(total_guardrails > 0, (passed_guardrails * 100.0) / total_guardrails, 0) AS pass_rate
+            FROM guardrails_stats
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    private static final String GET_AVG_COST_PER_TRACE = """
+            %s, cost_stats AS (
+                SELECT
+                    <bucket> AS bucket,
+                    count(DISTINCT t.id) AS trace_count,
+                    sum(s.total_estimated_cost) AS total_cost
+                FROM traces_filtered t
+                LEFT JOIN (
+                    SELECT trace_id, total_estimated_cost
+                    FROM spans final
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ) s ON s.trace_id = t.id
+                GROUP BY bucket
+            )
+            SELECT bucket,
+                   if(trace_count > 0, total_cost / trace_count, 0) AS avg_cost
+            FROM cost_stats
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
+    // MEDIUM METRICS - Span duration
+
+    private static final String GET_SPAN_DURATION = """
+            %s, spans_with_duration AS (
+                SELECT
+                    t.start_time,
+                    if(s.end_time IS NOT NULL AND s.start_time IS NOT NULL
+                        AND notEquals(s.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                        (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
+                        NULL) AS duration
+                FROM traces_filtered t
+                JOIN (
+                    SELECT trace_id, start_time, end_time
+                    FROM spans final
+                    WHERE project_id = :project_id
+                    AND workspace_id = :workspace_id
+                ) s ON s.trace_id = t.id
+                WHERE if(s.end_time IS NOT NULL AND s.start_time IS NOT NULL
+                    AND notEquals(s.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                    (dateDiff('microsecond', s.start_time, s.end_time) / 1000.0),
+                    NULL) IS NOT NULL
+            )
+            SELECT <bucket> AS bucket,
+                   arrayMap(
+                     v -> toDecimal64(
+                            greatest(
+                              least(if(isFinite(v), v, 0),  999999999.999999999),
+                              -999999999.999999999
+                            ),
+                            9
+                          ),
+                     quantiles(0.5, 0.9, 0.99)(duration)
+                   ) AS duration
+            FROM spans_with_duration
+            GROUP BY bucket
+            ORDER BY bucket
+            WITH FILL
+                FROM <fill_from>
+                TO parseDateTimeBestEffort(:end_time)
+                STEP <step>;
+            """.formatted(TRACE_FILTERED_PREFIX);
+
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
@@ -599,6 +935,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 .orElse(Stream.empty());
     }
 
+    @SuppressWarnings("rawtypes")
     private static BigDecimal getP(List durations, int index) {
         if (durations.size() <= index) {
             return null;
@@ -691,6 +1028,209 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         row -> NAME_GUARDRAILS_FAILED_COUNT,
                         row -> row.get("failed_cnt", Integer.class)))
                 .collectList());
+    }
+
+    // EASY METRICS IMPLEMENTATIONS
+
+    @Override
+    public Mono<List<Entry>> getErrorCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_ERROR_COUNT, "errorCount")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "errors",
+                        row -> row.get("count", Integer.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_SPAN_COUNT, "spanCount")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "spans",
+                        row -> row.get("avg_span_count", BigDecimal.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getLlmSpanCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_LLM_SPAN_COUNT, "llmSpanCount")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "llm_spans",
+                        row -> row.get("avg_llm_span_count", BigDecimal.class)))
+                .collectList());
+    }
+
+    // MEDIUM METRICS IMPLEMENTATIONS - Token metrics
+
+    @Override
+    public Mono<List<Entry>> getCompletionTokens(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return getTokenMetricByType(projectId, request, "completion_tokens", "completionTokens");
+    }
+
+    @Override
+    public Mono<List<Entry>> getPromptTokens(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return getTokenMetricByType(projectId, request, "prompt_tokens", "promptTokens");
+    }
+
+    @Override
+    public Mono<List<Entry>> getTotalTokens(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return getTokenMetricByType(projectId, request, "total_tokens", "totalTokens");
+    }
+
+    private Mono<List<Entry>> getTokenMetricByType(UUID projectId, ProjectMetricRequest request,
+            String tokenType, String segmentName) {
+        return template.nonTransaction(connection -> {
+            var template = new ST(GET_SPECIFIC_TOKEN_TYPE)
+                    .add("step", intervalToSql(request.interval()))
+                    .add("bucket", wrapWeekly(request.interval(),
+                            "toStartOfInterval(start_time, %s)".formatted(intervalToSql(request.interval()))))
+                    .add("fill_from", wrapWeekly(request.interval(),
+                            "toStartOfInterval(parseDateTimeBestEffort(:start_time), %s)"
+                                    .formatted(intervalToSql(request.interval()))));
+
+            Optional.ofNullable(request.traceFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                                .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                                .ifPresent(
+                                        scoresFilters -> template.add("trace_feedback_scores_filters", scoresFilters));
+                        filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
+                                        feedbackScoreIsEmptyFilters));
+                        filterQueryBuilder.hasGuardrailsFilter(filters)
+                                .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
+                    });
+
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", projectId)
+                    .bind("start_time", request.intervalStart().toString())
+                    .bind("end_time", request.intervalEnd().toString())
+                    .bind("token_type", tokenType);
+
+            Optional.ofNullable(request.traceFilters())
+                    .ifPresent(filters -> {
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                        filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    });
+
+            InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> rowToDataPoint(
+                            result,
+                            row -> tokenType,
+                            row -> row.get("value", Long.class)))
+                    .collectList()
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    // MEDIUM METRICS IMPLEMENTATIONS - Count metrics
+
+    @Override
+    public Mono<List<Entry>> getInputCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_INPUT_COUNT, "inputCount")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "input",
+                        row -> row.get("count", Integer.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getOutputCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_OUTPUT_COUNT, "outputCount")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "output",
+                        row -> row.get("count", Integer.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getMetadataCount(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_METADATA_COUNT, "metadataCount")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "metadata",
+                        row -> row.get("count", Integer.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getTagsAverage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_TAGS_AVERAGE, "tagsAverage")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "tags",
+                        row -> row.get("avg_tags", BigDecimal.class)))
+                .collectList());
+    }
+
+    // MEDIUM METRICS IMPLEMENTATIONS - Calculated metrics
+
+    @Override
+    public Mono<List<Entry>> getTraceWithErrorsPercent(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_TRACE_WITH_ERRORS_PERCENT, "traceWithErrorsPercent")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "error_percent",
+                        row -> row.get("error_percent", BigDecimal.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getGuardrailsPassRate(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_GUARDRAILS_PASS_RATE, "guardrailsPassRate")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "pass_rate",
+                        row -> row.get("pass_rate", BigDecimal.class)))
+                .collectList());
+    }
+
+    @Override
+    public Mono<List<Entry>> getAvgCostPerTrace(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_AVG_COST_PER_TRACE, "avgCostPerTrace")
+                .flatMapMany(result -> rowToDataPoint(result,
+                        row -> "avg_cost",
+                        row -> row.get("avg_cost", BigDecimal.class)))
+                .collectList());
+    }
+
+    // MEDIUM METRICS IMPLEMENTATIONS - Span duration
+
+    @Override
+    public Mono<List<Entry>> getSpanDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
+        return template.nonTransaction(connection -> getMetric(projectId, request, connection,
+                GET_SPAN_DURATION, "spanDuration")
+                .flatMapMany(result -> result
+                        .map((row, metadata) -> mapSpanDuration(row)))
+                .reduce(Stream::concat)
+                .map(Stream::toList));
+    }
+
+    private Stream<Entry> mapSpanDuration(Row row) {
+        return Optional.ofNullable(row.get("duration", List.class))
+                .map(durations -> Stream.of(
+                        Entry.builder().name("span_duration.p50")
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 0))
+                                .build(),
+                        Entry.builder().name("span_duration.p90")
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 1))
+                                .build(),
+                        Entry.builder().name("span_duration.p99")
+                                .time(row.get("bucket", Instant.class))
+                                .value(getP(durations, 2))
+                                .build()))
+                .orElse(Stream.empty());
     }
 
     private Mono<? extends Result> getMetric(

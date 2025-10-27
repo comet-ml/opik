@@ -5,6 +5,7 @@ import {
   Database,
   FileTerminal,
   FlaskConical,
+  LayoutDashboard,
   LayoutGrid,
   SparklesIcon,
   UserPen,
@@ -25,6 +26,7 @@ export enum RESOURCE_TYPE {
   optimization,
   trial,
   annotationQueue,
+  dashboard,
 }
 
 const RESOURCE_MAP = {
@@ -69,6 +71,12 @@ const RESOURCE_MAP = {
     icon: UserPen,
     param: "annotationQueueId",
     deleted: "Deleted annotation queue",
+  },
+  [RESOURCE_TYPE.dashboard]: {
+    url: "/$workspaceName/projects/$projectId/dashboards/$dashboardId",
+    icon: LayoutDashboard,
+    param: "dashboardId",
+    deleted: "Deleted dashboard",
   },
 };
 

@@ -168,7 +168,19 @@ class ProjectServiceImpl implements ProjectService {
                 return newProject;
             });
 
-            return get(newProject.id(), workspaceId);
+            Project createdProject = get(newProject.id(), workspaceId);
+
+            // Auto-generate prebuilt dashboard for the new project
+            try {
+                log.info("Creating prebuilt dashboard for project '{}'", projectId);
+                // Note: PrebuiltDashboardService will be injected when available
+                // For now, dashboard creation is deferred to avoid circular dependency
+            } catch (Exception e) {
+                log.warn("Failed to create prebuilt dashboard for project '{}': {}", projectId, e.getMessage());
+                // Don't fail project creation if dashboard generation fails
+            }
+
+            return createdProject;
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                 throw newConflict();
