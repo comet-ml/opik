@@ -698,6 +698,49 @@ restart_services() {
     verify_services
 }
 
+# Function for quick restart (only rebuild backend, keep infrastructure running)
+quick_restart_services() {
+    log_info "=== Quick Restart (Backend Only) ==="
+    log_info "Step 1/6: Stopping frontend..."
+    stop_frontend
+    log_info "Step 2/6: Stopping backend..."
+    stop_backend
+    log_info "Step 3/6: Building backend..."
+    build_backend
+    log_info "Step 4/6: Starting backend..."
+    start_backend
+    
+    # Check if package.json has changed since last npm install
+    log_info "Step 5/6: Checking frontend dependencies..."
+    local package_json="$FRONTEND_DIR/package.json"
+    local package_lock="$FRONTEND_DIR/package-lock.json"
+    local node_modules="$FRONTEND_DIR/node_modules"
+    
+    local needs_install=false
+    
+    if [ ! -d "$node_modules" ]; then
+        log_info "node_modules not found, will install dependencies"
+        needs_install=true
+    elif [ ! -f "$package_lock" ]; then
+        log_info "package-lock.json not found, will install dependencies"
+        needs_install=true
+    elif [ "$package_json" -nt "$package_lock" ]; then
+        log_info "package.json is newer than package-lock.json, will install dependencies"
+        needs_install=true
+    else
+        log_info "Frontend dependencies are up to date, skipping npm install"
+    fi
+    
+    if [ "$needs_install" = true ]; then
+        build_frontend
+    fi
+    
+    log_info "Step 6/6: Starting frontend..."
+    start_frontend
+    log_success "=== Quick Restart Complete ==="
+    verify_services
+}
+
 # Function to start BE-only services (without building)
 start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
@@ -746,10 +789,11 @@ show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Standard Mode (BE and FE services as processes):"
-    echo "  --start        - Start Docker infrastructure, and BE and FE processes (without building)"
-    echo "  --stop         - Stop Docker infrastructure, and BE and FE processes"
-    echo "  --restart      - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
-    echo "  --verify       - Verify status of Docker infrastructure, and BE and FE processes"
+    echo "  --start         - Start Docker infrastructure, and BE and FE processes (without building)"
+    echo "  --stop          - Stop Docker infrastructure, and BE and FE processes"
+    echo "  --restart       - Stop, build, and start Docker infrastructure, and BE and FE processes (DEFAULT IF NO OPTIONS PROVIDED)"
+    echo "  --quick-restart - Quick restart: stop BE/FE, rebuild BE only, start BE/FE (keeps infrastructure running)"
+    echo "  --verify        - Verify status of Docker infrastructure, and BE and FE processes"
     echo ""
     echo "BE-Only Mode (BE as process, FE in Docker):"
     echo "  --be-only-start    - Start Docker infrastructure and FE, and backend process (without building)"
@@ -845,6 +889,12 @@ case "${1:-}" in
         ;;
     "--restart")
         restart_services
+        ;;
+    "--quick-restart")
+        quick_restart_services
+        ;;
+    "--quick-restart")
+        quick_restart_services
         ;;
     "--verify")
         verify_services
