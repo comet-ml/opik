@@ -430,3 +430,9 @@ webhook:
     # Default: {}
     # Description: Period for events aggregation before sending to webhook endpoint
     windowSize: 1s
+
+# Workspace settings
+workspaceSettings:
+  # Default: -1 (no limit)
+  # Description: Maximum workspace size in GB to allow dynamic sorting. Set to -1 to disable the limit (allow sorting for all workspace sizes)
+  maxSizeToAllowSorting: -1

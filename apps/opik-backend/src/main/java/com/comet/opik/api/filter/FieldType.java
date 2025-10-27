@@ -12,6 +12,7 @@ public enum FieldType {
     DATE_TIME("date_time"),
     DATE_TIME_STATE_DB("date_time_state_db"),
     NUMBER("number"),
+    DURATION("duration"), // Duration is treated as a NUMBER internally
     FEEDBACK_SCORES_NUMBER("feedback_scores_number"),
     DICTIONARY("dictionary"),
     LIST("list"),

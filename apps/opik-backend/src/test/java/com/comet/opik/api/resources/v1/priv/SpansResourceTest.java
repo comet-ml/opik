@@ -1305,14 +1305,15 @@ class SpansResourceTest {
             return switch (field.getType()) {
                 case STRING, LIST, DICTIONARY, ENUM, ERROR_CONTAINER, STRING_STATE_DB, CUSTOM ->
                     RandomStringUtils.secure().nextAlphanumeric(10);
-                case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
+                case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
             };
         }
 
         private String getKey(Field field) {
             return switch (field.getType()) {
-                case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
+                case STRING, NUMBER, DURATION, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
+                        DATE_TIME_STATE_DB ->
                     null;
                 case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
                 case DICTIONARY -> "";
@@ -1323,7 +1324,8 @@ class SpansResourceTest {
             return switch (field.getType()) {
                 case STRING, DICTIONARY, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
                     " ";
-                case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER ->
+                    RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
 
