@@ -70,7 +70,6 @@ const ChartCard: React.FC<ChartCardProps> = ({
                 <DropdownMenuItem
                   onClick={() => {
                     // TODO: Implement clone functionality
-                    console.log("Clone chart:", chart.id);
                   }}
                 >
                   <Copy className="mr-2 h-4 w-4" />

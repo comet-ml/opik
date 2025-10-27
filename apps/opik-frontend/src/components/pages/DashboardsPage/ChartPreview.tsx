@@ -223,15 +223,15 @@ const ChartPreview: React.FC<ChartPreviewProps> = ({
             <ChartTooltip isAnimationActive={false} content={<ChartTooltipContent renderHeader={renderChartTooltipHeader} />} />
             <ChartLegend content={<ChartHorizontalLegendContent setActiveLine={setActiveLine} chartId="dashboard-chart-preview" />} />
             {seriesNames.map((name) => (
-              <>
+              <React.Fragment key={name}>
                 <defs>
                   <linearGradient id={`chart-area-gradient-${snakeCase(name)}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={config[name].color} stopOpacity={0.3}></stop>
                     <stop offset="95%" stopColor={config[name].color} stopOpacity={0}></stop>
                   </linearGradient>
                 </defs>
-                <Area key={name} type="monotone" dataKey={name} stroke={config[name].color} fill={`url(#chart-area-gradient-${snakeCase(name)})`} strokeWidth={1.5} />
-              </>
+                <Area type="monotone" dataKey={name} stroke={config[name].color} fill={`url(#chart-area-gradient-${snakeCase(name)})`} strokeWidth={1.5} />
+              </React.Fragment>
             ))}
           </AreaChart>
         )}
