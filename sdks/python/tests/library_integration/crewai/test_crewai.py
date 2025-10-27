@@ -1,5 +1,6 @@
 import opik
 from opik.integrations.crewai import track_crewai
+from opik.integrations.crewai import opik_tracker
 from crewai import Agent, Crew, Process, Task
 from ...testlib import (
     ANY,
@@ -28,9 +29,9 @@ pytestmark = [
     [
         ("openai/gpt-4o-mini", "openai"),
         (
-            "gemini/gemini-2.0-flash",
-            ANY_STRING.containing("google_"),
-        ),  # google_vertexai or google_ai
+            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertexai'}/gemini-2.0-flash",
+            "google_vertexai",
+        ),
         ("bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock"),
         ("anthropic/claude-sonnet-4-0", "anthropic"),
     ],

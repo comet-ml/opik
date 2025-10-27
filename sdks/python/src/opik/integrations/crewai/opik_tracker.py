@@ -47,11 +47,11 @@ def track_crewai(
     patchers.patch_flow(project_name=project_name)
 
     # Patch LLM clients used by CrewAI agents (v1.0.0+)
-    if crew is not None and _is_crewai_v1():
+    if crew is not None and is_crewai_v1():
         patchers.patch_llm_client(crew, project_name)
 
 
-def _is_crewai_v1() -> bool:
+def is_crewai_v1() -> bool:
     """
     Checks if CrewAI v1.0.0+ is installed.
 
