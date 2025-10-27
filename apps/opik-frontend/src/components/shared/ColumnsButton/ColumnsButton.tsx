@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Columns3, Eye, EyeOff } from "lucide-react";
+import { Columns3 } from "lucide-react";
 import toLower from "lodash/toLower";
 
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuCustomCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -47,6 +47,18 @@ const ColumnsButton = <TColumnData,>({
       (acc, { columns = [] }) => acc.concat(columns.map((c) => c.id)),
       columns.map((c) => c.id),
     );
+
+  const allColumnsSelected = useMemo(() => {
+    const allColumnIds = (sections || []).reduce<string[]>(
+      (acc, { columns: sectionColumns = [] }) =>
+        acc.concat(sectionColumns.map((c) => c.id)),
+      columns.map((c) => c.id),
+    );
+    return (
+      allColumnIds.length > 0 &&
+      allColumnIds.every((id) => selectedColumns.includes(id))
+    );
+  }, [selectedColumns, columns, sections]);
 
   const toggleColumns = (value: boolean) => {
     onSelectionChange(value ? getAllColumnsIds() : []);
@@ -124,14 +136,13 @@ const ColumnsButton = <TColumnData,>({
             );
           })}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => toggleColumns(true)}>
-          <Eye className="mr-2 size-4" />
-          Show all
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => toggleColumns(false)}>
-          <EyeOff className="mr-2 size-4" />
-          Hide all
-        </DropdownMenuItem>
+        <DropdownMenuCustomCheckboxItem
+          checked={allColumnsSelected}
+          onCheckedChange={(checked) => toggleColumns(!!checked)}
+          onSelect={(event) => event.preventDefault()}
+        >
+          Select all
+        </DropdownMenuCustomCheckboxItem>
       </div>
     );
   };
