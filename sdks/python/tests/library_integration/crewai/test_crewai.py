@@ -29,7 +29,7 @@ pytestmark = [
     [
         ("openai/gpt-4o-mini", "openai"),
         (
-            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertexai'}/gemini-2.0-flash",
+            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertex_ai'}/gemini-2.0-flash",
             "google_vertexai",
         ),
         ("bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock"),
