@@ -95,7 +95,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         open={open === 3}
         setOpen={setOpen}
         projectId={projectId}
-        entityIds={selectedRows.map((row) => row.id)}
+        entityIds={selectedRows.map((row) => row.thread_model_id)}
         entityType="thread"
       />
       <AddToDropdown
