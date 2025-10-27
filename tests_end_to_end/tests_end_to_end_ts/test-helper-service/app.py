@@ -10,11 +10,13 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from routes.projects import projects_bp
+from routes.datasets import datasets_bp
 
 app = Flask(__name__)
 CORS(app)
 
-app.register_blueprint(projects_bp, url_prefix="/api/projects")
+app.register_blueprint(projects_bp)
+app.register_blueprint(datasets_bp)
 
 
 @app.route("/health", methods=["GET"])
