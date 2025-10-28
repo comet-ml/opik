@@ -13,6 +13,7 @@ The message processing emulation models are primarily used in evaluation context
 - **Traces**: Complete execution paths of requests or operations
 - **Spans**: Individual steps or operations within a trace
 - **Feedback Scores**: Evaluation results attached to traces and spans
+- **Experiment Items**: Links between traces, datasets, and experiment runs
 
 Key Classes
 -----------
@@ -23,6 +24,7 @@ Key Classes
    FeedbackScoreModel
    SpanModel
    TraceModel
+   ExperimentItemModel
 
 Class Hierarchy
 ---------------
@@ -47,7 +49,8 @@ Import the models:
     from opik.message_processing.emulation.models import (
         TraceModel,
         SpanModel,
-        FeedbackScoreModel
+        FeedbackScoreModel,
+        ExperimentItemModel,
     )
 
 Common Usage Patterns
@@ -146,20 +149,4 @@ These models are commonly used for:
 Module Reference
 ----------------
 
-FeedbackScoreModel
-~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: FeedbackScoreModel
-    :members:
-
-SpanModel
-~~~~~~~~~
-
-.. autoclass:: SpanModel
-    :members:
-
-TraceModel
-~~~~~~~~~~
-
-.. autoclass:: TraceModel
-    :members:
+Use the class reference pages listed above for API details.
