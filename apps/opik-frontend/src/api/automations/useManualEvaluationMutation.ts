@@ -59,14 +59,12 @@ const useManualEvaluationMutation = () => {
     onSuccess: (data, variables) => {
       const entityLabel =
         variables.entityType === "trace" ? "traces" : "threads";
+      const capitalizedEntityLabel =
+        variables.entityType === "trace" ? "Traces" : "Threads";
 
       toast({
         title: "Evaluation queued",
-        description: `${
-          data.entities_queued
-        } ${entityLabel} sent for evaluation with ${data.rules_applied} ${
-          data.rules_applied === 1 ? "rule" : "rules"
-        }`,
+        description: `The selected ${entityLabel} have been queued for scoring. Processing time may vary based on how many ${entityLabel} you selected. You can view the results in the ${capitalizedEntityLabel} table, the Metrics tab, and in each ${variables.entityType}'s details view.`,
       });
     },
     onError: (error: AxiosError) => {

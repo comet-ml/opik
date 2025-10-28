@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Trash, PlayCircle } from "lucide-react";
+import { Trash, Brain } from "lucide-react";
 import get from "lodash/get";
 import first from "lodash/first";
 import slugify from "slugify";
@@ -104,7 +104,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
         disabled={disabled}
         dataType="threads"
       />
-      <TooltipWrapper content="Run evaluation">
+      <TooltipWrapper content="Evaluate">
         <Button
           variant="outline"
           size="sm"
@@ -114,8 +114,8 @@ const ThreadsActionsPanel: React.FunctionComponent<
           }}
           disabled={disabled}
         >
-          <PlayCircle className="mr-2 size-4" />
-          Run evaluation
+          <Brain className="mr-2 size-4" />
+          Evaluate
         </Button>
       </TooltipWrapper>
       <ExportToButton
