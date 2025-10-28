@@ -52,7 +52,7 @@ public class AlertJob extends Job {
     private final @NonNull @Config WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
     private final @NonNull WorkspaceNameService workspaceNameService;
-    @NonNull private final OpikConfiguration config;
+    private final @NonNull OpikConfiguration config;
 
     @Override
     public void doJob(JobExecutionContext context) {
