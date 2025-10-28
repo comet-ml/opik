@@ -172,7 +172,7 @@ public class AttachmentResourceClient {
     }
 
     public byte[] downloadFile(String url, String apiKey, int expectedStatus) throws IOException {
-        try (var response = client.target(url)
+        try (var response = externatClient.target(url)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .get()) {
