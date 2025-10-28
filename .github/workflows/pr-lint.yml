@@ -32,11 +32,11 @@ jobs:
 
             // 1. Validate PR Title
             const title = pr.title;
-            const titleRegex = /^\[(OPIK-\d+|DEV-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI|HELM)\])*\s*.+$/;
+            const titleRegex = /^\[(OPIK-\d+|DEV-\d+|CUST-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI|HELM)\])*\s*.+$/;
             if (!titleRegex.test(title)) {
               errors.push(
                 "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and may optionally include component tags (`[FE]`, `[BE]`, etc.).\n\n" +
-                "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx]` or `[DEV-xxxx] [COMPONENT] Your change`\n" +
+                "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx]` or `[CUST-xxxx]` or `[DEV-xxxx] [COMPONENT] Your change`\n" +
                 "  - **External contributors: Open a Github Issue and link to it via its number:** `[issue-xxxx] [COMPONENT] Your change`\n" +
                 "  - **No ticket:** Use `[NA] [COMPONENT] Your change` (Issues section not required)\n\n" +
                 "  *Example: `[issue-3108] [BE] [FE] Fix authentication bug` or `[OPIK-1234] Fix bug` or `[NA] Update README`*"
@@ -70,11 +70,11 @@ jobs:
               }
 
               const issuesContent = getSectionContent("## Issues");
-              const issuesRegex = /(#\d+|OPIK-\d+|DEV-\d+)/;
+              const issuesRegex = /(#\d+|OPIK-\d+|DEV-\d+|CUST-\d+)/;
               const isNATicket = title.startsWith("[NA]");
               if (issuesContent !== null && !isNATicket && !issuesRegex.test(issuesContent)) {
                  errors.push(
-                   "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`), Jira ticket (`OPIK-xxxx`), or DEV ticket (`DEV-xxxx`) under the `## Issues` section."
+                   "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`), Jira ticket (`OPIK-xxxx`), (`CUST-xxxx`) or DEV ticket (`DEV-xxxx`) under the `## Issues` section."
                  );
               }
             }
