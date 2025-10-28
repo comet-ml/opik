@@ -132,7 +132,18 @@ get_system_info() {
 }
 
 get_docker_compose_cmd() {
-  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  # Determine which Docker Compose command to use
+  local compose_cmd
+  if docker compose version >/dev/null 2>&1; then
+    compose_cmd="docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    compose_cmd="docker-compose"
+  else
+    echo "Error: Neither 'docker compose' nor 'docker-compose' is available" >&2
+    exit 1
+  fi
+
+  local cmd="$compose_cmd -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
