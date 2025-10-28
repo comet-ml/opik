@@ -278,10 +278,12 @@ spec:
 
 ### Automated Restore with Kubernetes Job
 
-Opik provides a Kubernetes Job for automated backup restoration. This job handles the complete restore process, including downloading backups from S3 (if needed) and restoring them to ClickHouse.
+Opik helm chart provides a Kubernetes Job for automated backup restoration. This job handles the complete restore process, including downloading backups from S3 (if needed) and restoring them to ClickHouse.
 
 #### Configuration
-
+<Warning>
+Note that backup server must be enabled before and backup created using it and not by using default Clickhouse backup
+</Warning>
 To create the restore job, configure the following values in your Helm chart:
 
 ```yaml
