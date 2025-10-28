@@ -96,7 +96,7 @@ const ColumnsButton = <TColumnData,>({
     }
 
     return (
-      <div className="min-w-56 max-w-72 overflow-hidden">
+      <>
         <SortableMenuSection
           columns={filteredColumns}
           selectedColumns={selectedColumns}
@@ -130,15 +130,7 @@ const ColumnsButton = <TColumnData,>({
               </React.Fragment>
             );
           })}
-        <DropdownMenuSeparator />
-        <DropdownMenuCustomCheckboxItem
-          checked={allColumnsSelected}
-          onCheckedChange={toggleColumns}
-          onSelect={(event) => event.preventDefault()}
-        >
-          Select all
-        </DropdownMenuCustomCheckboxItem>
-      </div>
+      </>
     );
   };
 
@@ -150,7 +142,7 @@ const ColumnsButton = <TColumnData,>({
           Columns
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="pt-12" align="end">
+      <DropdownMenuContent className="min-w-56 max-w-72 p-0 pt-12" align="end">
         <div
           className="absolute inset-x-1 top-1 h-11"
           onKeyDown={(e) => e.stopPropagation()}
@@ -163,7 +155,21 @@ const ColumnsButton = <TColumnData,>({
           ></SearchInput>
           <Separator className="mt-1" />
         </div>
-        <div className="max-h-[50vh] overflow-y-auto">{renderContent()}</div>
+        <div className="max-h-[50vh] overflow-y-auto p-1">
+          {renderContent()}
+        </div>
+        {!noData && (
+          <>
+            <Separator />
+            <DropdownMenuCustomCheckboxItem
+              checked={allColumnsSelected}
+              onCheckedChange={toggleColumns}
+              onSelect={(event) => event.preventDefault()}
+            >
+              Select all
+            </DropdownMenuCustomCheckboxItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
