@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EvaluatorsRule } from "@/types/automations";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
 
 interface MetricSelectorProps {
@@ -87,15 +88,38 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     }
   }, []);
 
+  const selectedRules = useMemo(() => {
+    if (!selectedRuleIds) {
+      return rules;
+    }
+    return rules.filter((rule) => selectedRuleIds.includes(rule.id));
+  }, [rules, selectedRuleIds]);
+
   const displayValue = useMemo(() => {
+    if (!datasetId) {
+      return "No metrics selected";
+    }
     if (rules.length === 0) {
       return "No metrics";
     }
     if (isAllSelected) {
-      return `All metrics (${rules.length})`;
+      return "All selected";
     }
-    return `${selectedRulesCount} of ${rules.length} metrics`;
-  }, [isAllSelected, selectedRulesCount, rules.length]);
+    if (selectedRules.length === 0) {
+      return "No metrics selected";
+    }
+    return selectedRules.map((rule) => rule.name).join(", ");
+  }, [isAllSelected, selectedRules, rules.length, datasetId]);
+
+  const tooltipContent = useMemo(() => {
+    if (!datasetId && rules.length > 0) {
+      return "Select a dataset first to choose metrics";
+    }
+    if (datasetId && selectedRules.length > 0) {
+      return selectedRules.map((rule) => rule.name).join(", ");
+    }
+    return null;
+  }, [datasetId, rules.length, selectedRules]);
 
   const isSelected = useCallback(
     (ruleId: string) => {
@@ -106,21 +130,41 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   );
 
   const hasNoRules = rules.length === 0;
+  const isDisabled = hasNoRules || !datasetId;
+
+  const buttonElement = (
+    <Button
+      className="group w-[280px] justify-between"
+      size="sm"
+      variant="outline"
+      type="button"
+      disabled={isDisabled}
+    >
+      <span className="truncate">{displayValue}</span>
+      <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
+    </Button>
+  );
+
 
   return (
     <Popover onOpenChange={openChangeHandler} open={open} modal>
-      <PopoverTrigger asChild>
-        <Button
-          className="group w-[280px] justify-between"
-          size="sm"
-          variant="outline"
-          type="button"
-          disabled={hasNoRules || !datasetId}
-        >
-          <span className="truncate">{displayValue}</span>
-          <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
-        </Button>
-      </PopoverTrigger>
+      {tooltipContent ? (
+        <TooltipWrapper content={tooltipContent}>
+          <PopoverTrigger asChild={!isDisabled}>
+            {isDisabled ? (
+              <span className="w-[280px] inline-block">
+                {buttonElement}
+              </span>
+            ) : (
+              buttonElement
+            )}
+          </PopoverTrigger>
+        </TooltipWrapper>
+      ) : (
+        <PopoverTrigger asChild>
+          {buttonElement}
+        </PopoverTrigger>
+      )}
       <PopoverContent
         align="end"
         style={{ width: "280px" }}
