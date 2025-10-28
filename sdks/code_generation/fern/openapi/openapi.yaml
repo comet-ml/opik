@@ -1394,6 +1394,14 @@ paths:
         in: query
         schema:
           type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: search
+        in: query
+        schema:
+          type: string
       - name: truncate
         in: query
         schema:
@@ -7457,6 +7465,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Column_Compare"
+        sortableBy:
+          type: array
+          items:
+            type: string
     DatasetItem_Compare:
       required:
       - data
@@ -7931,6 +7943,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Column_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Column:
       type: object
       properties:
