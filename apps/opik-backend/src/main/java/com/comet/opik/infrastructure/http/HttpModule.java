@@ -16,6 +16,6 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Override
     protected void configure() {
-        CorsFactory.registerFilterIfEnabled(configuration(), environment());
+        CorsFactory.registerHandlerIfEnabled(configuration(), environment());
     }
 }
