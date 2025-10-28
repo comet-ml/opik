@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { ExternalLink, Sparkles, ChevronDown } from "lucide-react";
 import {
   Dialog,
   DialogClose,
@@ -10,6 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tag } from "@/components/ui/tag";
 import useRulesList from "@/api/automations/useRulesList";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
 import useAppStore from "@/store/AppStore";
@@ -33,6 +36,9 @@ const RunEvaluationDialog: React.FunctionComponent<
 > = ({ open, setOpen, projectId, entityIds, entityType }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(
     new Set(),
   );
 
@@ -75,8 +81,27 @@ const RunEvaluationDialog: React.FunctionComponent<
     }
   }, [data?.content, entityType]);
 
+  // Pre-select all rules when dialog opens and rules are loaded
+  useEffect(() => {
+    if (open && rules.length > 0 && selectedRuleIds.size === 0) {
+      setSelectedRuleIds(new Set(rules.map((rule) => rule.id)));
+    }
+  }, [open, rules, selectedRuleIds.size]);
+
   const handleCheckboxChange = useCallback((ruleId: string) => {
     setSelectedRuleIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(ruleId)) {
+        newSet.delete(ruleId);
+      } else {
+        newSet.add(ruleId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const toggleExpanded = useCallback((ruleId: string) => {
+    setExpandedRuleIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(ruleId)) {
         newSet.delete(ruleId);
@@ -101,6 +126,7 @@ const RunEvaluationDialog: React.FunctionComponent<
         onSuccess: () => {
           setOpen(false);
           setSelectedRuleIds(new Set());
+          setExpandedRuleIds(new Set());
         },
       },
     );
@@ -118,10 +144,43 @@ const RunEvaluationDialog: React.FunctionComponent<
       setOpen(newOpen);
       if (!newOpen) {
         setSelectedRuleIds(new Set());
+        setExpandedRuleIds(new Set());
       }
     },
     [setOpen],
   );
+
+  const handleManageRules = useCallback(() => {
+    const url = `/${workspaceName}/configuration/automations?tab=online-evaluation`;
+    window.open(url, "_blank");
+  }, [workspaceName]);
+
+  const renderEmptyState = () => {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col items-center justify-center gap-2 py-8">
+            <Sparkles className="size-4 text-muted-foreground" />
+            <p className="comet-body-s-accented text-center">
+              This project doesn&apos;t have any online evaluation rules yet
+            </p>
+            <p className="comet-body-s text-center text-muted-foreground">
+              Create a new rule or link an existing one to this project.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManageRules}
+              className="mt-2"
+            >
+              <ExternalLink className="mr-2 size-4" />
+              Manage rules
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const renderRulesList = () => {
     if (isLoading) {
@@ -133,49 +192,104 @@ const RunEvaluationDialog: React.FunctionComponent<
     }
 
     if (rules.length === 0) {
-      return (
-        <div className="flex min-h-36 items-center justify-center">
-          <p className="comet-body-s text-muted-foreground">
-            No rules available for this project
-          </p>
-        </div>
-      );
+      return renderEmptyState();
     }
 
-    return rules.map((rule: EvaluatorsRule) => {
-      const checked = selectedRuleIds.has(rule.id);
-      return (
-        <label
-          key={rule.id}
-          className="flex cursor-pointer items-center gap-2 py-2.5 pl-3 pr-4"
-        >
-          <Checkbox
-            checked={checked}
-            onCheckedChange={() => handleCheckboxChange(rule.id)}
-            aria-label={`Select rule ${rule.name}`}
-          />
-          <span className="comet-body-s truncate">{rule.name}</span>
-        </label>
-      );
-    });
+    return (
+      <div className="flex flex-col gap-2">
+        {rules.map((rule: EvaluatorsRule) => {
+          const checked = selectedRuleIds.has(rule.id);
+          const isExpanded = expandedRuleIds.has(rule.id);
+          const hasCode =
+            rule.type === EVALUATORS_RULE_TYPE.llm_judge ||
+            rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge;
+
+          // Extract schema names for score tags
+          const schemaNames =
+            hasCode && rule.code && "schema" in rule.code
+              ? rule.code.schema.map((s) => s.name)
+              : [];
+
+          return (
+            <Card key={rule.id} className="overflow-hidden">
+              <CardContent className="p-0">
+                <div className="flex items-start gap-3 p-3">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => handleCheckboxChange(rule.id)}
+                    aria-label={`Select rule ${rule.name}`}
+                    className="mt-0.5"
+                  />
+                  <div className="flex flex-1 flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="comet-body-s-accented">{rule.name}</span>
+                      {schemaNames.length > 0 && (
+                        <div className="flex shrink-0 flex-wrap gap-1">
+                          {schemaNames.map((schemaName) => (
+                            <Tag
+                              key={schemaName}
+                              variant="gray"
+                              size="lg"
+                              className="shrink-0"
+                            >
+                              {schemaName}
+                            </Tag>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {hasCode && rule.code && (
+                      <div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleExpanded(rule.id)}
+                          className="h-auto p-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+                        >
+                          <ChevronDown
+                            className={`mr-1 size-3 transition-transform ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          />
+                          {isExpanded ? "Hide" : "Show"} prompt
+                        </Button>
+                        {isExpanded && (
+                          <div className="mt-2 rounded-md bg-muted p-3">
+                            <pre className="comet-code max-h-40 overflow-auto whitespace-pre-wrap text-xs">
+                              {JSON.stringify(rule.code, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
   };
 
   const entityLabel = entityType === "trace" ? "traces" : "threads";
+  const capitalizedEntityLabel = entityType === "trace" ? "Traces" : "Threads";
   const isRunDisabled =
     selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-[560px]">
+      <DialogContent className="max-w-lg sm:max-w-screen-sm">
         <DialogHeader>
-          <DialogTitle>Run evaluation</DialogTitle>
+          <DialogTitle>Run online evaluation rules</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
           <p className="comet-body-s mb-4 text-muted-foreground">
-            Select which rules to run on {entityIds.length} selected{" "}
-            {entityLabel}
+            Choose the online evaluation rules you want to apply to the selected{" "}
+            {entityLabel}. Each rule will generate new scores based on its
+            configuration.
           </p>
-          <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
+          <div className="my-4 flex max-h-[500px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
             {renderRulesList()}
           </div>
         </div>
@@ -189,10 +303,8 @@ const RunEvaluationDialog: React.FunctionComponent<
             onClick={handleRunEvaluation}
           >
             {manualEvaluationMutation.isPending
-              ? "Running..."
-              : `Run evaluation with ${selectedRuleIds.size} ${
-                  selectedRuleIds.size === 1 ? "rule" : "rules"
-                }`}
+              ? "Evaluating..."
+              : `Evaluate ${capitalizedEntityLabel.toLowerCase()}`}
           </Button>
         </DialogFooter>
       </DialogContent>

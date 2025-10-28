@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash, PlayCircle } from "lucide-react";
+import { Tag, Trash, Brain } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -136,7 +136,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         </Button>
       </TooltipWrapper>
       {type === TRACE_DATA_TYPE.traces && (
-        <TooltipWrapper content="Run evaluation">
+        <TooltipWrapper content="Evaluate">
           <Button
             variant="outline"
             size="sm"
@@ -146,8 +146,8 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             }}
             disabled={disabled}
           >
-            <PlayCircle className="mr-2 size-4" />
-            Run evaluation
+            <Brain className="mr-2 size-4" />
+            Evaluate
           </Button>
         </TooltipWrapper>
       )}
