@@ -206,6 +206,7 @@ const usePromptDatasetItemCombination = ({
       runStreaming,
       datasetName,
       deleteAbortController,
+      selectedRuleIds,
     ],
   );
 
