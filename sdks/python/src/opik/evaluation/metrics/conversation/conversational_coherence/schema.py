@@ -1,6 +1,6 @@
 from ...llm_judges.conversation.conversational_coherence.schema import (
     EvaluateConversationCoherenceResponse,
-    IrrelevanceExample,
+    ScoreReasonResponse,
 )
 
-__all__ = ["EvaluateConversationCoherenceResponse", "IrrelevanceExample"]
+__all__ = ["EvaluateConversationCoherenceResponse", "ScoreReasonResponse"]

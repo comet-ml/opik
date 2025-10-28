@@ -1,6 +1,6 @@
 from ...llm_judges.conversation.user_frustration.schema import (
-    FrustrationVerdictResponse,
-    FrustrationWindowResponse,
+    EvaluateUserFrustrationResponse,
+    ScoreReasonResponse,
 )
 
-__all__ = ["FrustrationVerdictResponse", "FrustrationWindowResponse"]
+__all__ = ["EvaluateUserFrustrationResponse", "ScoreReasonResponse"]
