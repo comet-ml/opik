@@ -46,8 +46,10 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const handleSelect = useCallback(
     (ruleId: string) => {
       if (!selectedRuleIds || selectedRuleIds.length === rules.length) {
-        // If all selected, select only this one
-        onSelectionChange([ruleId]);
+        // If all selected, deselect this one (keep all others)
+        const allRuleIds = rules.map((r) => r.id);
+        const newSelection = allRuleIds.filter((id) => id !== ruleId);
+        onSelectionChange(newSelection.length > 0 ? newSelection : null);
       } else {
         const isSelected = selectedRuleIds.includes(ruleId);
         if (isSelected) {
@@ -63,7 +65,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         }
       }
     },
-    [selectedRuleIds, rules.length, onSelectionChange],
+    [selectedRuleIds, rules, onSelectionChange],
   );
 
   const handleSelectAll = useCallback(() => {
