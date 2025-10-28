@@ -714,6 +714,38 @@ class Opik:
 
             self._streamer.put(add_trace_feedback_scores_batch_message)
 
+    def log_threads_feedback_scores(
+        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+    ) -> None:
+        """
+        Log feedback scores for threads.
+
+        Args:
+            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+                Specifying a thread id via `id` key for each score is mandatory.
+            project_name: The name of the project in which the threads are logged. If not set, the project name
+                which was configured when the Opik instance was created will be used.
+
+        Returns:
+            None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> scores = [
+            >>>     {
+            >>>         "id": "thread_123",
+            >>>         "name": "user_satisfaction",
+            >>>         "value": 0.85,
+            >>>         "reason": "User seemed satisfied with the conversation"
+            >>>     }
+            >>> ]
+            >>> client.log_threads_feedback_scores(scores=scores)
+        """
+        self.get_threads_client().log_threads_feedback_scores(
+            scores=scores, project_name=project_name
+        )
+
     def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
         """
         Deletes a feedback score associated with a specific trace.
