@@ -50,7 +50,7 @@ Import the models:
         TraceModel,
         SpanModel,
         FeedbackScoreModel,
-        ExperimentItemModel,
+        ExperimentItemModel
     )
 
 Common Usage Patterns
