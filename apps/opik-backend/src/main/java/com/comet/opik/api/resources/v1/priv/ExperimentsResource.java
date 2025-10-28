@@ -126,6 +126,8 @@ public class ExperimentsResource {
 
         var metadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                // Context is required for resolving project ID, unused for workspace, but left for uniformity
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {

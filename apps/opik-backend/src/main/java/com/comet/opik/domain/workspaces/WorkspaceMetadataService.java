@@ -14,8 +14,14 @@ import java.util.UUID;
 
 @ImplementedBy(WorkspaceMetadataServiceImpl.class)
 public interface WorkspaceMetadataService {
+    /**
+     *  Workspace ID could have been resolved from context, but required as a parameter to make caching work properly
+     */
     Mono<ScopeMetadata> getWorkspaceMetadata(String workspaceId);
 
+    /**
+     *  Workspace ID could have been resolved from context, but required as a parameter to make caching work properly
+     */
     Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId, String projectName);
 }
 

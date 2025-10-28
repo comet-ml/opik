@@ -310,11 +310,15 @@ clickHouseLogAppender:
   flushIntervalDuration: PT0.500S
 
 workspaceSettings:
-  # Default: -1 (no limit)
-  # Description: Maximum workspace size in GB to allow dynamic sorting. Set to -1 to disable the limit (allow sorting for all workspace sizes)
-  maxSizeToAllowSorting: -1
   # Default: 50
-  # Description: Maximum size of a project in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all workspace sizes).
+  # This value is calculated via estimated size based on spans table.
+  maxSizeToAllowSorting: -1
+  # Default: 100
+  # Description: Maximum size of a project in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all project sizes).
+  # This value is calculated via estimated size based on spans table.
   maxProjectSizeToAllowSorting: -1
 
 # Configuration AWS S3

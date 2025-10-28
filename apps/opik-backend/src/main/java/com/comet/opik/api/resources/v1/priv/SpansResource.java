@@ -123,6 +123,8 @@ public class SpansResource {
 
         var workspaceMetadata = workspaceMetadataService
                 .getProjectMetadata(workspaceId, projectId, projectName)
+                // Context is required for resolving project ID
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         if (!sortingFields.isEmpty() && workspaceMetadata.cannotUseDynamicSorting()) {
