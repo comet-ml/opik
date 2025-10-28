@@ -33,8 +33,11 @@ To create a custom conversation metric, subclass [`ConversationThreadMetric`](ht
 
 ```python
 from typing import Any
-from opik.evaluation.metrics import conversation_types, score_result
-from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import (
+    ConversationThreadMetric,
+    types as conversation_types,
+)
 
 
 class ConversationLengthMetric(ConversationThreadMetric):

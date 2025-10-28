@@ -1,9 +1,8 @@
-"""
-Heuristic conversation-level metrics.
+"""Heuristic conversation-level metrics.
 
-This module exposes the conversation aggregation helpers so downstream imports like
-`opik.evaluation.metrics.heuristics.conversation.degeneration.metric` continue to
-resolve when the package is installed.
+Exposes the reusable conversation-level heuristics so imports like
+``opik.evaluation.metrics.heuristics.conversation.degeneration.metric`` continue to
+resolve and can be surfaced in generated documentation.
 """
 
 from .degeneration.metric import ConversationDegenerationMetric

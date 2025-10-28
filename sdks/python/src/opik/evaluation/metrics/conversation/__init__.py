@@ -1,4 +1,9 @@
-"""Compatibility exports for the legacy conversation package."""
+"""Conversation metrics compatibility exports.
+
+Provides stable import paths for the conversation helpers and metrics so legacy
+code (and generated documentation) can resolve symbols such as
+``opik.evaluation.metrics.conversation.degeneration.metric``.
+"""
 
 from __future__ import annotations
 

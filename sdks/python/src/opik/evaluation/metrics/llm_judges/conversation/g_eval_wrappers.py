@@ -28,11 +28,19 @@ class GEvalConversationMetric(ConversationThreadMetric):
     can plug into the wider Opik evaluation pipeline. Any errors raised by the
     underlying judge are captured and reported as a failed score computation.
 
+    The conversation input should match :class:`ConversationThreadMetric`
+    semantics—a list of dicts containing ``role`` and ``content`` keys ordered by
+    time.
+
     Args:
         judge: A GEval-compatible metric instance that accepts ``output`` as its
             primary argument.
         name: Optional override for the metric name used in results. When ``None``
             the name is derived from the wrapped judge.
+
+    Returns:
+        ScoreResult: Mirrors the wrapped judge's score/value/metadata fields. When
+        the judge fails, ``scoring_failed`` is set and ``value`` is ``0.0``.
 
     Example:
         >>> from opik.evaluation.metrics.llm_judges.conversation.g_eval_wrappers import (
@@ -81,6 +89,18 @@ class GEvalConversationMetric(ConversationThreadMetric):
         conversation: conversation_types.Conversation,
         **_: Any,
     ) -> score_result.ScoreResult:
+        """
+        Evaluate the final assistant turn in a conversation.
+
+        Args:
+            conversation: Sequence of dict-like turns containing ``role`` and
+                ``content`` keys. Only assistant turns with non-empty ``content``
+                are considered.
+
+        Returns:
+            ScoreResult: Normalised output from the wrapped judge. If no assistant
+            message is present, the result is marked as failed with ``value=0.0``.
+        """
         last_assistant = next(
             (
                 turn.get("content", "")
@@ -137,6 +157,10 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
         project_name: Optional tracking project name. Defaults to ``None``.
         temperature: Sampling temperature supplied to the underlying judge model.
 
+    Returns:
+        ScoreResult: Compliance score emitted by the wrapped judge; failed
+        evaluations set ``scoring_failed`` and ``value=0.0``.
+
     Example:
         >>> from opik.evaluation.metrics import ConversationComplianceRiskMetric
         >>> conversation = [
@@ -171,7 +195,8 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
     """
     Score how helpful the closing assistant message is within the dialogue.
 
-    The metric uses
+    The metric expects the same conversation shape as
+    :class:`ConversationThreadMetric`. It uses
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.DialogueHelpfulnessJudge`
     to evaluate usefulness and responsiveness of the final assistant turn.
 
@@ -180,6 +205,9 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
         track: Whether to automatically track results. Defaults to ``True``.
         project_name: Optional tracking project. Defaults to ``None``.
         temperature: Temperature fed into the judge's underlying model.
+
+    Returns:
+        ScoreResult: Helpfulness score from the wrapped judge.
 
     Example:
         >>> from opik.evaluation.metrics import ConversationDialogueHelpfulnessMetric
@@ -215,7 +243,8 @@ class ConversationQARelevanceMetric(GEvalConversationMetric):
     """
     Quantify how relevant the assistant's final answer is to the preceding query.
 
-    This metric wraps
+    This metric expects a conversation sequence compatible with
+    :class:`ConversationThreadMetric` and wraps
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.QARelevanceJudge`
     and is useful when the conversation emulates a Q&A exchange.
 
@@ -224,6 +253,9 @@ class ConversationQARelevanceMetric(GEvalConversationMetric):
         track: Whether to automatically track outcomes. Defaults to ``True``.
         project_name: Optional project for tracked scores. Defaults to ``None``.
         temperature: Judge sampling temperature.
+
+    Returns:
+        ScoreResult: Relevance score from the judge.
 
     Example:
         >>> from opik.evaluation.metrics import ConversationQARelevanceMetric
@@ -259,7 +291,8 @@ class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
     """
     Assess the coherence of a summary-style assistant response.
 
-    The metric invokes
+    The metric expects the conversation schema defined by
+    :class:`ConversationThreadMetric` and invokes
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.SummarizationCoherenceJudge`
     to rate whether the summary flows naturally and captures the conversation
     structure.
@@ -269,6 +302,9 @@ class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
         track: Whether to track metric results automatically. Defaults to ``True``.
         project_name: Optional project name for tracked scores. Defaults to ``None``.
         temperature: Sampling temperature passed to the judge model.
+
+    Returns:
+        ScoreResult: Coherence score from the judge.
 
     Example:
         >>> from opik.evaluation.metrics import ConversationSummarizationCoherenceMetric
@@ -304,7 +340,7 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
     """
     Check whether a dialogue summary stays faithful to the source turns.
 
-    It delegates scoring to
+    The metric assumes the standard conversation schema and delegates scoring to
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.SummarizationConsistencyJudge`
     and reports the result at the conversation level.
 
@@ -313,6 +349,9 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
         track: Whether to automatically track results. Defaults to ``True``.
         project_name: Optional tracking project. Defaults to ``None``.
         temperature: Temperature parameter supplied to the judge model.
+
+    Returns:
+        ScoreResult: Consistency score from the judge.
 
     Example:
         >>> from opik.evaluation.metrics import ConversationSummarizationConsistencyMetric
@@ -348,7 +387,8 @@ class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
     """
     Measure how uncertain the assistant appears about executing the prompt.
 
-    The metric pipes the latest assistant reply into
+    The metric expects the standard conversation schema and pipes the latest
+    assistant reply into
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.prompt_diagnostics.PromptUncertaintyJudge`
     and returns the judge's score in a conversation-friendly format.
 
@@ -357,6 +397,9 @@ class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
         track: Whether to automatically track the metric. Defaults to ``True``.
         project_name: Optional tracking project. Defaults to ``None``.
         temperature: Sampling temperature for the judge model.
+
+    Returns:
+        ScoreResult: Uncertainty score from the judge.
 
     Example:
         >>> from opik.evaluation.metrics import ConversationPromptUncertaintyMetric
