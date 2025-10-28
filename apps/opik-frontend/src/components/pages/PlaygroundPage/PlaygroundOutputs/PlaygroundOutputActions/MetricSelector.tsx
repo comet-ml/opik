@@ -33,13 +33,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const isAllSelected =
     selectedRuleIds === null || selectedRuleIds.length === rules.length;
 
-  const selectedRulesCount = useMemo(() => {
-    if (selectedRuleIds === null) {
-      return rules.length;
-    }
-    return selectedRuleIds.length;
-  }, [selectedRuleIds, rules.length]);
-
   const filteredRules = useMemo(() => {
     if (!search) return rules;
     const searchLower = toLower(search);
@@ -145,16 +138,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     </Button>
   );
 
-
   return (
     <Popover onOpenChange={openChangeHandler} open={open} modal>
       {tooltipContent ? (
         <TooltipWrapper content={tooltipContent}>
           <PopoverTrigger asChild={!isDisabled}>
             {isDisabled ? (
-              <span className="w-[280px] inline-block">
-                {buttonElement}
-              </span>
+              <span className="inline-block w-[280px]">{buttonElement}</span>
             ) : (
               buttonElement
             )}
