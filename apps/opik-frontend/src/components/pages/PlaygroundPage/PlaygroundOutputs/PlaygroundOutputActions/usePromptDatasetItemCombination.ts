@@ -11,6 +11,7 @@ import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStre
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
 import { IMAGE_TAG_START, IMAGE_TAG_END } from "@/lib/llm";
+import { DATA_IMAGE_REGEX, IMAGE_URL_REGEX } from "@/lib/images";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import mustache from "mustache";
@@ -79,15 +80,6 @@ const transformMessageIntoProviderMessage = (
  * - [image_N] placeholders (from processInputData)
  */
 const wrapImageUrlsWithTags = (content: string): string => {
-  // Pattern 1: Match data:image base64 strings
-  // Captures the full data URL including the base64 data
-  const DATA_IMAGE_REGEX = /data:image\/[^;]+;base64,[A-Za-z0-9+/]+=*/g;
-
-  // Pattern 2: Match http(s) image URLs
-  // Only match URLs that end with common image extensions or contain image in path
-  const HTTP_IMAGE_REGEX =
-    /https?:\/\/[^\s<>"{}|\\^`\]]+\.(?:jpg|jpeg|png|gif|webp|bmp|svg|ico|tiff|tif|heic|heif)(?:\?[^\s<>"{}|\\^`\]]*)?(?:#[^\s<>"{}|\\^`\]]*)?/gi;
-
   /**
    * Helper function to wrap an image URL with tags if not already wrapped
    */
@@ -108,7 +100,7 @@ const wrapImageUrlsWithTags = (content: string): string => {
   );
 
   // Wrap HTTP(S) image URLs
-  processedContent = processedContent.replace(HTTP_IMAGE_REGEX, (match) =>
+  processedContent = processedContent.replace(IMAGE_URL_REGEX, (match) =>
     wrapIfNotWrapped(processedContent, match),
   );
 
