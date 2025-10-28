@@ -5,7 +5,7 @@ description: Describes all the built-in heuristic metrics provided by Opik
 Heuristic metrics are rule-based evaluation methods that allow you to check specific aspects of language model outputs. These metrics use predefined criteria or patterns to assess the quality, consistency, or characteristics of generated text. They come in two flavours:
 
 - **Token or string heuristics** – operate on a single turn and compare the candidate output to a reference or handcrafted rule.
-- **Conversation heuristics** – aggregate classical NLP scores across assistant turns in a dialogue.
+- **Conversation heuristics** – analyse whole transcripts to spot issues like degeneration or forgotten facts across assistant turns.
 
 ### String and token heuristics
 
@@ -35,15 +35,13 @@ Heuristic metrics are rule-based evaluation methods that allow you to check spec
 
 | Metric | Description |
 | --- | --- |
-| BLEUC | Aggregates sentence-level BLEU across assistant turns (implemented by `BleuConversationMetric`). |
-| DegenerationC | Detects repetition and low-entropy responses over a conversation (implemented by `ConversationDegenerationMetric`). |
+| Conversation Degeneration | Detects repetition and low-entropy responses over a conversation (implemented by `ConversationDegenerationMetric`). |
 | Knowledge Retention | Checks whether the last assistant reply preserves user-provided facts from earlier turns. |
-| METEORC | Aggregates METEOR scores across assistant turns (implemented by `MeteorConversationMetric`). |
-| ROUGEC | Aggregates ROUGE scores across assistant turns (implemented by `RougeConversationMetric`). |
 
 > [!TIP]
-> Conversation heuristics accept full transcripts as input. Refer to the [Conversation metrics guide](/evaluation/metrics/conversation_threads_metrics) for detailed examples and configuration options.
-> The `*C` names map to classes such as `RougeConversationMetric`, `BleuConversationMetric`, and `MeteorConversationMetric`.
+> These metrics operate on a single transcript without requiring a gold reference. If you
+> need BLEU/ROUGE/METEOR-style comparisons, compose a custom `ConversationThreadMetric`
+> that wraps the single-turn heuristics (`SentenceBLEU`, `ROUGE`, `METEOR`).
 
 ## Score an LLM response
 

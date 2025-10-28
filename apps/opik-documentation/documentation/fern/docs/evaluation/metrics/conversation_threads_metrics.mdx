@@ -6,7 +6,7 @@ The conversational metrics can be used to score the quality of conversational th
 
 Opik provides two families of conversation metrics:
 
-1. **Conversation-level heuristic metrics** – aggregate classic NLP scores (BLEU, ROUGE, METEOR, degeneration detection, etc.) over the assistant turns.
+1. **Conversation-level heuristic metrics** – lightweight analytics that inspect the transcript itself (for example, knowledge retention or degeneration). Use these when you only have the production conversation and no gold reference.
 2. **LLM-as-a-judge conversation metrics** – call an LLM to reason about conversation quality, user goal completion, or risk in the latest assistant responses.
 
 ## Conversation-level heuristic metrics
@@ -14,9 +14,6 @@ Opik provides two families of conversation metrics:
 | Metric | Description |
 | --- | --- |
 | KnowledgeRetentionMetric | Checks whether the final assistant replies retain earlier user-provided facts. |
-| RougeConversationMetric | Aggregates ROUGE scores across assistant turns in the thread. |
-| BleuConversationMetric | Aggregates BLEU scores across assistant turns. |
-| MeteorConversationMetric | Aggregates METEOR scores across assistant turns. |
 | ConversationDegenerationMetric | Detects repetition and degeneration patterns across the conversation. |
 
 ### Knowledge Retention Metric
@@ -29,39 +26,6 @@ from opik.evaluation.metrics import KnowledgeRetentionMetric
 metric = KnowledgeRetentionMetric(turns_to_consider=5)
 score = metric.score(conversation=my_thread)
 print(score.value, score.reason)
-```
-
-### Rouge Conversation Metric
-
-`RougeConversationMetric` computes ROUGE scores over every assistant message and averages them to provide a conversation-level quality signal. It relies on the same configuration options as the regular `ROUGE` metric (e.g. `rouge_type`, stemming, custom tokenizers).
-
-```python
-from opik.evaluation.metrics import RougeConversationMetric
-
-metric = RougeConversationMetric(rouge_type="rougeL")
-score = metric.score(conversation=my_thread, references=my_reference_thread)
-```
-
-### Bleu Conversation Metric
-
-`BleuConversationMetric` aggregates sentence-level BLEU scores for each assistant turn and reports the conversation average. It accepts the same parameters as `SentenceBLEU`, including n-gram weighting and smoothing methods.
-
-```python
-from opik.evaluation.metrics import BleuConversationMetric
-
-metric = BleuConversationMetric(n_grams=4)
-score = metric.score(conversation=my_thread, references=my_reference_thread)
-```
-
-### Meteor Conversation Metric
-
-`MeteorConversationMetric` extends the standard METEOR metric to conversations by scoring each assistant message and averaging the results. You can forward all arguments supported by `METEOR` (language, stemmer, smoothing, etc.).
-
-```python
-from opik.evaluation.metrics import MeteorConversationMetric
-
-metric = MeteorConversationMetric()
-score = metric.score(conversation=my_thread, references=my_reference_thread)
 ```
 
 ### Conversation Degeneration Metric
@@ -97,6 +61,12 @@ These metrics are based on the idea of using an LLM to evaluate the turns of the
   `opik.evaluation.metrics.conversation.g_eval_wrappers` module. They accept the same
   keyword arguments as their underlying judges (e.g. `model`, `temperature`). See
   [Conversation-level GEval metrics](/evaluation/metrics/g_eval_conversation_metrics) for a deeper walkthrough.
+</Tip>
+
+<Tip>
+  Need reference-based scores such as BLEU, ROUGE, or METEOR across conversations?
+  Compose your own `ConversationThreadMetric` and reuse the single-turn heuristics
+  (`SentenceBLEU`, `ROUGE`, `METEOR`) directly.
 </Tip>
 
 ### ConversationalCoherenceMetric

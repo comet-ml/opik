@@ -23,15 +23,6 @@ from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
 from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
 from opik.evaluation.metrics.heuristics.readability import Readability
 from opik.evaluation.metrics.heuristics.tone import Tone
-from opik.evaluation.metrics.conversation.rouge_conversation.metric import (
-    RougeConversationMetric,
-)
-from opik.evaluation.metrics.conversation.bleu_conversation.metric import (
-    BleuConversationMetric,
-)
-from opik.evaluation.metrics.conversation.meteor_conversation.metric import (
-    MeteorConversationMetric,
-)
 
 
 class CustomTokenizer:
@@ -496,103 +487,6 @@ def test_tone_metric_detects_shouting_and_negativity():
 
     assert metric.score(output=polite).value == 1.0
     assert metric.score(output=rude).value == 0.0
-
-
-class _StubRougeMetric:
-    def __init__(self, scores):
-        self._scores = scores
-        self.calls = []
-
-    def score(self, *, output, reference):
-        self.calls.append((output, reference))
-        idx = len(self.calls) - 1
-        return ScoreResult(name="rouge", value=self._scores[idx])
-
-
-def test_rouge_conversation_metric_average_and_penalty():
-    rouge_stub = _StubRougeMetric(scores=[0.8, 0.6])
-    metric = RougeConversationMetric(
-        rouge_metric=rouge_stub, missing_turn_penalty=0.1, track=False
-    )
-
-    conversation = [
-        {"role": "user", "content": "Hi"},
-        {"role": "assistant", "content": "Hello there"},
-        {"role": "assistant", "content": "How can I help?"},
-    ]
-    reference = [
-        {"role": "user", "content": "Hi"},
-        {"role": "assistant", "content": "Greetings"},
-        {"role": "assistant", "content": "What can I do for you?"},
-    ]
-
-    result = metric.score(conversation=conversation, reference_conversation=reference)
-
-    assert result.value == pytest.approx((0.8 + 0.6) / 2)
-    assert rouge_stub.calls == [
-        ("Hello there", "Greetings"),
-        ("How can I help?", "What can I do for you?"),
-    ]
-    assert result.metadata["evaluated_turns"] == 2
-    assert result.metadata["missing_turns"] == 0
-
-
-def test_rouge_conversation_metric_requires_target_turns():
-    metric = RougeConversationMetric(
-        rouge_metric=_StubRougeMetric(scores=[0.5]), track=False
-    )
-
-    with pytest.raises(MetricComputationError):
-        metric.score(
-            conversation=[{"role": "user", "content": "hi"}],
-            reference_conversation=[{"role": "assistant", "content": "hello"}],
-        )
-
-    with pytest.raises(MetricComputationError):
-        metric.score(
-            conversation=[{"role": "assistant", "content": "hi"}],
-            reference_conversation=[{"role": "user", "content": "hello"}],
-        )
-
-
-class _StubTurnMetric:
-    def __init__(self, scores):
-        self._scores = scores
-        self.calls = []
-
-    def score(self, *, output, reference):
-        self.calls.append((output, reference))
-        idx = len(self.calls) - 1
-        return ScoreResult(name="stub", value=self._scores[idx])
-
-
-def test_bleu_conversation_metric_with_stub():
-    stub = _StubTurnMetric([0.4, 0.6])
-    metric = BleuConversationMetric(bleu_metric=stub, track=False)
-
-    convo = [
-        {"role": "assistant", "content": "one"},
-        {"role": "assistant", "content": "two"},
-    ]
-    ref = [
-        {"role": "assistant", "content": "uno"},
-        {"role": "assistant", "content": "dos"},
-    ]
-
-    result = metric.score(conversation=convo, reference_conversation=ref)
-    assert result.value == pytest.approx(0.5)
-    assert stub.calls == [("one", "uno"), ("two", "dos")]
-
-
-def test_meteor_conversation_metric_with_stub():
-    stub = _StubTurnMetric([0.3])
-    metric = MeteorConversationMetric(meteor_metric=stub, track=False)
-
-    convo = [{"role": "assistant", "content": "hi"}]
-    ref = [{"role": "assistant", "content": "hello"}]
-
-    result = metric.score(conversation=convo, reference_conversation=ref)
-    assert result.value == pytest.approx(0.3)
 
 
 # ROUGE score tests

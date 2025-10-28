@@ -3,9 +3,6 @@ from .conversation.conversation_thread_metric import ConversationThreadMetric
 from .conversation.session_completeness.metric import SessionCompletenessQuality
 from .conversation.conversational_coherence.metric import ConversationalCoherenceMetric
 from .conversation.user_frustration.metric import UserFrustrationMetric
-from .conversation.rouge_conversation.metric import RougeConversationMetric
-from .conversation.bleu_conversation.metric import BleuConversationMetric
-from .conversation.meteor_conversation.metric import MeteorConversationMetric
 from .conversation.degeneration.metric import ConversationDegenerationMetric
 from .conversation.knowledge_retention.metric import KnowledgeRetentionMetric
 from .conversation.g_eval_wrappers import (
@@ -117,9 +114,6 @@ __all__ = [
     "RegionalBiasJudge",
     "VADERSentiment",
     "Tone",
-    "RougeConversationMetric",
-    "BleuConversationMetric",
-    "MeteorConversationMetric",
     "StructuredOutputCompliance",
     "MetricComputationError",
     "Moderation",
