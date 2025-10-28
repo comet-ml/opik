@@ -1,6 +1,6 @@
 > 注意：此文件为机器翻译版本。欢迎对翻译进行改进！
 
-<div align="center"><b><a href="README.md">英文版</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_KO.md">한국어</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
 
 <h1 align="center" style="border-bottom: none">
     <div>
@@ -58,27 +58,24 @@ Opik（由 [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=git
 
 <br>
 
-### 关键能力
+主要功能包括：
 
-#### 开发与跟踪
+- **开发与跟踪:**
+  - 在开发和生产环境中跟踪所有 LLM 调用和详细跟踪信息 ([快速开始](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik))
+  - 丰富的第三方集成：原生支持 Google ADK、Autogen、Flowise AI 等主流框架 ([集成列表](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
+  - 通过 [Python SDK](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) 或 [UI](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-through-the-ui?from=llm&utm_source=opik&utm_medium=github&utm_content=ui_link&utm_campaign=opik) 为跟踪和跨度添加反馈分数注释
+  - 在 [Prompt Playground](https://www.comet.com/docs/opik/prompt_engineering/playground) 中试验提示和模型
 
-- 在开发和生产环境中跟踪所有 LLM 调用和详细跟踪信息 ([快速开始](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik))
-- 丰富的第三方集成：原生支持 Google ADK、Autogen、Flowise AI 等主流框架 ([集成列表](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
-- 通过 [Python SDK](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) 或 UI 为跟踪和跨度添加反馈分数注释
-- 在 [Prompt Playground](https://www.comet.com/docs/opik/prompt_engineering/playground) 中试验提示和模型
+- **评估与测试**:
+  - 使用 [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik) 和 [Experiments](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik) 自动化 LLM 应用评估
+  - 利用 LLM-as-a-judge 指标进行复杂任务评估，如 [幻觉检测](https://www.comet.com/docs/opik/evaluation/metrics/hallucination/?from=llm&utm_source=opik&utm_medium=github&utm_content=hallucination_link&utm_campaign=opik)、[内容审核](https://www.comet.com/docs/opik/evaluation/metrics/moderation/?from=llm&utm_source=opik&utm_medium=github&utm_content=moderation_link&utm_campaign=opik) 和 RAG 评估（[回答相关性](https://www.comet.com/docs/opik/evaluation/metrics/answer_relevance/?from=llm&utm_source=opik&utm_medium=github&utm_content=alex_link&utm_campaign=opik)、[上下文精确度](https://www.comet.com/docs/opik/evaluation/metrics/context_precision/?from=llm&utm_source=opik&utm_medium=github&utm_content=context_link&utm_campaign=opik)）
+  - 使用 [PyTest 集成](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik) 将评估纳入 CI/CD 流水线
 
-#### 评估与测试
-
-- 使用 [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik) 和 [Experiments](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik) 自动化 LLM 应用评估
-- 利用 LLM-as-a-judge 指标进行复杂任务评估，如 [幻觉检测](https://www.comet.com/docs/opik/evaluation/metrics/hallucination/?from=llm&utm_source=opik&utm_medium=github&utm_content=hallucination_link&utm_campaign=opik)、[内容审核](https://www.comet.com/docs/opik/evaluation/metrics/moderation/?from=llm&utm_source=opik&utm_medium=github&utm_content=moderation_link&utm_campaign=opik) 和 RAG 评估（[回答相关性](https://www.comet.com/docs/opik/evaluation/metrics/answer_relevance/?from=llm&utm_source=opik&utm_medium=github&utm_content=alex_link&utm_campaign=opik)、[上下文精确度](https://www.comet.com/docs/opik/evaluation/metrics/context_precision/?from=llm&utm_source=opik&utm_medium=github&utm_content=context_link&utm_campaign=opik)）
-- 使用 [PyTest 集成](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik) 将评估纳入 CI/CD 流水线
-
-#### 生产监控与优化
-
-- 高吞吐量生产跟踪：支持每日 4,000 万+ 跟踪记录
-- 在 Opik 仪表板中监控反馈分数、跟踪计数和令牌使用量 ([仪表板](https://www.comet.com/docs/opik/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik))
-- 使用在线评估规则检测生产问题 ([规则](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik))
-- 借助 **Opik Agent Optimizer** 和 **Opik Guardrails** 持续改进和保护您的 LLM 应用
+- **生产监控与优化**:
+  - 高吞吐量生产跟踪：支持每日 4,000 万+ 跟踪记录
+  - 在 [Opik 仪表板](https://www.comet.com/docs/opik/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik) 中监控反馈分数、跟踪计数和令牌使用量
+  - 使用 [在线评估规则](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik) 和 LLM-as-a-Judge 指标检测生产问题
+  - 利用 **Opik Agent Optimizer** 和 **Opik Guardrails** 持续改进和保护您的 LLM 应用
 
 > [!TIP]  
 > 如果您需要 Opik 当前尚不支持的功能，请提交新的 [功能请求](https://github.com/comet-ml/opik/issues/new/choose) 🚀
@@ -156,6 +153,9 @@ Opik 安装脚本现在支持针对不同开发场景的服务配置文件：
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
+> [!IMPORTANT]
+> **版本 1.7.0 变更**：请查看 [更新日志](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) 以了解重要更新和破坏性变更。
+
 ## 💻 Opik 客户端 SDK
 
 Opik 提供一系列客户端库和 REST API 与 Opik 服务端交互，包含 Python、TypeScript 和 Ruby（通过 OpenTelemetry）SDK，方便集成到各类工作流中。详细 API 与 SDK 参考见 [客户端参考文档](apps/opik-documentation/documentation/fern/docs/reference/overview.mdx)。
@@ -196,7 +196,8 @@ opik configure
 | **Anthropic**             | 记录 Anthropic LLM 调用的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/anthropic?utm_source=opik&utm_medium=github&utm_content=anthropic_link&utm_campaign=opik)                         |
 | **Autogen**               | 记录 Autogen 智能体工作流的跟踪                 | [文档](https://www.comet.com/docs/opik/integrations/autogen?utm_source=opik&utm_medium=github&utm_content=autogen_link&utm_campaign=opik)                             |
 | **Bedrock**               | 记录 Amazon Bedrock LLM 调用的跟踪              | [文档](https://www.comet.com/docs/opik/integrations/bedrock?utm_source=opik&utm_medium=github&utm_content=bedrock_link&utm_campaign=opik)                             |
-| **BeeAI**                 | 记录 BeeAI 智能体框架调用的跟踪                 | [文档](https://www.comet.com/docs/opik/integrations/beeai?utm_source=opik&utm_medium=github&utm_content=beeai_link&utm_campaign=opik)                                 |
+| **BeeAI (Python)**        | 记录 BeeAI Python 智能体框架调用的跟踪          | [文档](https://www.comet.com/docs/opik/integrations/beeai?utm_source=opik&utm_medium=github&utm_content=beeai_link&utm_campaign=opik)                                 |
+| **BeeAI (TypeScript)**    | 记录 BeeAI TypeScript 智能体框架调用的跟踪      | [文档](https://www.comet.com/docs/opik/integrations/beeai-typescript?utm_source=opik&utm_medium=github&utm_content=beeai_typescript_link&utm_campaign=opik)           |
 | **BytePlus**              | 记录 BytePlus LLM 调用的跟踪                    | [文档](https://www.comet.com/docs/opik/integrations/byteplus?utm_source=opik&utm_medium=github&utm_content=byteplus_link&utm_campaign=opik)                           |
 | **CrewAI**                | 记录 CrewAI 调用的跟踪                          | [文档](https://www.comet.com/docs/opik/integrations/crewai?utm_source=opik&utm_medium=github&utm_content=crewai_link&utm_campaign=opik)                               |
 | **Cloudflare Workers AI** | 记录 Cloudflare Workers AI 调用的跟踪           | [文档](https://www.comet.com/docs/opik/integrations/cloudflare-workers-ai?utm_source=opik&utm_medium=github&utm_content=cloudflare_workers_ai_link&utm_campaign=opik) |
@@ -216,10 +217,12 @@ opik configure
 | **LangChain (Python)**    | 记录 LangChain LLM 调用的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/langchain?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)                         |
 | **LangChain (JS/TS)**     | 记录 LangChain JavaScript/TypeScript 调用的跟踪 | [文档](https://www.comet.com/docs/opik/integrations/langchainjs?utm_source=opik&utm_medium=github&utm_content=langchainjs_link&utm_campaign=opik)                     |
 | **LangGraph**             | 记录 LangGraph 执行的跟踪                       | [文档](https://www.comet.com/docs/opik/integrations/langgraph?utm_source=opik&utm_medium=github&utm_content=langgraph_link&utm_campaign=opik)                         |
+| **Langflow**              | 记录 Langflow 可视化 AI 应用的跟踪              | [文档](https://www.comet.com/docs/opik/integrations/langflow?utm_source=opik&utm_medium=github&utm_content=langflow_link&utm_campaign=opik)                           |
 | **LiteLLM**               | 记录 LiteLLM 模型调用的跟踪                     | [文档](https://www.comet.com/docs/opik/integrations/litellm?utm_source=opik&utm_medium=github&utm_content=litellm_link&utm_campaign=opik)                             |
 | **LiveKit Agents**        | 记录 LiveKit Agents AI 智能体框架调用的跟踪     | [文档](https://www.comet.com/docs/opik/integrations/livekit?utm_source=opik&utm_medium=github&utm_content=livekit_link&utm_campaign=opik)                             |
 | **Mastra**                | 记录 Mastra AI 工作流框架调用的跟踪             | [文档](https://www.comet.com/docs/opik/integrations/mastra?utm_source=opik&utm_medium=github&utm_content=mastra_link&utm_campaign=opik)                               |
 | **Microsoft Agent Framework (Python)** | 记录 Microsoft Agent Framework 调用的跟踪 | [文档](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework?utm_source=opik&utm_medium=github&utm_content=agent_framework_link&utm_campaign=opik)              |
+| **Microsoft Agent Framework (.NET)** | 记录 Microsoft Agent Framework .NET 调用的跟踪 | [文档](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework-dotnet?utm_source=opik&utm_medium=github&utm_content=agent_framework_dotnet_link&utm_campaign=opik) |
 | **Mistral AI**            | 记录 Mistral AI LLM 调用的跟踪                  | [文档](https://www.comet.com/docs/opik/integrations/mistral?utm_source=opik&utm_medium=github&utm_content=mistral_link&utm_campaign=opik)                             |
 | **LlamaIndex**            | 记录 LlamaIndex LLM 调用的跟踪                  | [文档](https://www.comet.com/docs/opik/integrations/llama_index?utm_source=opik&utm_medium=github&utm_content=llama_index_link&utm_campaign=opik)                     |
 | **Ollama**                | 记录 Ollama LLM 调用的跟踪                      | [文档](https://www.comet.com/docs/opik/integrations/ollama?utm_source=opik&utm_medium=github&utm_content=ollama_link&utm_campaign=opik)                               |
@@ -229,6 +232,7 @@ opik configure
 | **Novita AI**             | 记录 Novita AI LLM 调用的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/novita-ai?utm_source=opik&utm_medium=github&utm_content=novita_ai_link&utm_campaign=opik)                         |
 | **OpenRouter**            | 记录 OpenRouter LLM 调用的跟踪                  | [文档](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik)                       |
 | **OpenTelemetry**         | 记录 OpenTelemetry 支持的调用跟踪               | [文档](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik)             |
+| **OpenWebUI**             | 记录 OpenWebUI 对话的跟踪                       | [文档](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik)                         |
 | **Pipecat**               | 记录 Pipecat 实时语音智能体调用的跟踪           | [文档](https://www.comet.com/docs/opik/integrations/pipecat?utm_source=opik&utm_medium=github&utm_content=pipecat_link&utm_campaign=opik)                             |
 | **Predibase**             | 记录 Predibase LLM 调用的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/predibase?utm_source=opik&utm_medium=github&utm_content=predibase_link&utm_campaign=opik)                         |
 | **Pydantic AI**           | 记录 PydanticAI 智能体调用的跟踪                | [文档](https://www.comet.com/docs/opik/integrations/pydantic-ai?utm_source=opik&utm_medium=github&utm_content=pydantic_ai_link&utm_campaign=opik)                     |

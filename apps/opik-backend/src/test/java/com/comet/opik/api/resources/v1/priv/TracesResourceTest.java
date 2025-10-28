@@ -84,6 +84,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.common.collect.Lists;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NotFoundException;
@@ -95,9 +96,11 @@ import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -116,9 +119,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.com.google.common.collect.Lists;
-import org.testcontainers.shaded.org.apache.commons.lang3.tuple.Pair;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -4768,7 +4768,7 @@ class TracesResourceTest {
         return switch (field.getType()) {
             case STRING, LIST, DICTIONARY, CUSTOM, ENUM, STRING_STATE_DB ->
                 RandomStringUtils.secure().nextAlphanumeric(10);
-            case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
+            case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
             case ERROR_CONTAINER -> "";
         };
@@ -4776,7 +4776,7 @@ class TracesResourceTest {
 
     private String getKey(Field field) {
         return switch (field.getType()) {
-            case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB,
+            case STRING, NUMBER, DURATION, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB,
                     DICTIONARY ->
                 null;
             case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
@@ -4786,7 +4786,7 @@ class TracesResourceTest {
     private String getInvalidValue(Field field) {
         return switch (field.getType()) {
             case STRING, DICTIONARY, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB -> " ";
-            case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
+            case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
 
@@ -7451,7 +7451,7 @@ class TracesResourceTest {
 
             // Then the trace should have attachments stripped and replaced with references
             // Wait for async processing and attachment stripping
-            // Use truncate=true to get attachment references instead of re-injected full base64 data
+            // Use strip_attachments=true to get attachment references instead of re-injected full base64 data
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 Trace retrievedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
                 assertThat(retrievedTrace).isNotNull();
@@ -7557,7 +7557,7 @@ class TracesResourceTest {
             assertThat(attachmentPage).isNotNull();
             assertThat(attachmentPage.content()).hasSize(2); // Should have exactly 2, not duplicates
 
-            // Test 1: Fetch with truncate=true (default behavior) - should show references
+            // Test 1: Fetch with strip_attachments=true - should show references
             Trace truncatedTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY, true);
             assertThat(truncatedTrace).isNotNull();
 
@@ -7979,7 +7979,7 @@ class TracesResourceTest {
             // Wait for async processing and attachment stripping
             var projectId = projectResourceClient.getByName(DEFAULT_PROJECT, API_KEY, TEST_WORKSPACE).id();
 
-            // Use truncate=true to get attachment references instead of re-injected full base64 data
+            // Use strip_attachments=true to get attachment references instead of re-injected full base64 data
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 // Ensure all traces can be retrieved successfully before proceeding with assertions
                 for (var originalTrace : traces) {
@@ -10056,6 +10056,58 @@ class TracesResourceTest {
             var expectedThreads = getExpectedThreads(traces, projectId, threadId, spans, TraceThreadStatus.ACTIVE);
 
             TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+        }
+
+        @Test
+        @DisplayName("when trace thread is retrieved with truncate parameter, then messages are truncated accordingly")
+        void getTraceThread__whenTruncateParameter__thenMessagesAreTruncatedAccordingly() {
+
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            // Create a long message that exceeds the truncation threshold of 10001 characters
+            var longMessage = "x".repeat(15000);
+            var longInput = "{\"content\": \"" + longMessage + "\"}";
+            var longOutput = "{\"result\": \"" + longMessage + "\"}";
+
+            var trace1 = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString(longInput))
+                    .build();
+
+            var trace2 = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .output(JsonUtils.getJsonNodeFromString(longOutput))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            // Test with truncate=false (default behavior) - should return full messages
+            var threadWithoutTruncate = traceResourceClient.getTraceThread(threadId, projectId, false, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(threadWithoutTruncate.firstMessage()).isNotNull();
+            assertThat(threadWithoutTruncate.lastMessage()).isNotNull();
+            assertThat(threadWithoutTruncate.firstMessage().toString()).contains(longMessage);
+            assertThat(threadWithoutTruncate.lastMessage().toString()).contains(longMessage);
+
+            // Test with truncate=true - should return truncated messages
+            var threadWithTruncate = traceResourceClient.getTraceThread(threadId, projectId, true, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(threadWithTruncate.firstMessage()).isNotNull();
+            assertThat(threadWithTruncate.lastMessage()).isNotNull();
+            // Truncated messages should be significantly shorter than the original
+            assertThat(threadWithTruncate.firstMessage().toString().length()).isLessThan(longInput.length());
+            assertThat(threadWithTruncate.lastMessage().toString().length()).isLessThan(longOutput.length());
+            // Truncated messages should be around 10001 characters (the threshold) plus some JSON formatting overhead
+            // Allow up to 10% overhead for JSON serialization
+            assertThat(threadWithTruncate.firstMessage().toString().length()).isLessThan(11000);
+            assertThat(threadWithTruncate.lastMessage().toString().length()).isLessThan(11000);
         }
 
         @Test

@@ -31,6 +31,9 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import PromptMessageImageTags from "@/components/pages-shared/llm/PromptMessageImageTags/PromptMessageImageTags";
+import { useMessageContent } from "@/hooks/useMessageContent";
+import { parseContentWithImages } from "@/lib/llm";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -71,6 +74,12 @@ const EditPromptVersionDialog: React.FunctionComponent<
     editable: true,
   });
 
+  const { localText, images, setImages, handleContentChange } =
+    useMessageContent({
+      content: template,
+      onChangeContent: setTemplate,
+    });
+
   const { mutate } = useCreatePromptVersionMutation();
 
   const handleClickEditPrompt = () => {
@@ -97,6 +106,14 @@ const EditPromptVersionDialog: React.FunctionComponent<
   const metadataHasChanges = metadata !== metadataString;
   const isValid =
     template?.length && (templateHasChanges || metadataHasChanges);
+
+  const { text: originalText, images: originalImages } =
+    parseContentWithImages(promptTemplate);
+  const { text: currentText, images: currentImages } =
+    parseContentWithImages(template);
+
+  const imagesHaveChanges =
+    JSON.stringify(originalImages) !== JSON.stringify(currentImages);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -136,25 +153,69 @@ const EditPromptVersionDialog: React.FunctionComponent<
               </ToggleGroup>
             </div>
             {previewMode === PROMPT_PREVIEW_MODE.write ? (
-              <Textarea
-                id="template"
-                className="comet-code"
-                placeholder="Prompt"
-                value={template}
-                onChange={(event) => setTemplate(event.target.value)}
-              />
+              <>
+                <Textarea
+                  id="template"
+                  className="comet-code"
+                  placeholder="Prompt"
+                  value={localText}
+                  onChange={(event) => handleContentChange(event.target.value)}
+                />
+                <Description>
+                  {
+                    EXPLAINERS_MAP[
+                      EXPLAINER_ID.what_format_should_the_prompt_be
+                    ].description
+                  }
+                </Description>
+              </>
             ) : (
-              <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
-                <TextDiff content1={promptTemplate} content2={template} />
+              <div className="flex flex-col gap-4">
+                <div className="comet-code min-h-44 overflow-y-auto whitespace-pre-line break-words rounded-md border px-2.5 py-1.5">
+                  <TextDiff content1={originalText} content2={currentText} />
+                </div>
+                {imagesHaveChanges && (
+                  <div className="flex flex-col gap-3 rounded-md border p-4">
+                    <div className="comet-body-s-accented text-muted-foreground">
+                      Images comparison
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="comet-body-xs text-muted-foreground">
+                        Before:
+                      </div>
+                      <PromptMessageImageTags
+                        images={originalImages}
+                        setImages={() => {}}
+                        align="start"
+                        editable={false}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="comet-body-xs text-muted-foreground">
+                        After:
+                      </div>
+                      <PromptMessageImageTags
+                        images={currentImages}
+                        setImages={() => {}}
+                        align="start"
+                        editable={false}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-            <Description>
-              {
-                EXPLAINERS_MAP[EXPLAINER_ID.what_format_should_the_prompt_be]
-                  .description
-              }
-            </Description>
           </div>
+          {previewMode === PROMPT_PREVIEW_MODE.write && (
+            <div className="flex flex-col gap-2 pb-4">
+              <Label>Images</Label>
+              <PromptMessageImageTags
+                images={images}
+                setImages={setImages}
+                align="start"
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="promptMetadata">Commit message</Label>
             <Textarea

@@ -24,7 +24,7 @@ public class TraceThreadConfig implements StreamConfiguration {
     public static final String PAYLOAD_FIELD = "message";
 
     private static final CompositeCodec CODEC = new CompositeCodec(new LZ4CodecV2(),
-            new JsonJacksonCodec(JsonUtils.MAPPER));
+            new JsonJacksonCodec(JsonUtils.getMapper()));
 
     @Valid @JsonProperty
     private boolean enabled = true;
@@ -41,6 +41,11 @@ public class TraceThreadConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration poolingInterval;
+
+    @Valid @JsonProperty
+    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
+    private Duration longPollingDuration;
 
     @Valid @JsonProperty
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)

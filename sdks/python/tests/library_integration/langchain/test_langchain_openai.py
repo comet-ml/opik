@@ -1,11 +1,11 @@
 import asyncio
-
+import importlib.metadata
 import langchain_openai
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain import OpikTracer
-
+from opik import semantic_version
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -18,6 +18,13 @@ from ...testlib import (
 from .constants import (
     EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
     EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
+)
+
+LANGCHAIN_OPENAI_VERSION_NEWER_THAN_0_3_35 = (
+    semantic_version.SemanticVersion.parse(
+        importlib.metadata.version("langchain_openai")
+    )
+    >= "0.3.35"
 )
 
 
@@ -79,15 +86,12 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
         expected_llm_span_input = {
             "messages": [
                 [
-                    {
-                        "content": expected_input_prompt,
-                        "additional_kwargs": {},
-                        "response_metadata": {},
-                        "type": "human",
-                        "name": None,
-                        "id": None,
-                        "example": False,
-                    }
+                    ANY_DICT.containing(
+                        {
+                            "content": expected_input_prompt,
+                            "type": "human",
+                        }
+                    ),
                 ]
             ]
         }
@@ -181,15 +185,12 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
         input={
             "messages": [
                 [
-                    {
-                        "content": input_prompt,
-                        "additional_kwargs": {},
-                        "response_metadata": {},
-                        "type": "human",
-                        "name": None,
-                        "id": None,
-                        "example": False,
-                    }
+                    ANY_DICT.containing(
+                        {
+                            "content": input_prompt,
+                            "type": "human",
+                        }
+                    ),
                 ]
             ]
         },
@@ -219,15 +220,12 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
                 input={
                     "messages": [
                         [
-                            {
-                                "content": input_prompt,
-                                "additional_kwargs": {},
-                                "response_metadata": {},
-                                "type": "human",
-                                "name": None,
-                                "id": None,
-                                "example": False,
-                            }
+                            ANY_DICT.containing(
+                                {
+                                    "content": input_prompt,
+                                    "type": "human",
+                                }
+                            ),
                         ]
                     ]
                 },
@@ -259,6 +257,10 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@pytest.mark.skipif(
+    LANGCHAIN_OPENAI_VERSION_NEWER_THAN_0_3_35,
+    reason="In newer versions usage is logged anyway",
+)
 def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged__happyflow(
     fake_backend,
     ensure_openai_configured,
@@ -355,15 +357,12 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                         input={
                             "messages": [
                                 [
-                                    {
-                                        "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
-                                        "additional_kwargs": {},
-                                        "response_metadata": {},
-                                        "type": "human",
-                                        "name": None,
-                                        "id": None,
-                                        "example": False,
-                                    }
+                                    ANY_DICT.containing(
+                                        {
+                                            "content": "Given the title of play, write a synopsys for that. Title: The Hobbit.",
+                                            "type": "human",
+                                        }
+                                    ),
                                 ]
                             ]
                         },
@@ -388,6 +387,10 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+@pytest.mark.skipif(
+    LANGCHAIN_OPENAI_VERSION_NEWER_THAN_0_3_35,
+    reason="In newer versions usage is logged anyway",
+)
 def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__happyflow(
     fake_backend,
     ensure_openai_configured,
@@ -550,6 +553,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
         error_info={
             "exception_type": ANY_STRING,
             "traceback": ANY_STRING,
+            "message": None,
         },
         spans=[
             SpanModel(
@@ -567,6 +571,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                 error_info={
                     "exception_type": ANY_STRING,
                     "traceback": ANY_STRING,
+                    "message": None,
                 },
                 spans=[
                     SpanModel(
@@ -599,6 +604,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                         error_info={
                             "exception_type": ANY_STRING,
                             "traceback": ANY_STRING,
+                            "message": None,
                         },
                         spans=[],
                     ),

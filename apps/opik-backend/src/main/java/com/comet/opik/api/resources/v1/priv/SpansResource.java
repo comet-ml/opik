@@ -25,7 +25,6 @@ import com.comet.opik.domain.SpanSearchCriteria;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -111,7 +110,8 @@ public class SpansResource {
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude) {
 
@@ -119,11 +119,15 @@ public class SpansResource {
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var sortingFields = sortingFactory.newSorting(sorting);
 
-        WorkspaceMetadata workspaceMetadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        var workspaceMetadata = workspaceMetadataService
+                .getProjectMetadata(workspaceId, projectId, projectName)
+                // Context is required for resolving project ID
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && workspaceMetadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -134,17 +138,16 @@ public class SpansResource {
                 .type(type)
                 .filters(spanFilters)
                 .truncate(truncate)
+                .stripAttachments(stripAttachments)
                 .sortingFields(sortingFields)
                 .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
                 .build();
-
-        String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
         SpanPage spans = spanService.find(page, size, spanSearchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                    if (workspaceMetadata.cannotUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;
@@ -163,17 +166,19 @@ public class SpansResource {
     @JsonView(View.Public.class)
     @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getById(@PathParam("id") @NotNull UUID id,
-            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "If true, returns references; if false, returns reinjected base64. Matches traces endpoint for consistency and API discoverability.") boolean truncate) {
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting span by id '{}' on workspace_id '{}' with truncate={}", id, workspaceId, truncate);
+        log.info("Getting span by id '{}' on workspace_id '{}' with stripAttachments={}", id, workspaceId,
+                stripAttachments);
 
-        var span = spanService.getById(id, truncate)
+        var span = spanService.getById(id, stripAttachments)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}' with truncate={}",
+        log.info(
+                "Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}' with stripAttachments={}",
                 span.id(), span.traceId(),
-                span.parentSpanId(), workspaceId, truncate);
+                span.parentSpanId(), workspaceId, stripAttachments);
 
         return Response.ok().entity(span).build();
     }

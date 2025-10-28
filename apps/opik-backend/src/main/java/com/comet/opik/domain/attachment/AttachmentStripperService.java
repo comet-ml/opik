@@ -4,18 +4,15 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.attachment.AttachmentInfo;
-import com.comet.opik.api.attachment.CompleteMultipartUploadRequest;
 import com.comet.opik.api.attachment.EntityType;
-import com.comet.opik.api.attachment.MultipartUploadPart;
-import com.comet.opik.api.attachment.StartMultipartUploadRequest;
-import com.comet.opik.api.attachment.StartMultipartUploadResponse;
-import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.api.events.AttachmentUploadRequested;
+import com.comet.opik.infrastructure.AttachmentsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.Singleton;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
@@ -31,39 +28,38 @@ import org.apache.tika.mime.MimeTypes;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.Base64;
-import java.util.Collections;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Service responsible for detecting and stripping attachments from trace/span payloads.
  *
- * This service uses a simplified string-based approach:
+ * This service uses a simplified string-based approach with async upload processing:
  * 1. Convert JSON to string
  * 2. Find all base64 strings using regex
  * 3. Process each base64 string with Tika for MIME type detection
- * 4. Upload valid attachments to S3/MinIO (using multipart upload for S3, direct for MinIO)
- * 5. Replace base64 strings in the JSON with references to the uploaded attachments
+ * 4. Post attachment upload events to EventBus for async processing
+ * 5. Replace base64 strings in the JSON with references to the attachments
  *
  * Filenames are generated to include context (input, output, metadata) to prevent naming conflicts.
+ * Actual uploads are handled asynchronously by AttachmentUploadListener.
  */
 @Singleton
 @Slf4j
 public class AttachmentStripperService {
 
-    private final @NonNull AttachmentService attachmentService;
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull ObjectMapper objectMapper;
     private final @NonNull S3Config s3Config;
+    private final @NonNull AttachmentsConfig attachmentsConfig;
+    private final @NonNull EventBus eventBus;
 
-    // OpenTelemetry metrics for monitoring attachment processing
+    // OpenTelemetry metrics for monitoring attachment detection and event posting
+    // Note: Actual upload success/failure metrics are tracked in AttachmentUploadListener
     private final LongCounter attachmentsProcessed;
     private final LongCounter attachmentsSkipped;
     private final LongCounter attachmentErrors;
@@ -76,175 +72,196 @@ public class AttachmentStripperService {
     private final Pattern base64Pattern;
 
     // Minimum base64 size to look for
-    private final int minBase64Size;
+    private final long minBase64Size;
 
     @Inject
-    public AttachmentStripperService(@NonNull AttachmentService attachmentService,
-            @NonNull IdGenerator idGenerator,
-            @NonNull ObjectMapper objectMapper,
-            @NonNull OpikConfiguration opikConfig) {
-        this.attachmentService = attachmentService;
-        this.idGenerator = idGenerator;
+    public AttachmentStripperService(@NonNull ObjectMapper objectMapper,
+            @NonNull OpikConfiguration opikConfig,
+            @NonNull EventBus eventBus) {
         this.objectMapper = objectMapper;
         this.s3Config = opikConfig.getS3Config();
+        this.attachmentsConfig = opikConfig.getAttachmentsConfig();
+        this.eventBus = eventBus;
 
         // Initialize OpenTelemetry metrics using global instance
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
 
         this.attachmentsProcessed = meter
                 .counterBuilder("opik.attachments.processed")
-                .setDescription("Number of attachments successfully processed and uploaded")
+                .setDescription("Number of attachment upload events posted to EventBus")
                 .build();
+
         this.attachmentsSkipped = meter
                 .counterBuilder("opik.attachments.skipped")
                 .setDescription("Number of base64 strings skipped (not valid attachments)")
                 .build();
         this.attachmentErrors = meter
                 .counterBuilder("opik.attachments.errors")
-                .setDescription("Number of errors during attachment processing")
+                .setDescription("Number of errors during attachment detection/processing")
                 .build();
         this.processingTimer = meter
                 .histogramBuilder("opik.attachments.processing.duration.ms")
-                .setDescription("Time spent processing attachments in milliseconds")
+                .setDescription("Time spent detecting and processing attachments in milliseconds")
                 .ofLongs()
                 .build();
 
         // Compile the regex pattern once during construction based on configuration
-        int minLength = s3Config.getStripAttachmentsMinSize();
-        this.minBase64Size = minLength;
-        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minLength + ",}={0,2})");
+        this.minBase64Size = attachmentsConfig.getStripMinSize();
+        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minBase64Size + ",}={0,2})");
 
-        log.info("AttachmentStripperService initialized with minBase64Length: {}", minLength);
+        log.info("AttachmentStripperService initialized with minBase64Length: {}", minBase64Size);
     }
 
     /**
      * Strips attachments from a Trace entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<Trace> stripAttachmentsFromTrace(Trace trace, String workspaceId, String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            Trace.TraceBuilder builder = trace.toBuilder();
-
-            if (trace.input() != null) {
-                JsonNode processedInput = stripAttachments(trace.input(), trace.id(), EntityType.TRACE,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
-
-            if (trace.output() != null) {
-                JsonNode processedOutput = stripAttachments(trace.output(), trace.id(), EntityType.TRACE,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
-
-            if (trace.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(trace.metadata(), trace.id(), EntityType.TRACE,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
-
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+    public Mono<Trace> stripAttachments(Trace trace, String workspaceId, String userName, String projectName) {
+        var builder = trace.toBuilder();
+        return stripAttachmentsCommon(
+                trace.id(),
+                EntityType.TRACE,
+                workspaceId,
+                userName,
+                projectName,
+                trace.input(),
+                trace.output(),
+                trace.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
     }
 
     /**
      * Strips attachments from a TraceUpdate entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<TraceUpdate> stripAttachmentsFromTraceUpdate(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
+    public Mono<TraceUpdate> stripAttachments(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
             String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            TraceUpdate.TraceUpdateBuilder builder = traceUpdate.toBuilder();
-
-            if (traceUpdate.input() != null) {
-                JsonNode processedInput = stripAttachments(traceUpdate.input(), traceId, EntityType.TRACE,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
-
-            if (traceUpdate.output() != null) {
-                JsonNode processedOutput = stripAttachments(traceUpdate.output(), traceId, EntityType.TRACE,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
-
-            if (traceUpdate.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(traceUpdate.metadata(), traceId, EntityType.TRACE,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
-
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+        var builder = traceUpdate.toBuilder();
+        return stripAttachmentsCommon(
+                traceId,
+                EntityType.TRACE,
+                workspaceId,
+                userName,
+                projectName,
+                traceUpdate.input(),
+                traceUpdate.output(),
+                traceUpdate.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
     }
 
     /**
      * Strips attachments from a Span entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<Span> stripAttachmentsFromSpan(Span span, String workspaceId, String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            Span.SpanBuilder builder = span.toBuilder();
-
-            if (span.input() != null) {
-                JsonNode processedInput = stripAttachments(span.input(), span.id(), EntityType.SPAN,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
-
-            if (span.output() != null) {
-                JsonNode processedOutput = stripAttachments(span.output(), span.id(), EntityType.SPAN,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
-
-            if (span.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(span.metadata(), span.id(), EntityType.SPAN,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
-
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+    public Mono<Span> stripAttachments(Span span, String workspaceId, String userName, String projectName) {
+        var builder = span.toBuilder();
+        return stripAttachmentsCommon(
+                span.id(),
+                EntityType.SPAN,
+                workspaceId,
+                userName,
+                projectName,
+                span.input(),
+                span.output(),
+                span.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
     }
 
     /**
      * Strips attachments from a SpanUpdate entity.
-     *
-     * TODO: This one and the similar ones below should be refactored to use the same method if
-     * we can make all these types to share the same interface (shouldn't they?)
      */
-    public Mono<SpanUpdate> stripAttachmentsFromSpanUpdate(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
+    public Mono<SpanUpdate> stripAttachments(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
             String userName, String projectName) {
-        return Mono.fromCallable(() -> {
-            SpanUpdate.SpanUpdateBuilder builder = spanUpdate.toBuilder();
+        var builder = spanUpdate.toBuilder();
+        return stripAttachmentsCommon(
+                spanId,
+                EntityType.SPAN,
+                workspaceId,
+                userName,
+                projectName,
+                spanUpdate.input(),
+                spanUpdate.output(),
+                spanUpdate.metadata(),
+                builder::input,
+                builder::output,
+                builder::metadata,
+                builder::build);
+    }
 
-            if (spanUpdate.input() != null) {
-                JsonNode processedInput = stripAttachments(spanUpdate.input(), spanId, EntityType.SPAN,
-                        workspaceId, userName, projectName, "input");
-                builder.input(processedInput);
-            }
+    /**
+     * Common logic for stripping attachments from trace/span entities.
+     *
+     * This method handles the reactive processing of input, output, and metadata fields,
+     * stripping attachments asynchronously and applying the results back via the provided setters.
+     *
+     * @param <T> the entity type being processed
+     * @param entityId the entity ID (trace or span)
+     * @param entityType the type of entity (TRACE or SPAN)
+     * @param workspaceId the workspace ID
+     * @param userName the user name
+     * @param projectName the project name
+     * @param input the input JSON node
+     * @param output the output JSON node
+     * @param metadata the metadata JSON node
+     * @param inputSetter consumer to set input on the entity builder
+     * @param outputSetter consumer to set output on the entity builder
+     * @param metadataSetter consumer to set metadata on the entity builder
+     * @param buildFunction supplier to build the final entity
+     * @return Mono containing the processed entity
+     */
+    private <T> Mono<T> stripAttachmentsCommon(
+            UUID entityId,
+            EntityType entityType,
+            String workspaceId,
+            String userName,
+            String projectName,
+            JsonNode input,
+            JsonNode output,
+            JsonNode metadata,
+            Consumer<JsonNode> inputSetter,
+            Consumer<JsonNode> outputSetter,
+            Consumer<JsonNode> metadataSetter,
+            Supplier<T> buildFunction) {
 
-            if (spanUpdate.output() != null) {
-                JsonNode processedOutput = stripAttachments(spanUpdate.output(), spanId, EntityType.SPAN,
-                        workspaceId, userName, projectName, "output");
-                builder.output(processedOutput);
-            }
+        Mono<Optional<JsonNode>> inputMono = processField(
+                input, entityId, entityType, workspaceId, userName, projectName, "input");
 
-            if (spanUpdate.metadata() != null) {
-                JsonNode processedMetadata = stripAttachments(spanUpdate.metadata(), spanId, EntityType.SPAN,
-                        workspaceId, userName, projectName, "metadata");
-                builder.metadata(processedMetadata);
-            }
+        Mono<Optional<JsonNode>> outputMono = processField(
+                output, entityId, entityType, workspaceId, userName, projectName, "output");
 
-            return builder.build();
-        }).subscribeOn(Schedulers.boundedElastic());
+        Mono<Optional<JsonNode>> metadataMono = processField(
+                metadata, entityId, entityType, workspaceId, userName, projectName, "metadata");
+
+        return Mono.zip(inputMono, outputMono, metadataMono)
+                .map(tuple -> {
+                    tuple.getT1().ifPresent(inputSetter);
+                    tuple.getT2().ifPresent(outputSetter);
+                    tuple.getT3().ifPresent(metadataSetter);
+
+                    return buildFunction.get();
+                });
+    }
+
+    private Mono<Optional<JsonNode>> processField(
+            JsonNode value,
+            UUID entityId,
+            EntityType entityType,
+            String workspaceId,
+            String userName,
+            String projectName,
+            String fieldName) {
+        return Mono.justOrEmpty(value)
+                .flatMap(it -> Mono.fromCallable(
+                        () -> stripAttachments(it, entityId, entityType, workspaceId, userName, projectName, fieldName))
+                        .subscribeOn(Schedulers.boundedElastic()))
+                .map(Optional::of)
+                .defaultIfEmpty(Optional.empty());
     }
 
     /**
@@ -340,9 +357,8 @@ public class AttachmentStripperService {
     /**
      * Processes a potential base64 attachment string.
      *
-     * Decodes the base64 data, uses Apache Tika to detect the MIME type, and uploads the attachment
-     * using either direct upload (MinIO) or multipart upload (S3) based on configuration.
-     * The generated filename includes the context prefix to avoid conflicts.
+     * Decodes the base64 data, uses Apache Tika to detect the MIME type, and posts an async upload event
+     * to the EventBus for background processing. The generated filename includes the context prefix to avoid conflicts.
      *
      * @param base64Data the base64 string to process
      * @param attachmentNumber the sequential attachment number for this request
@@ -378,41 +394,34 @@ public class AttachmentStripperService {
             String fileName = context + "-attachment-" + attachmentNumber + "-" + System.currentTimeMillis() + "."
                     + extension;
 
-            // Create AttachmentInfo for upload
-            AttachmentInfo attachmentInfo = AttachmentInfo.builder()
-                    .fileName(fileName)
-                    .mimeType(mimeType)
-                    .entityType(entityType)
-                    .entityId(entityId)
-                    .projectName(projectName)
-                    .build();
+            // Post event for async attachment upload
+            AttachmentUploadRequested uploadEvent = new AttachmentUploadRequested(
+                    fileName,
+                    mimeType,
+                    base64Data, // Keep original base64 data for async processing
+                    workspaceId,
+                    userName,
+                    projectName,
+                    entityId,
+                    entityType);
 
-            // Upload attachment using appropriate method based on configuration
-            if (s3Config.isMinIO()) {
-                // For MinIO, use direct upload
-                attachmentService.uploadAttachment(attachmentInfo, bytes, workspaceId, userName);
-            } else {
-                // For S3, use multipart upload
-                uploadAttachmentViaMultipart(attachmentInfo, bytes, workspaceId, userName);
-            }
+            // Post event to EventBus for async processing
+            eventBus.post(uploadEvent);
 
-            // Record successful attachment processing
+            log.info("Posted async upload event for attachment: '{}'", fileName);
+
+            // Record that we posted an upload event (compare with uploadSuccesses/uploadFailures in AttachmentUploadListener)
             attachmentsProcessed.add(1);
+
             return "[" + fileName + "]";
 
         } catch (IllegalArgumentException e) {
             // Not valid base64, ignore silently
             attachmentsSkipped.add(1);
             return null;
-        } catch (IOException | InterruptedException e) {
-            // Network/IO errors during upload - these are often transient
-            log.warn("Network error during attachment upload (attachment #{}), skipping: {}",
-                    attachmentNumber, e.getMessage());
-            attachmentErrors.add(1);
-            return null; // Graceful degradation - continue without this attachment
         } catch (Exception e) {
-            // Unexpected errors - log more details for debugging
-            log.error("Unexpected error processing attachment #{} in context '{}': {}",
+            // Unexpected errors during attachment processing
+            log.error("Error processing attachment #{} in context '{}': {}",
                     attachmentNumber, context, e.getMessage(), e);
             attachmentErrors.add(1);
             return null; // Graceful degradation - continue without this attachment
@@ -443,8 +452,6 @@ public class AttachmentStripperService {
             return extension.isEmpty() ? "bin" : extension;
 
         } catch (MimeTypeException e) {
-            log.debug("Unknown MIME type: {}, using fallback extension", mimeType);
-
             // Fallback: extract from MIME type (e.g., "image/png" -> "png")
             if (mimeType.contains("/")) {
                 String subtype = mimeType.substring(mimeType.indexOf("/") + 1);
@@ -472,93 +479,4 @@ public class AttachmentStripperService {
         }
     }
 
-    /**
-     * Upload attachment via multipart upload flow for S3.
-     *
-     * This method implements the complete S3 multipart upload flow:
-     * 1. Starts a multipart upload to get presigned URLs
-     * 2. Uploads the data to the presigned URL using HTTP PUT
-     * 3. Completes the multipart upload with the ETag from the upload response
-     */
-    private void uploadAttachmentViaMultipart(AttachmentInfo attachmentInfo, byte[] bytes,
-            String workspaceId, String userName) throws IOException, InterruptedException {
-        try {
-            // Step 1: Start multipart upload
-            StartMultipartUploadRequest startRequest = StartMultipartUploadRequest.builder()
-                    .fileName(attachmentInfo.fileName())
-                    .mimeType(attachmentInfo.mimeType())
-                    .entityType(attachmentInfo.entityType())
-                    .entityId(attachmentInfo.entityId())
-                    .projectName(attachmentInfo.projectName())
-                    .numOfFileParts(1) // Single part since we have all data in memory
-                    .path("placeholder") // irrelevant; S3 doesn't use it and for Minio we did in another flow
-                    .build();
-
-            StartMultipartUploadResponse startResponse = attachmentService.startMultiPartUpload(startRequest,
-                    workspaceId,
-                    userName);
-
-            // Step 2: Upload the data to the presigned URL and get the ETag
-            String uploadUrl = startResponse.preSignUrls().get(0); // First (and only) URL
-            String eTag = uploadDataToPresignedUrl(uploadUrl, bytes);
-
-            // Step 3: Complete multipart upload with the actual ETag
-            MultipartUploadPart part = MultipartUploadPart.builder()
-                    .partNumber(1)
-                    .eTag(eTag) // Use the actual ETag from the upload response
-                    .build();
-
-            CompleteMultipartUploadRequest completeRequest = CompleteMultipartUploadRequest.builder()
-                    .fileName(attachmentInfo.fileName())
-                    .projectName(attachmentInfo.projectName())
-                    .entityType(attachmentInfo.entityType())
-                    .entityId(attachmentInfo.entityId())
-                    .fileSize((long) bytes.length)
-                    .mimeType(attachmentInfo.mimeType())
-                    .uploadId(startResponse.uploadId())
-                    .uploadedFileParts(Collections.singletonList(part))
-                    .build();
-
-            attachmentService.completeMultiPartUpload(completeRequest, workspaceId, userName);
-
-        } catch (IOException | InterruptedException e) {
-            log.error("Failed to upload attachment '{}' via multipart upload: {}",
-                    attachmentInfo.fileName(), e.getMessage());
-            throw e; // Re-throw for caller to handle
-        } catch (Exception e) {
-            log.error("Unexpected error during multipart upload for attachment '{}': {}",
-                    attachmentInfo.fileName(), e.getMessage(), e);
-            // Wrap unexpected exceptions in IOException for consistent error handling
-            throw new IOException("Multipart upload failed: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Upload data to a presigned URL using HTTP PUT.
-     *
-     * Performs a synchronous HTTP PUT request to upload binary data to the provided presigned URL.
-     * The ETag from the response headers is required for completing the multipart upload.
-     */
-    private String uploadDataToPresignedUrl(String presignedUrl, byte[] data) throws IOException, InterruptedException {
-        HttpClient client = HttpClient.newHttpClient();
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(presignedUrl))
-                .PUT(HttpRequest.BodyPublishers.ofByteArray(data))
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new IOException(
-                    "Failed to upload data to presigned URL: " + response.statusCode() + " " + response.body());
-        }
-
-        // Extract and return the ETag from response headers
-        String eTag = response.headers().firstValue("ETag").orElseThrow(
-                () -> new IOException("ETag not found in upload response headers"));
-
-        log.debug("Successfully uploaded data to presigned URL, ETag: {}", eTag);
-        return eTag;
-    }
 }

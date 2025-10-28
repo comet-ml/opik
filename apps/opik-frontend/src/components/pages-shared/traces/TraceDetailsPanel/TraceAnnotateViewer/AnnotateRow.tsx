@@ -32,7 +32,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import copy from "clipboard-copy";
 import { useToast } from "@/components/ui/use-toast";
 import { UpdateFeedbackScoreData } from "./types";
-import { useLoggedInUserName } from "@/store/AppStore";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 const SET_VALUE_DEBOUNCE_DELAY = 500;
 
@@ -53,7 +53,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 }) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const { toast } = useToast();
-  const userName = useLoggedInUserName();
+  const userName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
   const feedbackScoreData = useMemo(() => {
     if (!feedbackScore) {
@@ -167,7 +167,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
       return (
         <DebounceInput
-          className="h-7 min-w-[100px] py-1"
+          className="my-0.5 h-7 min-w-[100px] py-1"
           max={feedbackDefinition.details.max}
           min={feedbackDefinition.details.min}
           step="any"
@@ -244,7 +244,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             value={categoryName || ""}
             options={categoricalSelectOptionList}
             onChange={onCategoricalValueChange}
-            className="h-7 min-w-[100px] py-1"
+            className="my-0.5 h-7 min-w-[100px] py-1"
             renderTrigger={(value) => {
               const selectedOption = categoricalOptionList.find(
                 (item) => item.name.trim() === value.trim(),
@@ -270,7 +270,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
       }
       return (
         <ToggleGroup
-          className="min-w-fit"
+          className="min-w-fit p-0.5"
           onValueChange={onCategoricalValueChange}
           variant="outline"
           type="single"
@@ -314,9 +314,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         {feedbackScoreData?.value !== "" && (
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon-xs"
             className={cn(
-              "size-7 relative group/reason-btn",
+              "relative group/reason-btn",
               editReason &&
                 "bg-toggle-outline-active active:bg-toggle-outline-active hover:bg-toggle-outline-active",
             )}
@@ -335,11 +335,11 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           </Button>
         )}
       </div>
-      <div className="flex items-center overflow-hidden border-t border-border">
+      <div className="flex items-center overflow-hidden border-t border-border px-0.5">
         {feedbackScoreData?.value !== "" && (
           <Button
             variant="minimal"
-            size="icon-sm"
+            size="icon-xs"
             onClick={deleteFeedbackScore}
           >
             <X />

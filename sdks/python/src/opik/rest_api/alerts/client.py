@@ -7,8 +7,12 @@ from ..core.request_options import RequestOptions
 from ..types.alert_page_public import AlertPagePublic
 from ..types.alert_public import AlertPublic
 from ..types.alert_trigger_write import AlertTriggerWrite
+from ..types.alert_write_alert_type import AlertWriteAlertType
+from ..types.webhook_examples import WebhookExamples
+from ..types.webhook_test_result import WebhookTestResult
 from ..types.webhook_write import WebhookWrite
 from .raw_client import AsyncRawAlertsClient, RawAlertsClient
+from .types.get_webhook_examples_request_alert_type import GetWebhookExamplesRequestAlertType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -73,10 +77,12 @@ class AlertsClient:
     def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -85,13 +91,17 @@ class AlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -107,10 +117,17 @@ class AlertsClient:
         from Opik import OpikApi
         from Opik import WebhookWrite
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.alerts.create_alert(name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+        client.alerts.create_alert(webhook=WebhookWrite(url='url', ), )
         """
         _response = self._raw_client.create_alert(
-            name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
+            webhook=webhook,
+            id=id,
+            name=name,
+            enabled=enabled,
+            alert_type=alert_type,
+            metadata=metadata,
+            triggers=triggers,
+            request_options=request_options,
         )
         return _response.data
 
@@ -169,10 +186,12 @@ class AlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -183,13 +202,17 @@ class AlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -205,10 +228,106 @@ class AlertsClient:
         from Opik import OpikApi
         from Opik import WebhookWrite
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+        client.alerts.update_alert(id_='id', webhook=WebhookWrite(url='url', ), )
         """
         _response = self._raw_client.update_alert(
-            id_, name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
+            id_,
+            webhook=webhook,
+            id=id,
+            name=name,
+            enabled=enabled,
+            alert_type=alert_type,
+            metadata=metadata,
+            triggers=triggers,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def get_webhook_examples(
+        self,
+        *,
+        alert_type: typing.Optional[GetWebhookExamplesRequestAlertType] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WebhookExamples:
+        """
+        Get webhook payload examples for all alert event types, optionally filtered by alert type
+
+        Parameters
+        ----------
+        alert_type : typing.Optional[GetWebhookExamplesRequestAlertType]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WebhookExamples
+            Webhook examples
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.alerts.get_webhook_examples()
+        """
+        _response = self._raw_client.get_webhook_examples(alert_type=alert_type, request_options=request_options)
+        return _response.data
+
+    def test_webhook(
+        self,
+        *,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WebhookTestResult:
+        """
+        Test alert webhook
+
+        Parameters
+        ----------
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WebhookTestResult
+            Webhook test
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import WebhookWrite
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.alerts.test_webhook(webhook=WebhookWrite(url='url', ), )
+        """
+        _response = self._raw_client.test_webhook(
+            webhook=webhook,
+            id=id,
+            name=name,
+            enabled=enabled,
+            alert_type=alert_type,
+            metadata=metadata,
+            triggers=triggers,
+            request_options=request_options,
         )
         return _response.data
 
@@ -275,10 +394,12 @@ class AsyncAlertsClient:
     async def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -287,13 +408,17 @@ class AsyncAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -311,11 +436,18 @@ class AsyncAlertsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.alerts.create_alert(name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+            await client.alerts.create_alert(webhook=WebhookWrite(url='url', ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_alert(
-            name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
+            webhook=webhook,
+            id=id,
+            name=name,
+            enabled=enabled,
+            alert_type=alert_type,
+            metadata=metadata,
+            triggers=triggers,
+            request_options=request_options,
         )
         return _response.data
 
@@ -380,10 +512,12 @@ class AsyncAlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -394,13 +528,17 @@ class AsyncAlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -418,10 +556,112 @@ class AsyncAlertsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.alerts.update_alert(id_='id', name='name', webhook=WebhookWrite(url='url', secret_token='secret_token', ), )
+            await client.alerts.update_alert(id_='id', webhook=WebhookWrite(url='url', ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.update_alert(
-            id_, name=name, webhook=webhook, id=id, enabled=enabled, triggers=triggers, request_options=request_options
+            id_,
+            webhook=webhook,
+            id=id,
+            name=name,
+            enabled=enabled,
+            alert_type=alert_type,
+            metadata=metadata,
+            triggers=triggers,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def get_webhook_examples(
+        self,
+        *,
+        alert_type: typing.Optional[GetWebhookExamplesRequestAlertType] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WebhookExamples:
+        """
+        Get webhook payload examples for all alert event types, optionally filtered by alert type
+
+        Parameters
+        ----------
+        alert_type : typing.Optional[GetWebhookExamplesRequestAlertType]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WebhookExamples
+            Webhook examples
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.alerts.get_webhook_examples()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_webhook_examples(alert_type=alert_type, request_options=request_options)
+        return _response.data
+
+    async def test_webhook(
+        self,
+        *,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> WebhookTestResult:
+        """
+        Test alert webhook
+
+        Parameters
+        ----------
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        WebhookTestResult
+            Webhook test
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import WebhookWrite
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.alerts.test_webhook(webhook=WebhookWrite(url='url', ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.test_webhook(
+            webhook=webhook,
+            id=id,
+            name=name,
+            enabled=enabled,
+            alert_type=alert_type,
+            metadata=metadata,
+            triggers=triggers,
+            request_options=request_options,
         )
         return _response.data

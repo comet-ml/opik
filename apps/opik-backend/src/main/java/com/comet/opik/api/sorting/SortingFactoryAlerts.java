@@ -8,7 +8,6 @@ import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
-import static com.comet.opik.api.sorting.SortableFields.WEBHOOK_SECRET_TOKEN;
 import static com.comet.opik.api.sorting.SortableFields.WEBHOOK_URL;
 
 public class SortingFactoryAlerts extends SortingFactory {
@@ -21,7 +20,6 @@ public class SortingFactoryAlerts extends SortingFactory {
                 LAST_UPDATED_AT,
                 CREATED_BY,
                 LAST_UPDATED_BY,
-                WEBHOOK_URL,
-                WEBHOOK_SECRET_TOKEN);
+                WEBHOOK_URL);
     }
 }

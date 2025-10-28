@@ -3,6 +3,8 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.domain.AlertService;
+import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -18,9 +20,8 @@ import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -50,10 +51,12 @@ public class AlertJob extends Job {
     private final @NonNull WebhookPublisher webhookPublisher;
     private final @NonNull @Config WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
+    private final @NonNull WorkspaceNameService workspaceNameService;
+    private final @NonNull OpikConfiguration config;
 
     @Override
     public void doJob(JobExecutionContext context) {
-        log.info("Starting alert job - checking for buckets to process");
+        log.debug("Starting alert job - checking for buckets to process");
 
         // Use distributed lock to prevent overlapping scans in case of slow Redis SCAN operations
         lockService.bestEffortLock(
@@ -62,7 +65,7 @@ public class AlertJob extends Job {
                         .flatMap(this::processBucket)
                         .onErrorContinue((throwable, bucketKey) -> log.error("Failed to process bucket '{}': {}",
                                 bucketKey, throwable.getMessage(), throwable))
-                        .doOnComplete(() -> log.info("Alert job finished processing all ready buckets"))
+                        .doOnComplete(() -> log.debug("Alert job finished processing all ready buckets"))
                         .then()),
                 Mono.defer(() -> {
                     log.info("Could not acquire lock for scanning buckets, another job instance is running");
@@ -99,8 +102,11 @@ public class AlertJob extends Job {
                             .flatMap(bucketData -> processAlertBucket(
                                     alertId,
                                     bucketData.workspaceId(),
+                                    bucketData.workspaceName(),
                                     eventType,
-                                    bucketData.eventIds()))
+                                    bucketData.eventIds(),
+                                    bucketData.payloads(),
+                                    bucketData.userNames()))
                             .then(bucketService.deleteBucket(bucketKey));
                 })
                 .doOnSuccess(__ -> log.info("Successfully processed and deleted bucket: '{}'", bucketKey))
@@ -114,23 +120,31 @@ public class AlertJob extends Job {
      *
      * @param alertId the alert ID
      * @param workspaceId the workspace ID for the alert
+     * @param workspaceName the workspace name for the alert
      * @param eventType the event type
      * @param eventIds the set of aggregated event IDs
+     * @param payloads the set of aggregated event payloads
      * @return Mono that completes when the webhook is sent
      */
     private Mono<Void> processAlertBucket(
             @NonNull UUID alertId,
             @NonNull String workspaceId,
+            @NonNull String workspaceName,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds) {
+            @NonNull List<String> eventIds,
+            @NonNull List<String> payloads,
+            @NonNull List<String> userNames) {
 
-        log.info("Processing alert bucket: alertId='{}', workspaceId='{}', eventType='{}', eventCount='{}'",
-                alertId, workspaceId, eventType, eventIds.size());
+        log.info(
+                "Processing alert bucket: alertId='{}', workspaceId='{}', workspaceName='{}', eventType='{}', eventCount='{}', payloadCount='{}'",
+                alertId, workspaceId, workspaceName, eventType, eventIds.size(), payloads.size());
 
         return Mono.fromCallable(() -> alertService.getByIdAndWorkspace(alertId, workspaceId))
-                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, eventType, eventIds))
-                .doOnSuccess(__ -> log.info("Successfully sent webhook for alert '{}' with '{}' events",
-                        alertId, eventIds.size()))
+                .flatMap(alert -> createAndSendWebhook(alert, workspaceId, workspaceName, eventType, eventIds, payloads,
+                        userNames))
+                .doOnSuccess(
+                        __ -> log.info("Successfully sent webhook for alert '{}' with '{}' events and '{}' payloads",
+                                alertId, eventIds.size(), payloads.size()))
                 .doOnError(error -> log.error("Failed to send webhook for alert '{}': {}",
                         alertId, error.getMessage(), error));
     }
@@ -140,15 +154,20 @@ public class AlertJob extends Job {
      *
      * @param alert the alert configuration
      * @param workspaceId the workspace ID
+     * @param workspaceName the workspace name
      * @param eventType the event type
      * @param eventIds the set of aggregated event IDs
+     * @param payloads the set of aggregated event payloads
      * @return Mono that completes when the webhook is sent
      */
     private Mono<Void> createAndSendWebhook(
             @NonNull Alert alert,
             @NonNull String workspaceId,
+            @NonNull String workspaceName,
             @NonNull AlertEventType eventType,
-            @NonNull Set<String> eventIds) {
+            @NonNull List<String> eventIds,
+            @NonNull List<String> payloads,
+            @NonNull List<String> userNames) {
 
         if (Boolean.FALSE.equals(alert.enabled())) {
             log.warn("Alert '{}' is disabled, skipping webhook", alert.id());
@@ -160,8 +179,8 @@ public class AlertJob extends Job {
             return Mono.empty();
         }
 
-        log.debug("Creating consolidated webhook event for alert '{}' with '{}' events",
-                alert.id(), eventIds.size());
+        log.debug("Creating consolidated webhook event for alert '{}' with '{}' events and '{}' payloads",
+                alert.id(), eventIds.size(), payloads.size());
 
         // Create payload with alert and aggregation data
         Map<String, Object> payload = Map.of(
@@ -169,22 +188,26 @@ public class AlertJob extends Job {
                 "alertName", alert.name(),
                 "eventType", eventType.getValue(),
                 "eventIds", eventIds,
+                "metadata", payloads,
+                "userNames", userNames,
                 "eventCount", eventIds.size(),
                 "aggregationType", "consolidated",
                 "message", String.format("Alert '%s': %d %s events aggregated",
                         alert.name(), eventIds.size(), eventType.getValue()));
 
-        log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}'",
-                alert.name(), alert.id(), eventIds.size());
+        log.info("Sending webhook for alertName='{}', alertId='{}', eventCount='{}', payloadCount='{}'",
+                alert.name(), alert.id(), eventIds.size(), payloads.size());
 
         // Send via WebhookPublisher with data from alert configuration
         return webhookPublisher.publishWebhookEvent(
                 eventType,
-                alert.id(),
+                alert,
                 workspaceId,
-                alert.webhook().url(),
+                StringUtils.isBlank(workspaceName)
+                        ? workspaceNameService.getWorkspaceName(workspaceId,
+                                config.getAuthentication().getReactService().url())
+                        : workspaceName,
                 payload,
-                Optional.ofNullable(alert.webhook().headers()).orElse(Map.of()),
                 webhookConfig.getMaxRetries()) // maxRetries
                 .doOnSuccess(webhookId -> log.info(
                         "Successfully sent webhook for alertName='{}', alertId='{}': webhook_id='{}' ",

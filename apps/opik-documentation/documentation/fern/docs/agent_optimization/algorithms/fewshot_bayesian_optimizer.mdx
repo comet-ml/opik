@@ -4,114 +4,31 @@ subtitle: "Optimize few-shot examples for chat prompts with Bayesian techniques.
 description: "Learn how to use the Few-Shot Bayesian Optimizer to find optimal few-shot examples for your chat-based prompts using Bayesian optimization techniques."
 ---
 
-The FewShotBayesianOptimizer is a sophisticated prompt optimization tool that combines few-shot learning with Bayesian optimization techniques. It's designed to iteratively improve prompts by learning from examples and systematically exploring the optimization space, specifically for chat-based prompts.
+The FewShotBayesianOptimizer is a sophisticated prompt optimization tool adds relevant examples from
+your sample questions to the system prompt using Bayesian optimization techniques.
 
 <Note>
-  **When to Use This Optimizer:**
-  Use `FewShotBayesianOptimizer` when your primary goal is to find the optimal number and combination of few-shot examples (demonstrations) to accompany your main instruction prompt, particularly for **chat models**. If your task performance heavily relies on the quality and relevance of in-context examples, this optimizer is ideal.
-
-**Key Trade-offs:**
-
-- Focuses exclusively on selecting examples from the provided dataset; it does _not_ optimize the `prompt` text itself.
-- The search space can be very large if the dataset for example selection is massive; `n_iterations` needs to be sufficient for adequate exploration.
-- Effectiveness depends on the quality and diversity of the examples within your dataset.
-
+  The `FewShotBayesianOptimizer` is a strong choice when your primary goal is to find the optimal number and
+  combination of few-shot examples (demonstrations) to accompany your main instruction prompt,
+  particularly for **chat models**. If your task performance heavily relies on the quality and relevance of in-context examples, this optimizer is ideal.
 </Note>
-
-<Info>
-  Have questions about `FewShotBayesianOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/opik_optimizer/faq)
-  answers common questions, including when to use this optimizer, how parameters like `min_examples` and `n_iterations`
-  work, and whether it modifies the main instruction prompt.
-</Info>
 
 ## How It Works
 
-This optimizer focuses on finding the optimal set and number of few-shot examples to include with
-your base instruction prompt for chat models. It uses [Optuna](https://optuna.org/), a hyperparameter
-optimization framework, to guide this search:
+The `FewShotBayesianOptimizer` uses Bayesian optimization to find the optimal set and number of
+few-shot examples to include with your base instruction prompt for chat models. It Uses
+[Optuna](https://optuna.org/), a hyperparameter optimization framework, to guide the search for the
+optimal set and number of few-shot examples.
 
-1.  **Problem Definition**: The core task is to select the best combination of few-shot examples
-    from your provided dataset to append to the `prompt`.
-    The number of examples to select can range from `min_examples` to `max_examples`.
+<Frame>
+  <img src="/img/agent_optimization/fewshot_bayesian_optimizer.png" alt="FewShot Bayesian Optimizer" />
+</Frame>
 
-2.  (Optional) Create the few-shot prompt template: As a first step the few-shot optimizer updates the
-    `prompt` with the few-shot examples placeholder and creates a few-shot example template.
+## Quickstart
 
-3.  **Search Space**: For each trial, Optuna suggests:
+You can use the `FewShotBayesianOptimizer` to optimize a prompt by following these steps:
 
-    - `n_examples`: The number of few-shot examples to use for this particular trial (within the `min_examples` and `max_examples` range).
-    - `example_indices`: A list of specific indices pointing to items in your dataset that will serve as these `n_examples`.
-
-4.  **Prompt Construction**: For each trial, the few-shot example placeholder is replaced with the
-    examples selected in the search space.
-
-5.  **Evaluation**: This constructed few-shot prompt is then evaluated against a portion (or all) of
-    your dataset using the specified `metric`. The evaluation measures how well this particular
-    combination of few-shot examples helps the model perform the task.
-
-6.  **Bayesian Optimization (via Optuna)**:
-
-    - Optuna uses a Bayesian optimization algorithm (typically TPESampler - Tree-structured Parzen
-      Estimator Sampler) to decide which combinations of `n_examples` and `example_indices` to try
-      next.
-    - It builds a probabilistic model of how different example choices affect the evaluation score
-      and uses this model to balance exploration (trying new, uncertain combinations) and exploitation
-      (focusing on combinations likely to yield high scores).
-    - This process is repeated for `n_iterations` (number of trials).
-
-7.  **Result**: After all trials, the optimizer returns the `prompt` with the best few-shot examples
-    that achieved the best score.
-
-Essentially, the `FewShotBayesianOptimizer` intelligently searches through the vast space of
-possible few-shot example combinations to find the set that best primes your chat model for the
-task.
-
-<Tip>
-  The core of this optimizer relies on robust evaluation (Step 4) where each combination of few-shot examples is
-  assessed using your `metric` against the `dataset`. Understanding Opik's evaluation platform is key to effective use:
-  - [Evaluation Overview](/evaluation/overview) - [Evaluate Prompts](/evaluation/evaluate_prompt) - [Metrics
-  Overview](/evaluation/metrics/overview)
-</Tip>
-
-## Configuration Options
-
-### Basic Configuration
-
-```python
-from opik_optimizer import FewShotBayesianOptimizer
-
-optimizer = FewShotBayesianOptimizer(
-    model="openai/gpt-4",  # or "azure/gpt-4"
-    temperature=0.1,
-    max_tokens=5000,
-    n_threads=8,
-    seed=42
-)
-```
-
-### Advanced Configuration
-
-The `FewShotBayesianOptimizer` relies on the [Optuna](https://optuna.org/) library, specifically
-using its `TPESampler` for Bayesian optimization. The primary configurable parameters are those
-exposed directly in its constructor:
-
-- `model`: The LLM used for evaluating prompts with different few-shot example combinations.
-- `min_examples` / `max_examples`: Define the range for the number of few-shot examples to be
-  selected by Optuna during optimization.
-- `n_trials`: The total number of optimization trials Optuna will run (passed via kwargs in optimize_prompt).
-- `n_threads`: Number of parallel threads for evaluation.
-
-LLM call parameters (e.g., `temperature`, `max_tokens`, `seed`) are passed via keyword arguments
-(`**model_kwargs`) to the constructor.
-
-The optimizer works by letting Optuna suggest the number of examples (`n_examples`) and which
-specific examples from the dataset to use for constructing few-shot prompts. These prompts are
-then evaluated, and Optuna uses the scores to guide its search for the best combination of
-examples and their count.
-
-## Example Usage
-
-```python
+```python maxLines=1000
 from opik_optimizer import FewShotBayesianOptimizer
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import datasets, ChatPrompt
@@ -119,8 +36,10 @@ from opik_optimizer import datasets, ChatPrompt
 # Initialize optimizer
 optimizer = FewShotBayesianOptimizer(
     model="openai/gpt-4",
-    temperature=0.1,
-    max_tokens=5000
+    model_parameters={
+        "temperature": 0.1,
+        "max_tokens": 5000
+    },
 )
 
 # Prepare dataset
@@ -131,7 +50,6 @@ def levenshtein_ratio(dataset_item, llm_output):
     return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
 
 prompt = ChatPrompt(
-    project_name="my-project",
     messages=[
         {"role": "system", "content": "Provide an answer to the question."},
         {"role": "user", "content": "{question}"}
@@ -150,58 +68,59 @@ results = optimizer.optimize_prompt(
 results.display()
 ```
 
-## Model Support
+## Configuration Options
 
-The FewShotBayesianOptimizer supports all models available through LiteLLM. This provides broad
-compatibility with providers like OpenAI, Azure OpenAI, Anthropic, Google, and many others,
-including locally hosted models.
+### Optimizer parameters
 
-For detailed instructions on how to specify different models and configure providers, please refer
-to the main [LiteLLM Support for Optimizers documentation page](/agent_optimization/opik_optimizer/litellm_support).
+The optimizer has the following parameters:
 
-### Configuration Example using LiteLLM model string
+<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
+<ParamField path="min_examples" type="int" optional={true} default="2">Minimum number of examples to include in the prompt</ParamField>
+<ParamField path="max_examples" type="int" optional={true} default="8">Maximum number of examples to include in the prompt</ParamField>
+<ParamField path="n_threads" type="int" optional={true} default="8">Number of threads for parallel evaluation</ParamField>
+<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
+<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+
+### `optimize_prompt` parameters
+
+The `optimize_prompt` method has the following parameters:
+
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
+<ParamField path="metric" type="Callable">Metric function to evaluate on</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment, useful to log additional metadata</ParamField>
+<ParamField path="n_samples" type="int | None" optional={true}>Optional number of items to test in the dataset</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
+
+### Model Support
+
+There are two models to consider when using the `FewShotBayesianOptimizer`:
+- `FewShotBayesianOptimizer.model`: The model used to generate the few-shot template and placeholder.
+- `ChatPrompt.model`: The model used to evaluate the prompt.
+
+The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
+`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
+using the `model_parameters` parameter:
 
 ```python
 optimizer = FewShotBayesianOptimizer(
-    model="openai/gpt-4o-mini",  # Example: Using OpenAI via LiteLLM
-    temperature=0.1,
-    max_tokens=5000
+    model="anthropic/claude-3-opus-20240229",
+    model_parameters={
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
 )
 ```
 
-## Best Practices
-
-1. **Dataset Preparation**
-
-   - Minimum 50 examples recommended
-   - Diverse and representative samples
-   - Clear input-output pairs
-
-2. **Parameter Tuning**
-
-   - Start with default parameters
-   - Adjust based on problem complexity
-   - Monitor convergence metrics
-
-3. **Evaluation Strategy**
-
-   - Use separate validation set
-   - Track multiple metrics
-   - Document optimization history
-
-4. **Performance Optimization**
-   - Adjust n_threads based on resources
-   - Balance min_examples and max_examples
-   - Monitor memory usage
-
-## Research and References
-
-- [Bayesian Optimization for Hyperparameter Tuning](https://arxiv.org/abs/1206.2944)
-- [Few-shot Learning with Bayesian Optimization](https://arxiv.org/abs/1904.04232)
-- [Gaussian Processes for Machine Learning](https://gaussianprocess.org/gpml/)
-
 ## Next Steps
 
-- Explore other [Optimization Algorithms](/agent_optimization/overview#optimization-algorithms)
-- Explore [Dataset Requirements](/agent_optimization/opik_optimizer/datasets)
-- Try the [Example Projects & Cookbooks](/agent_optimization/opik_optimizer/quickstart) for runnable Colab notebooks using this optimizer
+1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.

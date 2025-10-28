@@ -160,6 +160,10 @@ class BaseTrackDecorator(abc.ABC):
         So these spans can't be parents for other spans. This is usually the case LLM API calls
         with `stream=True`.
         """
+        # Idempotency: skip re-decoration if already tracked
+        if hasattr(func, "opik_tracked") and func.opik_tracked:  # type: ignore
+            return func
+
         if inspect.isgeneratorfunction(func):
             return self._tracked_sync_generator(func=func, track_options=track_options)
 
@@ -187,8 +191,8 @@ class BaseTrackDecorator(abc.ABC):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> TrackingStartOptions:
-        opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict] = (
-            kwargs.pop("opik_distributed_trace_headers", None)
+        opik_distributed_trace_headers = (
+            arguments_helpers.extract_distributed_trace_headers(kwargs)
         )
 
         opik_args_ = None
@@ -447,36 +451,12 @@ class BaseTrackDecorator(abc.ABC):
             kwargs=kwargs,
         )
 
-        created_trace_data, created_span_data = (
-            span_creation_handler.create_span_respecting_context(
-                start_span_arguments=track_start_options.start_span_parameters,
-                distributed_trace_headers=track_start_options.opik_distributed_trace_headers,
-            )
+        add_start_candidates(
+            start_span_parameters=track_start_options.start_span_parameters,
+            opik_distributed_trace_headers=track_start_options.opik_distributed_trace_headers,
+            opik_args_data=track_start_options.opik_args,
+            tracing_active=tracing_runtime_config.is_tracing_active(),
         )
-        client = opik_client.get_client_cached()
-
-        if (
-            client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            client.span(**created_span_data.as_start_parameters)
-
-        if created_trace_data is not None:
-            context_storage.set_trace_data(created_trace_data)
-            TRACES_CREATED_BY_DECORATOR.add(created_trace_data.id)
-
-            # Handle thread_id and trace updates after span/trace creation
-            opik_args.apply_opik_args_to_trace(
-                opik_args=track_start_options.opik_args, trace_data=created_trace_data
-            )
-
-            if (
-                client.config.log_start_trace_span
-                and tracing_runtime_config.is_tracing_active()
-            ):
-                client.trace(**created_trace_data.as_start_parameters)
-
-        context_storage.add_span_data(created_span_data)
 
     def _after_call(
         self,
@@ -633,3 +613,84 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
         TRACES_CREATED_BY_DECORATOR.discard(possible_trace_data_to_end.id)
 
     return span_data_to_end, trace_data_to_end
+
+
+def add_start_candidates(
+    start_span_parameters: arguments_helpers.StartSpanParameters,
+    opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
+    opik_args_data: Optional[opik_args.OpikArgs],
+    tracing_active: bool,
+) -> span_creation_handler.SpanCreationResult:
+    """
+    Handles the creation and registration of a new start span and trace while respecting the
+    tracing context based on given parameters. It also applies relevant arguments
+    to the trace if it was created and handles client logging if the tracing is active.
+
+    Args:
+        start_span_parameters: The parameters used to start the span, including the
+            span name and other configurations.
+        opik_distributed_trace_headers: Optional headers for distributed tracing, which
+            are passed to the span creation process.
+        opik_args_data : Optional additional arguments that can be applied to the trace
+            data after the span is created.
+        tracing_active: A boolean indicating whether a tracing is active.
+
+    Returns:
+        The result of the span creation, including the span and trace data.
+    """
+    span_creation_result = span_creation_handler.create_span_respecting_context(
+        start_span_arguments=start_span_parameters,
+        distributed_trace_headers=opik_distributed_trace_headers,
+    )
+    context_storage.add_span_data(span_creation_result.span_data)
+
+    if tracing_active:
+        client = opik_client.get_client_cached()
+
+        if client.config.log_start_trace_span:
+            client.span(**span_creation_result.span_data.as_start_parameters)
+
+    if span_creation_result.trace_data is not None:
+        add_start_trace_candidate(
+            trace_data=span_creation_result.trace_data,
+            opik_args_data=opik_args_data,
+            tracing_active=tracing_active,
+        )
+
+    return span_creation_result
+
+
+def add_start_trace_candidate(
+    trace_data: trace.TraceData,
+    opik_args_data: Optional[opik_args.OpikArgs],
+    tracing_active: bool,
+) -> None:
+    """
+    Adds a start trace candidate to the current context storage and updates
+    it with the given Opik arguments if applicable.
+
+    This function initializes the trace data in the current context and
+    tracks its creation. It also applies provided Opik argument modifications
+    to the trace and logs the start trace span in the client if tracing is
+    active and logging is enabled.
+
+    Args:
+        trace_data: The trace data object to be added and initialized in the
+            current context storage. It contains details about the trace.
+        opik_args_data: Optional OpikArgs object containing additional data
+            to be applied to the trace. This may include configurations
+            that modify or enrich the trace data.
+        tracing_active: A boolean indicating whether a tracing is active.
+    """
+    context_storage.set_trace_data(trace_data)
+    TRACES_CREATED_BY_DECORATOR.add(trace_data.id)
+
+    # Handle thread_id and trace updates after span/trace creation
+    opik_args.apply_opik_args_to_trace(opik_args=opik_args_data, trace_data=trace_data)
+
+    if not tracing_active:
+        return
+
+    client = opik_client.get_client_cached()
+    if client.config.log_start_trace_span:
+        client.trace(**trace_data.as_start_parameters)

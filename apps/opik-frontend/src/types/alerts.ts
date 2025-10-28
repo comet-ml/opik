@@ -1,47 +1,73 @@
 export enum ALERT_EVENT_TYPE {
-  trace_errors = "trace_errors",
-  guardrails = "guardrails",
-  prompt_creation = "prompt_creation",
-  prompt_commit = "prompt_commit",
-  trace_score = "trace_score",
-  thread_score = "thread_score",
+  trace_errors = "trace:errors",
+  trace_feedback_score = "trace:feedback_score",
+  trace_thread_feedback_score = "trace_thread:feedback_score",
+  prompt_created = "prompt:created",
+  prompt_committed = "prompt:committed",
+  trace_guardrails_triggered = "trace:guardrails_triggered",
+  prompt_deleted = "prompt:deleted",
 }
 
-export enum ALERT_CONDITION_TYPE {
-  project_scope = "project_scope",
-  value_threshold = "value_threshold",
+export enum ALERT_TRIGGER_CONFIG_TYPE {
+  "scope:project" = "scope:project",
+  "threshold:feedback_score" = "threshold:feedback_score",
 }
 
-export interface ProjectScopeCondition {
-  type: ALERT_CONDITION_TYPE.project_scope;
-  value: string[];
+export enum ALERT_TYPE {
+  general = "general",
+  slack = "slack",
+  pagerduty = "pagerduty",
 }
 
-export interface ValueThresholdCondition {
-  type: ALERT_CONDITION_TYPE.value_threshold;
-  lower_bound?: number;
-  upper_bound?: number;
+export interface AlertTriggerConfig {
+  id?: string;
+  alert_trigger_id?: string;
+  type: ALERT_TRIGGER_CONFIG_TYPE;
+  config_value: Record<string, string>;
+  created_at?: string;
+  created_by?: string;
+  last_updated_at?: string;
+  last_updated_by?: string;
 }
 
-export type AlertCondition = ProjectScopeCondition | ValueThresholdCondition;
-
-export interface AlertEvent {
+export interface AlertTrigger {
+  id?: string;
+  alert_id?: string;
   event_type: ALERT_EVENT_TYPE;
-  conditions?: AlertCondition[];
+  trigger_configs?: AlertTriggerConfig[];
+  created_at?: string;
+  created_by?: string;
+}
+
+export interface Webhook {
+  id?: string;
+  name?: string;
+  url: string;
+  secret_token?: string;
+  headers?: Record<string, string>;
+  created_at?: string;
+  created_by?: string;
+  last_updated_at?: string;
+  last_updated_by?: string;
+}
+
+export interface AlertMetadata {
+  base_url?: string;
+  routing_key?: string;
 }
 
 export interface Alert {
   id?: string;
   name: string;
   enabled: boolean;
-  url: string;
-  secret_token?: string;
-  headers?: Record<string, string>;
-  events: AlertEvent[];
-  created_at: string;
-  created_by: string;
-  last_updated_at: string;
-  last_updated_by: string;
+  alert_type?: ALERT_TYPE;
+  metadata?: AlertMetadata;
+  webhook: Webhook;
+  triggers: AlertTrigger[];
+  created_at?: string;
+  created_by?: string;
+  last_updated_at?: string;
+  last_updated_by?: string;
 }
 
 export interface AlertsListResponse {
@@ -50,4 +76,11 @@ export interface AlertsListResponse {
   content: Alert[];
   total: number;
   sortable_by: string[];
+}
+
+export interface WebhookTestResult {
+  status: "success" | "failure";
+  status_code: number;
+  request_body: string;
+  error_message?: string;
 }

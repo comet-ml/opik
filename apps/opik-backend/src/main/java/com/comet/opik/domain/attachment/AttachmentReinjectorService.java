@@ -50,8 +50,8 @@ public class AttachmentReinjectorService {
      * Only processes if truncate=false.
      */
     @WithSpan
-    public Mono<Trace> reinjectAttachments(@NonNull Trace trace, boolean truncate) {
-        if (truncate) {
+    public Mono<Trace> reinjectAttachments(@NonNull Trace trace, boolean reinjectAttachments) {
+        if (!reinjectAttachments) {
             return Mono.just(trace);
         }
 
@@ -96,8 +96,8 @@ public class AttachmentReinjectorService {
      * Only processes if truncate=false.
      */
     @WithSpan
-    public Mono<Span> reinjectAttachments(@NonNull Span span, boolean truncate) {
-        if (truncate) {
+    public Mono<Span> reinjectAttachments(@NonNull Span span, boolean reinjectAttachments) {
+        if (!reinjectAttachments) {
             return Mono.just(span);
         }
 
@@ -146,7 +146,8 @@ public class AttachmentReinjectorService {
     private Mono<JsonNode> reinjectIntoJson(JsonNode node, List<AttachmentInfo> attachments,
             String workspaceId) {
         if (node == null || node.isNull()) {
-            return Mono.just(node);
+            // Return a NullNode instead of null to avoid NPE in Mono.just()
+            return Mono.just(objectMapper.getNodeFactory().nullNode());
         }
 
         // Convert JsonNode to string

@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useCallback } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -8,14 +10,94 @@ import {
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
+import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
+import { ExpandedState } from "@tanstack/react-table";
+import useTraceById from "@/api/traces/useTraceById";
+
+const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 const TraceDataViewer: React.FC = () => {
-  const { currentItem } = useSMEFlow();
+  const { currentItem, nextItem } = useSMEFlow();
+  const { state, updateExpanded, updateScrollTop } = useAnnotationTreeState();
 
   const trace = currentItem as Trace;
+  const nextTrace = nextItem as Trace | undefined;
+
+  // Fetch full trace data (not truncated)
+  const { data: fullTrace, isFetching } = useTraceById(
+    {
+      traceId: trace?.id || "",
+    },
+    {
+      enabled: !!trace?.id,
+      placeholderData: keepPreviousData,
+      staleTime: STALE_TIME,
+    },
+  );
+
+  // Preload next trace data
+  useTraceById(
+    {
+      traceId: nextTrace?.id || "",
+    },
+    {
+      enabled: !!nextTrace?.id,
+      placeholderData: keepPreviousData,
+      staleTime: STALE_TIME,
+    },
+  );
+
+  const displayTrace = fullTrace || trace;
+
+  // Handlers for expanded state changes
+  const handleInputExpandedChange = useCallback(
+    (
+      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+    ) => {
+      updateExpanded("input", updaterOrValue);
+    },
+    [updateExpanded],
+  );
+
+  const handleOutputExpandedChange = useCallback(
+    (
+      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
+    ) => {
+      updateExpanded("output", updaterOrValue);
+    },
+    [updateExpanded],
+  );
+
+  // Handlers for scroll position changes
+  const handleInputScrollChange = useCallback(
+    (updaterOrValue: number | ((old: number) => number)) => {
+      const newScrollTop =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(state.input.scrollTop)
+          : updaterOrValue;
+      updateScrollTop("input", newScrollTop);
+    },
+    [updateScrollTop, state.input.scrollTop],
+  );
+
+  const handleOutputScrollChange = useCallback(
+    (updaterOrValue: number | ((old: number) => number)) => {
+      const newScrollTop =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(state.output.scrollTop)
+          : updaterOrValue;
+      updateScrollTop("output", newScrollTop);
+    },
+    [updateScrollTop, state.output.scrollTop],
+  );
 
   return (
-    <div className="pr-4">
+    <div className="relative pr-4">
+      {isFetching && (
+        <div className="absolute right-6 top-2 z-10">
+          <Loader2 className="size-4 animate-spin text-slate-400" />
+        </div>
+      )}
       <Accordion
         type="multiple"
         className="w-full"
@@ -30,10 +112,15 @@ const TraceDataViewer: React.FC = () => {
             className="group-data-[state=closed]:hidden"
           >
             <SyntaxHighlighter
-              data={trace?.input || {}}
+              data={displayTrace?.input || {}}
               prettifyConfig={{ fieldType: "input" }}
               preserveKey="syntax-highlighter-annotation-input"
               withSearch
+              controlledExpanded={state.input.expanded}
+              onExpandedChange={handleInputExpandedChange}
+              scrollPosition={state.input.scrollTop}
+              onScrollPositionChange={handleInputScrollChange}
+              maxHeight="400px"
             />
           </AccordionContent>
         </AccordionItem>
@@ -47,10 +134,15 @@ const TraceDataViewer: React.FC = () => {
             className="group-data-[state=closed]:hidden"
           >
             <SyntaxHighlighter
-              data={trace?.output || {}}
+              data={displayTrace?.output || {}}
               prettifyConfig={{ fieldType: "output" }}
               preserveKey="syntax-highlighter-annotation-output"
               withSearch
+              controlledExpanded={state.output.expanded}
+              onExpandedChange={handleOutputExpandedChange}
+              scrollPosition={state.output.scrollTop}
+              onScrollPositionChange={handleOutputScrollChange}
+              maxHeight="400px"
             />
           </AccordionContent>
         </AccordionItem>
@@ -62,9 +154,10 @@ const TraceDataViewer: React.FC = () => {
             className="group-data-[state=closed]:hidden"
           >
             <SyntaxHighlighter
-              data={trace?.metadata || {}}
+              data={displayTrace?.metadata || {}}
               preserveKey="syntax-highlighter-annotation-metadata"
               withSearch
+              maxHeight="400px"
             />
           </AccordionContent>
         </AccordionItem>

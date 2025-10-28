@@ -1,5 +1,5 @@
 name: Trigger Test Environment Deployment
-run-name: "Trigger Test Environment Deployment for PR #${{ github.event.number }} by @${{ github.actor }}"
+run-name: ${{ github.event.label.name == 'test-environment' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
 
 on:
   pull_request:
@@ -21,8 +21,30 @@ jobs:
         run: |
           echo "Skipping deployment of test environment for this PR"
 
+  notify-started:
+    if: github.event.label.name == 'test-environment'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on PR - Deployment Started
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: Number('${{ github.event.number }}'),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔄 **Test environment deployment started**
+              
+              Building images for PR #${{ github.event.number }}...
+              
+              You can monitor the build progress [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
+            });
+
   build-apps:
     if: github.event.label.name == 'test-environment'
+    needs:
+      - notify-started
     uses: ./.github/workflows/build_apps.yml
     secrets: inherit
     with:
@@ -39,6 +61,8 @@ jobs:
     steps:
       - name: Trigger deployment via repository dispatch
         uses: actions/github-script@v7
+        env:
+          VERSION_NAME: ${{ needs.build-apps.outputs.version }}
         with:
           github-token: ${{ secrets.DEPLOYMENT_TRIGGER_TOKEN }}
           script: |
@@ -48,28 +72,15 @@ jobs:
               event_type: 'deploy-opik-test-env',
               client_payload: {
                 pr_number: '${{ github.event.number }}',
-                version_name: '${{ needs.build-apps.outputs.version }}'
+                version_name: process.env.VERSION_NAME
               }
             });
             
-            console.log('Repository dispatch sent:', response.status);
-            
-            // Comment on PR with deployment info
-            await github.rest.issues.createComment({
-              issue_number: Number('${{ github.event.number }}'),
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `🚀 **Test environment deployment triggered!**
+            console.log('✅ Repository dispatch sent successfully:', response.status);
+            console.log('📊 Monitor deployment progress: https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml');
+            console.log('🔗 Deployment will verify the version and post a comment on this PR when complete');
 
-              ### Access Information
-              - **URL:** https://pr-${{ github.event.number }}.dev.comet.com
-              - **Namespace:** pr-${{ github.event.number }}
-              - **Version:** ${{ needs.build-apps.outputs.version }}
-                     
-              You can monitor the deployment progress [here](https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml).`
-            });
-
-      - name: Handle deployment failure
+      - name: Handle trigger failure
         if: failure()
         uses: actions/github-script@v7
         with:
@@ -79,5 +90,7 @@ jobs:
               issue_number: Number('${{ github.event.number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `❌ **Failed to trigger test environment deployment**`
+              body: `❌ **Failed to trigger test environment deployment**
+              
+              Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more details.`
             });

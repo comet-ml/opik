@@ -15,7 +15,7 @@ public enum AlertEventType {
     TRACE_THREAD_FEEDBACK_SCORE("trace_thread:feedback_score"),
     PROMPT_CREATED("prompt:created"),
     PROMPT_COMMITTED("prompt:committed"),
-    SPAN_GUARDRAILS_TRIGGERED("span:guardrails_triggered"),
+    TRACE_GUARDRAILS_TRIGGERED("trace:guardrails_triggered"),
     PROMPT_DELETED("prompt:deleted");
 
     @JsonValue

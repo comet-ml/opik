@@ -5,13 +5,16 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { AlertAlertType } from "./AlertAlertType";
 import { Webhook } from "./Webhook";
 import { AlertTrigger } from "./AlertTrigger";
 
 export const Alert: core.serialization.ObjectSchema<serializers.Alert.Raw, OpikApi.Alert> = core.serialization.object({
     id: core.serialization.string().optional(),
-    name: core.serialization.string(),
+    name: core.serialization.string().optional(),
     enabled: core.serialization.boolean().optional(),
+    alertType: core.serialization.property("alert_type", AlertAlertType.optional()),
+    metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
     webhook: Webhook,
     triggers: core.serialization.list(AlertTrigger).optional(),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -23,8 +26,10 @@ export const Alert: core.serialization.ObjectSchema<serializers.Alert.Raw, OpikA
 export declare namespace Alert {
     export interface Raw {
         id?: string | null;
-        name: string;
+        name?: string | null;
         enabled?: boolean | null;
+        alert_type?: AlertAlertType.Raw | null;
+        metadata?: Record<string, string> | null;
         webhook: Webhook.Raw;
         triggers?: AlertTrigger.Raw[] | null;
         created_at?: string | null;

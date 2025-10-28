@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 | https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
 | https://charts.bitnami.com/bitnami | redis | 18.19.2 |
 | https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.0 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 
 ## Values
@@ -131,11 +131,20 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.monitoring.serviceMonitor.relabelings | list | `[]` |  |
 | clickhouse.backupServer.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.backupServer.port | int | `7171` |  |
+| clickhouse.configuration.files."conf.d/memory.xml" | string | `"<yandex>\n  <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>\n</yandex>\n"` |  |
+| clickhouse.configuration.files."conf.d/profiles.xml" | string | `"<clickhouse>\n  <profiles>\n    <default>\n        <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>\n        <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>\n    </default>\n  </profiles>\n</clickhouse>\n"` |  |
+| clickhouse.configuration.files."conf.d/system_tables.xml" | string | `"<clickhouse>\n  <opentelemetry_span_log remove=\"1\"/>\n  <asynchronous_metric_log remove=\"1\"/>\n  <processors_profile_log remove=\"1\"/>\n  <text_log remove=\"1\"/>\n  <trace_log remove=\"1\"/>\n  <blob_storage_log remove=\"1\"/>\n  <error_log>\n      <engine>\n          ENGINE MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>error_log</table>\n  </error_log>\n  <latency_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>latency_log</table>\n  </latency_log>\n  <metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>metric_log</table>\n  </metric_log>\n  <query_metric_log>\n      <engine>\n          ENGINE = MergeTree\n          PARTITION BY toYYYYMM(event_date)\n          ORDER BY (event_date, event_time)\n          TTL event_date + toIntervalDay(30)\n          SETTINGS index_granularity = 8192\n      </engine>\n      <database>system</database>\n      <table>query_metric_log</table>\n  </query_metric_log>\n</clickhouse>\n"` |  |
 | clickhouse.enabled | bool | `true` |  |
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:24.3.5.47.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.livenessProbe.failureThreshold | int | `10` |  |
+| clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.livenessProbe.initialDelaySeconds | int | `60` |  |
+| clickhouse.livenessProbe.periodSeconds | int | `30` |  |
+| clickhouse.livenessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.logsLevel | string | `"information"` |  |
 | clickhouse.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.monitoring.annotations | object | `{}` |  |
@@ -159,6 +168,12 @@ Call opik api on http://localhost:5173/api
 | clickhouse.monitoring.serviceMonitor.scrapeTimeout | string | `"30s"` |  |
 | clickhouse.monitoring.useSecret.enabled | bool | `false` |  |
 | clickhouse.monitoring.username | string | `"opikmon"` |  |
+| clickhouse.readinessProbe.failureThreshold | int | `30` |  |
+| clickhouse.readinessProbe.httpGet.path | string | `"/ping"` |  |
+| clickhouse.readinessProbe.httpGet.port | int | `8123` |  |
+| clickhouse.readinessProbe.initialDelaySeconds | int | `30` |  |
+| clickhouse.readinessProbe.periodSeconds | int | `10` |  |
+| clickhouse.readinessProbe.timeoutSeconds | int | `5` |  |
 | clickhouse.replicasCount | int | `1` |  |
 | clickhouse.service.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.serviceAccount.annotations | object | `{}` |  |
@@ -316,7 +331,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
+| global.argocd | bool | `false` |  |
 | global.security.allowInsecureImages | bool | `true` |  |
+| global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |

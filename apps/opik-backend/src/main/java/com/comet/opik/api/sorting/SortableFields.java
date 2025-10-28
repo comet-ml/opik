@@ -41,7 +41,14 @@ public class SortableFields {
     public static final String STATUS = "status";
     public static final String VERSION_COUNT = "version_count";
     public static final String PROJECT_ID = "project_id";
+    public static final String PROJECT_NAME = "project_name";
     public static final String INSTRUCTIONS = "instructions";
     public static final String WEBHOOK_URL = "webhook_url";
-    public static final String WEBHOOK_SECRET_TOKEN = "webhook_secret_token";
+    public static final String DATA = "data.*"; // Truly dynamic - uses Map with parameter binding
+    public static final String OUTPUT_WILDCARD = "output.*"; // JSON fields - use JSONExtractRaw, not parameter binding
+    public static final String INPUT_WILDCARD = "input.*"; // JSON fields - use JSONExtractRaw, not parameter binding
+    public static final String METADATA_WILDCARD = "metadata.*"; // JSON fields - use JSONExtractRaw, not parameter binding (metadata field already exists above)
+    public static final String COMMENTS = "comments";
+    public static final String ENABLED = "enabled";
+    public static final String SAMPLING_RATE = "sampling_rate";
 }

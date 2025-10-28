@@ -10,25 +10,22 @@ import {
   ONBOARDING_STEP_KEY,
 } from "@/components/shared/OnboardingOverlay/OnboardingOverlayContext";
 import useLocalStorageState from "use-local-storage-state";
-import { useFeatureFlagVariantKey } from "posthog-js/react";
 
 const NewQuickstartPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [currentOnboardingStep] = useLocalStorageState(ONBOARDING_STEP_KEY);
-  const variant = useFeatureFlagVariantKey("onboarding-flow-conversion");
 
-  if (
-    currentOnboardingStep !== ONBOARDING_STEP_FINISHED &&
-    variant === "test"
-  ) {
+  if (currentOnboardingStep !== ONBOARDING_STEP_FINISHED) {
     return <OnboardingOverlay />;
   }
 
   return (
     <div className="w-full pb-10">
       <div className="mx-auto max-w-[1040px]">
-        <div className="mb-3 mt-10 flex items-center justify-between">
-          <h1 className="comet-title-xl">Get started with Opik</h1>
+        <div className="mb-3 mt-6 flex items-center justify-between md:mt-10">
+          <h1 className="md:comet-title-xl comet-title-l">
+            Get started with Opik
+          </h1>
           {/* <LoggedDataStatus status="waiting" /> */}
         </div>
         <div className="comet-body-s mb-10 text-muted-slate">
@@ -37,11 +34,11 @@ const NewQuickstartPage: React.FunctionComponent = () => {
           and debugging.
         </div>
 
-        <IntegrationExplorer>
-          <div className="mb-8 flex items-center justify-between gap-6">
+        <IntegrationExplorer source="get-started">
+          <div className="mb-8 flex flex-col justify-between gap-6 md:flex-row md:items-center">
             <IntegrationExplorer.Search />
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-6 md:gap-3">
               <IntegrationExplorer.CopyApiKey />
               <IntegrationExplorer.GetHelp />
               <Button variant="ghost" size="sm" asChild>

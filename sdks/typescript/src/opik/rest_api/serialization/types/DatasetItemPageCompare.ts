@@ -17,6 +17,7 @@ export const DatasetItemPageCompare: core.serialization.ObjectSchema<
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
     columns: core.serialization.list(ColumnCompare).optional(),
+    sortableBy: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace DatasetItemPageCompare {
@@ -26,5 +27,6 @@ export declare namespace DatasetItemPageCompare {
         size?: number | null;
         total?: number | null;
         columns?: ColumnCompare.Raw[] | null;
+        sortableBy?: string[] | null;
     }
 }

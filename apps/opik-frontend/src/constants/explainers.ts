@@ -73,6 +73,11 @@ export enum EXPLAINER_ID {
   metric_context_precision = "metric_context_precision",
   metric_context_recall = "metric_context_recall",
   trace_opik_ai = "trace_opik_ai",
+  feedback_scores_hotkeys = "feedback_scores_hotkeys",
+  llm_judge_variable_mapping = "llm_judge_variable_mapping",
+  prompt_generation_learn_more = "prompt_generation_learn_more",
+  prompt_improvement_learn_more = "prompt_improvement_learn_more",
+  prompt_improvement_optimizer = "prompt_improvement_optimizer",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -512,5 +517,36 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.trace_opik_ai,
     description:
       "Our AI assistant allows you to analyze trace and spans data (which may include personal or sensitive information) using a generative AI model via OpenAI, L.L.C.",
+  },
+  [EXPLAINER_ID.feedback_scores_hotkeys]: {
+    id: EXPLAINER_ID.feedback_scores_hotkeys,
+    description:
+      'Press "F" to jump to first component in feedback scores\nand use "Tab"/"Shift+Tab" to move between components\n\nController Types:\n\n1. Numerical Inputs (number fields):\n   • use arrow keys to adjust values\n   • or type numbers directly\n\n2. Dropdown selectors:\n   • press "Enter" to open select\n   • use arrow keys to navigate\n   • press "Enter" to select\n\n3. Toggle buttons:\n   • use arrow keys to navigate between options\n   • press "Enter" to select\n\n4. Reason Text Areas (comment fields):\n   • press "Enter" to open/close section\n   • type your reasoning',
+    type: "help",
+  },
+  [EXPLAINER_ID.llm_judge_variable_mapping]: {
+    id: EXPLAINER_ID.llm_judge_variable_mapping,
+    description:
+      "Choose the trace field that should fill each variable. Map variables to any trace field, including image fields like input.image_url or output.image_base64.",
+  },
+  [EXPLAINER_ID.prompt_generation_learn_more]: {
+    id: EXPLAINER_ID.prompt_generation_learn_more,
+    description:
+      "Not sure where to start? Tell us your goal in plain language, and we'll generate a ready-to-use prompt.",
+    docLink: "/prompt_engineering/improve",
+    docHash: "#generate",
+  },
+  [EXPLAINER_ID.prompt_improvement_learn_more]: {
+    id: EXPLAINER_ID.prompt_improvement_learn_more,
+    description:
+      "Give your prompt a boost! Add optional guidance, or let AI apply best-practice improvements for you.",
+    docLink: "/prompt_engineering/improve",
+    docHash: "#improve",
+  },
+  [EXPLAINER_ID.prompt_improvement_optimizer]: {
+    id: EXPLAINER_ID.prompt_improvement_optimizer,
+    description:
+      "Looking for advanced optimization algorithms? Check out the Opik optimizer!",
+    docLink: "/agent_optimization/opik_optimizer/overview",
   },
 };

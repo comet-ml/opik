@@ -184,6 +184,7 @@ class SpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -208,6 +209,8 @@ class SpansClient:
         filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
+
+        strip_attachments : typing.Optional[bool]
 
         sorting : typing.Optional[str]
 
@@ -236,6 +239,7 @@ class SpansClient:
             type=type,
             filters=filters,
             truncate=truncate,
+            strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
             request_options=request_options,
@@ -376,13 +380,21 @@ class SpansClient:
         _response = self._raw_client.create_spans(spans=spans, request_options=request_options)
         return _response.data
 
-    def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    def get_span_by_id(
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SpanPublic:
         """
         Get span by id
 
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -398,7 +410,9 @@ class SpansClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.spans.get_span_by_id(id='id', )
         """
-        _response = self._raw_client.get_span_by_id(id, request_options=request_options)
+        _response = self._raw_client.get_span_by_id(
+            id, strip_attachments=strip_attachments, request_options=request_options
+        )
         return _response.data
 
     def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
@@ -724,7 +738,7 @@ class SpansClient:
         from Opik import OpikApi
         from Opik import FeedbackScoreBatchItem
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
+        client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
         """
         _response = self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)
         return _response.data
@@ -1003,6 +1017,7 @@ class AsyncSpansClient:
         type: typing.Optional[GetSpansByProjectRequestType] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
+        strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1027,6 +1042,8 @@ class AsyncSpansClient:
         filters : typing.Optional[str]
 
         truncate : typing.Optional[bool]
+
+        strip_attachments : typing.Optional[bool]
 
         sorting : typing.Optional[str]
 
@@ -1058,6 +1075,7 @@ class AsyncSpansClient:
             type=type,
             filters=filters,
             truncate=truncate,
+            strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
             request_options=request_options,
@@ -1204,13 +1222,21 @@ class AsyncSpansClient:
         _response = await self._raw_client.create_spans(spans=spans, request_options=request_options)
         return _response.data
 
-    async def get_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> SpanPublic:
+    async def get_span_by_id(
+        self,
+        id: str,
+        *,
+        strip_attachments: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SpanPublic:
         """
         Get span by id
 
         Parameters
         ----------
         id : str
+
+        strip_attachments : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1229,7 +1255,9 @@ class AsyncSpansClient:
             await client.spans.get_span_by_id(id='id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.get_span_by_id(id, request_options=request_options)
+        _response = await self._raw_client.get_span_by_id(
+            id, strip_attachments=strip_attachments, request_options=request_options
+        )
         return _response.data
 
     async def delete_span_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
@@ -1578,7 +1606,7 @@ class AsyncSpansClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(id='id', name='name', value=1.1, source="ui", )], )
+            await client.spans.score_batch_of_spans(scores=[FeedbackScoreBatchItem(name='name', value=1.1, source="ui", id='id', )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.score_batch_of_spans(scores=scores, request_options=request_options)

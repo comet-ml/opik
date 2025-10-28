@@ -175,3 +175,39 @@ class GuardrailBatchMessageBatcher(base_batcher.BaseBatcher):
 
     def add(self, message: messages.GuardrailBatchMessage) -> None:  # type: ignore
         return super().add(message)
+
+
+class CreateExperimentItemsBatchMessageBatcher(base_batcher.BaseBatcher):
+    def _create_batches_from_accumulated_messages(  # type: ignore
+        self,
+    ) -> List[messages.CreateExperimentItemsBatchMessage]:
+        return [
+            messages.CreateExperimentItemsBatchMessage(
+                batch=self._accumulated_messages,  # type: ignore
+                supports_batching=False,
+            )
+        ]
+
+    def add(  # type: ignore
+        self, message: messages.CreateExperimentItemsBatchMessage
+    ) -> None:
+        with self._lock:
+            new_messages = message.batch
+            n_new_messages = len(new_messages)
+            n_accumulated_messages = len(self._accumulated_messages)
+
+            if n_new_messages + n_accumulated_messages >= self._max_batch_size:
+                free_space_in_accumulator = (
+                    self._max_batch_size - n_accumulated_messages
+                )
+
+                messages_that_fit_in_batch = new_messages[:free_space_in_accumulator]
+                messages_that_dont_fit_in_batch = new_messages[
+                    free_space_in_accumulator:
+                ]
+
+                self._accumulated_messages += messages_that_fit_in_batch
+                new_messages = messages_that_dont_fit_in_batch
+                self.flush()
+
+            self._accumulated_messages += new_messages

@@ -50,7 +50,11 @@ public interface Field {
     String SPAN_ID_QUERY_PARAM = "span_id";
     String ANNOTATION_QUEUE_IDS_QUERY_PARAM = "annotation_queue_ids";
     String WEBHOOK_URL_QUERY_PARAM = "webhook_url";
-    String WEBHOOK_SECRET_TOKEN_QUERY_PARAM = "webhook_secret_token";
+    String ALERT_TYPE_QUERY_PARAM = "alert_type";
+    String ENABLED_QUERY_PARAM = "enabled";
+    String SAMPLING_RATE_QUERY_PARAM = "sampling_rate";
+    String PROJECT_ID_QUERY_PARAM = "project_id";
+    String PROJECT_NAME_QUERY_PARAM = "project_name";
 
     @JsonValue
     String getQueryParamField();

@@ -35,7 +35,7 @@ import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
 import SidebarMenuItem, {
   MENU_ITEM_TYPE,
@@ -170,12 +170,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   setExpanded,
 }) => {
   const [openProvideFeedback, setOpenProvideFeedback] = useState(false);
+  const { open: openQuickstart } = useOpenQuickStartDialog();
 
-  const {
-    activeWorkspaceName: workspaceName,
-    quickstartOpened,
-    setQuickstartOpened,
-  } = useAppStore();
+  const { activeWorkspaceName: workspaceName } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -306,7 +303,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         type: MENU_ITEM_TYPE.button,
         icon: GraduationCap,
         label: "Quickstart guide",
-        onClick: () => setQuickstartOpened(true),
+        onClick: openQuickstart,
       },
       {
         id: "provideFeedback",
@@ -353,7 +350,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         size="icon-2xs"
         onClick={() => setExpanded((s) => !s)}
         className={cn(
-          "absolute -right-3 top-2 hidden rounded-full z-50 group-hover:flex",
+          "absolute -right-3 top-2 hidden rounded-full z-50 lg:group-hover:flex",
         )}
       >
         {expanded ? <ChevronLeft /> : <ChevronRight />}
@@ -394,8 +391,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         open={openProvideFeedback}
         setOpen={setOpenProvideFeedback}
       />
-
-      <QuickstartDialog open={quickstartOpened} setOpen={setQuickstartOpened} />
     </>
   );
 };

@@ -17,7 +17,11 @@ from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.alert_page_public import AlertPagePublic
 from ..types.alert_public import AlertPublic
 from ..types.alert_trigger_write import AlertTriggerWrite
+from ..types.alert_write_alert_type import AlertWriteAlertType
+from ..types.webhook_examples import WebhookExamples
+from ..types.webhook_test_result import WebhookTestResult
 from ..types.webhook_write import WebhookWrite
+from .types.get_webhook_examples_request_alert_type import GetWebhookExamplesRequestAlertType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -86,10 +90,12 @@ class RawAlertsClient:
     def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -98,13 +104,17 @@ class RawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -122,6 +132,8 @@ class RawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -277,10 +289,12 @@ class RawAlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -291,13 +305,17 @@ class RawAlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -315,6 +333,8 @@ class RawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -353,6 +373,137 @@ class RawAlertsClient:
                         ),
                     ),
                 )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_webhook_examples(
+        self,
+        *,
+        alert_type: typing.Optional[GetWebhookExamplesRequestAlertType] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[WebhookExamples]:
+        """
+        Get webhook payload examples for all alert event types, optionally filtered by alert type
+
+        Parameters
+        ----------
+        alert_type : typing.Optional[GetWebhookExamplesRequestAlertType]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[WebhookExamples]
+            Webhook examples
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/alerts/webhooks/examples",
+            method="GET",
+            params={
+                "alert_type": alert_type,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WebhookExamples,
+                    parse_obj_as(
+                        type_=WebhookExamples,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def test_webhook(
+        self,
+        *,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[WebhookTestResult]:
+        """
+        Test alert webhook
+
+        Parameters
+        ----------
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[WebhookTestResult]
+            Webhook test
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/alerts/webhooks/tests",
+            method="POST",
+            json={
+                "id": id,
+                "name": name,
+                "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
+                "webhook": convert_and_respect_annotation_metadata(
+                    object_=webhook, annotation=WebhookWrite, direction="write"
+                ),
+                "triggers": convert_and_respect_annotation_metadata(
+                    object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WebhookTestResult,
+                    parse_obj_as(
+                        type_=WebhookTestResult,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
                     headers=dict(_response.headers),
@@ -433,10 +584,12 @@ class AsyncRawAlertsClient:
     async def create_alert(
         self,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -445,13 +598,17 @@ class AsyncRawAlertsClient:
 
         Parameters
         ----------
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -469,6 +626,8 @@ class AsyncRawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -624,10 +783,12 @@ class AsyncRawAlertsClient:
         self,
         id_: str,
         *,
-        name: str,
         webhook: WebhookWrite,
         id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
         enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -638,13 +799,17 @@ class AsyncRawAlertsClient:
         ----------
         id_ : str
 
-        name : str
-
         webhook : WebhookWrite
 
         id : typing.Optional[str]
 
+        name : typing.Optional[str]
+
         enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
@@ -662,6 +827,8 @@ class AsyncRawAlertsClient:
                 "id": id,
                 "name": name,
                 "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
                 "webhook": convert_and_respect_annotation_metadata(
                     object_=webhook, annotation=WebhookWrite, direction="write"
                 ),
@@ -700,6 +867,137 @@ class AsyncRawAlertsClient:
                         ),
                     ),
                 )
+            if _response.status_code == 422:
+                raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_webhook_examples(
+        self,
+        *,
+        alert_type: typing.Optional[GetWebhookExamplesRequestAlertType] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[WebhookExamples]:
+        """
+        Get webhook payload examples for all alert event types, optionally filtered by alert type
+
+        Parameters
+        ----------
+        alert_type : typing.Optional[GetWebhookExamplesRequestAlertType]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[WebhookExamples]
+            Webhook examples
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/alerts/webhooks/examples",
+            method="GET",
+            params={
+                "alert_type": alert_type,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WebhookExamples,
+                    parse_obj_as(
+                        type_=WebhookExamples,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def test_webhook(
+        self,
+        *,
+        webhook: WebhookWrite,
+        id: typing.Optional[str] = OMIT,
+        name: typing.Optional[str] = OMIT,
+        enabled: typing.Optional[bool] = OMIT,
+        alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[WebhookTestResult]:
+        """
+        Test alert webhook
+
+        Parameters
+        ----------
+        webhook : WebhookWrite
+
+        id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        enabled : typing.Optional[bool]
+
+        alert_type : typing.Optional[AlertWriteAlertType]
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+
+        triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[WebhookTestResult]
+            Webhook test
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/alerts/webhooks/tests",
+            method="POST",
+            json={
+                "id": id,
+                "name": name,
+                "enabled": enabled,
+                "alert_type": alert_type,
+                "metadata": metadata,
+                "webhook": convert_and_respect_annotation_metadata(
+                    object_=webhook, annotation=WebhookWrite, direction="write"
+                ),
+                "triggers": convert_and_respect_annotation_metadata(
+                    object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    WebhookTestResult,
+                    parse_obj_as(
+                        type_=WebhookTestResult,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
                     headers=dict(_response.headers),

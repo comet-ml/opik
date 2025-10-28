@@ -15,13 +15,15 @@ on:
           - all
           - openai
           - langchain
+          - langchain_legacy
           - llama_index
           - anthropic
           - aisuite
           - haystack
           - guardrails
           - dspy
-          - crewai
+          - crewai_v0
+          - crewai_v1
           - genai
           - adk
           - adk_legacy_1_3_0
@@ -70,6 +72,12 @@ jobs:
     uses: ./.github/workflows/lib-langchain-tests.yml
     secrets: inherit
   
+  langchain_legacy_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["langchain_legacy", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-langchain-legacy-tests.yml
+    secrets: inherit
+  
   llama_index_tests:
     needs: [init_environment]
     if: contains(fromJSON('["llama_index", "all"]'), needs.init_environment.outputs.LIBS)
@@ -106,10 +114,16 @@ jobs:
     uses: ./.github/workflows/lib-dspy-tests.yml
     secrets: inherit
 
-  crewai_tests:
+  crewai_v0_tests:
     needs: [init_environment]
-    if: contains(fromJSON('["crewai", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-crewai-tests.yml
+    if: contains(fromJSON('["crewai_v0", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-v0-tests.yml
+    secrets: inherit
+
+  crewai_v1_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["crewai_v1", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-v1-tests.yml
     secrets: inherit
   
   genai_tests:

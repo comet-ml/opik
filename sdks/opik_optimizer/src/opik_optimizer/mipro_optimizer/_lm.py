@@ -145,15 +145,15 @@ class LM(BaseLM):
         ):
             settings.usage_tracker.add_usage(self.model, dict(results.usage))
 
-        self.increment_llm_counter()
+        self._increment_llm_counter()
         return results
 
-    def increment_llm_counter(self) -> None:
+    def _increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
         self.llm_call_counter += 1
         parent = getattr(self, "parent_optimizer", None)
-        if parent is not None and hasattr(parent, "increment_llm_counter"):
-            parent.increment_llm_counter()
+        if parent is not None and hasattr(parent, "_increment_llm_counter"):
+            parent._increment_llm_counter()
 
     def launch(self, launch_kwargs: dict[str, Any] | None = None):
         self.provider.launch(self, launch_kwargs)

@@ -70,6 +70,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.common.collect.Lists;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NotFoundException;
@@ -85,6 +86,7 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.glassfish.jersey.client.ChunkedInput;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -102,8 +104,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.com.google.common.collect.Lists;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
@@ -1305,14 +1305,15 @@ class SpansResourceTest {
             return switch (field.getType()) {
                 case STRING, LIST, DICTIONARY, ENUM, ERROR_CONTAINER, STRING_STATE_DB, CUSTOM ->
                     RandomStringUtils.secure().nextAlphanumeric(10);
-                case NUMBER, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
+                case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
             };
         }
 
         private String getKey(Field field) {
             return switch (field.getType()) {
-                case STRING, NUMBER, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
+                case STRING, NUMBER, DURATION, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
+                        DATE_TIME_STATE_DB ->
                     null;
                 case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
                 case DICTIONARY -> "";
@@ -1323,7 +1324,8 @@ class SpansResourceTest {
             return switch (field.getType()) {
                 case STRING, DICTIONARY, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
                     " ";
-                case NUMBER, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
+                case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER ->
+                    RandomStringUtils.secure().nextAlphanumeric(10);
             };
         }
 
@@ -4998,7 +5000,7 @@ class SpansResourceTest {
         void createSpanWithNonNumericNumbers() throws JsonProcessingException {
             var expectedSpan = podamFactory.manufacturePojo(Span.class);
             var span = (ObjectNode) JsonUtils.readTree(expectedSpan);
-            var input = JsonUtils.MAPPER.createObjectNode();
+            var input = JsonUtils.createObjectNode();
             input.put("value", Double.POSITIVE_INFINITY);
             span.replace("input", input);
             var customObjectMapper = new ObjectMapper()
@@ -5360,7 +5362,7 @@ class SpansResourceTest {
             // Then the span should have attachments stripped and replaced with references
             // Wait for async processing and attachment stripping
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                // Use truncate=true to get attachment references instead of reinjected base64
+                // Use strip_attachments=true to get attachment references instead of reinjected base64
                 Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
                 assertThat(retrievedSpan).isNotNull();
 
@@ -5381,35 +5383,52 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("when span is fetched with truncate flag, then attachments are handled accordingly")
-        void getById__whenFetchedWithTruncateFlag__thenAttachmentsAreHandledAccordingly() throws Exception {
-            // Given a span with base64 encoded attachments in its input
+        @DisplayName("when span is fetched with different truncate and strip_attachments flags, then response varies accordingly")
+        void getByList__whenFetchedWithDifferentFlags__thenResponseVariesAccordingly() throws Exception {
+            // Given a span with a large text payload (20k chars) plus base64 encoded attachments at the end
             String base64Png = AttachmentPayloadUtilsTest.createLargePngBase64();
             String base64Gif = AttachmentPayloadUtilsTest.createLargeGifBase64();
 
+            // Create a 20k character text payload
+            StringBuilder largeTextBuilder = new StringBuilder();
+            String loremIpsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. ";
+            while (largeTextBuilder.length() < 20000) {
+                largeTextBuilder.append(loremIpsum);
+            }
+            String largeText = largeTextBuilder.toString();
+
+            // Create input JSON with large text + attachments at the end
             String originalInputJson = String.format(
-                    "{\"message\": \"Images attached:\", " +
+                    "{\"message\": \"%s\", " +
                             "\"png_data\": \"%s\", " +
                             "\"gif_data\": \"%s\"}",
-                    base64Png, base64Gif);
+                    largeText, base64Png, base64Gif);
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree("{\"request\": \"process data\"}"))
+                    .output(JsonUtils.readTree("{\"result\": \"done\"}"))
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
             var span = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
                     .input(JsonUtils.readTree(originalInputJson))
                     .output(JsonUtils.readTree("{\"result\": \"processed\"}"))
                     .metadata(JsonUtils.readTree("{}"))
                     .build();
 
             // When creating the span
-            spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
-            assertThat(span.id()).isNotNull();
+            var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            assertThat(spanId).isNotNull();
 
             // Wait for async attachment stripping - verify attachments are stored and replaced with references
             Awaitility.await()
                     .pollInterval(500, TimeUnit.MILLISECONDS)
                     .atMost(30, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        Span retrievedSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY, true);
+                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
                         assertThat(retrievedSpan).isNotNull();
 
                         String inputString = retrievedSpan.input().toString();
@@ -5435,35 +5454,73 @@ class SpansResourceTest {
             assertThat(attachmentPage).isNotNull();
             assertThat(attachmentPage.content()).hasSize(2); // Should have exactly 2, not duplicates
 
-            // Test 1: Fetch with truncate=true (explicitly set; default is truncate=false) - should show references
-            Span truncatedSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY, true);
-            assertThat(truncatedSpan).isNotNull();
+            // Test 1: truncate=true && strip_attachments=true -> checks if the input/output is much smaller than the text sent (character limit applies)
+            // Note: When truncate=true, the truncation can cut off attachment references if they appear late in the JSON
+            // For this test with 20k Lorem ipsum text followed by attachment fields, the references are beyond the 10KB truncation threshold
+            Span.SpanPage truncatedPage = spanResourceClient.getByTraceIdAndProject(traceId, DEFAULT_PROJECT,
+                    TEST_WORKSPACE, API_KEY, true, true);
+            assertThat(truncatedPage).isNotNull();
+            assertThat(truncatedPage.content()).isNotEmpty();
+            Span truncatedSpan = truncatedPage.content().get(0);
 
             JsonNode truncatedInput = truncatedSpan.input();
             assertThat(truncatedInput).isNotNull();
             String truncatedInputString = truncatedInput.toString();
 
-            // Verify the base64 data is replaced by attachment references (with timestamps)
-            assertThat(truncatedInputString).containsPattern("\\[input-attachment-1-\\d+\\.png\\]");
-            assertThat(truncatedInputString).containsPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+            // Verify text is truncated (much smaller than 20k chars)
+            assertThat(truncatedInputString.length()).isLessThan(12000); // Should be truncated
+            // Verify base64 data is not in the truncated response (either stripped or cut off by truncation)
             assertThat(truncatedInputString).doesNotContain(base64Png);
             assertThat(truncatedInputString).doesNotContain(base64Gif);
+            // Note: We can't reliably test for attachment references here because truncation may cut them off
 
-            // Test 2: Fetch with truncate=false - should show original base64 data
-            Span fullSpan = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY, false);
-            assertThat(fullSpan).isNotNull();
+            // Test 2: truncate=false && strip_attachments=true -> checks if we have the full text, but stripped attachments
+            Span.SpanPage strippedPage = spanResourceClient.getByTraceIdAndProject(traceId, DEFAULT_PROJECT,
+                    TEST_WORKSPACE, API_KEY, false, true);
+            assertThat(strippedPage).isNotNull();
+            assertThat(strippedPage.content()).isNotEmpty();
+            Span strippedSpan = strippedPage.content().get(0);
 
-            JsonNode fullInput = fullSpan.input();
-            assertThat(fullInput).isNotNull();
-            String fullInputString = fullInput.toString();
+            JsonNode strippedInput = strippedSpan.input();
+            assertThat(strippedInput).isNotNull();
+            String strippedInputString = strippedInput.toString();
 
-            // Verify the base64 data is restored (whitespace formatting may differ due to Jackson read/write)
-            assertThat(fullInputString).contains(base64Png);
-            assertThat(fullInputString).contains(base64Gif);
-            assertThat(fullInputString).contains("Images attached:");
-            // Should not contain attachment references
-            assertThat(fullInputString).doesNotContainPattern("\\[input-attachment-1-\\d+\\.png\\]");
-            assertThat(fullInputString).doesNotContainPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+            // Verify full text (NOT truncated) AND attachments are still references
+            assertThat(strippedInputString).contains(largeText); // Full text preserved
+            assertThat(strippedInputString).containsPattern("\\[input-attachment-1-\\d+\\.png\\]");
+            assertThat(strippedInputString).containsPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+            assertThat(strippedInputString).doesNotContain(base64Png);
+            assertThat(strippedInputString).doesNotContain(base64Gif);
+
+            // Test 3: truncate=false && strip_attachments=false -> verifies attachment reinjection
+            // Wait for MinIO uploads to complete by checking attachment availability
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Span.SpanPage fullPageCheck = spanResourceClient.getByTraceIdAndProject(traceId,
+                                DEFAULT_PROJECT,
+                                TEST_WORKSPACE, API_KEY, false, false);
+                        assertThat(fullPageCheck).isNotNull();
+                        assertThat(fullPageCheck.content()).isNotEmpty();
+                        Span fullSpanCheck = fullPageCheck.content().get(0);
+
+                        JsonNode fullInputCheck = fullSpanCheck.input();
+                        assertThat(fullInputCheck).isNotNull();
+                        String fullInputStringCheck = fullInputCheck.toString();
+
+                        // Verify full text is preserved (NOT truncated)
+                        assertThat(fullInputStringCheck).contains(largeText); // Full 20k+ char text preserved
+                        assertThat(fullInputStringCheck.length()).isGreaterThan(20000); // Much larger than truncation threshold
+
+                        // Verify the base64 data is reinjected (whitespace formatting may differ due to Jackson read/write)
+                        assertThat(fullInputStringCheck).contains(base64Png);
+                        assertThat(fullInputStringCheck).contains(base64Gif);
+
+                        // Should not contain attachment references when reinjection succeeds
+                        assertThat(fullInputStringCheck).doesNotContainPattern("\\[input-attachment-1-\\d+\\.png\\]");
+                        assertThat(fullInputStringCheck).doesNotContainPattern("\\[input-attachment-2-\\d+\\.gif\\]");
+                    });
         }
     }
 
@@ -7668,5 +7725,169 @@ class SpansResourceTest {
         } while (currentSpanType.equals(spanType.orElse(null)));
 
         return currentSpanType;
+    }
+
+    @Nested
+    @DisplayName("Large Payload Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class LargePayloadTests {
+
+        @Test
+        @DisplayName("Create span with two 35MB base64 encoded videos - should succeed with attachment stripping")
+        void createSpan__whenTwoLargeVideoAttachments__thenSucceedWithStripping() throws Exception {
+            // Given: Create two 35MB video attachments (simulating large video uploads)
+            // 35MB raw * 4/3 (base64 overhead) = ~46.6MB base64 string each
+            // Total JSON payload: ~93.2MB (well under 100MB cloud / 250MB self-hosted limit)
+            int videoSizeBytes = 35 * 1024 * 1024; // 35MB each
+            String base64Video1 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes); // Using PNG for simplicity
+            String base64Video2 = AttachmentPayloadUtilsTest.createValidJpegBase64(videoSizeBytes);
+
+            // Create input JSON with first large video
+            String originalInputJson = String.format(
+                    "{\"message\": \"Processing video upload\", " +
+                            "\"video_data\": \"%s\", " +
+                            "\"user_id\": \"user123\", " +
+                            "\"session_id\": \"session456\"}",
+                    base64Video1);
+
+            // Create output JSON with second large video (result)
+            String originalOutputJson = String.format(
+                    "{\"result\": \"Video processed successfully\", " +
+                            "\"processed_video\": \"%s\", " +
+                            "\"duration_ms\": 5230}",
+                    base64Video2);
+
+            // Create span with PODAM factory following existing patterns
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree(originalOutputJson))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .feedbackScores(null)
+                    .build();
+
+            // When: Create the span
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Then: Verify span was created
+            assertThat(spanId).isNotNull();
+
+            // Verify attachments were stripped and replaced with references (async operation)
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
+                        assertThat(retrievedSpan).isNotNull();
+
+                        String inputString = retrievedSpan.input().toString();
+                        String outputString = retrievedSpan.output().toString();
+
+                        // Original base64 videos should be stripped
+                        assertThat(inputString).doesNotContain(base64Video1);
+                        assertThat(outputString).doesNotContain(base64Video2);
+
+                        // Should contain attachment references like [input-attachment-1-12345.png]
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
+                    });
+        }
+
+        @Test
+        @DisplayName("Create span with attachment exceeding limit - should return 400 Bad Request")
+        void createSpan__whenSingleAttachmentExceedsLimit__thenReject() throws Exception {
+            // Given: Create a single attachment that exceeds the 250MB test limit
+            // In test environment: maxStringLength = 250MB (262,144,000 bytes)
+            // We'll create a 190MB raw attachment, which becomes ~253MB as base64 (190 * 4/3 = 253.3MB)
+            // This exceeds the 250MB limit and should be rejected during deserialization
+            int videoSizeBytes = 190 * 1024 * 1024; // 190MB raw -> ~253MB base64
+            String base64Video = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
+
+            // Create input JSON with the oversized video
+            String originalInputJson = String.format(
+                    "{\"message\": \"Processing large video\", " +
+                            "\"video_data\": \"%s\", " +
+                            "\"user_id\": \"user123\"}",
+                    base64Video);
+
+            // Create span with PODAM factory
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree("{}"))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .feedbackScores(null)
+                    .build();
+
+            // When: Attempt to create the span
+            // Then: Should fail with 400 Bad Request
+            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE, 400)) {
+                // Assert error message mentions the limit
+                var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorResponse).isNotNull();
+                assertThat(errorResponse.getMessage())
+                        .containsIgnoringCase("String value length")
+                        .containsIgnoringCase("exceeds the maximum allowed")
+                        .containsIgnoringCase("StreamReadConstraints");
+            }
+        }
+
+        @Test
+        @DisplayName("Create span with multiple large attachments under individual limit - should succeed")
+        void createSpan__whenMultipleLargeAttachmentsUnderIndividualLimit__thenSucceed() throws Exception {
+            // Given: Create THREE 70MB attachments (each ~93MB as base64)
+            // Total payload: ~280MB, but each individual string is under 250MB limit
+            // This verifies the limit is per-string, not per total payload
+            int videoSizeBytes = 70 * 1024 * 1024; // 70MB each -> ~93MB base64 each
+            String base64Video1 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
+            String base64Video2 = AttachmentPayloadUtilsTest.createValidJpegBase64(videoSizeBytes);
+            String base64Video3 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
+
+            // Create JSONs with large videos
+            String originalInputJson = String.format(
+                    "{\"video1\": \"%s\", \"video2\": \"%s\"}",
+                    base64Video1, base64Video2);
+
+            String originalOutputJson = String.format(
+                    "{\"result_video\": \"%s\"}",
+                    base64Video3);
+
+            // Create span
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .input(JsonUtils.readTree(originalInputJson))
+                    .output(JsonUtils.readTree(originalOutputJson))
+                    .metadata(JsonUtils.readTree("{}"))
+                    .feedbackScores(null)
+                    .build();
+
+            // When: Create the span
+            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // Then: Should succeed and attachments should be stripped
+            assertThat(spanId).isNotNull();
+
+            // Verify attachments were stripped
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
+                        assertThat(retrievedSpan).isNotNull();
+
+                        String inputString = retrievedSpan.input().toString();
+                        String outputString = retrievedSpan.output().toString();
+
+                        // All three videos should be stripped
+                        assertThat(inputString).doesNotContain(base64Video1);
+                        assertThat(inputString).doesNotContain(base64Video2);
+                        assertThat(outputString).doesNotContain(base64Video3);
+
+                        // Should have attachment references
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
+                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
+                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.png\\]");
+                    });
+        }
     }
 }

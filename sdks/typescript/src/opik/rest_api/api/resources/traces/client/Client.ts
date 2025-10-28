@@ -399,7 +399,7 @@ export class Traces {
         request: OpikApi.GetTracesByProjectRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePagePublic>> {
-        const { page, size, projectName, projectId, filters, truncate, sorting, exclude } = request;
+        const { page, size, projectName, projectId, filters, truncate, stripAttachments, sorting, exclude } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -423,6 +423,10 @@ export class Traces {
 
         if (truncate != null) {
             _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
         }
 
         if (sorting != null) {
@@ -659,6 +663,7 @@ export class Traces {
      * Get trace by id
      *
      * @param {string} id
+     * @param {OpikApi.GetTraceByIdRequest} request
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
@@ -666,15 +671,23 @@ export class Traces {
      */
     public getTraceById(
         id: string,
+        request: OpikApi.GetTraceByIdRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.TracePublic> {
-        return core.HttpResponsePromise.fromPromise(this.__getTraceById(id, requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__getTraceById(id, request, requestOptions));
     }
 
     private async __getTraceById(
         id: string,
+        request: OpikApi.GetTraceByIdRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TracePublic>> {
+        const { stripAttachments } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
@@ -695,6 +708,7 @@ export class Traces {
                 ...requestOptions?.headers,
             },
             contentType: "application/json",
+            queryParameters: _queryParams,
             requestType: "json",
             timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
             maxRetries: requestOptions?.maxRetries,
@@ -1958,7 +1972,7 @@ export class Traces {
         request: OpikApi.GetTraceThreadsRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TraceThreadPage>> {
-        const { page, size, projectName, projectId, truncate, filters, sorting } = request;
+        const { page, size, projectName, projectId, truncate, stripAttachments, filters, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -1978,6 +1992,10 @@ export class Traces {
 
         if (truncate != null) {
             _queryParams["truncate"] = truncate.toString();
+        }
+
+        if (stripAttachments != null) {
+            _queryParams["strip_attachments"] = stripAttachments.toString();
         }
 
         if (filters != null) {
@@ -2141,10 +2159,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfThreads({
      *         scores: [{
-     *                 threadId: "thread_id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 threadId: "thread_id"
      *             }]
      *     })
      */
@@ -2226,10 +2244,10 @@ export class Traces {
      * @example
      *     await client.traces.scoreBatchOfTraces({
      *         scores: [{
-     *                 id: "id",
      *                 name: "name",
      *                 value: 1.1,
-     *                 source: "ui"
+     *                 source: "ui",
+     *                 id: "id"
      *             }]
      *     })
      */

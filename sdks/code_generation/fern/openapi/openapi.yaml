@@ -58,6 +58,8 @@ tags:
   description: Guardrails related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: Manual Evaluation
+  description: Manual evaluation resources for traces and threads
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -72,6 +74,8 @@ tags:
   description: Span related resources
 - name: Traces
   description: Trace related resources
+- name: Welcome Wizard
+  description: Welcome wizard tracking resources
 - name: Workspaces
   description: Workspace related resources
 - name: Redirect
@@ -320,6 +324,55 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "409":
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/alerts/webhooks/examples:
+    get:
+      tags:
+      - Alerts
+      summary: Get webhook payload examples
+      description: "Get webhook payload examples for all alert event types, optionally\
+        \ filtered by alert type"
+      operationId: getWebhookExamples
+      parameters:
+      - name: alert_type
+        in: query
+        schema:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+      responses:
+        "200":
+          description: Webhook examples
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookExamples"
+  /v1/private/alerts/webhooks/tests:
+    post:
+      tags:
+      - Alerts
+      summary: Test alert webhook
+      description: Test alert webhook
+      operationId: testWebhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Alert_Write"
+      responses:
+        "200":
+          description: Webhook test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookTestResult"
+        "422":
+          description: Unprocessable Content
           content:
             application/json:
               schema:
@@ -901,7 +954,21 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: id
+        in: query
+        schema:
+          type: string
+          description: "Filter automation rules with rule ID containing this value\
+            \ (partial match, like %id%)"
       - name: name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: sorting
         in: query
         schema:
           type: string
@@ -1322,9 +1389,16 @@ paths:
         in: query
         required: true
         schema:
-          minLength: 1
           type: string
       - name: filters
+        in: query
+        schema:
+          type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: search
         in: query
         schema:
           type: string
@@ -1359,6 +1433,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Dataset_Public"
+  /v1/private/datasets/{id}/items/experiments/items/stats:
+    get:
+      tags:
+      - Datasets
+      summary: Get experiment items stats for dataset
+      description: Get experiment items stats for dataset
+      operationId: getDatasetExperimentItemsStats
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: experiment_ids
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Experiment items stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
   /v1/private/datasets/items/{itemId}:
     get:
       tags:
@@ -2161,6 +2265,70 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/threads:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate threads
+      description: Manually trigger evaluation rules on selected threads. Bypasses
+        sampling and enqueues all specified threads for evaluation.
+      operationId: evaluateThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/traces:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate traces
+      description: Manually trigger evaluation rules on selected traces. Bypasses
+        sampling and enqueues all specified traces for evaluation.
+      operationId: evaluateTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
           content:
             application/json:
               schema:
@@ -3104,7 +3272,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3176,6 +3352,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
+          default: false
       responses:
         "200":
           description: Span resource
@@ -3583,7 +3767,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: sorting
         in: query
         schema:
@@ -3649,6 +3841,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects attachment content from S3 (default:\
+            \ false for backward compatibility)"
+          default: false
       responses:
         "200":
           description: Trace resource
@@ -3989,7 +4189,15 @@ paths:
         in: query
         schema:
           type: boolean
-          description: Truncate image included in the messages
+          description: "Truncate input, output and metadata to slim payloads"
+          default: false
+      - name: strip_attachments
+        in: query
+        schema:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
       - name: filters
         in: query
         schema:
@@ -4190,6 +4398,34 @@ paths:
           description: No Content
         "404":
           description: Not found
+  /v1/private/welcome-wizard:
+    get:
+      tags:
+      - Welcome Wizard
+      summary: Get welcome wizard tracking status
+      description: Get welcome wizard tracking status for the current workspace
+      operationId: getWelcomeWizardStatus
+      responses:
+        "200":
+          description: Welcome wizard tracking status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WelcomeWizardTracking"
+    post:
+      tags:
+      - Welcome Wizard
+      summary: Submit welcome wizard
+      description: Submit welcome wizard with user information
+      operationId: submitWelcomeWizard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WelcomeWizardSubmission"
+      responses:
+        "204":
+          description: Welcome wizard submitted successfully
   /v1/private/workspaces/costs/summaries:
     post:
       tags:
@@ -4598,7 +4834,6 @@ components:
           type: string
     Alert:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -4611,6 +4846,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook"
         triggers:
@@ -4651,7 +4896,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4701,7 +4946,6 @@ components:
           readOnly: true
     Webhook:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4768,7 +5012,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4776,7 +5020,6 @@ components:
             $ref: "#/components/schemas/AlertTriggerConfig_Write"
     Alert_Write:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -4789,6 +5032,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Write"
         triggers:
@@ -4797,7 +5050,6 @@ components:
             $ref: "#/components/schemas/AlertTrigger_Write"
     Webhook_Write:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4905,7 +5157,7 @@ components:
           - trace_thread:feedback_score
           - prompt:created
           - prompt:committed
-          - span:guardrails_triggered
+          - trace:guardrails_triggered
           - prompt:deleted
         trigger_configs:
           type: array
@@ -4920,7 +5172,6 @@ components:
           readOnly: true
     Alert_Public:
       required:
-      - name
       - webhook
       type: object
       properties:
@@ -4933,6 +5184,16 @@ components:
           type: string
         enabled:
           type: boolean
+        alert_type:
+          type: string
+          enum:
+          - general
+          - slack
+          - pagerduty
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
         webhook:
           $ref: "#/components/schemas/Webhook_Public"
         triggers:
@@ -4955,7 +5216,6 @@ components:
           readOnly: true
     Webhook_Public:
       required:
-      - secret_token
       - url
       type: object
       properties:
@@ -4998,6 +5258,28 @@ components:
         message:
           type: string
         details:
+          type: string
+    WebhookExamples:
+      type: object
+      properties:
+        response_examples:
+          type: object
+          additionalProperties:
+            type: object
+    WebhookTestResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - success
+          - failure
+        status_code:
+          type: integer
+          format: int32
+        request_body:
+          type: string
+        error_message:
           type: string
     AnnotationQueueItemIds:
       required:
@@ -6011,6 +6293,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
+        sortable_by:
+          type: array
+          items:
+            type: string
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
       - action
@@ -7179,6 +7465,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Column_Compare"
+        sortableBy:
+          type: array
+          items:
+            type: string
     DatasetItem_Compare:
       required:
       - data
@@ -7464,6 +7754,65 @@ components:
         dataset_name:
           minLength: 1
           type: string
+    AvgValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            type: number
+            format: double
+    CountValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            type: integer
+            format: int64
+    PercentageValueStat_Public:
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
+      - type: object
+        properties:
+          value:
+            $ref: "#/components/schemas/PercentageValues_Public"
+    PercentageValues_Public:
+      type: object
+      properties:
+        p50:
+          type: number
+        p90:
+          type: number
+        p99:
+          type: number
+    ProjectStatItemObject_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - COUNT
+          - PERCENTAGE
+          - AVG
+      discriminator:
+        propertyName: type
+        mapping:
+          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
+          COUNT: "#/components/schemas/CountValueStat_Public"
+          AVG: "#/components/schemas/AvgValueStat_Public"
+    ProjectStats_Public:
+      type: object
+      properties:
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectStatItemObject_Public"
     DatasetItem_Public:
       required:
       - data
@@ -7594,6 +7943,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Column_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     Column:
       type: object
       properties:
@@ -8520,15 +8873,6 @@ components:
         items:
           type: object
       - type: string
-    PercentageValues_Public:
-      type: object
-      properties:
-        p50:
-          type: number
-        p90:
-          type: number
-        p99:
-          type: number
     PromptVersionLink_Public:
       required:
       - id
@@ -8551,11 +8895,27 @@ components:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/GroupContent"
+        details:
+          $ref: "#/components/schemas/GroupDetails"
     GroupContent:
       type: object
       properties:
         label:
           type: string
+    GroupDetail:
+      type: object
+      properties:
+        group_sorting:
+          type: array
+          items:
+            type: string
+    GroupDetails:
+      type: object
+      properties:
+        groups_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupDetail"
     AggregationData:
       type: object
       properties:
@@ -9115,6 +9475,9 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           type: string
           enum:
@@ -9171,6 +9534,9 @@ components:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           type: string
           enum:
@@ -9352,6 +9718,60 @@ components:
             type: string
         base_url:
           type: string
+    ManualEvaluationResponse:
+      type: object
+      properties:
+        entities_queued:
+          type: integer
+          description: Number of entities queued for evaluation
+          format: int32
+          example: 5
+        rules_applied:
+          type: integer
+          description: Number of rules that will be applied
+          format: int32
+          example: 2
+    ManualEvaluationRequest:
+      required:
+      - entity_ids
+      - entity_type
+      - project_id
+      - rule_ids
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        entity_ids:
+          minItems: 1
+          type: array
+          description: List of entity IDs (trace IDs or thread IDs) to evaluate
+          example:
+          - 550e8400-e29b-41d4-a716-446655440000
+          - 550e8400-e29b-41d4-a716-446655440001
+          items:
+            type: string
+            description: List of entity IDs (trace IDs or thread IDs) to evaluate
+            format: uuid
+        rule_ids:
+          minItems: 1
+          type: array
+          description: List of automation rule IDs to apply
+          example:
+          - 660e8400-e29b-41d4-a716-446655440000
+          items:
+            type: string
+            description: List of automation rule IDs to apply
+            format: uuid
+        entity_type:
+          type: string
+          description: Type of entity to evaluate (trace or thread)
+          example: trace
+          enum:
+          - trace
+          - thread
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
     Optimization:
@@ -10352,10 +10772,12 @@ components:
             type: string
     ServiceTogglesConfig:
       required:
+      - alertsEnabled
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
       - traceThreadPythonEvaluatorEnabled
+      - welcomeWizardEnabled
       type: object
       properties:
         pythonEvaluatorEnabled:
@@ -10365,6 +10787,10 @@ components:
         guardrailsEnabled:
           type: boolean
         opikAIEnabled:
+          type: boolean
+        alertsEnabled:
+          type: boolean
+        welcomeWizardEnabled:
           type: boolean
     ErrorInfo_Write:
       required:
@@ -10669,56 +11095,6 @@ components:
           type: array
           items:
             type: string
-    AvgValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: number
-            format: double
-    CountValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            type: integer
-            format: int64
-    PercentageValueStat_Public:
-      type: object
-      allOf:
-      - $ref: "#/components/schemas/ProjectStatItemObject_Public"
-      - type: object
-        properties:
-          value:
-            $ref: "#/components/schemas/PercentageValues_Public"
-    ProjectStatItemObject_Public:
-      type: object
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-          enum:
-          - COUNT
-          - PERCENTAGE
-          - AVG
-      discriminator:
-        propertyName: type
-        mapping:
-          PERCENTAGE: "#/components/schemas/PercentageValueStat_Public"
-          COUNT: "#/components/schemas/CountValueStat_Public"
-          AVG: "#/components/schemas/AvgValueStat_Public"
-    ProjectStats_Public:
-      type: object
-      properties:
-        stats:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProjectStatItemObject_Public"
     FeedbackScoreBatch:
       required:
       - scores
@@ -10738,13 +11114,13 @@ components:
       - value
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           minLength: 1
           type: string
@@ -10766,6 +11142,9 @@ components:
           - online_scoring
         author:
           type: string
+        id:
+          type: string
+          format: uuid
     SpanFilter_Public:
       type: object
       properties:
@@ -11213,6 +11592,8 @@ components:
         thread_id:
           minLength: 1
           type: string
+        truncate:
+          type: boolean
     TraceThreadPage:
       type: object
       properties:
@@ -11261,13 +11642,13 @@ components:
       - value
       type: object
       properties:
-        thread_id:
-          minLength: 1
-          type: string
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
         name:
           minLength: 1
           type: string
@@ -11288,6 +11669,9 @@ components:
           - sdk
           - online_scoring
         author:
+          type: string
+        thread_id:
+          minLength: 1
           type: string
     FeedbackScoreBatchThread:
       required:
@@ -11348,8 +11732,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceSearchStreamRequest_Public:
       type: object
       properties:
@@ -11374,8 +11763,13 @@ components:
           default: 500
         truncate:
           type: boolean
-          description: "Truncate image included in either input, output or metadata"
+          description: "Truncate input, output and metadata to slim payloads"
           default: true
+        strip_attachments:
+          type: boolean
+          description: "If true, returns attachment references like [file.png]; if\
+            \ false, downloads and reinjects stripped attachments"
+          default: false
     TraceUpdate:
       type: object
       properties:
@@ -11416,6 +11810,35 @@ components:
           type: array
           items:
             type: string
+    WelcomeWizardTracking:
+      type: object
+      properties:
+        completed:
+          type: boolean
+          description: Whether the welcome wizard has been completed
+    WelcomeWizardSubmission:
+      type: object
+      properties:
+        role:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: Optional user role
+        integrations:
+          type: array
+          description: List of integrations the user selected
+          items:
+            type: string
+            description: List of integrations the user selected
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional user email
+          format: email
+        join_beta_program:
+          type: boolean
+          description: Whether user wants to join beta programs
     Result:
       type: object
       properties:

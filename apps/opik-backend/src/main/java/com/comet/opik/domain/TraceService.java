@@ -19,6 +19,7 @@ import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
@@ -61,6 +62,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertEventType.TRACE_ERRORS;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
@@ -79,7 +81,7 @@ public interface TraceService {
 
     Mono<Trace> get(UUID id);
 
-    Mono<Trace> get(UUID id, boolean truncate);
+    Mono<Trace> get(UUID id, boolean stripAttachments);
 
     Mono<TraceDetails> getTraceDetailsById(UUID id);
 
@@ -103,7 +105,7 @@ public interface TraceService {
 
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
-    Mono<TraceThread> getThreadById(UUID projectId, String threadId);
+    Mono<TraceThread> getThreadById(UUID projectId, String threadId, boolean truncate);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 
@@ -145,11 +147,12 @@ class TraceServiceImpl implements TraceService {
                 .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .flatMap(project -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     // Strip attachments from the trace with the generated ID and project ID
                     Trace traceWithId = trace.toBuilder().id(id).projectId(project.id()).build();
-                    return attachmentStripperService.stripAttachmentsFromTrace(traceWithId, workspaceId,
+                    return attachmentStripperService.stripAttachments(traceWithId, workspaceId,
                             userName, projectName)
                             .flatMap(processedTrace -> lockService.executeWithLock(
                                     new LockService.Lock(id, TRACE_KEY),
@@ -158,8 +161,39 @@ class TraceServiceImpl implements TraceService {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
                                         eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                                        raiseAlertEventIfApplicable(List.of(savedTrace), workspaceId, workspaceName,
+                                                userName);
                                     }));
                 }));
+    }
+
+    private void raiseAlertEventIfApplicable(List<Trace> traces, String workspaceId, String workspaceName,
+            String userName) {
+        if (CollectionUtils.isEmpty(traces)) {
+            return;
+        }
+
+        var tracesWithErrors = traces.stream()
+                .filter(trace -> trace.errorInfo() != null)
+                .map(trace -> trace.toBuilder()
+                        .createdBy(userName)
+                        .createdAt(Instant.now())
+                        .lastUpdatedBy(userName)
+                        .lastUpdatedAt(Instant.now())
+                        .build())
+                .toList();
+
+        if (CollectionUtils.isNotEmpty(tracesWithErrors)) {
+            var projectId = traces.getFirst().projectId();
+            eventBus.post(AlertEvent.builder()
+                    .eventType(TRACE_ERRORS)
+                    .workspaceId(workspaceId)
+                    .workspaceName(workspaceName)
+                    .userName(userName)
+                    .projectId(projectId)
+                    .payload(tracesWithErrors)
+                    .build());
+        }
     }
 
     @WithSpan
@@ -187,6 +221,7 @@ class TraceServiceImpl implements TraceService {
         return attachmentService.deleteAutoStrippedAttachments(EntityType.TRACE, traceIds)
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
@@ -194,7 +229,7 @@ class TraceServiceImpl implements TraceService {
                             .collectList()
                             .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
                             .flatMapMany(Flux::fromIterable)
-                            .flatMap(trace -> attachmentStripperService.stripAttachmentsFromTrace(trace, workspaceId,
+                            .flatMap(trace -> attachmentStripperService.stripAttachments(trace, workspaceId,
                                     userName,
                                     trace.projectName()))
                             .collectList();
@@ -202,9 +237,26 @@ class TraceServiceImpl implements TraceService {
                     return resolveProjects
                             .flatMap(traces -> template
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
-                                    .doOnSuccess(
-                                            __ -> eventBus.post(new TracesCreated(traces, workspaceId, userName))));
+                                    .doOnSuccess(__ -> {
+                                        eventBus.post(new TracesCreated(traces, workspaceId, userName));
+                                        raiseAlertEventIfApplicableForBatch(traces, workspaceId, workspaceName,
+                                                userName);
+                                    }));
                 }));
+    }
+
+    // Traces could belong to different projects
+    private void raiseAlertEventIfApplicableForBatch(List<Trace> traces, String workspaceId, String workspaceName,
+            String userName) {
+        if (CollectionUtils.isEmpty(traces)) {
+            return;
+        }
+
+        traces.stream()
+                .collect(Collectors.groupingBy(Trace::projectId))
+                .values()
+                .forEach(tracesPerProject -> raiseAlertEventIfApplicable(tracesPerProject, workspaceId, workspaceName,
+                        userName));
     }
 
     private List<Trace> dedupTraces(List<Trace> initialTraces) {
@@ -337,7 +389,7 @@ class TraceServiceImpl implements TraceService {
                     String projectName = project.name();
 
                     // Strip attachments from the new trace data before inserting
-                    return attachmentStripperService.stripAttachmentsFromTraceUpdate(
+                    return attachmentStripperService.stripAttachments(
                             traceUpdate, id, workspaceId, userName, projectName)
                             .flatMap(processedUpdate -> template.nonTransaction(
                                     connection -> dao.partialInsert(project.id(), processedUpdate, id, connection)));
@@ -358,7 +410,7 @@ class TraceServiceImpl implements TraceService {
             return attachmentService.getAttachmentInfoByEntity(id, EntityType.TRACE, trace.projectId())
                     .flatMap(existingAttachments ->
             // Step 2: Strip attachments OUTSIDE the database transaction
-            attachmentStripperService.stripAttachmentsFromTraceUpdate(
+            attachmentStripperService.stripAttachments(
                     traceUpdate, id, workspaceId, userName, projectName)
                     .flatMap(processedUpdate ->
             // Step 3: Update in database transaction
@@ -407,12 +459,11 @@ class TraceServiceImpl implements TraceService {
         return get(id, false);
     }
 
-    @Override
     @WithSpan
-    public Mono<Trace> get(@NonNull UUID id, boolean truncate) {
+    public Mono<Trace> get(@NonNull UUID id, boolean stripAttachments) {
         return template.nonTransaction(connection -> dao.findById(id, connection))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))))
-                .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, truncate));
+                .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, !stripAttachments));
     }
 
     @Override
@@ -455,11 +506,12 @@ class TraceServiceImpl implements TraceService {
                 .flatMap(resolvedCriteria -> template
                         .nonTransaction(connection -> dao.find(size, page, resolvedCriteria, connection))
                         .flatMap(tracePage -> {
-                            // If truncate=false, reinject attachments into all traces
-                            if (!resolvedCriteria.truncate()) {
+                            // If stripAttachments=false, reinject attachments into all traces
+                            var reinjectAttachments = !resolvedCriteria.stripAttachments();
+                            if (reinjectAttachments) {
                                 return Flux.fromIterable(tracePage.content())
                                         .concatMap(trace -> attachmentReinjectorService
-                                                .reinjectAttachments(trace, resolvedCriteria.truncate()))
+                                                .reinjectAttachments(trace, reinjectAttachments))
                                         .collectList()
                                         .map(reinjectedTraces -> tracePage.toBuilder()
                                                 .content(reinjectedTraces)
@@ -572,8 +624,8 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
-    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId) {
-        return dao.findThreadById(projectId, threadId)
+    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
+        return dao.findThreadById(projectId, threadId, truncate)
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
     }
 
@@ -581,14 +633,8 @@ class TraceServiceImpl implements TraceService {
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.search(limit, it)
-                        .concatMap(trace -> {
-                            // If truncate=false, reinject attachments
-                            if (!it.truncate()) {
-                                return attachmentReinjectorService.reinjectAttachments(trace,
-                                        it.truncate());
-                            }
-                            return Mono.just(trace);
-                        }));
+                        .concatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace,
+                                !it.stripAttachments())));
     }
 
     @Override

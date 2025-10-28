@@ -179,8 +179,8 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return getById(id, workspaceName, apiKey, false);
     }
 
-    public Span getById(UUID id, String workspaceName, String apiKey, boolean truncate) {
-        try (var response = callGetSpanIdApi(id, workspaceName, apiKey, truncate)) {
+    public Span getById(UUID id, String workspaceName, String apiKey, boolean stripAttachments) {
+        try (var response = callGetSpanIdApi(id, workspaceName, apiKey, stripAttachments)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();
             return response.readEntity(Span.class);
@@ -191,10 +191,10 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return callGetSpanIdApi(id, workspaceName, apiKey, false);
     }
 
-    public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey, boolean truncate) {
+    public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey, boolean stripAttachments) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
-                .queryParam("truncate", truncate)
+                .queryParam("strip_attachments", stripAttachments)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -202,15 +202,27 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Span.SpanPage getByTraceIdAndProject(UUID traceId, String projectName, String workspaceName, String apiKey) {
+        return getByTraceIdAndProject(traceId, projectName, workspaceName, apiKey, false, false);
+    }
+
+    public Span.SpanPage getByTraceIdAndProject(UUID traceId, String projectName, String workspaceName, String apiKey,
+            boolean truncate, boolean stripAttachments) {
         var requestBuilder = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("trace_id", traceId.toString());
 
         if (StringUtils.isNotEmpty(projectName)) {
-            requestBuilder = requestBuilder.queryParam("project", projectName);
+            requestBuilder = requestBuilder.queryParam("project_name", projectName);
+        }
+
+        if (truncate) {
+            requestBuilder = requestBuilder.queryParam("truncate", true);
+        }
+
+        if (stripAttachments) {
+            requestBuilder = requestBuilder.queryParam("strip_attachments", true);
         }
 
         var response = requestBuilder
-                .queryParam("project_name", projectName)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

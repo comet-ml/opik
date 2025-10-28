@@ -9,6 +9,7 @@ import {
   PythonCodeDetailsThreadForm,
   PythonCodeDetailsTraceForm,
 } from "@/types/automations";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
@@ -23,7 +24,7 @@ export const LLM_MESSAGE_ROLE_NAME_MAP = {
 
 export const DEFAULT_OPEN_AI_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
@@ -31,13 +32,13 @@ export const DEFAULT_OPEN_AI_CONFIGS = {
 
 export const DEFAULT_ANTHROPIC_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
 };
 
 export const DEFAULT_GEMINI_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
 };
 
@@ -61,11 +62,27 @@ export const DEFAULT_VERTEX_AI_CONFIGS = {
 
 export const DEFAULT_CUSTOM_CONFIGS = {
   TEMPERATURE: 0,
-  MAX_COMPLETION_TOKENS: 1024,
+  MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
 };
+
+// Reasoning models that require temperature = 1.0
+// These models do not support temperature = 0 and will fail if used
+export const REASONING_MODELS = [
+  // GPT-5 family
+  PROVIDER_MODEL_TYPE.GPT_5,
+  PROVIDER_MODEL_TYPE.GPT_5_MINI,
+  PROVIDER_MODEL_TYPE.GPT_5_NANO,
+  PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+  // O* reasoning models
+  PROVIDER_MODEL_TYPE.GPT_O1,
+  PROVIDER_MODEL_TYPE.GPT_O1_MINI,
+  PROVIDER_MODEL_TYPE.GPT_O3,
+  PROVIDER_MODEL_TYPE.GPT_O3_MINI,
+  PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+] as const;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

@@ -190,10 +190,10 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return getById(id, workspaceName, apiKey, false);
     }
 
-    public Trace getById(UUID id, String workspaceName, String apiKey, boolean truncate) {
+    public Trace getById(UUID id, String workspaceName, String apiKey, boolean stripAttachments) {
         var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
-                .queryParam("truncate", truncate)
+                .queryParam("strip_attachments", stripAttachments)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -393,6 +393,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public TraceThread getTraceThread(String threadId, UUID projectId, String apiKey, String workspaceName) {
+        return getTraceThread(threadId, projectId, false, apiKey, workspaceName);
+    }
+
+    public TraceThread getTraceThread(String threadId, UUID projectId, boolean truncate, String apiKey,
+            String workspaceName) {
 
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
@@ -400,7 +405,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).threadId(threadId).build()))) {
+                .post(Entity.json(TraceThreadIdentifier.builder()
+                        .projectId(projectId)
+                        .threadId(threadId)
+                        .truncate(truncate)
+                        .build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             assertThat(response.hasEntity()).isTrue();

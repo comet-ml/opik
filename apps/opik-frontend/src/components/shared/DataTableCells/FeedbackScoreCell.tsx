@@ -4,19 +4,41 @@ import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
 
-import { formatNumericData } from "@/lib/utils";
+import { cn, formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
-import { TraceFeedbackScore } from "@/types/traces";
+import { TraceFeedbackScore, Thread, Span } from "@/types/traces";
 import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
 } from "@/lib/feedback-scores";
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
+import { BaseTraceData } from "@/types/traces";
+import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
+import { isObjectSpan, isObjectThread } from "@/lib/traces";
+import { ThreadStatus } from "@/types/thread";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
   const reason = feedbackScore?.reason;
+  const row = context.row.original as BaseTraceData | Thread | Span;
+
+  // Get projectId and projectName from table meta
+  const projectId = (
+    context.table.options.meta as { projectId?: string } | undefined
+  )?.projectId;
+  const projectName = (
+    context.table.options.meta as { projectName?: string } | undefined
+  )?.projectName;
+
+  const { handleValueChange } = useFeedbackScoreInlineEdit({
+    id: row.id,
+    isThread: isObjectThread(row),
+    isSpan: isObjectSpan(row),
+    feedbackScore,
+    projectId,
+    projectName,
+  });
 
   const reasons = useMemo(() => {
     if (getIsMultiValueFeedbackScore(feedbackScore?.value_by_author)) {
@@ -39,13 +61,25 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_at,
   ]);
 
+  const enableUserFeedbackEditing =
+    ((!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
+      context.table.options.meta?.enableUserFeedbackEditing) ??
+    false;
+  const isUserFeedbackColumn =
+    enableUserFeedbackEditing &&
+    context.column.id === "feedback_scores_User feedback";
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-1"
+      className={cn("gap-1", isUserFeedbackColumn && "group")}
     >
-      <FeedbackScoreCellValue feedbackScore={feedbackScore} />
+      <FeedbackScoreCellValue
+        feedbackScore={feedbackScore}
+        isUserFeedbackColumn={isUserFeedbackColumn}
+        onValueChange={handleValueChange}
+      />
 
       {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>

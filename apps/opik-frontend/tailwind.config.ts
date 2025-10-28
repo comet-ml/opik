@@ -73,6 +73,7 @@ module.exports = {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          background: "hsl(var(--accent-background))",
         },
         popover: {
           gray: "hsl(var(--popover-gray))",
@@ -156,5 +157,8 @@ module.exports = {
         },
       );
     },
+  ],
+  safelist: [
+    "playground-table",
   ],
 };
