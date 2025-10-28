@@ -211,9 +211,12 @@ public class OnlineScoringSampler {
     }
 
     /**
-     * Filters evaluators based on trace metadata. If any trace in the batch contains
+     * Filters evaluators based on trace metadata. If the first trace in the batch contains
      * "selected_rule_ids" in its metadata, only evaluators with IDs in that list will be returned.
      * Otherwise, all evaluators are returned (default behavior for backward compatibility).
+     *
+     * Note: All traces in a batch from the same source (e.g., Playground) will have the same metadata,
+     * so checking only the first trace is sufficient.
      *
      * @param evaluators the list of all evaluators for the project
      * @param traces the traces batch to check for metadata
@@ -222,12 +225,14 @@ public class OnlineScoringSampler {
     private List<? extends AutomationRuleEvaluator<?>> filterEvaluatorsByTraceMetadata(
             List<? extends AutomationRuleEvaluator<?>> evaluators, List<Trace> traces) {
 
-        // Check if any trace has selected_rule_ids in metadata
-        Optional<List<UUID>> selectedRuleIds = traces.stream()
-                .map(this::extractSelectedRuleIds)
-                .filter(Optional::isPresent)
-                .map(Optional::get)
-                .findFirst();
+        // Check if batch is empty
+        if (traces.isEmpty()) {
+            return evaluators;
+        }
+
+        // Check the first trace for selected_rule_ids metadata
+        // All traces in the same batch will have identical metadata
+        Optional<List<UUID>> selectedRuleIds = extractSelectedRuleIds(traces.getFirst());
 
         // If no selection found, return all evaluators (default behavior)
         if (selectedRuleIds.isEmpty()) {
@@ -253,31 +258,27 @@ public class OnlineScoringSampler {
      * @return Optional containing list of rule UUIDs if present, empty otherwise
      */
     private Optional<List<UUID>> extractSelectedRuleIds(Trace trace) {
-        if (trace.metadata() == null) {
-            return Optional.empty();
-        }
-
-        JsonNode metadataNode = trace.metadata();
-        if (!metadataNode.has("selected_rule_ids")) {
-            return Optional.empty();
-        }
-
-        JsonNode ruleIdsNode = metadataNode.get("selected_rule_ids");
-        if (!ruleIdsNode.isArray()) {
-            return Optional.empty();
-        }
-
-        try {
-            List<UUID> ruleIds = new ArrayList<>();
-            for (JsonNode idNode : ruleIdsNode) {
-                if (idNode.isTextual()) {
-                    ruleIds.add(UUID.fromString(idNode.asText()));
-                }
-            }
-            return ruleIds.isEmpty() ? Optional.empty() : Optional.of(ruleIds);
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid UUID format in selected_rule_ids metadata for trace: '{}'", trace.id(), e);
-            return Optional.empty();
-        }
+        return Optional.ofNullable(trace.metadata())
+                .map(metadata -> metadata.get("selected_rule_ids"))
+                .filter(JsonNode::isArray)
+                .map(ruleIdsNode -> {
+                    try {
+                        List<UUID> ruleIds = new ArrayList<>();
+                        ruleIdsNode.forEach(idNode -> {
+                            if (idNode.isTextual()) {
+                                try {
+                                    ruleIds.add(UUID.fromString(idNode.asText()));
+                                } catch (IllegalArgumentException e) {
+                                    log.warn("Invalid UUID format in selected_rule_ids metadata for trace: '{}'",
+                                            trace.id(), e);
+                                }
+                            }
+                        });
+                        return ruleIds.isEmpty() ? null : ruleIds;
+                    } catch (Exception e) {
+                        log.warn("Error parsing selected_rule_ids metadata for trace: '{}'", trace.id(), e);
+                        return null;
+                    }
+                });
     }
 }
