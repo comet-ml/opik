@@ -417,6 +417,8 @@ class DatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
@@ -434,6 +436,10 @@ class DatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -457,6 +463,8 @@ class DatasetsClient:
             page=page,
             size=size,
             filters=filters,
+            sorting=sorting,
+            search=search,
             truncate=truncate,
             request_options=request_options,
         )
@@ -1101,6 +1109,8 @@ class AsyncDatasetsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         filters: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DatasetItemPageCompare:
@@ -1118,6 +1128,10 @@ class AsyncDatasetsClient:
         size : typing.Optional[int]
 
         filters : typing.Optional[str]
+
+        sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         truncate : typing.Optional[bool]
 
@@ -1144,6 +1158,8 @@ class AsyncDatasetsClient:
             page=page,
             size=size,
             filters=filters,
+            sorting=sorting,
+            search=search,
             truncate=truncate,
             request_options=request_options,
         )
