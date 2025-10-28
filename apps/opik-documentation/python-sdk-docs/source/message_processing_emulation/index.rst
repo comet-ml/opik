@@ -149,4 +149,9 @@ These models are commonly used for:
 Module Reference
 ----------------
 
-Use the class reference pages listed above for API details.
+For detailed API documentation, see the following class reference pages:
+
+- :doc:`TraceModel <../message_processing_emulation/TraceModel>`
+- :doc:`SpanModel <../message_processing_emulation/SpanModel>`
+- :doc:`FeedbackScoreModel <../message_processing_emulation/FeedbackScoreModel>`
+- :doc:`ExperimentItemModel <../message_processing_emulation/ExperimentItemModel>`
