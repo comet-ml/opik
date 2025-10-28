@@ -161,13 +161,15 @@ const ColumnsButton = <TColumnData,>({
         {!noData && (
           <>
             <Separator />
-            <DropdownMenuCustomCheckboxItem
-              checked={allColumnsSelected}
-              onCheckedChange={toggleColumns}
-              onSelect={(event) => event.preventDefault()}
-            >
-              <div className="w-full break-words py-2 pr-5">Select all</div>
-            </DropdownMenuCustomCheckboxItem>
+            <div className="p-1">
+              <DropdownMenuCustomCheckboxItem
+                checked={allColumnsSelected}
+                onCheckedChange={toggleColumns}
+                onSelect={(event) => event.preventDefault()}
+              >
+                <div className="w-full break-words py-2 pr-5">Select all</div>
+              </DropdownMenuCustomCheckboxItem>
+            </div>
           </>
         )}
       </DropdownMenuContent>
