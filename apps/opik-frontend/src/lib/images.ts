@@ -99,12 +99,12 @@ const IMAGE_URL_EXTENSIONS = [
 ] as const;
 
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
-const DATA_IMAGE_REGEX = new RegExp(
+export const DATA_IMAGE_REGEX = new RegExp(
   `data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}`,
   "g",
 );
 // Exclude characters that are invalid in URLs: whitespace, quotes, angle brackets, curly braces, backslash, pipe, caret, backtick
-const IMAGE_URL_REGEX = new RegExp(
+export const IMAGE_URL_REGEX = new RegExp(
   `https?:\\/\\/[^\\s"'<>{}\\\\|\\^\`]+\\.(${IMAGE_URL_EXTENSIONS.join(
     "|",
   )})(\\?[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?(#[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?`,
