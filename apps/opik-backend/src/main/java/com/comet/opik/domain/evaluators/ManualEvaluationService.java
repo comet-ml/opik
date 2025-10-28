@@ -4,6 +4,8 @@ import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
@@ -140,7 +142,10 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             switch (rule) {
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> spanLevelLlmAsJudgeRules.add(llmAsJudge);
                 case AutomationRuleEvaluatorUserDefinedMetricPython python -> spanLevelPythonRules.add(python);
-                default -> traceThreadRules.add(rule);
+                case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge ->
+                    traceThreadRules.add(traceThreadLlmAsJudge);
+                case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython traceThreadPython ->
+                    traceThreadRules.add(traceThreadPython);
             }
         }
 
