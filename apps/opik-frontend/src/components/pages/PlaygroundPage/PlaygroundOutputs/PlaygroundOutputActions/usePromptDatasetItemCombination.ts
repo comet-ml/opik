@@ -50,19 +50,19 @@ const transformMessageIntoProviderMessage = (
     throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
 
-  let renderedContent = mustache.render(
-    message.content,
-    serializedDatasetItem,
-    {},
-    {
-      // avoid escaping of a mustache
-      escape: (val: string) => val,
-    },
-  );
-
   // Wrap any raw image URLs or base64 data in the content with <<<image>>>...<<</image>>> tags
   // This is needed when using datasets with images where mustache directly inserts image data
-  renderedContent = wrapImageUrlsWithTags(renderedContent);
+  const renderedContent = wrapImageUrlsWithTags(
+    mustache.render(
+      message.content,
+      serializedDatasetItem,
+      {},
+      {
+        // avoid escaping of a mustache
+        escape: (val: string) => val,
+      },
+    ),
+  );
 
   return {
     role: message.role,
