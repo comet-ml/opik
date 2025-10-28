@@ -153,6 +153,9 @@ Opikインストールスクリプトは、異なる開発シナリオ向けの�
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
 
+> [!IMPORTANT]
+> **バージョン 1.7.0 の変更**：重要な更新と破壊的変更については [変更履歴](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) をご確認ください。
+
 ## 💻 OpikクライアントSDK
 
 Opikは、Opikサーバーとやり取りするためのクライアントライブラリ群とREST APIを提供します。Python、TypeScript、Ruby（OpenTelemetry経由）のSDKがあり、ワークフローへのシームレスな統合が可能です。詳細は [Opikクライアントリファレンス](apps/opik-documentation/documentation/fern/docs/reference/overview.mdx) をご覧ください。
