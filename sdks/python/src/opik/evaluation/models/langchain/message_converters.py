@@ -1,11 +1,13 @@
-from typing import Dict, List, TYPE_CHECKING
+from typing import Any, Dict, List, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     import langchain_core.messages
 
+ContentType = Union[str, List[Dict[str, Any]]]
+
 
 def convert_to_langchain_messages(
-    messages: List[Dict[str, str]],
+    messages: List[Dict[str, ContentType]],
 ) -> List["langchain_core.messages.BaseMessage"]:
     import langchain_core.messages
 
