@@ -2,7 +2,7 @@ import React, { ReactNode, useMemo } from "react";
 import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
-import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
+import JsonMarkdown from "@/components/shared/JsonMarkdown/JsonMarkdown";
 import { isStringMarkdown } from "@/lib/utils";
 import { makeHeadingsCollapsible } from "@/lib/remarkCollapsibleHeadings";
 import ReactMarkdown from "react-markdown";
@@ -13,7 +13,7 @@ import { isNull } from "lodash";
 import SyntaxHighlighterSearch from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterSearch";
 import { ExpandedState } from "@tanstack/react-table";
 
-const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
+const DEFAULT_JSON_TABLE_MAX_DEPTH = 10;
 
 export interface MarkdownHighlighterProps {
   searchValue?: string;
@@ -58,17 +58,12 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
       return <div className="comet-code text-muted-foreground">null</div>;
     }
 
-    // Handle object messages - render as JSON table
+    // Handle object messages - render as JSON markdown
     if (typeof codeOutput.message === "object" && codeOutput.message !== null) {
       return (
-        <JsonKeyValueTable
+        <JsonMarkdown
           data={codeOutput.message}
           maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-          localStorageKey={
-            controlledExpanded ? undefined : "json-table-expanded-state"
-          }
-          controlledExpanded={controlledExpanded}
-          onExpandedChange={onExpandedChange}
         />
       );
     }
@@ -85,14 +80,9 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
       };
       if (structuredResult.renderType === "json-table") {
         return (
-          <JsonKeyValueTable
+          <JsonMarkdown
             data={structuredResult.data}
             maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
-            localStorageKey={
-              controlledExpanded ? undefined : "json-table-expanded-state"
-            }
-            controlledExpanded={controlledExpanded}
-            onExpandedChange={onExpandedChange}
           />
         );
       }

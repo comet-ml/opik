@@ -45,7 +45,6 @@ export const useMarkdownSearch = ({
   const searchPlugin = useMemo(() => {
     return () => (tree: VisitorNode) => {
       if (!searchValue?.trim()) {
-        setSearchState({ currentMatchIndex: 0, totalMatches: 0 });
         return;
       }
 
@@ -57,19 +56,25 @@ export const useMarkdownSearch = ({
         currentMatchIndex,
       )(tree);
 
-      setSearchState((prev) => ({
-        ...prev,
-        totalMatches: matchIndexRef.current.value,
-      }));
-
       return result;
     };
   }, [searchValue, currentMatchIndex]);
 
+  // Update total matches after search operations
+  useEffect(() => {
+    if (searchValue?.trim()) {
+      setSearchState((prev) => ({
+        ...prev,
+        totalMatches: matchIndexRef.current.value,
+      }));
+    } else {
+      setSearchState({ currentMatchIndex: 0, totalMatches: 0 });
+    }
+  }, [searchValue, matchIndexRef.current.value]);
+
   const searchPlainText = useCallback(
     (text: string) => {
       if (!searchValue?.trim()) {
-        setSearchState({ currentMatchIndex: 0, totalMatches: 0 });
         return [text];
       }
 
@@ -81,11 +86,6 @@ export const useMarkdownSearch = ({
         matchIndexRef.current,
         currentMatchIndex,
       );
-
-      setSearchState((prev) => ({
-        ...prev,
-        totalMatches: matchIndexRef.current.value,
-      }));
 
       return result;
     },

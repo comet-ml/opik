@@ -6,7 +6,7 @@ import isNull from "lodash/isNull";
 import isArray from "lodash/isArray";
 
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
-import JsonKeyValueTable from "@/components/shared/JsonKeyValueTable/JsonKeyValueTable";
+import JsonMarkdown from "@/components/shared/JsonMarkdown/JsonMarkdown";
 import { cn, toString } from "@/lib/utils";
 import { extractTextFromObject } from "@/lib/traces";
 import {
@@ -15,7 +15,7 @@ import {
   isArrayLikeString,
 } from "@/lib/arrayParser";
 
-const DEFAULT_JSON_TABLE_MAX_DEPTH = 5;
+const DEFAULT_JSON_TABLE_MAX_DEPTH = 10;
 
 export interface MessageRendererProps {
   /**
@@ -111,7 +111,7 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
             };
             if (structuredResult.renderType === "json-table") {
               return (
-                <JsonKeyValueTable
+                <JsonMarkdown
                   data={structuredResult.data}
                   maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
                 />
@@ -129,7 +129,7 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({
 
       // Fall back to JSON table for objects that can't be prettified as text
       return (
-        <JsonKeyValueTable
+        <JsonMarkdown
           data={message}
           maxDepth={DEFAULT_JSON_TABLE_MAX_DEPTH}
         />
