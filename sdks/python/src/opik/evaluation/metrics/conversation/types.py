@@ -1,5 +1,21 @@
-"""Compatibility wrapper for legacy conversation types imports."""
+from typing import Dict, List, Literal, Optional
 
-from ..conversation_types import Conversation, ConversationDict, ConversationTurn
+import pydantic
 
-__all__ = ["Conversation", "ConversationDict", "ConversationTurn"]
+ConversationDict = Dict[Literal["role", "content"], str]
+Conversation = List[ConversationDict]
+
+
+class ConversationTurn(pydantic.BaseModel):
+    """Representation of a user/assistant exchange."""
+
+    input: ConversationDict
+    output: Optional[ConversationDict]
+
+    def as_list(self) -> List[ConversationDict]:
+        if self.output is None:
+            return [self.input]
+        return [self.input, self.output]
+
+
+__all__ = ["ConversationDict", "Conversation", "ConversationTurn"]
