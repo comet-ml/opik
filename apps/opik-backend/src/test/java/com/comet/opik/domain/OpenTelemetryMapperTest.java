@@ -20,7 +20,7 @@ class OpenTelemetryMapperTest {
 
     @BeforeEach
     void setUp() {
-        testNode = JsonUtils.MAPPER.createObjectNode();
+        testNode = JsonUtils.createObjectNode();
     }
 
     @Test
