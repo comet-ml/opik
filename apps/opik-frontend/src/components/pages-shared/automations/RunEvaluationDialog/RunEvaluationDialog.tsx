@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tag } from "@/components/ui/tag";
+import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import useRulesList from "@/api/automations/useRulesList";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
 import useAppStore from "@/store/AppStore";
@@ -151,8 +151,8 @@ const RunEvaluationDialog: React.FunctionComponent<
   );
 
   const handleManageRules = useCallback(() => {
-    const url = `/${workspaceName}/configuration/automations?tab=online-evaluation`;
-    window.open(url, "_blank");
+    const url = `/${workspaceName}/online-evaluation`;
+    window.location.href = url;
   }, [workspaceName]);
 
   const renderEmptyState = () => {
@@ -173,8 +173,8 @@ const RunEvaluationDialog: React.FunctionComponent<
               onClick={handleManageRules}
               className="mt-2"
             >
-              <ExternalLink className="mr-2 size-4" />
               Manage rules
+              <ExternalLink className="ml-2 size-4" />
             </Button>
           </div>
         </CardContent>
@@ -226,14 +226,11 @@ const RunEvaluationDialog: React.FunctionComponent<
                       {schemaNames.length > 0 && (
                         <div className="flex shrink-0 flex-wrap gap-1">
                           {schemaNames.map((schemaName) => (
-                            <Tag
+                            <ColoredTagNew
                               key={schemaName}
-                              variant="gray"
-                              size="lg"
-                              className="shrink-0"
-                            >
-                              {schemaName}
-                            </Tag>
+                              label={schemaName}
+                              className="h-6"
+                            />
                           ))}
                         </div>
                       )}
