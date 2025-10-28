@@ -1,7 +1,9 @@
 import pytest
 
-import opik.evaluation.metrics.conversation_helpers as conversation_helpers
-import opik.evaluation.metrics.conversation_turns as conversation_turns
+from opik.evaluation.metrics.conversation import helpers as conversation_helpers
+from opik.evaluation.metrics.conversation import (
+    conversation_turns_factory as conversation_turns,
+)
 
 
 def test_get_turns_in_sliding_window():

@@ -8,7 +8,9 @@ import opik.exceptions as exceptions
 
 from opik.evaluation.metrics import conversation_types, score_result
 from opik.evaluation.metrics.base_metric import BaseMetric
-from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.conversation.conversation_thread_metric import (
+    ConversationThreadMetric,
+)
 from opik.evaluation.metrics.llm_judges.g_eval_presets import (
     compliance_risk as compliance_presets,
     prompt_uncertainty as prompt_presets,

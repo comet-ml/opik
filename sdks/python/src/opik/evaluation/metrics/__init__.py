@@ -1,5 +1,5 @@
 from .aggregated_metric import AggregatedMetric
-from .conversation_metric_base import ConversationThreadMetric
+from .conversation.conversation_thread_metric import ConversationThreadMetric
 from .heuristics.conversation.degeneration.metric import ConversationDegenerationMetric
 from .heuristics.conversation.knowledge_retention.metric import (
     KnowledgeRetentionMetric,

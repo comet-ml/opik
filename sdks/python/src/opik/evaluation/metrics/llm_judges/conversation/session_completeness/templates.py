@@ -1,6 +1,6 @@
 from typing import List
 
-import opik.evaluation.metrics.conversation_types as conversation_types
+from opik.evaluation.metrics.conversation import types as conversation_types
 
 
 def extract_user_goals(conversation: conversation_types.Conversation) -> str:

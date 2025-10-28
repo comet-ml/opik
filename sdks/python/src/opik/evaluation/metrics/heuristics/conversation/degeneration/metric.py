@@ -5,8 +5,10 @@ import re
 from collections import Counter
 from typing import Dict, List, Optional
 
-import opik.evaluation.metrics.conversation_types as conversation_types
-from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.metrics.conversation.conversation_thread_metric import (
+    ConversationThreadMetric,
+)
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.exceptions import MetricComputationError
 from .phrases import DEFAULT_FALLBACK_PHRASES

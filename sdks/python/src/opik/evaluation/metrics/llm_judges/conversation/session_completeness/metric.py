@@ -3,10 +3,12 @@ import logging
 from typing import Optional, Any, Union, List
 import pydantic
 
-import opik.evaluation.metrics.conversation_types as conversation_types
+from opik.evaluation.metrics.conversation import types as conversation_types
 import opik.exceptions as exceptions
 from opik.evaluation.metrics import score_result
-from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.conversation.conversation_thread_metric import (
+    ConversationThreadMetric,
+)
 from opik.evaluation.metrics.llm_judges import parsing_helpers
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates

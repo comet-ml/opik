@@ -1,4 +1,6 @@
-import opik.evaluation.metrics.conversation_turns as conversation_turns
+from opik.evaluation.metrics.conversation import (
+    conversation_turns_factory as conversation_turns,
+)
 
 
 def test_build_conversation_turns__happy_path():

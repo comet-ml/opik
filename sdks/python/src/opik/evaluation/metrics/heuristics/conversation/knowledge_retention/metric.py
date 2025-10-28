@@ -5,8 +5,10 @@ from __future__ import annotations
 import functools
 from typing import Callable, List, Optional, Sequence, Set
 
-import opik.evaluation.metrics.conversation_types as conversation_types
-from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.evaluation.metrics.conversation.conversation_thread_metric import (
+    ConversationThreadMetric,
+)
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.preprocessing import normalize_text
 

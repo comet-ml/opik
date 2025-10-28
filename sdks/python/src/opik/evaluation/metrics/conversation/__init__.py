@@ -1,45 +1,18 @@
-"""
-Legacy compatibility shims for conversation metrics.
+"""Compatibility exports for the legacy conversation package."""
 
-The conversation metrics package historically hosted the conversation
-implementations directly.  The modern layout relocates those modules under
-``heuristics.conversation`` and ``llm_judges.conversation`` while the shared
-utilities live beside the rest of the metrics.  This module re-exports the new
-implementations so older import paths keep working.
-"""
+from __future__ import annotations
 
-from ..conversation_metric_base import ConversationThreadMetric
-from ..conversation_turns import build_conversation_turns
-from ..conversation_types import Conversation, ConversationDict, ConversationTurn
-from ..conversation_helpers import (
+import importlib
+from typing import Any
+
+from .conversation_thread_metric import ConversationThreadMetric
+from .conversation_turns_factory import build_conversation_turns
+from .helpers import (
     extract_turns_windows_from_conversation,
     get_turns_in_sliding_window,
     merge_turns,
 )
-from ..heuristics.conversation.degeneration.metric import (
-    ConversationDegenerationMetric,
-)
-from ..heuristics.conversation.knowledge_retention.metric import (
-    KnowledgeRetentionMetric,
-)
-from ..llm_judges.conversation.conversational_coherence.metric import (
-    ConversationalCoherenceMetric,
-)
-from ..llm_judges.conversation.g_eval_wrappers import (
-    ConversationComplianceRiskMetric,
-    ConversationDialogueHelpfulnessMetric,
-    ConversationPromptUncertaintyMetric,
-    ConversationQARelevanceMetric,
-    ConversationSummarizationCoherenceMetric,
-    ConversationSummarizationConsistencyMetric,
-    GEvalConversationMetric,
-)
-from ..llm_judges.conversation.session_completeness.metric import (
-    SessionCompletenessQuality,
-)
-from ..llm_judges.conversation.user_frustration.metric import (
-    UserFrustrationMetric,
-)
+from .types import Conversation, ConversationDict, ConversationTurn
 
 __all__ = [
     "ConversationThreadMetric",
@@ -63,3 +36,28 @@ __all__ = [
     "ConversationSummarizationConsistencyMetric",
     "GEvalConversationMetric",
 ]
+
+_LEGACY_EXPORTS = {
+    "ConversationDegenerationMetric": "opik.evaluation.metrics.conversation.degeneration.metric",
+    "KnowledgeRetentionMetric": "opik.evaluation.metrics.conversation.knowledge_retention.metric",
+    "ConversationalCoherenceMetric": "opik.evaluation.metrics.conversation.conversational_coherence.metric",
+    "SessionCompletenessQuality": "opik.evaluation.metrics.conversation.session_completeness.metric",
+    "UserFrustrationMetric": "opik.evaluation.metrics.conversation.user_frustration.metric",
+    "ConversationComplianceRiskMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
+    "ConversationDialogueHelpfulnessMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
+    "ConversationPromptUncertaintyMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
+    "ConversationQARelevanceMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
+    "ConversationSummarizationCoherenceMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
+    "ConversationSummarizationConsistencyMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
+    "GEvalConversationMetric": "opik.evaluation.metrics.conversation.g_eval_wrappers",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _LEGACY_EXPORTS:
+        raise AttributeError(name)
+
+    module = importlib.import_module(_LEGACY_EXPORTS[name])
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
