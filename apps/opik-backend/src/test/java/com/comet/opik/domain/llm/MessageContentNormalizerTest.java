@@ -98,8 +98,6 @@ class MessageContentNormalizerTest {
         assertThat(normalized).isEqualTo(request);
     }
 
-    // NEW TESTS FOR IMAGE PLACEHOLDER EXPANSION
-
     @Test
     void normalizeRequestExpandsImagePlaceholdersForVisionModel() {
         var userMessage = UserMessage.builder()
