@@ -78,6 +78,9 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   }, []);
 
   const displayValue = useMemo(() => {
+    if (rules.length === 0) {
+      return "No metrics";
+    }
     if (isAllSelected) {
       return `All metrics (${rules.length})`;
     }
@@ -92,9 +95,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [isAllSelected, selectedRuleIds],
   );
 
-  if (rules.length === 0) {
-    return null;
-  }
+  const hasNoRules = rules.length === 0;
 
   return (
     <Popover onOpenChange={openChangeHandler} open={open} modal>
@@ -104,6 +105,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
           size="sm"
           variant="outline"
           type="button"
+          disabled={hasNoRules}
         >
           <span className="truncate">{displayValue}</span>
           <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />
@@ -116,17 +118,28 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         hideWhenDetached
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="absolute inset-x-1 top-0 h-12">
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            placeholder="Search metrics"
-            variant="ghost"
-          />
-          <Separator className="mt-1" />
-        </div>
+        {!hasNoRules && (
+          <div className="absolute inset-x-1 top-0 h-12">
+            <SearchInput
+              searchText={search}
+              setSearchText={setSearch}
+              placeholder="Search metrics"
+              variant="ghost"
+            />
+            <Separator className="mt-1" />
+          </div>
+        )}
         <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
-          {filteredRules.length > 0 ? (
+          {hasNoRules ? (
+            <div className="flex h-20 items-center justify-center text-center text-muted-foreground">
+              <div className="px-4">
+                <div className="comet-body-s">No metrics configured</div>
+                <div className="comet-body-xs mt-1">
+                  Configure automation rules for the playground project
+                </div>
+              </div>
+            </div>
+          ) : filteredRules.length > 0 ? (
             <>
               {filteredRules.map((rule) => (
                 <div
@@ -148,7 +161,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
           )}
         </div>
 
-        {filteredRules.length > 0 && (
+        {!hasNoRules && filteredRules.length > 0 && (
           <div className="sticky inset-x-0 bottom-0">
             <Separator className="my-1" />
             <div

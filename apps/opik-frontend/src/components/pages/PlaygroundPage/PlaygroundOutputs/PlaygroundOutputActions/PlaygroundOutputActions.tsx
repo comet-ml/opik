@@ -55,17 +55,17 @@ const PlaygroundOutputActions = ({
   const selectedRuleIds = useSelectedRuleIds();
   const setSelectedRuleIds = useSetSelectedRuleIds();
 
-  // Fetch playground project
+  // Fetch playground project - always fetch to show metric selector
   const { data: playgroundProject } = useProjectByName(
     {
       projectName: "playground",
     },
     {
-      enabled: !!workspaceName && !!datasetId,
+      enabled: !!workspaceName,
     },
   );
 
-  // Fetch automation rules for playground project
+  // Fetch automation rules for playground project - always fetch to show metric selector
   const { data: rulesData } = useRulesList(
     {
       workspaceName,
@@ -74,7 +74,7 @@ const PlaygroundOutputActions = ({
       size: 100,
     },
     {
-      enabled: !!playgroundProject?.id && !!datasetId,
+      enabled: !!playgroundProject?.id,
     },
   );
 
@@ -318,15 +318,13 @@ const PlaygroundOutputActions = ({
           </Button>
         )}
       </div>
-      {datasetId && rules.length > 0 && (
-        <div className="mt-2.5 flex">
-          <MetricSelector
-            rules={rules}
-            selectedRuleIds={selectedRuleIds}
-            onSelectionChange={setSelectedRuleIds}
-          />
-        </div>
-      )}
+      <div className="mt-2.5 flex">
+        <MetricSelector
+          rules={rules}
+          selectedRuleIds={selectedRuleIds}
+          onSelectionChange={setSelectedRuleIds}
+        />
+      </div>
       <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
         <ExplainerIcon
           {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
