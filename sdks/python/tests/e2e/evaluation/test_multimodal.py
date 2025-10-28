@@ -22,8 +22,9 @@ MESSAGES: List[Dict[str, Any]] = [
             {
                 "type": "text",
                 "text": (
-                    "You are an image classifier. Always respond with the provided target "
-                    "label exactly, after inspecting the image input."
+                    "You are an image classifier. When the user provides an image, respond "
+                    "with the primary animal depicted using a single lowercase word. Do not "
+                    "add extra words or punctuation."
                 ),
             }
         ],
@@ -34,7 +35,7 @@ MESSAGES: List[Dict[str, Any]] = [
             {
                 "type": "text",
                 "text": (
-                    "Target label: {{expected_label}}. Respond with exactly that label."
+                    "What animal is in this image? Answer with a single lowercase word."
                 ),
             },
             {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
@@ -57,11 +58,11 @@ def test_evaluate_prompt_supports_multimodal_images(
     ]
     dataset.insert(dataset_items)
 
-    equals_metric = metrics.Equals()
+    contains_metric = metrics.Contains(case_sensitive=False)
     evaluation_result = evaluate_prompt(
         dataset=dataset,
         messages=MESSAGES,
-        scoring_metrics=[equals_metric],
+        scoring_metrics=[contains_metric],
         experiment_name=experiment_name,
         scoring_key_mapping={"reference": lambda item: item["expected_label"]},
         model="gpt-5-mini",
