@@ -1,32 +1,36 @@
-from opik.evaluation.models import message_renderer
+from typing import Any, Dict
+
+import pytest
+
+from opik.evaluation.models import MessageContentRenderer
 
 
 class TestRenderMessageContent:
-    def test_renders_plain_text(self):
-        rendered = message_renderer.render_message_content(
+    def test_renders_plain_text(self) -> None:
+        rendered = MessageContentRenderer.render(
             content="Hello {{name}}",
             variables={"name": "Opik"},
-            supports_vision=False,
+            supported_modalities={"vision": False},
         )
         assert rendered == "Hello Opik"
 
-    def test_preserves_structured_content_for_vision_models(self):
+    def test_preserves_structured_content_for_vision_models(self) -> None:
         content = [
             {"type": "text", "text": "Describe this image"},
             {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
         ]
 
-        rendered = message_renderer.render_message_content(
+        rendered = MessageContentRenderer.render(
             content=content,
             variables={"image_url": "https://example.com/cat.jpg"},
-            supports_vision=True,
+            supported_modalities={"vision": True},
         )
 
         assert isinstance(rendered, list)
         assert rendered[0]["text"] == "Describe this image"
         assert rendered[1]["image_url"]["url"] == "https://example.com/cat.jpg"
 
-    def test_includes_detail_field_when_present(self):
+    def test_includes_detail_field_when_present(self) -> None:
         content = [
             {
                 "type": "image_url",
@@ -34,69 +38,95 @@ class TestRenderMessageContent:
             }
         ]
 
-        rendered = message_renderer.render_message_content(
+        rendered = MessageContentRenderer.render(
             content=content,
             variables={},
-            supports_vision=True,
+            supported_modalities={"vision": True},
         )
 
         assert rendered[0]["image_url"]["detail"] == "high"
 
-    def test_supports_base64_image_urls(self):
-        data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA"
+    @pytest.mark.parametrize(
+        "data_url_prefix",
+        ["data:image/png;base64,", "data:image/jpeg;base64,"],
+    )
+    def test_supports_base64_image_urls(self, data_url_prefix: str) -> None:
+        data_url = f"{data_url_prefix}iVBORw0KGgoAAAANSUhEUgAAAAUA"
         content = [
             {"type": "text", "text": "Inline data"},
             {"type": "image_url", "image_url": {"url": data_url}},
         ]
 
-        rendered = message_renderer.render_message_content(
+        rendered = MessageContentRenderer.render(
             content=content,
             variables={},
-            supports_vision=True,
+            supported_modalities={"vision": True},
         )
 
         assert rendered[1]["image_url"]["url"] == data_url
 
-    def test_flattens_structured_content_when_vision_disabled(self):
+    def test_flattens_structured_content_when_vision_disabled(self) -> None:
         content = [
             {"type": "text", "text": "First"},
             {"type": "image_url", "image_url": {"url": "https://example.com/one.png"}},
             {"type": "text", "text": "Second"},
         ]
 
-        rendered = message_renderer.render_message_content(
+        rendered = MessageContentRenderer.render(
             content=content,
             variables={},
-            supports_vision=False,
+            supported_modalities={"vision": False},
         )
 
         assert isinstance(rendered, str)
         assert "First" in rendered
         assert "Second" in rendered
         assert "https://example.com/one.png" in rendered
+        assert rendered.count("<<<image>>>") == 1
 
-    def test_skips_invalid_parts(self):
+    def test_skips_invalid_parts(self) -> None:
         content = [{"type": "text", "text": "ok"}, "bad-part", None]
 
-        rendered = message_renderer.render_message_content(
+        rendered = MessageContentRenderer.render(
             content=content,
             variables={},
-            supports_vision=True,
+            supported_modalities={"vision": True},
         )
 
         assert rendered == [{"type": "text", "text": "ok"}]
 
+    def test_custom_part_registration_allows_future_modalities(self) -> None:
+        custom_part = {
+            "type": "custom_media",
+            "custom_media": {"data": "AAA=", "format": "binary"},
+        }
 
-class TestHelpers:
-    def test_flatten_joins_with_double_newlines(self):
-        parts = [
-            {"type": "text", "text": "A"},
-            {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}},
-            {"type": "text", "text": "B"},
-        ]
+        def _render_custom(
+            part: Dict[str, Any], _variables: Dict[str, Any], _template_type: str
+        ) -> Dict[str, Any]:
+            return part
 
-        flattened = message_renderer._flatten_parts_to_text(parts)  # type: ignore[attr-defined]
+        MessageContentRenderer.register_part_renderer(
+            "custom_media",
+            _render_custom,
+            modality="custom",
+            placeholder=("<<<custom>>>", "<<</custom>>>"),
+        )
 
-        lines = flattened.split("\n\n")
-        assert len(lines) == 3
-        assert "<<<image>>>" in lines[1]
+        rendered = MessageContentRenderer.render(
+            content=[custom_part],
+            variables={},
+            supported_modalities={"vision": True, "custom": False},
+        )
+
+        assert isinstance(rendered, str)
+        assert "<<<custom>>>" in rendered
+
+        rendered_with_custom = MessageContentRenderer.render(
+            content=[custom_part],
+            variables={},
+            supported_modalities={"vision": True, "custom": True},
+        )
+
+        assert isinstance(rendered_with_custom, list)
+        assert rendered_with_custom[0]["type"] == "custom_media"
