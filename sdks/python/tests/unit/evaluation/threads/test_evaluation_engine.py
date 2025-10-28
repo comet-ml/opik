@@ -8,7 +8,7 @@ from opik import exceptions
 from opik.api_objects.conversation import conversation_thread
 from opik.api_objects.threads import threads_client
 from opik.evaluation.metrics import score_result
-from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.conversation import conversation_thread_metric
 from opik.evaluation.threads import evaluation_engine, evaluation_result
 from opik.rest_api import TraceThread
 
@@ -47,9 +47,13 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self.mock_client.search_threads.return_value = mock_threads
 
         # Create mock metrics
-        mock_metric1 = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric1 = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_metric1.name = "metric1"
-        mock_metric2 = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric2 = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_metric2.name = "metric2"
         metrics = [mock_metric1, mock_metric2]
 
@@ -86,9 +90,13 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self.mock_client.search_threads.return_value = mock_threads
 
         # Create mock metrics
-        mock_metric1 = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric1 = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_metric1.name = "metric1"
-        mock_metric2 = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric2 = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_metric2.name = "metric2"
         metrics = [mock_metric1, mock_metric2]
 
@@ -146,7 +154,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self.mock_client.search_threads.return_value = mock_threads
 
         # Create mock metrics
-        mock_metric1 = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric1 = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_metric1.name = "metric1"
         mock_score1 = score_result.ScoreResult(name="metric1", value=0.8, reason="Good")
         mock_metric1.score.return_value = mock_score1
@@ -186,7 +196,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self.mock_client.search_threads.return_value = []
 
         # Create mock metrics
-        mock_metric = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         metrics = [mock_metric]
 
         filter_string = "test_filter"
@@ -215,7 +227,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self.mock_client.search_threads.return_value = mock_threads
 
         # Create mock metrics
-        mock_metric = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         metrics = [mock_metric]
 
         filter_string = "test_filter"
@@ -275,7 +289,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
             mock_execute.return_value = results
 
             # Create mock metric
-            mock_metric = mock.MagicMock(spec=ConversationThreadMetric)
+            mock_metric = mock.MagicMock(
+                spec=conversation_thread_metric.ConversationThreadMetric
+            )
             metrics = [mock_metric]
 
             # Call the method
@@ -324,12 +340,16 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         load_conversation_thread.return_value = mock_conversation
 
         # Create mock metrics
-        mock_metric1 = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric1 = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_metric1.name = "metric1"
         mock_score1 = score_result.ScoreResult(name="metric1", value=0.8, reason="Good")
         mock_metric1.score.return_value = mock_score1
 
-        mock_metric2 = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_metric2 = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_metric2.name = "metric2"
         mock_score2 = score_result.ScoreResult(
             name="metric2", value=0.6, reason="Average"
@@ -386,7 +406,9 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         load_conversation_thread.return_value = mock_conversation
 
         # Create a metric that raises an exception
-        mock_error_metric = mock.MagicMock(spec=ConversationThreadMetric)
+        mock_error_metric = mock.MagicMock(
+            spec=conversation_thread_metric.ConversationThreadMetric
+        )
         mock_error_metric.name = "error_metric"
         mock_error_metric.score.side_effect = ValueError("Test error in metric")
 
