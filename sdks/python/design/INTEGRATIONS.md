@@ -349,18 +349,34 @@ for creating them and working with context (it's done to benefit from reliabilit
 - `crewai_decorator.py` - Decorator for CrewAI methods
 - `flow_patchers.py` - Flow class patching
 
-**Why Hybrid**: CrewAI methods wrapped + LiteLLM used for LLM tracking.
+**Why Hybrid**: CrewAI methods wrapped + LiteLLM used for LLM tracking + direct provider client patching for v1.0.0+.
 
 **Approach**:
 1. **Method Wrapping**: Wrap `Crew.kickoff`, `Agent.execute_task`, `Task.execute_sync`
-2. **LiteLLM Delegation**: Enable `litellm.track_litellm()` (CrewAI uses LiteLLM internally)
-3. **Flow Patching**: Patch `Flow.__init__` to auto-wrap dynamically registered methods
+2. **LiteLLM Delegation**: Enable `litellm.track_litellm()` (CrewAI uses LiteLLM internally for v0.x)
+3. **Flow Patching**: Patch `Flow.__init__` to auto-wrap dynamically registered methods (v1.0.0+ only)
+4. **Provider Client Patching**: For v1.0.0+, directly patch OpenAI, Anthropic, Gemini, and Bedrock clients when `crew` argument is provided
 
-**Key Implementation Detail**: **LiteLLM Delegation**
+**Key Implementation Details**:
 
-Reuses existing LiteLLM integration instead of duplicating LLM tracking logic.
+1. **LiteLLM Delegation**: Reuses existing LiteLLM integration instead of duplicating LLM tracking logic.
 
-**Flow Patching** (`flow_patchers.py`): Patches constructor to wrap methods registered via `@start`, `@listen` decorators.
+2. **Flow Patching** (`flow_patchers.py`): Patches constructor to wrap methods registered via `@start`, `@listen` decorators. Gracefully handles missing `Flow` class (not available in CrewAI < v1.0.0).
+
+3. **Graceful Degradation**: Handles missing provider libraries gracefully:
+   - If a provider library (e.g., `crewai.llms.providers.openai.completion`) is not installed, logs debug message and continues
+   - If tracking a specific provider client fails, logs warning and continues with other providers
+   - Ensures integration doesn't fail if some optional dependencies are missing
+
+**Usage**:
+```python
+# For CrewAI v0.x (LiteLLM-based)
+track_crewai(project_name="my-project")
+
+# For CrewAI v1.0.0+ (direct provider clients)
+crew = Crew(agents=[...], tasks=[...])
+track_crewai(project_name="my-project", crew=crew)  # crew argument enables LLM client tracking
+```
 
 ## Streaming Strategies
 
