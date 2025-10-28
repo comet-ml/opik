@@ -1,6 +1,6 @@
 > 주의: 이 파일은 기계 번역되었습니다. 번역 개선에 기여해 주시기를 환영합니다!
 
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_KO.md">한국어</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
 
 <h1 align="center" style="border-bottom: none">
     <div>
@@ -58,27 +58,24 @@ Opik(Comet에서 개발한 오픈 소스 플랫폼으로, LLM 애플리케이션
 
 <br>
 
-### 주요 기능
+주요 기능:
 
-#### 개발 & 트레이싱
+- **개발 & 트레이싱:**
+  - 개발 및 프로덕션 환경에서 상세 컨텍스트와 함께 모든 LLM 호출 및 트레이스를 추적 ([빠른 시작](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik))
+  - Google ADK, Autogen, Flowise AI 등 다양한 서드파티 프레임워크 통합 지원 ([통합 목록](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
+  - [Python SDK](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik) 또는 [UI](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-through-the-ui?from=llm&utm_source=opik&utm_medium=github&utm_content=ui_link&utm_campaign=opik)를 사용해 트레이스와 스팬에 피드백 점수 주석
+  - [Prompt Playground](https://www.comet.com/docs/opik/prompt_engineering/playground)에서 프롬프트와 모델 실험
 
-- 개발 및 프로덕션 환경에서 상세 컨텍스트와 함께 모든 LLM 호출 및 트레이스를 추적 ([클릭하여 빠른 시작](https://www.comet.com/docs/opik/quickstart/?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_link&utm_campaign=opik))
-- Google ADK, Autogen, Flowise AI 등 다양한 서드파티 프레임워크 통합 지원 ([통합 목록](https://www.comet.com/docs/opik/integrations/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=integrations_link&utm_campaign=opik))
-- Python SDK 또는 UI를 사용해 트레이스와 스팬에 피드백 점수 주석 ([SDK 안내](https://www.comet.com/docs/opik/tracing/annotate_traces/#annotating-traces-and-spans-using-the-sdk?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link&utm_campaign=opik))
-- [Prompt Playground](https://www.comet.com/docs/opik/prompt_engineering/playground)에서 프롬프트와 모델 실험
+- **평가 & 테스트**:
+  - [데이터셋](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik) 및 [실험](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik)을 통한 평가 자동화
+  - [환각 감지](https://www.comet.com/docs/opik/evaluation/metrics/hallucination/?from=llm&utm_source=opik&utm_medium=github&utm_content=hallucination_link&utm_campaign=opik), [콘텐츠 조정](https://www.comet.com/docs/opik/evaluation/metrics/moderation/?from=llm&utm_source=opik&utm_medium=github&utm_content=moderation_link&utm_campaign=opik), RAG 평가([답변 관련성](https://www.comet.com/docs/opik/evaluation/metrics/answer_relevance/?from=llm&utm_source=opik&utm_medium=github&utm_content=alex_link&utm_campaign=opik), [맥락 정확도](https://www.comet.com/docs/opik/evaluation/metrics/context_precision/?from=llm&utm_source=opik&utm_medium=github&utm_content=context_link&utm_campaign=opik)) 등 LLM-as-a-judge 메트릭
+  - [PyTest 통합](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik)으로 CI/CD 파이프라인에 평가 포함
 
-#### 평가 & 테스트
-
-- [데이터셋](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_link&utm_campaign=opik) 및 [실험](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=eval_link&utm_campaign=opik)을 통한 평가 자동화
-- 환각 감지(hallucination detection), 콘텐츠 조정(moderation), RAG 평가(답변 관련성, 맥락 정확도) 등 LLM-as-a-judge 메트릭
-- PyTest 통합으로 CI/CD 파이프라인에 평가 포함 ([PyTest 안내](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_link&utm_campaign=opik))
-
-#### 프로덕션 모니터링 & 최적화
-
-- 대용량 프로덕션 트레이스 로깅: 하루 4천만 건 이상 지원
-- Opik 대시보드에서 피드백 점수, 트레이스 수, 토큰 사용량 모니터링 ([대시보드](https://www.comet.com/docs/opik/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik))
-- LLM-as-a-judge 기반 온라인 평가 규칙으로 프로덕션 이슈 탐지 ([규칙 안내](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik))
-- Opik Agent Optimizer 및 Guardrails로 애플리케이션 지속 개선 및 보호
+- **프로덕션 모니터링 & 최적화**:
+  - 대용량 프로덕션 트레이스 로깅: 하루 4천만 건 이상 지원
+  - [Opik 대시보드](https://www.comet.com/docs/opik/production/production_monitoring/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)에서 피드백 점수, 트레이스 수, 토큰 사용량 모니터링
+  - [온라인 평가 규칙](https://www.comet.com/docs/opik/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik)과 LLM-as-a-Judge 메트릭으로 프로덕션 이슈 탐지
+  - **Opik Agent Optimizer** 및 **Opik Guardrails**로 애플리케이션 지속 개선 및 보호
 
 > [!TIP]  
 > 아직 Opik에 없는 기능이 필요하시다면 새로운 [기능 요청](https://github.com/comet-ml/opik/issues/new/choose)을 제출해주세요! 🚀
@@ -155,6 +152,9 @@ Opik 설치 스크립트는 다양한 개발 시나리오를 위한 서비스 �
 프로덕션 및 대규모 셀프 호스팅 환경에 Helm 차트를 사용하여 Kubernetes 클러스터에 설치:
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
+
+> [!IMPORTANT]
+> **버전 1.7.0 변경 사항**: 중요 업데이트 및 호환성 변경 사항은 [변경 로그](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md)를 확인하세요.
 
 ## 💻 Opik 클라이언트 SDK
 
