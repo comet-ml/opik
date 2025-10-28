@@ -16,7 +16,7 @@ from . import (
     samplers,
 )
 from .metrics import base_metric
-from .models import base_model, models_factory
+from .models import base_model, models_factory, model_capabilities, message_renderer
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
 
@@ -297,17 +297,23 @@ def evaluate_experiment(
 def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+    model_supports_vision = model_capabilities.supports_vision(
+        getattr(model, "model_name", None)
+    )
+
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         processed_messages = []
         for message in messages:
+            rendered_content = message_renderer.render_message_content(
+                content=message["content"],
+                variables=prompt_variables,
+                supports_vision=model_supports_vision,
+                template_type=prompt_variables.get("type", "mustache"),
+            )
             processed_messages.append(
                 {
                     "role": message["role"],
-                    "content": prompt_template.PromptTemplate(
-                        message["content"],
-                        validate_placeholders=False,
-                        type=prompt_variables.get("type", "mustache"),
-                    ).format(**prompt_variables),
+                    "content": rendered_content,
                 }
             )
 
