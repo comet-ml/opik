@@ -5,7 +5,7 @@ from typing import Optional, List, Callable, Dict, Literal
 import opik
 import opik.exceptions as exceptions
 import opik.opik_context as opik_context
-from opik.evaluation.metrics.conversation import conversation_thread_metric
+from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
 from opik.rest_api import JsonListStringPublic, TraceThread
 
 from . import evaluation_result, helpers
@@ -37,7 +37,7 @@ class ThreadsEvaluationEngine:
         self,
         filter_string: Optional[str],
         eval_project_name: Optional[str],
-        metrics: List[conversation_thread_metric.ConversationThreadMetric],
+        metrics: List[ConversationThreadMetric],
         trace_input_transform: Callable[[JsonListStringPublic], str],
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int = 1000,
@@ -97,7 +97,7 @@ class ThreadsEvaluationEngine:
         self,
         thread: TraceThread,
         eval_project_name: Optional[str],
-        metrics: List[conversation_thread_metric.ConversationThreadMetric],
+        metrics: List[ConversationThreadMetric],
         trace_input_transform: Callable[[JsonListStringPublic], str],
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int,
@@ -150,7 +150,7 @@ class ThreadsEvaluationEngine:
     def _evaluate_conversation(
         self,
         conversation: List[Dict[Literal["role", "content"], str]],
-        metrics: List[conversation_thread_metric.ConversationThreadMetric],
+        metrics: List[ConversationThreadMetric],
     ) -> List[score_result.ScoreResult]:
         score_results: List[score_result.ScoreResult] = []
         for metric in metrics:

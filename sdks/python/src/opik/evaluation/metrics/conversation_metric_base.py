@@ -1,10 +1,10 @@
 from typing import Union, List, Any
 
-from . import types
-from .. import base_metric, score_result
+from opik.evaluation.metrics import conversation_types as types, score_result
+from opik.evaluation.metrics.base_metric import BaseMetric
 
 
-class ConversationThreadMetric(base_metric.BaseMetric):
+class ConversationThreadMetric(BaseMetric):
     """
     Abstract base class for all conversation thread metrics. When creating a custom
     conversation metric, you should inherit from this class and implement the abstract methods.
@@ -20,11 +20,12 @@ class ConversationThreadMetric(base_metric.BaseMetric):
             there is no parent span/trace to inherit project name from.
 
     Example:
-        >>> from opik.evaluation.metrics.conversation import conversation_thread_metric, types
+        >>> from opik.evaluation.metrics import conversation_types as types
+        >>> from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
         >>> from opik.evaluation.metrics import score_result
         >>> from typing import Any
         >>>
-        >>> class ConversationLengthMetric(conversation_thread_metric.ConversationThreadMetric):
+        >>> class ConversationLengthMetric(ConversationThreadMetric):
         >>>     def __init__(self, name: str = "conversation_length_score"):
         >>>         super().__init__(name)
         >>>

@@ -6,16 +6,17 @@ from typing import Any, Optional
 
 import opik.exceptions as exceptions
 
-from .. import base_metric, score_result
-from ..llm_judges.g_eval_presets import (
+from opik.evaluation.metrics import conversation_types, score_result
+from opik.evaluation.metrics.base_metric import BaseMetric
+from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.llm_judges.g_eval_presets import (
     compliance_risk as compliance_presets,
     prompt_uncertainty as prompt_presets,
     qa_suite as qa_presets,
 )
-from . import conversation_thread_metric, types as conversation_types
 
 
-class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetric):
+class GEvalConversationMetric(ConversationThreadMetric):
     """
     Wrap a GEval-style judge so it can evaluate an entire conversation transcript.
 
@@ -31,7 +32,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
             the name is derived from the wrapped judge.
 
     Example:
-        >>> from opik.evaluation.metrics.conversation.g_eval_wrappers import (
+        >>> from opik.evaluation.metrics.llm_judges.conversation.g_eval_wrappers import (
         ...     GEvalConversationMetric,
         ... )
         >>> from opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite import DialogueHelpfulnessJudge
@@ -47,7 +48,7 @@ class GEvalConversationMetric(conversation_thread_metric.ConversationThreadMetri
 
     def __init__(
         self,
-        judge: base_metric.BaseMetric,
+        judge: BaseMetric,
         name: Optional[str] = None,
     ) -> None:
         super().__init__(

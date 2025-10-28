@@ -3,7 +3,7 @@ import os
 import certifi
 import pytest
 
-from opik.evaluation.metrics.conversation.user_frustration import (
+from opik.evaluation.metrics.llm_judges.conversation.user_frustration import (
     metric as user_frustration,
 )
 from ...testlib import assert_helpers

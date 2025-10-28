@@ -2,7 +2,9 @@ from typing import Any, List
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik.evaluation.metrics.conversation.g_eval_wrappers import GEvalConversationMetric
+from opik.evaluation.metrics.llm_judges.conversation.g_eval_wrappers import (
+    GEvalConversationMetric,
+)
 
 
 class StubJudge(BaseMetric):

@@ -4,21 +4,19 @@ from typing import Optional, Union, Any, List, Dict
 
 import pydantic
 
+import opik.evaluation.metrics.conversation_helpers as conversation_helpers
+import opik.evaluation.metrics.conversation_types as conversation_types
 import opik.exceptions as exceptions
 from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.llm_judges import parsing_helpers
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
-from .. import (
-    types as conversation_types,
-    conversation_thread_metric,
-    helpers,
-)
-from ...llm_judges import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
 
-class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric):
+class UserFrustrationMetric(ConversationThreadMetric):
     """
     A heuristic score estimating the likelihood that the user experienced confusion, annoyance,
     or disengagement during the session — due to repetition, lack of adaptation, ignored
@@ -113,8 +111,10 @@ class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric)
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = helpers.extract_turns_windows_from_conversation(
-                conversation=conversation, window_size=self._window_size
+            turns_windows = (
+                conversation_helpers.extract_turns_windows_from_conversation(
+                    conversation=conversation, window_size=self._window_size
+                )
             )
 
             verdicts = [
@@ -144,8 +144,10 @@ class UserFrustrationMetric(conversation_thread_metric.ConversationThreadMetric)
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = helpers.extract_turns_windows_from_conversation(
-                conversation=conversation, window_size=self._window_size
+            turns_windows = (
+                conversation_helpers.extract_turns_windows_from_conversation(
+                    conversation=conversation, window_size=self._window_size
+                )
             )
 
             verdicts = await asyncio.gather(

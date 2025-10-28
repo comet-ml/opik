@@ -1,4 +1,4 @@
-from opik.evaluation.metrics.conversation.degeneration.metric import (
+from opik.evaluation.metrics.heuristics.conversation.degeneration.metric import (
     ConversationDegenerationMetric,
 )
 

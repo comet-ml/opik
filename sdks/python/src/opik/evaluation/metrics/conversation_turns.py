@@ -1,6 +1,6 @@
 from typing import List
 
-from . import types
+import opik.evaluation.metrics.conversation_types as types
 
 
 def build_conversation_turns(

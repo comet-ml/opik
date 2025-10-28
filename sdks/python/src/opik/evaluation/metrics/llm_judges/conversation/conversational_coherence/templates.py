@@ -1,6 +1,6 @@
 from typing import List, Dict
 
-from .. import types as conversation_types
+import opik.evaluation.metrics.conversation_types as conversation_types
 
 
 def evaluate_conversation(sliding_window: conversation_types.Conversation) -> str:

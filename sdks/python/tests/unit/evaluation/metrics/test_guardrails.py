@@ -4,7 +4,7 @@ from opik.evaluation.metrics.heuristics.prompt_injection import PromptInjection
 from opik.evaluation.metrics.heuristics.language_adherence import (
     LanguageAdherenceMetric,
 )
-from opik.evaluation.metrics.conversation.knowledge_retention.metric import (
+from opik.evaluation.metrics.heuristics.conversation.knowledge_retention.metric import (
     KnowledgeRetentionMetric,
 )
 from opik.evaluation.metrics.score_result import ScoreResult

@@ -3,17 +3,18 @@ import logging
 from typing import Optional, Any, Union, List
 import pydantic
 
+import opik.evaluation.metrics.conversation_types as conversation_types
 import opik.exceptions as exceptions
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.llm_judges import parsing_helpers
 from opik.evaluation.models import base_model, models_factory
 from . import schema, templates
-from .. import conversation_thread_metric, types as conversation_types
-from ... import score_result
-from ...llm_judges import parsing_helpers
 
 LOGGER = logging.getLogger(__name__)
 
 
-class SessionCompletenessQuality(conversation_thread_metric.ConversationThreadMetric):
+class SessionCompletenessQuality(ConversationThreadMetric):
     """
     Represents the Session Completeness Quality metric for a conversation thread.
 

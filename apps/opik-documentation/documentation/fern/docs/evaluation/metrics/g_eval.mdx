@@ -202,7 +202,7 @@ print(result.value, result.metadata["judge_scores"])
 
 ## Conversation adapters
 
-Need to apply G-Eval-based judges to full conversations? Use the conversation adapters in `opik.evaluation.metrics.conversation.g_eval_wrappers`, exposed via `Conversation*` classes. They focus on the last assistant turn (or full transcript for summaries) and keep the original GEval reasoning.
+Need to apply G-Eval-based judges to full conversations? Use the conversation adapters in `opik.evaluation.metrics.llm_judges.conversation.g_eval_wrappers`, exposed via `Conversation*` classes. They focus on the last assistant turn (or full transcript for summaries) and keep the original GEval reasoning.
 
 Refer to [Conversation-level GEval Metrics](/evaluation/metrics/g_eval_conversation_metrics) for available adapters and usage examples.
 

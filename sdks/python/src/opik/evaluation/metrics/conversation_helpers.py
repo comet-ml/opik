@@ -1,6 +1,7 @@
 from typing import Any, Generator, List
 
-from . import types, conversation_turns_factory
+import opik.evaluation.metrics.conversation_turns as conversation_turns
+import opik.evaluation.metrics.conversation_types as types
 
 
 def get_turns_in_sliding_window(
@@ -71,9 +72,7 @@ def extract_turns_windows_from_conversation(
     if len(conversation) == 0:
         raise ValueError("Conversation is empty")
 
-    turns = conversation_turns_factory.build_conversation_turns(
-        conversation=conversation
-    )
+    turns = conversation_turns.build_conversation_turns(conversation=conversation)
     if len(turns) == 0:
         raise ValueError("Conversation has no turns")
 

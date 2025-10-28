@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from opik import exceptions
 from opik.evaluation.metrics import SessionCompletenessQuality
 from opik.evaluation.models import base_model
-from ......testlib import assert_helpers
+from tests.testlib import assert_helpers
 
 
 @pytest.fixture

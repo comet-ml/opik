@@ -34,21 +34,21 @@ _INJECTION_PATTERNS = [
     r"bypass (?:the )?(?:content|safety|policy|control|filter|restriction|moderation)",
     r"(?:enable|activate|switch to) (?:developer mode|dan mode|jailbreak|god mode)",
     r"act as (?:an?|the)?\s*(?:system|hacker|developer|admin|moderator|human|other assistant)",
-    r"this is jailbreak",  # direct jailbreak references
-    r"\bDan\b.*?mode",  # "Dan mode" or similar
+    r"this is jailbreak",     # direct jailbreak references
+    r"\bDan\b.*?mode",       # "Dan mode" or similar
     r"\bJailbreak\b",
-    r"DAN\:|DAN mode",  # DAN pattern
-    r"Unleash",  # "Unleash DAN", "Unleash yourself", etc.
+    r"DAN\:|DAN mode",       # DAN pattern
+    r"Unleash",              # "Unleash DAN", "Unleash yourself", etc.
     r"no restrictions apply",
     r"no rules apply",
     r"\bno longer (?:bound|restricted|limited) by",  # flexible "no longer bound by..."
     r"###",  # common delimiter used in leaked prompts
     r"```",  # triple backtick for code/metadata leakage
-    r"\[system message\]",  # Often appears as system message marker
-    r"\[prompt\]",  # prompt marker
-    r"system\s*:",  # "system: " as preface
+    r"\[system message\]",   # Often appears as system message marker
+    r"\[prompt\]",           # prompt marker
+    r"system\s*:",           # "system: " as preface
     r"please disregard (?:the )?(?:previous|prior|above) (?:instructions|prompts|messages)",
-    r"please ignore (?:the )?(?:previous|prior|above) (?:instructions|prompts|messages)",
+    r"please ignore (?:the )?(?:previous|prior|above) (?:instructions|prompts|messages)"
 ]
 
 _SUSPICIOUS_KEYWORDS = {
@@ -76,7 +76,7 @@ _SUSPICIOUS_KEYWORDS = {
     "dan mode",
     "act as",
     "show system prompt",
-    "show developer prompt",
+    "show developer prompt"
 }
 
 
