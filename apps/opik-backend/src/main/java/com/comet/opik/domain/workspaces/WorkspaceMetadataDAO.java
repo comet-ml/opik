@@ -7,17 +7,23 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
+
+import java.util.Optional;
+import java.util.UUID;
 
 @ImplementedBy(WorkspaceMetadataDAOImpl.class)
 interface WorkspaceMetadataDAO {
-    Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId);
+    Mono<ScopeMetadata> getWorkspaceMetadata(String workspaceId);
+
+    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId);
 }
 
 @Singleton
 class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
 
-    private static final String GET_WORKSPACE_METADATA = """
+    private static final String CALCULATE_METADATA = """
             WITH
                 query_result AS (
                     SELECT AVG(query_size) AS query_size
@@ -26,17 +32,21 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                                 output_length +
                                 metadata_length +
                                 OCTET_LENGTH(error_info) +
-                                (OCTET_LENGTH(tags) * 10) +
+                                OCTET_LENGTH(toJSONString(tags)) +
                                 OCTET_LENGTH(toJSONString(usage)) as query_size
                         FROM spans
                         WHERE workspace_id = :workspace_id
+                        <if(project_id)>AND project_id = :project_id<endif>
                         ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC
                         LIMIT 1000
                     )
                 ),
             	total_spans AS (
-            			SELECT count(distinct id) as total_count FROM spans
+            			SELECT
+            			    count(distinct id) as total_count
+            			FROM spans
             			WHERE workspace_id = :workspace_id
+            			<if(project_id)>AND project_id = :project_id<endif>
             	),
                 table_size AS (
                     SELECT
@@ -48,11 +58,11 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                 )
 
             SELECT
-                round((query_result.query_size * total_spans.total_count) / 1e9, 2) AS workspace_size_gb_,
-                if(isNaN(workspace_size_gb_), 0, workspace_size_gb_) AS workspace_size_gb,
+                round((query_result.query_size * total_spans.total_count) / 1e9, 2) AS size_gb_,
+                if(isNaN(size_gb_), 0, size_gb_) AS size_gb,
                 round(table_size.total_compressed_size / 1e9, 2) AS total_table_size_gb_,
                 if(isNaN(total_table_size_gb_), 0, total_table_size_gb_) AS total_table_size_gb,
-                round((workspace_size_gb / total_table_size_gb) * 100, 2) AS percentage_of_table
+                round((size_gb / total_table_size_gb) * 100, 2) AS percentage_of_table
             FROM query_result, table_size, total_spans;
             """;
 
@@ -70,18 +80,41 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
         this.workspaceSettings = workspaceSettings;
     }
 
-    public Mono<WorkspaceMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(GET_WORKSPACE_METADATA)
-                        .bind("workspace_id", workspaceId)
-                        .bind("database_name", databaseName)
-                        .execute())
-                .flatMap(result -> result.map((row, rowMetadata) -> new WorkspaceMetadata(
-                        row.get("workspace_size_gb", Double.class),
-                        row.get("total_table_size_gb", Double.class),
-                        row.get("percentage_of_table", Double.class),
-                        workspaceSettings)))
-                .single(new WorkspaceMetadata(0, 0, 0, workspaceSettings));
+    public Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
+        return getMetadata(workspaceId, null)
+                .map(metadata -> metadata.toBuilder()
+                        .limitSizeGb(workspaceSettings.maxSizeToAllowSorting())
+                        .build());
     }
 
+    public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return getMetadata(workspaceId, projectId)
+                .map(metadata -> metadata.toBuilder()
+                        .limitSizeGb(workspaceSettings.maxProjectSizeToAllowSorting())
+                        .build());
+    }
+
+    private Mono<ScopeMetadata> getMetadata(String workspaceId, UUID projectId) {
+        var template = new ST(CALCULATE_METADATA);
+        if (projectId != null) {
+            template.add("project_id", projectId);
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("database_name", databaseName);
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId);
+                    }
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> ScopeMetadata.builder()
+                        .sizeGb(Optional.ofNullable(row.get("size_gb", Double.class)).orElse(0.0))
+                        .totalTableSizeGb(Optional.ofNullable(row.get("total_table_size_gb", Double.class)).orElse(0.0))
+                        .percentageOfTable(
+                                Optional.ofNullable(row.get("percentage_of_table", Double.class)).orElse(0.0))
+                        .build()))
+                .single(ScopeMetadata.builder().build());
+    }
 }
