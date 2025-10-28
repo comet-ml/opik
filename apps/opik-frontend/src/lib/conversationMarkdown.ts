@@ -5,7 +5,7 @@ import { stripImageTags } from "@/lib/llm";
 export interface ConversationMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
-  tool_calls?: ToolCall[] | string | unknown[];
+  tool_calls?: ToolCall[] | FlexibleToolCall[] | string;
   tool_call_id?: string;
 }
 
@@ -19,7 +19,7 @@ export interface ToolCall {
 }
 
 // Flexible tool call type for real-world data
-interface FlexibleToolCall {
+export interface FlexibleToolCall {
   id?: string;
   function?: {
     name?: string;
