@@ -5,7 +5,7 @@ import { stripImageTags } from "@/lib/llm";
 export interface ConversationMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
-  tool_calls?: ToolCall[];
+  tool_calls?: ToolCall[] | FlexibleToolCall[] | string;
   tool_call_id?: string;
 }
 
@@ -15,6 +15,15 @@ export interface ToolCall {
   function: {
     name: string;
     arguments: string;
+  };
+}
+
+// Flexible tool call type for real-world data
+export interface FlexibleToolCall {
+  id?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
   };
 }
 
@@ -37,6 +46,41 @@ export interface Tool {
     };
   };
 }
+
+/**
+ * Formats a tool calls string to be more readable
+ * @param toolCallsStr - The tool calls string to format
+ * @returns Formatted string with better readability
+ */
+const formatToolCallsString = (toolCallsStr: string): string => {
+  // If it looks like a ValidatorIterator or similar complex object, format it nicely
+  if (
+    toolCallsStr.includes("ValidatorIterator") ||
+    toolCallsStr.includes("UnionValidator")
+  ) {
+    return `**Tool Call Details:**\n\`\`\`\n${toolCallsStr}\n\`\`\``;
+  }
+
+  // If it's a JSON-like string, try to format it
+  if (
+    toolCallsStr.trim().startsWith("{") ||
+    toolCallsStr.trim().startsWith("[")
+  ) {
+    try {
+      const parsed = JSON.parse(toolCallsStr);
+      return `**Tool Call Data:**\n\`\`\`json\n${JSON.stringify(
+        parsed,
+        null,
+        2,
+      )}\n\`\`\``;
+    } catch {
+      // If parsing fails, treat as regular string
+    }
+  }
+
+  // For other strings, wrap in a code block for better readability
+  return `**Tool Call:**\n\`\`\`\n${toolCallsStr}\n\`\`\``;
+};
 
 /**
  * Converts a conversation JSON object into markdown format
@@ -105,57 +149,93 @@ export const convertConversationToMarkdown = (
       continue;
     }
 
+    // Check if there's any content to display
+    const toolCalls =
+      role === "assistant" && message.tool_calls ? message.tool_calls : [];
+    const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+
+    // Handle case where tool_calls is a string (treat it as additional content)
+    let additionalContent = "";
+    if (
+      role === "assistant" &&
+      message.tool_calls &&
+      !Array.isArray(message.tool_calls)
+    ) {
+      const toolCallsStr = isString(message.tool_calls)
+        ? message.tool_calls
+        : JSON.stringify(message.tool_calls);
+      additionalContent = formatToolCallsString(toolCallsStr);
+    }
+
+    const contentStr = isString(content) ? content : JSON.stringify(content);
+    const combinedContent =
+      contentStr + (additionalContent ? "\n\n" + additionalContent : "");
+    const hasContent = combinedContent && combinedContent.trim().length > 0;
+    const hasAnyContent = hasToolCalls || hasContent;
+
     // Add collapsible role header (expanded by default)
     lines.push(`<details open>`);
     lines.push(`<summary><strong>${capitalizeFirst(role)}</strong></summary>`);
     lines.push(``);
 
-    // Handle tool calls for assistant messages
-    if (
-      role === "assistant" &&
-      message.tool_calls &&
-      message.tool_calls.length > 0
-    ) {
-      for (const toolCall of message.tool_calls) {
-        lines.push(`<details style="margin-left: 20px;">`);
-        lines.push(
-          `<summary><strong>Tool call: ${toolCall.function.name}</strong></summary>`,
-        );
-        lines.push(``);
-        lines.push(
-          `&nbsp;&nbsp;&nbsp;&nbsp;**Function:** ${toolCall.function.name}`,
-        );
-        lines.push(
-          `&nbsp;&nbsp;&nbsp;&nbsp;**Arguments:** ${toolCall.function.arguments}`,
-        );
+    if (!hasAnyContent) {
+      // Show "No information available" message for empty sections
+      lines.push(`*No information available*`);
+    } else {
+      // Handle tool calls for assistant messages
+      if (hasToolCalls) {
+        for (const toolCall of toolCalls) {
+          // Skip tool calls that don't have a function property at all
+          if (!isObject(toolCall) || !(toolCall as FlexibleToolCall).function) {
+            continue;
+          }
 
-        // Look for the corresponding tool response
-        const toolResponse = conversationData.messages.find(
-          (msg) => msg.role === "tool" && msg.tool_call_id === toolCall.id,
-        );
+          const flexibleToolCall = toolCall as FlexibleToolCall;
+          const functionName =
+            flexibleToolCall.function?.name ||
+            flexibleToolCall.id ||
+            "unknown name";
 
-        if (toolResponse && toolResponse.content) {
-          const toolResponseContent = isString(toolResponse.content)
-            ? toolResponse.content
-            : JSON.stringify(toolResponse.content);
+          lines.push(`<details style="margin-left: 20px;">`);
+          lines.push(
+            `<summary><strong>Tool call: ${functionName}</strong></summary>`,
+          );
           lines.push(``);
-          lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;**Response:**`);
-          lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${toolResponseContent.trim()}`);
+          lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;**Function:** ${functionName}`);
+          lines.push(
+            `&nbsp;&nbsp;&nbsp;&nbsp;**Arguments:** ${
+              flexibleToolCall.function?.arguments || "N/A"
+            }`,
+          );
+
+          // Look for the corresponding tool response
+          const toolResponse = conversationData.messages.find(
+            (msg) =>
+              msg.role === "tool" && msg.tool_call_id === flexibleToolCall.id,
+          );
+
+          if (toolResponse && toolResponse.content) {
+            const toolResponseContent = isString(toolResponse.content)
+              ? toolResponse.content
+              : JSON.stringify(toolResponse.content);
+            lines.push(``);
+            lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;**Response:**`);
+            lines.push(`&nbsp;&nbsp;&nbsp;&nbsp;${toolResponseContent.trim()}`);
+          }
+
+          lines.push(`</details>`);
         }
 
-        lines.push(`</details>`);
+        // Add spacing after all tool calls for this assistant message
+        lines.push(`<div style="height: 1px; margin: 4px 0;"></div>`); // Visible spacing element
       }
 
-      // Add spacing after all tool calls for this assistant message
-      lines.push(`<div style="height: 1px; margin: 4px 0;"></div>`); // Visible spacing element
-    }
-
-    // Add content if present
-    let contentStr = isString(content) ? content : JSON.stringify(content);
-    if (contentStr.trim()) {
-      // Strip image tags, keeping only URLs (images are shown in attachments)
-      contentStr = stripImageTags(contentStr);
-      lines.push(contentStr.trim());
+      // Add content if present
+      if (hasContent) {
+        // Strip image tags, keeping only URLs (images are shown in attachments)
+        const processedContentStr = stripImageTags(combinedContent);
+        lines.push(processedContentStr.trim());
+      }
     }
 
     // Close the role section
@@ -184,8 +264,13 @@ const capitalizeFirst = (str: string): string => {
 export const formatToolCall = (toolCall: ToolCall): string => {
   const lines: string[] = [];
 
-  lines.push(`**Function:** ${toolCall.function.name}`);
-  lines.push(`**Arguments:** ${toolCall.function.arguments}`);
+  // Add null checks for safety
+  if (!toolCall.function) {
+    return "**Function:** Tool call missing required 'function' property";
+  }
+
+  lines.push(`**Function:** ${toolCall.function.name || "Unknown"}`);
+  lines.push(`**Arguments:** ${toolCall.function.arguments || "N/A"}`);
 
   return lines.join("\n");
 };
@@ -203,8 +288,16 @@ export const formatTools = (tools: Tool[]): string => {
   const lines: string[] = [];
 
   for (const tool of tools) {
-    lines.push(`**${tool.function.name}**`);
-    lines.push(tool.function.description);
+    // Add null checks for safety
+    if (!tool.function) {
+      lines.push(`**Unknown Tool**`);
+      lines.push("Invalid tool call structure");
+      lines.push("");
+      continue;
+    }
+
+    lines.push(`**${tool.function.name || "Unknown"}**`);
+    lines.push(tool.function.description || "No description available");
     lines.push("");
 
     if (tool.function.parameters) {
