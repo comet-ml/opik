@@ -38,7 +38,7 @@ def export_experiment_by_id(
         console.print(f"[blue]Fetching experiment by ID: {experiment_id}[/blue]")
 
         # Get the specific experiment by ID
-        experiment = client.get_experiment(experiment_id)
+        experiment = client.get_experiment_by_id(experiment_id)
         if not experiment:
             console.print(f"[red]Experiment '{experiment_id}' not found[/red]")
             return 0
@@ -129,7 +129,7 @@ def export_experiment_by_name(
 
         # Try to get experiment by exact name
         try:
-            experiment = client.get_experiment(name)
+            experiment = client.get_experiment_by_name(name)
             if not experiment:
                 console.print(f"[red]Experiment '{name}' not found[/red]")
                 return
