@@ -18534,7 +18534,8 @@
         "max_tokens": 8192,
         "mode": "chat",
         "output_cost_per_token": 6.3e-07,
-        "supports_tool_choice": true
+        "supports_tool_choice": true,
+        "supports_vision": true
     },
     "openrouter/qwen/qwen3-coder": {
         "input_cost_per_token": 1e-06,
@@ -18546,6 +18547,116 @@
         "output_cost_per_token": 5e-06,
         "source": "https://openrouter.ai/qwen/qwen3-coder",
         "supports_tool_choice": true
+    },
+    "openrouter/qwen/qwen-2.5-vl-7b-instruct": {
+        "input_cost_per_token": 1e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 1e-07,
+        "supports_vision": true
+    },
+    "openrouter/qwen/qwen-vl-max": {
+        "input_cost_per_token": 3e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32000,
+        "max_output_tokens": 8000,
+        "max_tokens": 32000,
+        "mode": "chat",
+        "output_cost_per_token": 9e-07,
+        "supports_vision": true
+    },
+    "openrouter/qwen/qwen2.5-vl-32b-instruct": {
+        "input_cost_per_token": 2e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 2e-07,
+        "supports_vision": true
+    },
+    "openrouter/qwen/qwen2.5-vl-72b-instruct": {
+        "input_cost_per_token": 3e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 9e-07,
+        "supports_vision": true
+    },
+    "qwen/qwen-vl-plus": {
+        "input_cost_per_token": 2.1e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 8192,
+        "max_output_tokens": 2048,
+        "max_tokens": 8192,
+        "mode": "chat",
+        "output_cost_per_token": 6.3e-07,
+        "supports_vision": true
+    },
+    "qwen/qwen-vl-max": {
+        "input_cost_per_token": 3e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32000,
+        "max_output_tokens": 8000,
+        "max_tokens": 32000,
+        "mode": "chat",
+        "output_cost_per_token": 9e-07,
+        "supports_vision": true
+    },
+    "qwen/qwen-2.5-vl-7b-instruct": {
+        "input_cost_per_token": 1e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 1e-07,
+        "supports_vision": true
+    },
+    "qwen/qwen2.5-vl-32b-instruct": {
+        "input_cost_per_token": 2e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 2e-07,
+        "supports_vision": true
+    },
+    "qwen/qwen2.5-vl-72b-instruct": {
+        "input_cost_per_token": 3e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 9e-07,
+        "supports_vision": true
+    },
+    "qwen/qwen3-vl-235b-a22b-instruct": {
+        "input_cost_per_token": 5e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 1.5e-06,
+        "supports_vision": true
+    },
+    "qwen/qwen3-vl-235b-a22b-thinking": {
+        "input_cost_per_token": 5e-07,
+        "litellm_provider": "openrouter",
+        "max_input_tokens": 32768,
+        "max_output_tokens": 8192,
+        "max_tokens": 32768,
+        "mode": "chat",
+        "output_cost_per_token": 1.5e-06,
+        "supports_vision": true
     },
     "openrouter/switchpoint/router": {
         "input_cost_per_token": 8.5e-07,
