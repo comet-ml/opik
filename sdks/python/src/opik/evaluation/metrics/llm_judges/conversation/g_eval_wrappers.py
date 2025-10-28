@@ -6,7 +6,8 @@ from typing import Any, Optional
 
 import opik.exceptions as exceptions
 
-from opik.evaluation.metrics import conversation_types, score_result
+from opik.evaluation.metrics import score_result
+from opik.evaluation.metrics.conversation import types as conversation_types
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.conversation.conversation_thread_metric import (
     ConversationThreadMetric,

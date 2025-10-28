@@ -1,3 +1,6 @@
-from ...llm_judges.conversation.user_frustration.schema import *  # type: ignore
+from ...llm_judges.conversation.user_frustration.schema import (
+    FrustrationVerdictResponse,
+    FrustrationWindowResponse,
+)
 
-__all__ = [name for name in globals().keys() if not name.startswith("_")]
+__all__ = ["FrustrationVerdictResponse", "FrustrationWindowResponse"]

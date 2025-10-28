@@ -1,3 +1,11 @@
-from ...llm_judges.conversation.session_completeness.schema import *  # type: ignore
+from ...llm_judges.conversation.session_completeness.schema import (
+    EvaluateUserGoalResponse,
+    ScoreReasonResponse,
+    UserGoalsResponse,
+)
 
-__all__ = [name for name in globals().keys() if not name.startswith("_")]
+__all__ = [
+    "EvaluateUserGoalResponse",
+    "ScoreReasonResponse",
+    "UserGoalsResponse",
+]

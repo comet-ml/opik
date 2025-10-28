@@ -1,5 +1,7 @@
 """Compatibility wrapper for degeneration phrases."""
 
-from ...heuristics.conversation.degeneration.phrases import *  # type: ignore
+from ...heuristics.conversation.degeneration.phrases import (
+    DEFAULT_FALLBACK_PHRASES,
+)
 
-__all__ = [name for name in globals().keys() if name.isupper()]
+__all__ = ["DEFAULT_FALLBACK_PHRASES"]

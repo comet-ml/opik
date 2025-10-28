@@ -1,3 +1,6 @@
-from ...llm_judges.conversation.conversational_coherence.templates import *  # type: ignore
+from ...llm_judges.conversation.conversational_coherence.templates import (
+    generate_reason,
+    evaluate_conversation,
+)
 
-__all__ = [name for name in globals().keys() if not name.startswith("_")]
+__all__ = ["generate_reason", "evaluate_conversation"]
