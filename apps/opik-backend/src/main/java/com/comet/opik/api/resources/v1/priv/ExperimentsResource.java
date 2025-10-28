@@ -126,7 +126,7 @@ public class ExperimentsResource {
 
         var metadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
-                // Context is required for resolving project ID, unused for workspace, but left for uniformity
+                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
