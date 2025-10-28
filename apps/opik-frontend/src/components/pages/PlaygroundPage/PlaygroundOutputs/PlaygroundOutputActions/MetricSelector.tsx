@@ -17,12 +17,14 @@ interface MetricSelectorProps {
   rules: EvaluatorsRule[];
   selectedRuleIds: string[] | null;
   onSelectionChange: (ruleIds: string[] | null) => void;
+  datasetId: string | null;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
   rules,
   selectedRuleIds,
   onSelectionChange,
+  datasetId,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -31,7 +33,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     selectedRuleIds === null || selectedRuleIds.length === rules.length;
 
   const selectedRulesCount = useMemo(() => {
-    if (!selectedRuleIds || selectedRuleIds.length === 0) {
+    if (selectedRuleIds === null) {
       return rules.length;
     }
     return selectedRuleIds.length;
@@ -45,16 +47,17 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const handleSelect = useCallback(
     (ruleId: string) => {
-      if (!selectedRuleIds || selectedRuleIds.length === rules.length) {
-        // If all selected, deselect this one (keep all others)
+      if (selectedRuleIds === null || selectedRuleIds.length === rules.length) {
+        // If all selected (null) or all specific items selected, deselect this one
         const allRuleIds = rules.map((r) => r.id);
         const newSelection = allRuleIds.filter((id) => id !== ruleId);
         onSelectionChange(newSelection.length > 0 ? newSelection : null);
       } else {
+        // Some items selected or none selected
         const isSelected = selectedRuleIds.includes(ruleId);
         if (isSelected) {
           const newSelection = selectedRuleIds.filter((id) => id !== ruleId);
-          // If deselecting the last one, select all
+          // If deselecting the last one, select all (null)
           onSelectionChange(newSelection.length > 0 ? newSelection : null);
         } else {
           const newSelection = [...selectedRuleIds, ruleId];
@@ -69,8 +72,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   );
 
   const handleSelectAll = useCallback(() => {
-    onSelectionChange(null);
-  }, [onSelectionChange]);
+    // Toggle between all selected (null) and none selected ([])
+    if (isAllSelected) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(null);
+    }
+  }, [onSelectionChange, isAllSelected]);
 
   const openChangeHandler = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
@@ -107,7 +115,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
           size="sm"
           variant="outline"
           type="button"
-          disabled={hasNoRules}
+          disabled={hasNoRules || !datasetId}
         >
           <span className="truncate">{displayValue}</span>
           <ChevronDown className="ml-2 size-4 shrink-0 text-light-slate" />

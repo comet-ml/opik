@@ -323,6 +323,7 @@ const PlaygroundOutputActions = ({
           rules={rules}
           selectedRuleIds={selectedRuleIds}
           onSelectionChange={setSelectedRuleIds}
+          datasetId={datasetId}
         />
       </div>
       <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
