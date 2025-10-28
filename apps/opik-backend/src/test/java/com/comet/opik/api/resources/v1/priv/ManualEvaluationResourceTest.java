@@ -177,13 +177,18 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            // Create trace
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            // Create entity (trace or thread) based on endpoint
+            UUID entityId;
+            if ("traces".equals(endpoint)) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                entityId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            } else {
+                entityId = createThreadAndGetModelId(projectName);
+            }
 
             // Create rule
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
@@ -196,7 +201,7 @@ class ManualEvaluationResourceTest {
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
-                    .entityIds(List.of(traceId))
+                    .entityIds(List.of(entityId))
                     .ruleIds(List.of(ruleId))
                     .entityType(entityType)
                     .build();
@@ -230,19 +235,26 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            // Create multiple traces
-            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var traceId1 = traceResourceClient.createTrace(trace1, API_KEY, WORKSPACE_NAME);
-            var traceId2 = traceResourceClient.createTrace(trace2, API_KEY, WORKSPACE_NAME);
+            // Create multiple entities (traces or threads) based on endpoint
+            UUID entityId1;
+            UUID entityId2;
+            if ("traces".equals(endpoint)) {
+                var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                entityId1 = traceResourceClient.createTrace(trace1, API_KEY, WORKSPACE_NAME);
+                entityId2 = traceResourceClient.createTrace(trace2, API_KEY, WORKSPACE_NAME);
+            } else {
+                entityId1 = createThreadAndGetModelId(projectName);
+                entityId2 = createThreadAndGetModelId(projectName);
+            }
 
             // Create multiple rules
             var rule1 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
@@ -266,7 +278,7 @@ class ManualEvaluationResourceTest {
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
-                    .entityIds(List.of(traceId1, traceId2))
+                    .entityIds(List.of(entityId1, entityId2))
                     .ruleIds(List.of(ruleId1, ruleId2))
                     .entityType(entityType)
                     .build();
@@ -431,12 +443,8 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .feedbackScores(null)
-                    .usage(null)
-                    .build();
-            var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+            // Create thread with thread_model_id
+            var threadModelId = createThreadAndGetModelId(projectName);
 
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
@@ -452,7 +460,7 @@ class ManualEvaluationResourceTest {
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
-                    .entityIds(List.of(traceId))
+                    .entityIds(List.of(threadModelId))
                     .ruleIds(List.of(ruleId))
                     .entityType(ManualEvaluationEntityType.THREAD)
                     .build();
@@ -588,5 +596,43 @@ class ManualEvaluationResourceTest {
                 assertThat(retrievedTrace.projectId()).isEqualTo(projectId);
             });
         }
+    }
+
+    /**
+     * Helper method to create a thread with thread_model_id.
+     * Creates traces with a thread_id and waits for the thread to be created in the trace_threads table.
+     *
+     * @return The UUID thread_model_id of the created thread
+     */
+    private UUID createThreadAndGetModelId(String projectName) {
+        var threadId = UUID.randomUUID().toString();
+
+        // Create traces with the same thread_id
+        var traces = List.of(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .threadId(threadId)
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build(),
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .threadId(threadId)
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build());
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+        UUID projectId = projectResourceClient.getByName(projectName, API_KEY, WORKSPACE_NAME).id();
+
+        // Wait for the thread to be created in the trace_threads table
+        Awaitility.await().untilAsserted(() -> {
+            var traceThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME);
+            assertThat(traceThread.threadModelId()).isNotNull();
+        });
+
+        var traceThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, WORKSPACE_NAME);
+        return traceThread.threadModelId();
     }
 }
