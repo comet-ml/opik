@@ -10,6 +10,7 @@ import {
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
 import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
+import { IMAGE_TAG_START, IMAGE_TAG_END } from "@/lib/llm";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import mustache from "mustache";
@@ -78,8 +79,6 @@ const transformMessageIntoProviderMessage = (
  * - [image_N] placeholders (from processInputData)
  */
 const wrapImageUrlsWithTags = (content: string): string => {
-  let processedContent = content;
-
   // Pattern 1: Match data:image base64 strings
   // Captures the full data URL including the base64 data
   const DATA_IMAGE_REGEX = /data:image\/[^;]+;base64,[A-Za-z0-9+/]+=*/g;
@@ -89,23 +88,29 @@ const wrapImageUrlsWithTags = (content: string): string => {
   const HTTP_IMAGE_REGEX =
     /https?:\/\/[^\s<>"{}|\\^`\]]+\.(?:jpg|jpeg|png|gif|webp|bmp|svg|ico|tiff|tif|heic|heif)(?:\?[^\s<>"{}|\\^`\]]*)?(?:#[^\s<>"{}|\\^`\]]*)?/gi;
 
-  // First, wrap data URLs
-  processedContent = processedContent.replace(DATA_IMAGE_REGEX, (match) => {
+  /**
+   * Helper function to wrap an image URL with tags if not already wrapped
+   */
+  const wrapIfNotWrapped = (content: string, match: string): string => {
+    const wrappedMatch = `${IMAGE_TAG_START}${match}${IMAGE_TAG_END}`;
     // Check if already wrapped
-    if (processedContent.includes(`<<<image>>>${match}<<</image>>>`)) {
+    if (content.includes(wrappedMatch)) {
       return match;
     }
-    return `<<<image>>>${match}<<</image>>>`;
-  });
+    return wrappedMatch;
+  };
 
-  // Then, wrap HTTP(S) image URLs
-  processedContent = processedContent.replace(HTTP_IMAGE_REGEX, (match) => {
-    // Check if already wrapped
-    if (processedContent.includes(`<<<image>>>${match}<<</image>>>`)) {
-      return match;
-    }
-    return `<<<image>>>${match}<<</image>>>`;
-  });
+  let processedContent = content;
+
+  // Wrap data URLs
+  processedContent = processedContent.replace(DATA_IMAGE_REGEX, (match) =>
+    wrapIfNotWrapped(processedContent, match),
+  );
+
+  // Wrap HTTP(S) image URLs
+  processedContent = processedContent.replace(HTTP_IMAGE_REGEX, (match) =>
+    wrapIfNotWrapped(processedContent, match),
+  );
 
   return processedContent;
 };
