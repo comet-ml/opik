@@ -9,7 +9,7 @@ import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
-import com.comet.opik.domain.threads.TraceThreadIdService;
+import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -22,6 +22,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -58,7 +59,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     private final OnlineScorePublisher onlineScorePublisher;
     private final TraceService traceService;
     private final ProjectService projectService;
-    private final TraceThreadIdService traceThreadIdService;
+    private final TraceThreadService traceThreadService;
     private final ServiceTogglesConfig serviceTogglesConfig;
 
     @Inject
@@ -66,13 +67,13 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull TraceService traceService,
             @NonNull ProjectService projectService,
-            @NonNull TraceThreadIdService traceThreadIdService,
+            @NonNull TraceThreadService traceThreadService,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.traceService = traceService;
         this.projectService = projectService;
-        this.traceThreadIdService = traceThreadIdService;
+        this.traceThreadService = traceThreadService;
         this.serviceTogglesConfig = serviceTogglesConfig;
     }
 
@@ -131,21 +132,18 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             String workspaceId, String userName) {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
-        // Separate rules by type
-        List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = rules.stream()
-                .filter(rule -> rule instanceof AutomationRuleEvaluatorLlmAsJudge)
-                .map(rule -> (AutomationRuleEvaluatorLlmAsJudge) rule)
-                .toList();
+        // Separate rules by type using grouping
+        List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = new ArrayList<>();
+        List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = new ArrayList<>();
+        List<AutomationRuleEvaluator<?>> traceThreadRules = new ArrayList<>();
 
-        List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = rules.stream()
-                .filter(rule -> rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython)
-                .map(rule -> (AutomationRuleEvaluatorUserDefinedMetricPython) rule)
-                .toList();
-
-        List<AutomationRuleEvaluator<?>> traceThreadRules = rules.stream()
-                .filter(rule -> !(rule instanceof AutomationRuleEvaluatorLlmAsJudge)
-                        && !(rule instanceof AutomationRuleEvaluatorUserDefinedMetricPython))
-                .toList();
+        for (AutomationRuleEvaluator<?> rule : rules) {
+            switch (rule) {
+                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> spanLevelLlmAsJudgeRules.add(llmAsJudge);
+                case AutomationRuleEvaluatorUserDefinedMetricPython python -> spanLevelPythonRules.add(python);
+                default -> traceThreadRules.add(rule);
+            }
+        }
 
         // Handle span-level evaluators - need to fetch full traces
         Mono<Void> spanLevelMono = Mono.empty();
@@ -257,7 +255,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         log.info("Evaluating '{}' threads with '{}' rules", threadModelIds.size(), rules.size());
 
         // Fetch thread IDs from thread model IDs
-        return traceThreadIdService.getTraceThreadIdsByThreadModelIds(threadModelIds)
+        return traceThreadService.getThreadIdsByThreadModelIds(threadModelIds)
                 .flatMap(threadModelIdToThreadIdMap -> {
                     if (threadModelIdToThreadIdMap == null || threadModelIdToThreadIdMap.isEmpty()) {
                         log.warn("No thread IDs found to enqueue for thread evaluation");

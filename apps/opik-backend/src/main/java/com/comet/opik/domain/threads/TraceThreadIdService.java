@@ -20,10 +20,13 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @ImplementedBy(TraceThreadIdServiceImpl.class)
-public interface TraceThreadIdService {
+interface TraceThreadIdService {
 
     Mono<TraceThreadIdModel> getOrCreateTraceThreadId(String workspaceId, UUID projectId, String threadId);
 
@@ -31,7 +34,7 @@ public interface TraceThreadIdService {
 
     Mono<TraceThreadIdModel> getTraceThreadIdByThreadModelId(UUID threadModelId);
 
-    Mono<java.util.Map<UUID, String>> getTraceThreadIdsByThreadModelIds(java.util.List<UUID> threadModelIds);
+    Mono<Map<UUID, String>> getTraceThreadIdsByThreadModelIds(List<UUID> threadModelIds);
 
 }
 
@@ -84,8 +87,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
     }
 
     @Override
-    public Mono<java.util.Map<UUID, String>> getTraceThreadIdsByThreadModelIds(
-            @NonNull java.util.List<UUID> threadModelIds) {
+    public Mono<Map<UUID, String>> getTraceThreadIdsByThreadModelIds(@NonNull List<UUID> threadModelIds) {
         Preconditions.checkArgument(!threadModelIds.isEmpty(),
                 "Thread model IDs cannot be null or empty");
 
@@ -97,7 +99,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                     threadModelIds.size());
 
             return threadModels.stream()
-                    .collect(java.util.stream.Collectors.toMap(
+                    .collect(Collectors.toMap(
                             TraceThreadIdModel::id,
                             TraceThreadIdModel::threadId));
         }).subscribeOn(Schedulers.boundedElastic());
