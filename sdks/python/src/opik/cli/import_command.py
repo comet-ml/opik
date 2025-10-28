@@ -1048,7 +1048,39 @@ def _import_prompts_from_directory(
 @click.argument("workspace", type=str)
 @click.pass_context
 def import_group(ctx: click.Context, workspace: str) -> None:
-    """Import data to Opik workspace."""
+    """Import data to Opik workspace.
+
+    This command allows you to import previously exported data back into an Opik workspace.
+    Supported data types include projects, datasets, experiments, and prompts.
+
+    \b
+    General Usage:
+        opik import WORKSPACE TYPE FOLDER/ [OPTIONS]
+
+    \b
+    Data Types:
+        project     Import projects from workspace_folder/projects/
+        dataset     Import datasets from workspace_folder/datasets/
+        experiment  Import experiments from workspace_folder/experiments/
+        prompt      Import prompts from workspace_folder/prompts/
+
+    \b
+    Common Options:
+        --dry-run   Preview what would be imported without actually importing
+        --name      Filter items by name using pattern matching
+        --debug     Show detailed information about the import process
+
+    \b
+    Examples:
+        # Preview all projects that would be imported
+        opik import my-workspace project ./exported-data/ --dry-run
+
+        # Import specific projects
+        opik import my-workspace project ./exported-data/ --name "my-project"
+
+        # Import all datasets
+        opik import my-workspace dataset ./exported-data/
+    """
     ctx.ensure_object(dict)
     ctx.obj["workspace"] = workspace
 
@@ -1060,12 +1092,12 @@ def import_group(ctx: click.Context, workspace: str) -> None:
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what would be imported without actually importing.",
+    help="Show what would be imported without actually importing. Use this to preview datasets before importing.",
 )
 @click.option(
     "--name",
     type=str,
-    help="Filter datasets by name using string pattern matching (case-insensitive).",
+    help="Filter datasets by name using case-insensitive substring matching. Use this to import only specific datasets.",
 )
 @click.option(
     "--debug",
@@ -1080,7 +1112,24 @@ def import_dataset(
     name: Optional[str],
     debug: bool,
 ) -> None:
-    """Import datasets from workspace/datasets directory."""
+    """Import datasets from workspace/datasets directory.
+
+    This command imports all datasets found in the workspace_folder/datasets/ directory.
+    By default, ALL datasets in the directory will be imported. Use --name to filter
+    specific datasets and --dry-run to preview what will be imported.
+
+    \b
+    Examples:
+    \b
+        # Preview all datasets that would be imported
+        opik import my-workspace dataset ./exported-data/ --dry-run
+    \b
+        # Import all datasets
+        opik import my-workspace dataset ./exported-data/
+    \b
+        # Import only datasets containing "training" in the name
+        opik import my-workspace dataset ./exported-data/ --name "training"
+    """
     workspace = ctx.obj["workspace"]
     _import_by_type("dataset", workspace_folder, workspace, dry_run, name, debug)
 
@@ -1092,12 +1141,12 @@ def import_dataset(
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what would be imported without actually importing.",
+    help="Show what would be imported without actually importing. Use this to preview projects before importing.",
 )
 @click.option(
     "--name",
     type=str,
-    help="Filter projects by name using string pattern matching (case-insensitive).",
+    help="Filter projects by name using case-insensitive substring matching. Use this to import only specific projects.",
 )
 @click.option(
     "--debug",
@@ -1112,7 +1161,30 @@ def import_project(
     name: Optional[str],
     debug: bool,
 ) -> None:
-    """Import projects from workspace/projects directory."""
+    """Import projects from workspace/projects directory.
+
+    This command imports all projects found in the workspace_folder/projects/ directory.
+    By default, ALL projects in the directory will be imported. Use --name to filter
+    specific projects and --dry-run to preview what will be imported.
+
+    \b
+    Examples:
+    \b
+        # Preview all projects that would be imported
+        opik import my-workspace project ./exported-data/ --dry-run
+    \b
+        # Import all projects
+        opik import my-workspace project ./exported-data/
+    \b
+        # Import only projects containing "my-project" in the name
+        opik import my-workspace project ./exported-data/ --name "my-project"
+    \b
+        # Import projects with debug output
+        opik import my-workspace project ./exported-data/ --debug
+    \b
+        # Preview specific projects before importing
+        opik import my-workspace project ./exported-data/ --name "test" --dry-run
+    """
     workspace = ctx.obj["workspace"]
     _import_by_type(
         "project",
