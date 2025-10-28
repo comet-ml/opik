@@ -166,7 +166,7 @@ const ColumnsButton = <TColumnData,>({
               onCheckedChange={toggleColumns}
               onSelect={(event) => event.preventDefault()}
             >
-              <div className="w-full break-words py-2">Select all</div>
+              <div className="w-full break-words py-2 pr-5">Select all</div>
             </DropdownMenuCustomCheckboxItem>
           </>
         )}
