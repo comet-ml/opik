@@ -70,7 +70,7 @@ export const useMarkdownSearch = ({
     } else {
       setSearchState({ currentMatchIndex: 0, totalMatches: 0 });
     }
-  }, [searchValue, matchIndexRef.current.value]);
+  }, [searchValue]);
 
   const searchPlainText = useCallback(
     (text: string) => {
