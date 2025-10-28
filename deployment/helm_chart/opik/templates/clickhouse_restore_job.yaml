@@ -1,0 +1,126 @@
+{{ if and .Values.clickhouse.enabled .Values.clickhouse.backup.restore.createJob }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.name" $ }}-clickhouse-restore
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: clickhouse-restore
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "clickhouse.backup.serviceAccountName" . }}
+      containers:
+      - command:
+        - /bin/bash
+        - -c
+        - |
+          set -euo pipefail
+          CHECK_INTERVAL=900  # 15 minutes in seconds
+
+          echo ""
+          echo "=== Checking if backup ${BACKUP_NAME} is available locally ==="
+          LOCAL_BACKUPS=$(curl --silent --fail -X GET http://${RESTORE_SERVICE}/backup/list/local)
+          echo "$LOCAL_BACKUPS" | jq '.'
+          
+          # Check if backup exists locally (handle both single object and array responses)
+          BACKUP_LOCAL=$(echo "$LOCAL_BACKUPS" | jq -e --arg name "$BACKUP_NAME" 'if type == "array" then any(.[]; .name == $name) elif type == "object" then .name == $name else false end')
+          
+          if [ "$BACKUP_LOCAL" = "true" ]; then
+            echo "✓ Backup found locally, using local restore"
+            RESTORE_COMMAND="restore"
+          else
+            echo "✗ Backup not found locally, using restore_remote (download + restore)"
+            RESTORE_COMMAND="restore_remote"
+          fi
+          
+          echo ""
+          echo "=== Starting ${RESTORE_COMMAND} of backup ${BACKUP_NAME} at $(date) ==="
+          RESTORE_RESPONSE=$(curl --silent --fail -X POST http://${RESTORE_SERVICE}/backup/${RESTORE_COMMAND}/${BACKUP_NAME})
+          echo "$RESTORE_RESPONSE" | jq '.'
+          
+          # Check if restore initiation failed
+          if echo "$RESTORE_RESPONSE" | jq -e '.status == "error"' > /dev/null; then
+            echo "ERROR: Restore failed to start!"
+            exit 1
+          fi
+          
+          # Poll for restore completion
+          echo ""
+          echo "=== Waiting for restore to complete (checking every 15 minutes) ==="
+          while true; do
+            echo "$(date): Checking restore status for backup ${BACKUP_NAME}..."
+            
+            # Get restore/restore_remote operation for this specific backup
+            RESTORE_ACTION=$(curl -s http://${RESTORE_SERVICE}/backup/actions | jq --slurp --arg name "$BACKUP_NAME" '.[] | select(.command | startswith("restore")) | select(.command | contains($name))' -c)
+            
+            if [ -z "$RESTORE_ACTION" ]; then
+              echo "No restore operation found for ${BACKUP_NAME}, checking again..."
+            else
+              echo "$RESTORE_ACTION"
+              
+              STATUS=$(echo "$RESTORE_ACTION" | jq -r '.status')
+              
+              # Check if operation failed
+              if [ "$STATUS" = "error" ]; then
+                echo "ERROR: Restore failed!"
+                exit 1
+              fi
+              
+              # Check if operation has finished (has finish timestamp)
+              FINISH=$(echo "$RESTORE_ACTION" | jq -r '.finish // empty')
+              
+              if [ -n "$FINISH" ] && [ "$STATUS" = "success" ]; then
+                echo "✓ Restore completed successfully at $(date)"
+                break
+              else
+                echo "Restore in progress..."
+              fi
+            fi
+            
+            echo "Waiting ${CHECK_INTERVAL} seconds before next check..."
+            sleep ${CHECK_INTERVAL}
+          done
+          
+          echo ""
+          echo "=== Restore finished successfully at $(date) ==="
+        env:
+        - name: BACKUP_NAME
+          value: {{ .Values.clickhouse.backup.restore.backupName | quote }}
+        - name: RESTORE_SERVICE
+          value: {{ .Values.clickhouse.backupServer.service.name }}:{{ .Values.clickhouse.backupServer.service.port }}
+        {{- range $key, $value := .Values.clickhouse.backup.restore.extraEnv }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        name: clickhouse-restore-job
+        image: {{ .Values.clickhouse.backup.restore.image }}
+        imagePullPolicy: IfNotPresent
+        {{- with .Values.clickhouse.backup.restore.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      {{- with .Values.clickhouse.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with ( default .Values.clickhouse.nodeSelector .Values.clickhouse.backup.restore.nodeSelector ) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ( default .Values.clickhouse.affinity .Values.clickhouse.backup.restore.affinity ) }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ( default .Values.clickhouse.tolerations .Values.clickhouse.backup.restore.tolerations ) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Never
+{{- end }}

@@ -276,6 +276,68 @@ spec:
           restartPolicy: OnFailure
 ```
 
+### Automated Restore with Kubernetes Job
+
+Opik provides a Kubernetes Job for automated backup restoration. This job handles the complete restore process, including downloading backups from S3 (if needed) and restoring them to ClickHouse.
+
+#### Configuration
+
+To create the restore job, configure the following values in your Helm chart:
+
+```yaml
+clickhouse:
+  backupServer:
+    enabled: true  # Required: backup server must be enabled
+  backup:
+    restore:
+      createJob: true
+      backupName: "backup-20240101-120000"  # Name of the backup to restore
+      image: "amazon/aws-cli:2.27.49"  # Image with curl and jq
+```
+
+#### How the Restore Job Works
+
+The restore job automatically:
+
+1. **Checks local availability**: Determines if the backup exists locally in ClickHouse
+2. **Chooses restore method**:
+   - If backup exists locally: Uses `restore` command (faster)
+   - If backup not local: Uses `restore_remote` command (downloads and restores in one step)
+3. **Monitors progress**: Polls the backup server API every 15 minutes to check restore status
+4. **Reports completion**: Logs success or failure with detailed status information
+
+#### Creating the Restore Job
+
+1. **Update your Helm values** with the restore configuration:
+
+   ```bash
+   # Create or update values file
+   cat > restore-values.yaml <<EOF
+   clickhouse:
+     backupServer:
+       enabled: true
+     backup:
+       restore:
+         createJob: true
+         backupName: "backup-20240101-120000"
+   EOF
+   ```
+
+2. **Apply the Helm upgrade**:
+
+   ```bash
+   helm upgrade opik opik/opik -f restore-values.yaml
+   ```
+
+3. **Monitor the restore job**:
+
+   ```bash
+   # Check job status
+   kubectl get jobs -l app=clickhouse-restore
+   
+   # Watch job logs
+   kubectl logs -f job/opik-clickhouse-restore
+   ```
 ## Comparison
 
 | Feature                 | SQL-based Backup | ClickHouse Backup Tool |
