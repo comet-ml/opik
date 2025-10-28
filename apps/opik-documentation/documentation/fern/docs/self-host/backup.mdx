@@ -289,11 +289,14 @@ To create the restore job, configure the following values in your Helm chart:
 ```yaml
 clickhouse:
   backupServer:
-    enabled: true  # Required: backup server must be enabled
+    enabled: true  # Required: backup server must be enabled and configured 
+    REMOTE_STORAGE: s3
+    S3_BUCKET: YOURBUCKET
+    S3_PATH: YOURPATH
   backup:
     restore:
       createJob: true
-      backupName: "backup-20240101-120000"  # Name of the backup to restore
+      backupName: "202501010"  # Name of the backup to restore
       image: "amazon/aws-cli:2.27.49"  # Image with curl and jq
 ```
 
