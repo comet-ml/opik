@@ -6122,7 +6122,7 @@ class DatasetsResourceTest {
              *   - This prevents expensive ClickHouse queries on large datasets
              *
              * The workspace metadata check is implemented in:
-             *   - WorkspaceMetadata.canUseDynamicSorting()
+             *   - ScopeMetadata.canUseDynamicSorting()
              *   - DatasetsResource.findDatasetItemsWithExperimentItems() (lines 440-446, 464-470)
              *
              * To test this scenario in a real environment:
@@ -6235,7 +6235,7 @@ class DatasetsResourceTest {
                  * And the data would NOT be sorted by the requested field.
                  *
                  * The protection mechanism is:
-                 *   1. Resource fetches WorkspaceMetadata
+                 *   1. Resource fetches ScopeMetadata
                  *   2. Checks canUseDynamicSorting()
                  *   3. If false: clears sorting fields and strips sortableBy from response
                  *   4. Frontend receives empty sortableBy and knows sorting is unavailable

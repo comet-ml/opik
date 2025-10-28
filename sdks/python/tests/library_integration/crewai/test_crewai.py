@@ -1,7 +1,9 @@
 import opik
 from opik.integrations.crewai import track_crewai
+from opik.integrations.crewai import opik_tracker
 from crewai import Agent, Crew, Process, Task
 from ...testlib import (
+    ANY,
     ANY_BUT_NONE,
     ANY_STRING,
     ANY_DICT,
@@ -11,18 +13,40 @@ from ...testlib import (
 )
 from . import constants
 
+import pytest
 
+
+pytestmark = [
+    pytest.mark.usefixtures("ensure_openai_configured"),
+    pytest.mark.usefixtures("ensure_vertexai_configured"),
+    pytest.mark.usefixtures("ensure_aws_bedrock_configured"),
+    pytest.mark.usefixtures("ensure_anthropic_configured"),
+]
+
+
+@pytest.mark.parametrize(
+    "model, opik_provider",
+    [
+        ("openai/gpt-4o-mini", "openai"),
+        (
+            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertex_ai'}/gemini-2.0-flash",
+            "google_vertexai",
+        ),
+        ("bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock"),
+        ("anthropic/claude-sonnet-4-0", "anthropic"),
+    ],
+)
 def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(
     fake_backend,
+    model,
+    opik_provider,
 ):
-    track_crewai(project_name=constants.PROJECT_NAME)
-
     researcher = Agent(
         role="Test Researcher",
         goal="Find basic information",
         backstory="You are a test agent for unit testing.",
         verbose=True,
-        llm=constants.MODEL_NAME_SHORT,
+        llm=model,
     )
 
     writer = Agent(
@@ -30,7 +54,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
         goal="Write summaries based on research",
         backstory="You are a test writer for unit testing.",
         verbose=True,
-        llm=constants.MODEL_NAME_SHORT,
+        llm=model,
     )
 
     research_task = Task(
@@ -56,6 +80,8 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
         process=Process.sequential,
         verbose=True,
     )
+
+    track_crewai(project_name=constants.PROJECT_NAME, crew=crew)
 
     inputs = {"topic": "AI"}
     crew.kickoff(inputs=inputs)
@@ -112,21 +138,19 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata=ANY_DICT.containing(
-                                            {
-                                                "created_from": "litellm",
-                                            }
-                                        ),
+                                        metadata=ANY_DICT,
                                         model=ANY_STRING,
-                                        name="completion",
+                                        name=ANY_STRING,  # depends on the provider
                                         output=ANY_DICT,
                                         project_name=constants.PROJECT_NAME,
-                                        provider="openai",
+                                        provider=opik_provider,
                                         start_time=ANY_BUT_NONE,
-                                        tags=["litellm"],
+                                        tags=ANY_BUT_NONE,
                                         type="llm",
-                                        usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                                        total_cost=ANY_BUT_NONE,
+                                        usage=ANY_DICT.containing(
+                                            constants.EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
+                                        total_cost=ANY,
                                         spans=[],
                                     )
                                 ],
@@ -160,21 +184,19 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         end_time=ANY_BUT_NONE,
                                         id=ANY_STRING,
                                         input=ANY_DICT,
-                                        metadata=ANY_DICT.containing(
-                                            {
-                                                "created_from": "litellm",
-                                            }
-                                        ),
+                                        metadata=ANY_DICT,
                                         model=ANY_STRING,
-                                        name="completion",
+                                        name=ANY_STRING,  # depends on the provider
                                         output=ANY_DICT,
                                         project_name=constants.PROJECT_NAME,
-                                        provider="openai",
+                                        provider=opik_provider,
                                         start_time=ANY_BUT_NONE,
-                                        tags=["litellm"],
+                                        tags=ANY_BUT_NONE,
                                         type="llm",
-                                        usage=constants.EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
-                                        total_cost=ANY_BUT_NONE,
+                                        usage=ANY_DICT.containing(
+                                            constants.EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT
+                                        ),
+                                        total_cost=ANY,
                                         spans=[],
                                     )
                                 ],
