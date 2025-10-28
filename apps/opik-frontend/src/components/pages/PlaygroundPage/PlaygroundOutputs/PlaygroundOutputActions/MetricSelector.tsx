@@ -151,9 +151,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
           </PopoverTrigger>
         </TooltipWrapper>
       ) : (
-        <PopoverTrigger asChild>
-          {buttonElement}
-        </PopoverTrigger>
+        <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
       )}
       <PopoverContent
         align="end"
