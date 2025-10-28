@@ -76,7 +76,7 @@ will allow us to capture the agent's trajectory and evaluate it.
     )
     ```
 
-    ```python title="Python" language="python" {4,5,7,24,29} maxLines=25
+    ```python title="OpenAI" language="python" {4,5,7,24,29} maxLines=25
     import json
     import openai
 
@@ -106,7 +106,7 @@ will allow us to capture the agent's trajectory and evaluate it.
         return f"It's always sunny in {city}!"
 
     @track
-    def agent_with_tools(user_input: str) -> str:
+    def agent_with_tools(user_input: str):
         messages = [{"role": "user", "content": user_input}]
 
         while True:
@@ -134,7 +134,7 @@ will allow us to capture the agent's trajectory and evaluate it.
             else:
                 break
             
-        return response.choices[0].message.content
+        return messages
     ```
 </CodeBlocks>
 
@@ -288,6 +288,29 @@ custom metrics and can be used to access the agent's trajectory:
 </CodeBlocks>
 
 ### Running the evaluation
+
+Let's define our evaluation task that will run our agent and return the assistant's response:
+
+<CodeBlocks>
+    ```python title="LangChain" maxLines=1000
+    def evaluation_task(dataset_item: dict) -> dict:
+        res = agent.invoke(
+            {"messages": [{
+                "role": "user",
+                "content": "what is the weather in sf"
+            }]},
+            config={"callbacks": [opik_tracer]}
+        )
+        
+        return {"output": res['messages'][-1].content}
+    ```
+
+    ```python title="OpenAI" maxLines=1000
+    def evaluation_task(dataset_item: dict) -> dict:
+        res = agent_with_tools(dataset_item["input"])
+        return {"output": messages[-1]['content']}
+    ```
+</CodeBlocks>
 
 Now that we have our dataset and metric, we can run the evaluation:
 
