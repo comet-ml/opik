@@ -18,7 +18,6 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.ListUtils;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -184,13 +183,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         // Fetch project to get project name
         var project = projectService.get(projectId, workspaceId);
 
-        // Fetch all traces reactively
-        return Flux.fromIterable(traceIds)
-                .flatMap(traceId -> traceService.get(traceId)
-                        .onErrorResume(throwable -> {
-                            log.warn("Failed to fetch trace '{}' for evaluation, skipping", traceId, throwable);
-                            return Mono.empty();
-                        }))
+        // Fetch all traces
+        return traceService.getByIds(traceIds)
                 .collectList()
                 .flatMap(traces -> {
                     if (ListUtils.emptyIfNull(traces).isEmpty()) {
