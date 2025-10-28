@@ -31,6 +31,7 @@ class ModelCapabilities:
         "gpt-4o-mini",
         "gpt-4-turbo",
         "chatgpt-4o-latest",
+        "gpt-5-mini",
         # Anthropic
         "claude-3",
         "claude-3-5",

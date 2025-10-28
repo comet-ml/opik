@@ -5,7 +5,7 @@ The renderer accepts both plain string prompts and OpenAI-style structured conte
 When the target model lacks support for a modality (for example vision), structured
 parts are flattened into textual placeholders so downstream tooling can still reason
 about the referenced media. The registry is intentionally designed to be extended to
-future modalities such as audio.
+future modalities.
 """
 
 from __future__ import annotations
@@ -23,10 +23,11 @@ from typing import (
 )
 
 from opik.api_objects.prompt.prompt_template import PromptTemplate
+from opik.api_objects.prompt.types import PromptType
 
 MessageContent = Union[str, List[Dict[str, Any]]]
 ContentPart = Dict[str, Any]
-RendererFn = Callable[[ContentPart, Dict[str, Any], str], Optional[ContentPart]]
+RendererFn = Callable[[ContentPart, Dict[str, Any], PromptType], Optional[ContentPart]]
 
 
 class MessageContentRenderer:
@@ -78,7 +79,7 @@ class MessageContentRenderer:
         variables: Dict[str, Any],
         *,
         supported_modalities: Optional[Mapping[str, bool]] = None,
-        template_type: str = "mustache",
+        template_type: Union[str, PromptType] = PromptType.MUSTACHE,
     ) -> MessageContent:
         """
         Render message content, preserving multimodal parts when supported.
@@ -96,9 +97,10 @@ class MessageContentRenderer:
             into a newline-separated string with media placeholders.
         """
         modality_flags: Dict[str, bool] = dict(supported_modalities or {})
+        normalized_type = cls._normalize_template_type(template_type)
 
         if isinstance(content, str):
-            return cls._render_template_string(content, variables, template_type)
+            return cls._render_template_string(content, variables, normalized_type)
 
         if not isinstance(content, list):
             return str(content)
@@ -107,7 +109,9 @@ class MessageContentRenderer:
             return []
 
         rendered_parts = cls._render_structured_content(
-            content, variables, template_type
+            content=content,
+            variables=variables,
+            template_type=normalized_type,
         )
 
         if not rendered_parts:
@@ -122,12 +126,21 @@ class MessageContentRenderer:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize_template_type(template_type: Union[str, PromptType]) -> PromptType:
+        if isinstance(template_type, PromptType):
+            return template_type
+        try:
+            return PromptType(template_type)
+        except ValueError:
+            return PromptType.MUSTACHE
+
     @classmethod
     def _render_structured_content(
         cls,
         content: List[Any],
         variables: Dict[str, Any],
-        template_type: str,
+        template_type: PromptType,
     ) -> List[ContentPart]:
         rendered_parts: List[ContentPart] = []
 
@@ -152,7 +165,7 @@ class MessageContentRenderer:
     def _render_template_string(
         template: str,
         variables: Dict[str, Any],
-        template_type: str,
+        template_type: PromptType,
     ) -> str:
         if not template:
             return ""
@@ -169,7 +182,7 @@ class MessageContentRenderer:
 
     @staticmethod
     def _render_text_part(
-        part: ContentPart, variables: Dict[str, Any], template_type: str
+        part: ContentPart, variables: Dict[str, Any], template_type: PromptType
     ) -> Optional[ContentPart]:
         text_template = part.get("text", "")
         rendered_text = MessageContentRenderer._render_template_string(
@@ -179,7 +192,7 @@ class MessageContentRenderer:
 
     @staticmethod
     def _render_image_url_part(
-        part: ContentPart, variables: Dict[str, Any], template_type: str
+        part: ContentPart, variables: Dict[str, Any], template_type: PromptType
     ) -> Optional[ContentPart]:
         image_dict = part.get("image_url", {})
         if not isinstance(image_dict, dict):
@@ -230,9 +243,10 @@ class MessageContentRenderer:
                 segments.append(str(part))
                 continue
 
-            prefix, suffix = cls._modality_placeholders.get(
-                modality, cls._default_placeholder
-            )
+            if modality and modality in cls._modality_placeholders:
+                prefix, suffix = cls._modality_placeholders[modality]
+            else:
+                prefix, suffix = cls._default_placeholder
             placeholder_value = cls._extract_placeholder_value(part)
             if placeholder_value:
                 segments.append(f"{prefix}{placeholder_value}{suffix}")
