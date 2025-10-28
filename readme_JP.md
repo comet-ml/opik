@@ -1,6 +1,6 @@
 > 注意：このファイルは機械翻訳されています。翻訳の改善への貢献を歓迎します！
 
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_KO.md">한국어</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
 
 <h1 align="center" style="border-bottom: none">
     <div>
@@ -152,6 +152,9 @@ Opikインストールスクリプトは、異なる開発シナリオ向けの�
 本番や大規模セルフホスト環境では、Helmチャートを使ってKubernetesクラスタにインストールできます。詳しくはバッジをクリックして [Kubernetesインストールガイド (Helm)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik) をご参照ください。
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-%23326ce5.svg?&logo=kubernetes&logoColor=white)](https://www.comet.com/docs/opik/self-host/kubernetes/#kubernetes-installation?from=llm&utm_source=opik&utm_medium=github&utm_content=kubernetes_link&utm_campaign=opik)
+
+> [!IMPORTANT]
+> **バージョン 1.7.0 の変更**：重要な更新と破壊的変更については [変更履歴](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) をご確認ください。
 
 ## 💻 OpikクライアントSDK
 
