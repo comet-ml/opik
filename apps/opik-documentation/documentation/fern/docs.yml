@@ -172,6 +172,9 @@ navigation:
           - page: Evaluate your agent
             path: docs/evaluation/evaluate_your_llm.mdx
             slug: evaluate_your_llm
+          - page: Evaluate agent trajectories
+            path: docs/evaluation/evaluate_agent_trajectory.mdx
+            slug: evaluate_agent_trajectory
           - page: Evaluate multi-turn conversations
             path: docs/evaluation/evaluate_threads.mdx
             slug: evaluate_threads
