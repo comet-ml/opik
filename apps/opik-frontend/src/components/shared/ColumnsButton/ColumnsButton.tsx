@@ -155,7 +155,7 @@ const ColumnsButton = <TColumnData,>({
           ></SearchInput>
           <Separator className="mt-1" />
         </div>
-        <div className="max-h-[50vh] overflow-y-auto p-1">
+        <div className="max-h-[calc(50vh-3.5rem)] overflow-y-auto p-1">
           {renderContent()}
         </div>
         {!noData && (
@@ -166,7 +166,7 @@ const ColumnsButton = <TColumnData,>({
               onCheckedChange={toggleColumns}
               onSelect={(event) => event.preventDefault()}
             >
-              Select all
+              <div className="w-full break-words py-2">Select all</div>
             </DropdownMenuCustomCheckboxItem>
           </>
         )}
