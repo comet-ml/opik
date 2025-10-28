@@ -16,6 +16,7 @@ from opik.cli.export_utils import (
     should_skip_file,
     write_csv_data,
     write_json_data,
+    print_export_summary,
 )
 
 console = Console()
@@ -117,6 +118,15 @@ def export_dataset_by_name(
         exported_count = export_single_dataset(
             dataset, output_dir, max_results, force, debug, format
         )
+
+        # Collect statistics for summary
+        stats = {
+            "datasets": 1 if exported_count > 0 else 0,
+            "datasets_skipped": 0 if exported_count > 0 else 1,
+        }
+
+        # Show export summary
+        print_export_summary(stats, format)
 
         if exported_count > 0:
             console.print(

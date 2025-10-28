@@ -1104,11 +1104,6 @@ def import_dataset(
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
-@click.option(
-    "--recreate-experiments",
-    is_flag=True,
-    help="Recreate experiments when importing projects. Defaults to False.",
-)
 @click.pass_context
 def import_project(
     ctx: click.Context,
@@ -1116,7 +1111,6 @@ def import_project(
     dry_run: bool,
     name: Optional[str],
     debug: bool,
-    recreate_experiments: bool,
 ) -> None:
     """Import projects from workspace/projects directory."""
     workspace = ctx.obj["workspace"]
@@ -1127,7 +1121,7 @@ def import_project(
         dry_run,
         name,
         debug,
-        recreate_experiments,
+        True,  # Always recreate experiments when importing projects
     )
 
 

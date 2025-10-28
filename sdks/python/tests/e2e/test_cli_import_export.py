@@ -621,14 +621,14 @@ class TestCLIImportExport:
         result = self._run_cli_command(import_cmd, "Import from non-existent directory")
         assert result.returncode != 0, "Import from non-existent directory should fail"
 
-    def test_import_projects_with_recreate_experiments_option(
+    def test_import_projects_automatically_recreates_experiments(
         self,
         opik_client: opik.Opik,
         source_project_name: str,
         target_project_name: str,
         test_data_dir: Path,
     ):
-        """Test import projects with --recreate-experiments option."""
+        """Test import projects automatically recreates experiments."""
         # Step 1: Prepare test data with experiments
         dataset_name = self._create_test_dataset(opik_client, source_project_name)
         self._create_test_traces(opik_client, source_project_name)
@@ -651,57 +651,7 @@ class TestCLIImportExport:
         project_dir = test_data_dir / "default" / "projects" / source_project_name
         assert project_dir.exists(), f"Export directory not found: {project_dir}"
 
-        # Step 3: Test import with --recreate-experiments flag
-        import_cmd = [
-            "import",
-            "default",
-            "project",
-            str(test_data_dir / "default"),
-            "--recreate-experiments",
-        ]
-
-        result = self._run_cli_command(
-            import_cmd, "Import projects with recreate experiments"
-        )
-        assert (
-            result.returncode == 0
-        ), f"Import projects with recreate experiments failed: {result.stderr}"
-
-        # The import should have succeeded (exit_code == 0)
-        # For now, we'll just verify that the commands ran without error
-        # The actual data verification can be done in separate, simpler tests
-
-    def test_import_projects_without_recreate_experiments_option(
-        self,
-        opik_client: opik.Opik,
-        source_project_name: str,
-        target_project_name: str,
-        test_data_dir: Path,
-    ):
-        """Test import projects without --recreate-experiments option (default behavior)."""
-        # Step 1: Prepare test data with experiments
-        dataset_name = self._create_test_dataset(opik_client, source_project_name)
-        self._create_test_traces(opik_client, source_project_name)
-        self._create_test_experiment(opik_client, source_project_name, dataset_name)
-
-        # Step 2: Export the project data (traces)
-        export_cmd = [
-            "export",
-            "default",
-            "project",
-            source_project_name,
-            "--path",
-            str(test_data_dir),
-        ]
-
-        result = self._run_cli_command(export_cmd, "Export project traces")
-        assert result.returncode == 0, f"Export failed: {result.stderr}"
-
-        # Verify export files were created
-        project_dir = test_data_dir / "default" / "projects" / source_project_name
-        assert project_dir.exists(), f"Export directory not found: {project_dir}"
-
-        # Step 3: Import projects without --recreate-experiments flag (default behavior)
+        # Step 3: Test import (experiments are automatically recreated)
         import_cmd = [
             "import",
             "default",
@@ -710,11 +660,11 @@ class TestCLIImportExport:
         ]
 
         result = self._run_cli_command(
-            import_cmd, "Import projects without recreate experiments"
+            import_cmd, "Import projects with automatic experiment recreation"
         )
         assert (
             result.returncode == 0
-        ), f"Import projects without recreate experiments failed: {result.stderr}"
+        ), f"Import projects with automatic experiment recreation failed: {result.stderr}"
 
         # The import should have succeeded (exit_code == 0)
         # For now, we'll just verify that the commands ran without error

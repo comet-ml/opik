@@ -16,6 +16,7 @@ from opik.cli.export_utils import (
     dump_to_file,
     matches_name_pattern,
     should_skip_file,
+    print_export_summary,
 )
 
 console = Console()
@@ -406,6 +407,26 @@ def export_project_by_name(
             debug,
             format,
         )
+
+        # Collect statistics for summary
+        stats = {
+            "projects": 1 if exported_count > 0 else 0,
+            "projects_skipped": 0 if exported_count > 0 else 1,
+        }
+
+        # Get trace statistics from the project directory
+        project_traces_dir = output_dir / matching_project.name
+        if project_traces_dir.exists():
+            trace_files = list(project_traces_dir.glob("trace_*.json"))
+            csv_files = list(project_traces_dir.glob("trace_*.csv"))
+            total_trace_files = len(trace_files) + len(csv_files)
+            stats["traces"] = total_trace_files
+            stats["traces_skipped"] = (
+                0  # We don't track skipped traces in current implementation
+            )
+
+        # Show export summary
+        print_export_summary(stats, format)
 
         if exported_count > 0:
             console.print(
