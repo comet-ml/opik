@@ -68,6 +68,8 @@ public interface TraceThreadService {
 
     Mono<Void> update(UUID threadModelId, TraceThreadUpdate threadUpdate);
 
+    Mono<Void> batchUpdate(List<UUID> threadModelIds, TraceThreadUpdate threadUpdate);
+
     Mono<Void> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
 }
 
@@ -150,6 +152,22 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
                 .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
                         traceThreadIdModel.projectId(), threadUpdate));
+    }
+
+    @Override
+    public Mono<Void> batchUpdate(@NonNull List<UUID> threadModelIds, @NonNull TraceThreadUpdate threadUpdate) {
+        if (CollectionUtils.isEmpty(threadModelIds)) {
+            log.info("No thread model IDs provided for batch update. Skipping update.");
+            return Mono.empty();
+        }
+
+        log.info("Batch updating threads, thread_count: '{}'", threadModelIds.size());
+
+        return traceThreadDAO.batchUpdateThreads(threadModelIds, threadUpdate)
+                .doOnSuccess(__ -> log.info("Successfully batch updated threads, thread_count: '{}'",
+                        threadModelIds.size()))
+                .doOnError(ex -> log.error("Error batch updating threads, thread_count: '{}'",
+                        threadModelIds.size(), ex));
     }
 
     @Override

@@ -18,6 +18,7 @@ import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadBatchIdentifier;
+import com.comet.opik.api.TraceThreadBatchUpdate;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -774,6 +775,30 @@ public class TracesResource {
                 .block();
 
         log.info("Updated thread with thread_model_id: '{}' on workspace_id: '{}'", threadModelId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/threads/batch")
+    @Operation(operationId = "batchUpdateThreads", summary = "Batch update threads", description = "Batch update threads", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
+    public Response batchUpdateThreads(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadBatchUpdate.class))) @NotNull @Valid TraceThreadBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Batch updating threads on workspace_id: '{}', user: '{}', thread_count: '{}'",
+                workspaceId, userName, batchUpdate.threadModelIds().size());
+
+        traceThreadService.batchUpdate(batchUpdate.threadModelIds(), batchUpdate.update())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Successfully batch updated threads on workspace_id: '{}', thread_count: '{}'",
+                workspaceId, batchUpdate.threadModelIds().size());
 
         return Response.noContent().build();
     }

@@ -372,6 +372,10 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       }));
   }, [feedbackScoresNames]);
 
+  const onClearSelection = useCallback(() => {
+    setRowSelection({});
+  }, []);
+
   const scoresColumnsData = useMemo(() => {
     // Always include "User feedback" column, even if it has no data
     const userFeedbackColumn: DynamicColumn = {
@@ -599,6 +603,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             getDataForExport={getDataForExport}
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
+            onClearSelection={onClearSelection}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content={`Refresh threads list`}>

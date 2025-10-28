@@ -16,6 +16,7 @@ import { Sorting } from "@/types/sorting";
 export enum TRACE_DATA_TYPE {
   traces = "traces",
   spans = "spans",
+  threads = "threads",
 }
 
 type UseTracesOrSpansListParams = {
