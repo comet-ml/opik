@@ -166,19 +166,21 @@ that you can pass directly to the metrics, otherwise you can use the `evaluate_t
         coherence_score = conversation_coherence_metric.score(conversation)
         frustration_score = user_frustration_metric.score(conversation)
 
-        opik_client.log_thread_feedback_score(
-            {
-                "id": simulation["thread_id"],
-                "name": "conversation_coherence",
-                "value": coherence_score.value,
-                "reason": coherence_score.reason
-            },
-            {
-                "id": simulation["thread_id"],
-                "name": "user_frustration",
-                "value": frustration_score.value,
-                "reason": frustration_score.reason
-            }
+        opik_client.log_threads_feedback_scores(
+            scores=[
+                {
+                    "id": simulation["thread_id"],
+                    "name": "conversation_coherence",
+                    "value": coherence_score.value,
+                    "reason": coherence_score.reason
+                },
+                {
+                    "id": simulation["thread_id"],
+                    "name": "user_frustration",
+                    "value": frustration_score.value,
+                    "reason": frustration_score.reason
+                }
+            ]
         )
     ```
 
