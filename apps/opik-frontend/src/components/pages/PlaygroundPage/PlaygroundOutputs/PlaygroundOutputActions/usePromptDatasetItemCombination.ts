@@ -81,27 +81,43 @@ const transformMessageIntoProviderMessage = (
  */
 const wrapImageUrlsWithTags = (content: string): string => {
   /**
-   * Helper function to wrap an image URL with tags if not already wrapped
+   * Replacer function that wraps matches with image tags if not already wrapped.
+   * Checks the surrounding context at the match position to avoid double-wrapping.
    */
-  const wrapIfNotWrapped = (content: string, match: string): string => {
-    const wrappedMatch = `${IMAGE_TAG_START}${match}${IMAGE_TAG_END}`;
-    // Check if already wrapped
-    if (content.includes(wrappedMatch)) {
+  const wrapIfNotAlreadyWrapped = (
+    match: string,
+    offset: number,
+    string: string,
+  ): string => {
+    const prefix = string.slice(
+      Math.max(0, offset - IMAGE_TAG_START.length),
+      offset,
+    );
+    const suffix = string.slice(
+      offset + match.length,
+      offset + match.length + IMAGE_TAG_END.length,
+    );
+
+    // Already wrapped at this position
+    if (prefix === IMAGE_TAG_START && suffix === IMAGE_TAG_END) {
       return match;
     }
-    return wrappedMatch;
+
+    return `${IMAGE_TAG_START}${match}${IMAGE_TAG_END}`;
   };
 
   let processedContent = content;
 
   // Wrap data URLs
-  processedContent = processedContent.replace(DATA_IMAGE_REGEX, (match) =>
-    wrapIfNotWrapped(processedContent, match),
+  processedContent = processedContent.replace(
+    DATA_IMAGE_REGEX,
+    wrapIfNotAlreadyWrapped,
   );
 
   // Wrap HTTP(S) image URLs
-  processedContent = processedContent.replace(IMAGE_URL_REGEX, (match) =>
-    wrapIfNotWrapped(processedContent, match),
+  processedContent = processedContent.replace(
+    IMAGE_URL_REGEX,
+    wrapIfNotAlreadyWrapped,
   );
 
   return processedContent;
