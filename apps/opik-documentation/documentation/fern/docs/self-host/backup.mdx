@@ -313,7 +313,7 @@ The restore job automatically:
 
 #### Creating the Restore Job
 
-1. **Update your Helm values** with the restore configuration:
+1. **Update your Helm values** with the restore configuration 
 
    ```bash
    # Create or update values file
@@ -327,13 +327,21 @@ The restore job automatically:
          backupName: "backup-20240101-120000"
    EOF
    ```
-
-2. **Apply the Helm upgrade**:
-
+2. ** Run the job
+   apply Helm upgrade 
    ```bash
-   helm upgrade opik opik/opik -f restore-values.yaml
+   helm upgrade opik opik/opik -f values.yaml
+   ```
+   or use this job template as an example and apply the job manually:
+   ```bash
+   helm template opik opik/opik -f values.yaml > opik.yaml
+   ```
+   copy the clickhouse-restore job from opik.yaml into separate file clickhouse-restore-job.yaml and apply
+   ```bash
+   kubectl apply -f clickhouse-restore-job.yaml
    ```
 
+  
 3. **Monitor the restore job**:
 
    ```bash
