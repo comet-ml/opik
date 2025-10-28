@@ -103,11 +103,15 @@ class ModelCapabilities:
             pass
 
         name_lower = model_name.lower()
-        return any(name_lower.startswith(prefix.lower()) for prefix in cls._vision_models)
+        return any(
+            name_lower.startswith(prefix.lower()) for prefix in cls._vision_models
+        )
 
 
 # Register built-in detectors.
-ModelCapabilities.register_capability_detector("vision", ModelCapabilities._supports_vision)
+ModelCapabilities.register_capability_detector(
+    "vision", ModelCapabilities._supports_vision
+)
 
 
 __all__ = ["ModelCapabilities"]

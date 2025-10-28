@@ -186,6 +186,7 @@ class MessageContentRenderer:
             return None
 
         url_template = image_dict.get("url", "")
+        # Works with http(s) links as well as base64 data URIs such as data:image/png;base64,...
         rendered_url = MessageContentRenderer._render_template_string(
             url_template, variables, template_type
         )

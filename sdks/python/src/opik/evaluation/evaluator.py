@@ -6,7 +6,6 @@ from .. import Prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
-from ..api_objects.prompt import prompt_template
 from . import (
     asyncio_support,
     engine,
@@ -16,7 +15,12 @@ from . import (
     samplers,
 )
 from .metrics import base_metric
-from .models import base_model, models_factory, MessageContentRenderer, ModelCapabilities
+from .models import (
+    base_model,
+    models_factory,
+    MessageContentRenderer,
+    ModelCapabilities,
+)
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
 
