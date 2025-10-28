@@ -52,9 +52,21 @@ def test_evaluate_prompt_supports_multimodal_images(
     dataset = opik_client.create_dataset(dataset_name)
 
     dataset_items = [
-        {"image_url": CAT_IMAGE_URL, "expected_label": "cat"},
-        {"image_url": PNG_DOG_DATA_URL, "expected_label": "dog"},
-        {"image_url": JPEG_FOX_DATA_URL, "expected_label": "fox"},
+        {
+            "image_url": CAT_IMAGE_URL,
+            "reference": "cat",
+            "expected_label": "cat",
+        },
+        {
+            "image_url": PNG_DOG_DATA_URL,
+            "reference": "dog",
+            "expected_label": "dog",
+        },
+        {
+            "image_url": JPEG_FOX_DATA_URL,
+            "reference": "fox",
+            "expected_label": "fox",
+        },
     ]
     dataset.insert(dataset_items)
 
@@ -64,7 +76,6 @@ def test_evaluate_prompt_supports_multimodal_images(
         messages=MESSAGES,
         scoring_metrics=[contains_metric],
         experiment_name=experiment_name,
-        scoring_key_mapping={"reference": lambda item: item["expected_label"]},
         model="gpt-5-mini",
     )
 
