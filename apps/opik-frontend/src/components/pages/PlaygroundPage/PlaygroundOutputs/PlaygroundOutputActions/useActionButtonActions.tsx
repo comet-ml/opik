@@ -5,7 +5,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PROJECTS_KEY } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
-import { usePromptIds, useResetOutputMap } from "@/store/PlaygroundStore";
+import {
+  usePromptIds,
+  useResetOutputMap,
+  useSelectedRuleIds,
+} from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
 import createLogPlaygroundProcessor, {
@@ -43,6 +47,7 @@ const useActionButtonActions = ({
   const [isRunning, setIsRunning] = useState(false);
   const [isToStop, setIsToStop] = useState(false);
   const promptIds = usePromptIds();
+  const selectedRuleIds = useSelectedRuleIds();
   const abortControllersRef = useRef(new Map<string, AbortController>());
 
   const resetOutputMap = useResetOutputMap();
@@ -142,6 +147,7 @@ const useActionButtonActions = ({
       isToStop,
       datasetItems,
       datasetName,
+      selectedRuleIds,
       addAbortController,
       deleteAbortController,
     });

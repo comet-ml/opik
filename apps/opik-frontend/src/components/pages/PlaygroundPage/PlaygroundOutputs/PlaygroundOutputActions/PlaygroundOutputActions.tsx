@@ -9,7 +9,12 @@ import {
   usePromptCount,
   usePromptMap,
   useResetOutputMap,
+  useSelectedRuleIds,
+  useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
+import useProjectByName from "@/api/projects/useProjectByName";
+import useRulesList from "@/api/automations/useRulesList";
+import MetricSelector from "./MetricSelector";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
@@ -47,6 +52,33 @@ const PlaygroundOutputActions = ({
   const promptMap = usePromptMap();
   const promptCount = usePromptCount();
   const resetOutputMap = useResetOutputMap();
+  const selectedRuleIds = useSelectedRuleIds();
+  const setSelectedRuleIds = useSetSelectedRuleIds();
+
+  // Fetch playground project - always fetch to show metric selector
+  const { data: playgroundProject } = useProjectByName(
+    {
+      projectName: "playground",
+    },
+    {
+      enabled: !!workspaceName,
+    },
+  );
+
+  // Fetch automation rules for playground project - always fetch to show metric selector
+  const { data: rulesData } = useRulesList(
+    {
+      workspaceName,
+      projectId: playgroundProject?.id,
+      page: 1,
+      size: 100,
+    },
+    {
+      enabled: !!playgroundProject?.id,
+    },
+  );
+
+  const rules = rulesData?.content || [];
 
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
@@ -285,6 +317,13 @@ const PlaygroundOutputActions = ({
             <X className="text-light-slate" />
           </Button>
         )}
+      </div>
+      <div className="mt-2.5 flex">
+        <MetricSelector
+          rules={rules}
+          selectedRuleIds={selectedRuleIds}
+          onSelectionChange={setSelectedRuleIds}
+        />
       </div>
       <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
         <ExplainerIcon
