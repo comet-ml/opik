@@ -161,13 +161,13 @@ class TraceThreadServiceImpl implements TraceThreadService {
             return Mono.empty();
         }
 
-        log.info("Batch updating '{}' threads with update: '{}'", threadModelIds.size(), threadUpdate);
+        log.info("Batch updating threads, thread_count: '{}'", threadModelIds.size());
 
         return traceThreadDAO.batchUpdateThreads(threadModelIds, threadUpdate)
-                .doOnSuccess(__ -> log.info("Successfully batch updated '{}' threads with tags: '{}'",
-                        threadModelIds.size(), threadUpdate.tags()))
-                .doOnError(ex -> log.error("Error batch updating '{}' threads with update: '{}'",
-                        threadModelIds.size(), threadUpdate, ex));
+                .doOnSuccess(__ -> log.info("Successfully batch updated threads, thread_count: '{}'",
+                        threadModelIds.size()))
+                .doOnError(ex -> log.error("Error batch updating threads, thread_count: '{}'",
+                        threadModelIds.size(), ex));
     }
 
     @Override

@@ -548,35 +548,31 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             return Mono.empty();
         }
 
-        log.info("DAO: Starting batch update for '{}' thread model IDs", threadModelIds.size());
-        log.debug("DAO: Thread model IDs: '{}', Update: '{}'", threadModelIds, threadUpdate);
+        log.info("Starting batch update for threads, thread_count: '{}'", threadModelIds.size());
 
         return asyncTemplate.nonTransaction(connection -> {
 
             var template = new ST(BATCH_UPDATE_THREADS_SQL);
 
             Optional.ofNullable(threadUpdate.tags())
-                    .ifPresent(tags -> {
-                        template.add("tags", tags.toString());
-                        log.debug("DAO: Added tags to template: '{}'", tags);
-                    });
+                    .ifPresent(tags -> template.add("tags", tags.toString()));
 
             String renderedSql = template.render();
-            log.debug("DAO: Rendered SQL: '{}'", renderedSql);
+            log.debug("Rendered SQL: '{}'", renderedSql);
 
             var statement = connection.createStatement(renderedSql)
                     .bind("ids", threadModelIds.toArray(UUID[]::new));
 
             Optional.ofNullable(threadUpdate.tags())
-                    .ifPresent(tags -> {
-                        statement.bind("tags", tags.toArray(String[]::new));
-                        log.debug("DAO: Bound tags parameter: '{}'", tags);
-                    });
+                    .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                    .doOnSuccess(rowsUpdated -> log.info("DAO: Batch update executed, rows updated: '{}'", rowsUpdated))
-                    .doOnError(ex -> log.error("DAO: Error executing batch update SQL", ex))
+                    .doOnSuccess(
+                            rowsUpdated -> log.info("Batch update executed, rows_updated: '{}', thread_count: '{}'",
+                                    rowsUpdated, threadModelIds.size()))
+                    .doOnError(ex -> log.error("Error executing batch update, thread_count: '{}'",
+                            threadModelIds.size(), ex))
                     .then();
         });
     }

@@ -790,15 +790,15 @@ public class TracesResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        log.info("Resource: Batch updating '{}' threads on workspace_id: '{}', user: '{}', update: '{}'",
-                batchUpdate.threadModelIds().size(), workspaceId, userName, batchUpdate.update());
+        log.info("Batch updating threads on workspace_id: '{}', user: '{}', thread_count: '{}'",
+                workspaceId, userName, batchUpdate.threadModelIds().size());
 
         traceThreadService.batchUpdate(batchUpdate.threadModelIds(), batchUpdate.update())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Resource: Successfully batch updated '{}' threads on workspace_id: '{}' with tags: '{}'",
-                batchUpdate.threadModelIds().size(), workspaceId, batchUpdate.update().tags());
+        log.info("Successfully batch updated threads on workspace_id: '{}', thread_count: '{}'",
+                workspaceId, batchUpdate.threadModelIds().size());
 
         return Response.noContent().build();
     }
