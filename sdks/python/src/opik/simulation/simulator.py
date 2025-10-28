@@ -16,12 +16,12 @@ def run_simulation(
 ) -> Dict[str, Any]:
     """
     Run a multi-turn conversation simulation between a simulated user and an app.
-    
+
     This function follows LangSmith's pattern where:
     1. The simulator passes single message strings to the app
     2. The app manages full conversation history internally using thread_id
     3. The app logs traces with thread_id for evaluation
-    
+
     Args:
         app: Callable that processes messages and manages conversation history internally.
             Signature: app(message: str, *, thread_id: str, **kwargs) -> Dict[str, str]
@@ -32,7 +32,7 @@ def run_simulation(
         thread_id: Optional thread ID for grouping traces. Generated if not provided
         project_name: Optional project name for trace logging
         **app_kwargs: Additional keyword arguments passed to the app
-        
+
     Returns:
         Dict containing:
         - thread_id: The thread ID used for this simulation
@@ -42,19 +42,19 @@ def run_simulation(
     # Generate thread_id if not provided
     if thread_id is None:
         thread_id = id_helpers.generate_id()
-    
+
     # Automatically decorate app if not already decorated
     if not hasattr(app, "opik_tracked"):
         app_name = app.__name__ if hasattr(app, "__name__") else "simulation_app"
         app = track(name=app_name)(app)
-    
+
     # Track conversation for simulator (app manages its own history internally)
     conversation_history: List[Dict[str, str]] = []
-    
+
     # Generate initial message if needed
     if initial_message is None:
         initial_message = user_simulator.generate_response(conversation_history)
-    
+
     # Simulation loop
     for turn in range(max_turns):
         # Get user message
@@ -62,43 +62,46 @@ def run_simulation(
             user_message_text = initial_message
         else:
             user_message_text = user_simulator.generate_response(conversation_history)
-        
+
         # Create message dict for tracking
         user_message = {"role": "user", "content": user_message_text}
         conversation_history.append(user_message)
-        
+
         # Call app with SINGLE message string, thread_id parameter, and opik_args for tracing
         try:
             assistant_message = app(
-                user_message_text, 
+                user_message_text,
                 thread_id=thread_id,
                 **app_kwargs,
                 opik_args={
                     "trace": {
                         "thread_id": thread_id,
-                        "metadata": {
-                            "turn": turn + 1,
-                            "project_name": project_name
-                        }
+                        "metadata": {"turn": turn + 1, "project_name": project_name},
                     }
-                }
+                },
             )
         except Exception as e:
             # Handle app errors gracefully
             assistant_message = {
-                "role": "assistant", 
-                "content": f"Error processing message: {str(e)}"
+                "role": "assistant",
+                "content": f"Error processing message: {str(e)}",
             }
-        
+
         # Validate assistant message format
-        if not isinstance(assistant_message, dict) or "role" not in assistant_message or "content" not in assistant_message:
+        if (
+            not isinstance(assistant_message, dict)
+            or "role" not in assistant_message
+            or "content" not in assistant_message
+        ):
             assistant_message = {
                 "role": "assistant",
-                "content": str(assistant_message) if assistant_message else "No response"
+                "content": str(assistant_message)
+                if assistant_message
+                else "No response",
             }
-        
+
         conversation_history.append(assistant_message)
-    
+
     return {
         "thread_id": thread_id,
         "conversation_history": conversation_history,
