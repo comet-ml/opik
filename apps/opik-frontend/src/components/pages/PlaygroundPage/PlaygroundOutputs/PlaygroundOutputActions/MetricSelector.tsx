@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { cn } from "@/lib/utils";
 import { EvaluatorsRule } from "@/types/automations";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import toLower from "lodash/toLower";
@@ -28,7 +27,8 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  const isAllSelected = selectedRuleIds === null || selectedRuleIds.length === rules.length;
+  const isAllSelected =
+    selectedRuleIds === null || selectedRuleIds.length === rules.length;
 
   const selectedRulesCount = useMemo(() => {
     if (!selectedRuleIds || selectedRuleIds.length === 0) {
@@ -149,7 +149,10 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                   onClick={() => handleSelect(rule.id)}
                 >
-                  <Checkbox checked={isSelected(rule.id)} className="shrink-0" />
+                  <Checkbox
+                    checked={isSelected(rule.id)}
+                    className="shrink-0"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="comet-body-s truncate">{rule.name}</div>
                   </div>

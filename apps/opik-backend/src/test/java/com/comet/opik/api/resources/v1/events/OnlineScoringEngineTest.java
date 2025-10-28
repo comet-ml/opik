@@ -79,7 +79,6 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -89,7 +88,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @Slf4j
@@ -348,7 +346,7 @@ class OnlineScoringEngineTest {
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
         // Create three evaluators
-        var evaluatorCode = JsonUtils.MAPPER.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
         var evaluator1 = createRule(projectId, evaluatorCode);
         var evaluator2 = createRule(projectId, evaluatorCode);
@@ -360,7 +358,7 @@ class OnlineScoringEngineTest {
 
         // Create trace with metadata specifying only evaluator1 and evaluator2
         var traceId = generator.generate();
-        var metadata = JsonUtils.MAPPER.createObjectNode();
+        var metadata = JsonUtils.createObjectNode();
         metadata.putArray("selected_rule_ids")
                 .add(evaluatorId1.toString())
                 .add(evaluatorId2.toString());

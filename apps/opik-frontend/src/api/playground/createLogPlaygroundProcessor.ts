@@ -36,7 +36,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
-  selectedRuleIds?: string[];
+  selectedRuleIds: string[] | null;
 }
 
 export interface LogProcessorArgs {
@@ -127,7 +127,7 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
 };
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
-  const experimentMetadata: Record<string, any> = {
+  const experimentMetadata: Record<string, unknown> = {
     model: run.model,
     messages: JSON.stringify(run.providerMessages),
     model_config: run.configs,
