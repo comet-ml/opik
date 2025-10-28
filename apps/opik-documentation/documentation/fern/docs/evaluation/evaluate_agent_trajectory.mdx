@@ -297,7 +297,7 @@ Let's define our evaluation task that will run our agent and return the assistan
         res = agent.invoke(
             {"messages": [{
                 "role": "user",
-                "content": "what is the weather in sf"
+                "content": dataset_item["input"]
             }]},
             config={"callbacks": [opik_tracer]}
         )
