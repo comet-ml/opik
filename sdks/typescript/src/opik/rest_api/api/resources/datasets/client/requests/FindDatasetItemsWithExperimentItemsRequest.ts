@@ -13,5 +13,7 @@ export interface FindDatasetItemsWithExperimentItemsRequest {
     size?: number;
     experimentIds: string;
     filters?: string;
+    sorting?: string;
+    search?: string;
     truncate?: boolean;
 }

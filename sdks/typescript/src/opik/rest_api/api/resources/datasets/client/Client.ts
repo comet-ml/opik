@@ -914,7 +914,7 @@ export class Datasets {
         request: OpikApi.FindDatasetItemsWithExperimentItemsRequest,
         requestOptions?: Datasets.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetItemPageCompare>> {
-        const { page, size, experimentIds, filters, truncate } = request;
+        const { page, size, experimentIds, filters, sorting, search, truncate } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -927,6 +927,14 @@ export class Datasets {
         _queryParams["experiment_ids"] = experimentIds;
         if (filters != null) {
             _queryParams["filters"] = filters;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
+        }
+
+        if (search != null) {
+            _queryParams["search"] = search;
         }
 
         if (truncate != null) {
