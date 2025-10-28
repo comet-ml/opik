@@ -10,4 +10,5 @@ export interface DatasetItemPageCompare {
     size?: number;
     total?: number;
     columns?: OpikApi.ColumnCompare[];
+    sortableBy?: string[];
 }
