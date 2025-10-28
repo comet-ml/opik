@@ -50,18 +50,64 @@ const transformMessageIntoProviderMessage = (
     throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
 
+  let renderedContent = mustache.render(
+    message.content,
+    serializedDatasetItem,
+    {},
+    {
+      // avoid escaping of a mustache
+      escape: (val: string) => val,
+    },
+  );
+
+  // Wrap any raw image URLs or base64 data in the content with <<<image>>>...<<</image>>> tags
+  // This is needed when using datasets with images where mustache directly inserts image data
+  renderedContent = wrapImageUrlsWithTags(renderedContent);
+
   return {
     role: message.role,
-    content: mustache.render(
-      message.content,
-      serializedDatasetItem,
-      {},
-      {
-        // avoid escaping of a mustache
-        escape: (val: string) => val,
-      },
-    ),
+    content: renderedContent,
   };
+};
+
+/**
+ * Wraps raw image URLs and base64 data URLs in the content with <<<image>>>...<<</image>>> tags.
+ * Detects both:
+ * - data:image/...;base64,... (base64 encoded images)
+ * - http(s)://... image URLs
+ * - [image_N] placeholders (from processInputData)
+ */
+const wrapImageUrlsWithTags = (content: string): string => {
+  let processedContent = content;
+
+  // Pattern 1: Match data:image base64 strings
+  // Captures the full data URL including the base64 data
+  const DATA_IMAGE_REGEX = /data:image\/[^;]+;base64,[A-Za-z0-9+/]+=*/g;
+
+  // Pattern 2: Match http(s) image URLs
+  // Only match URLs that end with common image extensions or contain image in path
+  const HTTP_IMAGE_REGEX =
+    /https?:\/\/[^\s<>"{}|\\^`\]]+\.(?:jpg|jpeg|png|gif|webp|bmp|svg|ico|tiff|tif|heic|heif)(?:\?[^\s<>"{}|\\^`\]]*)?(?:#[^\s<>"{}|\\^`\]]*)?/gi;
+
+  // First, wrap data URLs
+  processedContent = processedContent.replace(DATA_IMAGE_REGEX, (match) => {
+    // Check if already wrapped
+    if (processedContent.includes(`<<<image>>>${match}<<</image>>>`)) {
+      return match;
+    }
+    return `<<<image>>>${match}<<</image>>>`;
+  });
+
+  // Then, wrap HTTP(S) image URLs
+  processedContent = processedContent.replace(HTTP_IMAGE_REGEX, (match) => {
+    // Check if already wrapped
+    if (processedContent.includes(`<<<image>>>${match}<<</image>>>`)) {
+      return match;
+    }
+    return `<<<image>>>${match}<<</image>>>`;
+  });
+
+  return processedContent;
 };
 
 interface UsePromptDatasetItemCombinationArgs {
