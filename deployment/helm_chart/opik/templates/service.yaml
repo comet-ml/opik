@@ -8,6 +8,8 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
     {{- with $value.service.labels | default "" }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     component: {{ include "opik.name" $ }}-{{ $key | lower }}
   {{- if $value.service.annotations }}
   annotations:
