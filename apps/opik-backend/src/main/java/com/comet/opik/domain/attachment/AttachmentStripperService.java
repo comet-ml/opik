@@ -8,7 +8,6 @@ import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.events.AttachmentUploadRequested;
 import com.comet.opik.infrastructure.AttachmentsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +17,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
@@ -54,7 +54,6 @@ import java.util.regex.Pattern;
 public class AttachmentStripperService {
 
     private final @NonNull ObjectMapper objectMapper;
-    private final @NonNull S3Config s3Config;
     private final @NonNull AttachmentsConfig attachmentsConfig;
     private final @NonNull EventBus eventBus;
 
@@ -79,7 +78,6 @@ public class AttachmentStripperService {
             @NonNull OpikConfiguration opikConfig,
             @NonNull EventBus eventBus) {
         this.objectMapper = objectMapper;
-        this.s3Config = opikConfig.getS3Config();
         this.attachmentsConfig = opikConfig.getAttachmentsConfig();
         this.eventBus = eventBus;
 
@@ -115,6 +113,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a Trace entity.
      */
+    @WithSpan
     public Mono<Trace> stripAttachments(Trace trace, String workspaceId, String userName, String projectName) {
         var builder = trace.toBuilder();
         return stripAttachmentsCommon(
@@ -135,6 +134,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a TraceUpdate entity.
      */
+    @WithSpan
     public Mono<TraceUpdate> stripAttachments(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
             String userName, String projectName) {
         var builder = traceUpdate.toBuilder();
@@ -156,6 +156,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a Span entity.
      */
+    @WithSpan
     public Mono<Span> stripAttachments(Span span, String workspaceId, String userName, String projectName) {
         var builder = span.toBuilder();
         return stripAttachmentsCommon(
@@ -176,6 +177,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a SpanUpdate entity.
      */
+    @WithSpan
     public Mono<SpanUpdate> stripAttachments(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
             String userName, String projectName) {
         var builder = spanUpdate.toBuilder();
@@ -271,6 +273,7 @@ public class AttachmentStripperService {
      * Attachments are uploaded using either direct upload (MinIO) or multipart upload (S3) based on configuration.
      * Generated filenames include context to avoid conflicts between input, output, and metadata attachments.
      */
+    @WithSpan
     public JsonNode stripAttachments(JsonNode node,
             UUID entityId,
             EntityType entityType,
@@ -370,6 +373,7 @@ public class AttachmentStripperService {
      * @param context the context where the attachment was found (input, output, metadata)
      * @return attachment reference string if processed, null if not a valid attachment
      */
+    @WithSpan
     private String processBase64Attachment(String base64Data,
             int attachmentNumber,
             UUID entityId,
