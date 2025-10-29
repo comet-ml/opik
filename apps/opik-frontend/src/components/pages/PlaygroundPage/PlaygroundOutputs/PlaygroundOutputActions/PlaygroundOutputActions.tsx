@@ -17,6 +17,7 @@ import useRulesList from "@/api/automations/useRulesList";
 import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
 import MetricSelector from "./MetricSelector";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import { useQueryClient } from "@tanstack/react-query";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
@@ -52,6 +53,8 @@ const PlaygroundOutputActions = ({
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
+  const [isDatasetDialogOpen, setIsDatasetDialogOpen] = useState(false);
+  const [isDatasetDropdownOpen, setIsDatasetDropdownOpen] = useState(false);
   const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
     string | undefined
   >(undefined);
@@ -151,6 +154,25 @@ const PlaygroundOutputActions = ({
       }
     },
     [onChangeDatasetId, resetOutputMap, stopAll, datasetId],
+  );
+
+  const handleCreateDatasetClick = useCallback(() => {
+    setIsDatasetDialogOpen(true);
+  }, []);
+
+  const handleDatasetCreated = useCallback(
+    (newDataset: Dataset) => {
+      // Invalidate datasets query to refresh the list
+      queryClient.invalidateQueries({
+        queryKey: ["datasets"],
+      });
+      // Select the newly created dataset
+      if (newDataset.id) {
+        handleChangeDatasetId(newDataset.id);
+      }
+      setIsDatasetDialogOpen(false);
+    },
+    [queryClient, handleChangeDatasetId],
   );
 
   const handleCreateRuleClick = useCallback(async () => {
@@ -367,6 +389,8 @@ const PlaygroundOutputActions = ({
             </div>
           }
           onChange={handleChangeDatasetId}
+          open={isDatasetDropdownOpen}
+          onOpenChange={setIsDatasetDropdownOpen}
           buttonSize="sm"
           onLoadMore={
             (datasetTotal || 0) > DEFAULT_LOADED_DATASETS && !isLoadedMore
@@ -386,6 +410,24 @@ const PlaygroundOutputActions = ({
               </div>
             );
           }}
+          actionPanel={
+            <div className="sticky inset-x-0 bottom-0">
+              <Separator className="my-1" />
+              <div
+                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                onClick={() => {
+                  setIsDatasetDropdownOpen(false);
+                  setIsDatasetDialogOpen(true);
+                }}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="comet-body-s truncate text-primary">
+                    Create a new dataset
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
         />
 
         {datasetId && (
@@ -425,6 +467,11 @@ const PlaygroundOutputActions = ({
           }
         }}
         projectId={ruleDialogProjectId || playgroundProject?.id}
+      />
+      <AddEditDatasetDialog
+        open={isDatasetDialogOpen}
+        setOpen={setIsDatasetDialogOpen}
+        onDatasetCreated={handleDatasetCreated}
       />
     </div>
   );
