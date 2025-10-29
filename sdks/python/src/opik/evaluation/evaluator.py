@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 from .. import Prompt
 from ..api_objects import opik_client
@@ -23,8 +23,12 @@ from .models import (
 )
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
+from opik.api_objects.prompt.chat_prompt_template import SupportedModalities
 
 LOGGER = logging.getLogger(__name__)
+MODALITY_SUPPORT_DOC_URL = (
+    "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
+)
 
 
 def evaluate(
@@ -301,16 +305,38 @@ def evaluate_experiment(
 def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
-    model_supports_vision = ModelCapabilities.supports_vision(
-        getattr(model, "model_name", None)
+    supported_modalities = cast(
+        SupportedModalities,
+        {
+            "vision": ModelCapabilities.supports_vision(
+                getattr(model, "model_name", None)
+            )
+        },
     )
     chat_prompt_template = ChatPromptTemplate(messages=messages)
+
+    required_modalities = chat_prompt_template.required_modalities()
+    unsupported_modalities = {
+        modality
+        for modality in required_modalities
+        if not supported_modalities.get(modality, False)
+    }
+
+    if unsupported_modalities:
+        modalities_list = ", ".join(sorted(unsupported_modalities))
+        LOGGER.warning(
+            "Model '%s' does not support %s content. Multimedia parts will be flattened "
+            "to text placeholders. See %s for supported models and customization options.",
+            getattr(model, "model_name", "unknown"),
+            modalities_list,
+            MODALITY_SUPPORT_DOC_URL,
+        )
 
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         template_type_override = prompt_variables.get("type")
         processed_messages = chat_prompt_template.format(
             variables=prompt_variables,
-            supported_modalities={"vision": model_supports_vision},
+            supported_modalities=supported_modalities,
             template_type=template_type_override,
         )
 

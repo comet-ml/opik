@@ -51,6 +51,7 @@ class ModelCapabilitiesRegistry:
         self._vision_model_prefixes = {
             prefix.lower() for prefix in self._vision_model_prefixes
         }
+        self._vision_model_suffixes: Set[str] = {"-vision", "-vl"}
 
     def register_capability_detector(
         self, capability: str, detector: CapabilityDetector
@@ -99,6 +100,10 @@ class ModelCapabilitiesRegistry:
             normalized = candidate.lower()
             if any(
                 normalized.startswith(prefix) for prefix in self._vision_model_prefixes
+            ):
+                return True
+            if any(
+                normalized.endswith(suffix) for suffix in self._vision_model_suffixes
             ):
                 return True
 

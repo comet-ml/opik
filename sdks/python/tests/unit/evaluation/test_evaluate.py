@@ -1,5 +1,5 @@
+import logging
 from typing import Any, Dict, List
-
 from unittest import mock
 import pytest
 
@@ -728,6 +728,28 @@ def test_evaluate__with_random_sampler__happy_flow(
 
         assert actual_trace.output["output"] == expected_output
         assert feedback_score.value == expected_score
+
+
+def test_build_prompt_evaluation_task_logs_when_vision_missing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    model = mock.Mock()
+    model.model_name = "text-only-model"
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe the picture"},
+                {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
+            ],
+        }
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        evaluation._build_prompt_evaluation_task(model=model, messages=messages)
+
+    assert "does not support vision" in caplog.text
+    assert evaluation.MODALITY_SUPPORT_DOC_URL in caplog.text
 
 
 def test_evaluate_prompt_happyflow(

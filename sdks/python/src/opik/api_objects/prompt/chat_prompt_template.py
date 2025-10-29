@@ -17,8 +17,10 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
+    Set,
     Tuple,
     Union,
+    cast,
 )
 
 from .prompt_template import PromptTemplate
@@ -29,6 +31,7 @@ ContentPart = Dict[str, Any]
 RendererFn = Callable[[ContentPart, Dict[str, Any], PromptType], Optional[ContentPart]]
 ModalityName = Literal["vision"]
 SupportedModalities = Mapping[ModalityName, bool]
+ModalitySet = Set[ModalityName]
 
 
 class ChatContentRendererRegistry:
@@ -43,6 +46,7 @@ class ChatContentRendererRegistry:
             "vision": ("<<<image>>>", "<<</image>>>"),
         }
         self._default_placeholder: Tuple[str, str] = ("<<<media>>>", "<<</media>>>")
+        self._placeholder_value_limit = 500
 
     def register_part_renderer(
         self,
@@ -70,7 +74,13 @@ class ChatContentRendererRegistry:
         *,
         supported_modalities: Optional[SupportedModalities] = None,
     ) -> MessageContent:
-        modality_flags: Dict[str, bool] = dict(supported_modalities or {})
+        if supported_modalities is None:
+            modality_flags: Dict[str, bool] = {}
+        else:
+            modality_flags = {
+                modality: bool(is_supported)
+                for modality, is_supported in supported_modalities.items()
+            }
 
         if isinstance(content, str):
             return _render_template_string(content, variables, template_type)
@@ -105,6 +115,23 @@ class ChatContentRendererRegistry:
             return PromptType(template_type)
         except ValueError:
             return PromptType.MUSTACHE
+
+    def infer_modalities(self, content: MessageContent) -> ModalitySet:
+        """
+        Return the set of modalities referenced by the structured content.
+        """
+        if not isinstance(content, list):
+            return set()
+
+        modalities: ModalitySet = set()
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            part_type = part.get("type", "").lower()
+            modality = self._part_modalities.get(part_type)
+            if modality:
+                modalities.add(modality)
+        return modalities
 
     def _render_structured_content(
         self,
@@ -167,7 +194,8 @@ class ChatContentRendererRegistry:
 
             placeholder_value = self._extract_placeholder_value(part)
             if placeholder_value:
-                segments.append(f"{prefix}{placeholder_value}{suffix}")
+                truncated = self._truncate_placeholder_value(placeholder_value)
+                segments.append(f"{prefix}{truncated}{suffix}")
 
         return "\n\n".join(segment for segment in segments if segment)
 
@@ -179,6 +207,13 @@ class ChatContentRendererRegistry:
             if isinstance(image_dict, dict):
                 return str(image_dict.get("url", "")).strip()
         return str(part)
+
+    def _truncate_placeholder_value(self, value: str) -> str:
+        if len(value) <= self._placeholder_value_limit:
+            return value
+        if self._placeholder_value_limit <= 3:
+            return value[: self._placeholder_value_limit]
+        return value[: self._placeholder_value_limit - 3] + "..."
 
 
 class ChatPromptTemplate:
@@ -200,6 +235,16 @@ class ChatPromptTemplate:
     @property
     def messages(self) -> List[Dict[str, MessageContent]]:
         return self._messages
+
+    def required_modalities(self) -> ModalitySet:
+        """
+        Return the union of modalities referenced across all template messages.
+        """
+        required: ModalitySet = set()
+        for message in self._messages:
+            content = cast(MessageContent, message.get("content", ""))
+            required.update(self._registry.infer_modalities(content))
+        return required
 
     def format(
         self,
@@ -323,4 +368,6 @@ __all__ = [
     "ContentPart",
     "RendererFn",
     "register_default_chat_part_renderer",
+    "ModalityName",
+    "SupportedModalities",
 ]

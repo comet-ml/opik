@@ -16,3 +16,8 @@ def test_custom_capability_registration() -> None:
 
 def test_supports_vision_handles_provider_prefix() -> None:
     assert ModelCapabilities.supports_vision("anthropic/claude-3-opus") is True
+
+
+def test_supports_vision_detects_common_suffixes() -> None:
+    assert ModelCapabilities.supports_vision("provider/new-model-vision") is True
+    assert ModelCapabilities.supports_vision("provider/new-model-vl") is True

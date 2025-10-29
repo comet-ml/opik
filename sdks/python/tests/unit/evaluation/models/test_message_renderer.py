@@ -1,3 +1,5 @@
+import random
+import string
 from typing import Any, Dict, Optional
 
 import pytest
@@ -53,11 +55,15 @@ class TestChatPromptTemplate:
         assert rendered[0]["text"] == "Describe this image"
         assert rendered[1]["image_url"]["url"] == "https://example.com/cat.jpg"
 
-    def test_includes_detail_field_when_present(self) -> None:
+    @pytest.mark.parametrize("detail", ["low", "high"])
+    def test_includes_detail_field_when_present(self, detail: str) -> None:
         content = [
             {
                 "type": "image_url",
-                "image_url": {"url": "https://example.com/image.png", "detail": "high"},
+                "image_url": {
+                    "url": "https://example.com/image.png",
+                    "detail": detail,
+                },
             }
         ]
 
@@ -67,7 +73,7 @@ class TestChatPromptTemplate:
             supported_modalities={"vision": True},
         )
 
-        assert rendered[0]["image_url"]["detail"] == "high"
+        assert rendered[0]["image_url"]["detail"] == detail
 
     @pytest.mark.parametrize(
         "data_url_prefix",
@@ -106,6 +112,27 @@ class TestChatPromptTemplate:
         assert "Second" in rendered
         assert "https://example.com/one.png" in rendered
         assert rendered.count("<<<image>>>") == 1
+
+    def test_flattened_placeholder_truncates_large_base64(self) -> None:
+        random_payload = "".join(
+            random.choices(string.ascii_letters + string.digits + "+/", k=700)
+        )
+        data_url = f"data:image/png;base64,{random_payload}"
+        content = [
+            {"type": "image_url", "image_url": {"url": data_url}},
+        ]
+
+        rendered = _render_content(
+            content,
+            variables={},
+            supported_modalities={"vision": False},
+        )
+
+        assert isinstance(rendered, str)
+        assert "<<<image>>>" in rendered
+        inner = rendered.split("<<<image>>>")[1].split("<<</image>>>")[0]
+        assert len(inner) <= 500
+        assert inner.endswith("...")
 
     def test_skips_invalid_parts(self) -> None:
         content = [{"type": "text", "text": "ok"}, "bad-part", None]
@@ -164,3 +191,18 @@ class TestChatPromptTemplate:
 
         assert isinstance(flattened, str)
         assert "thumbnail" in flattened
+
+    def test_required_modalities_detects_vision(self) -> None:
+        template = ChatPromptTemplate(
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe the image"},
+                        {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
+                    ],
+                }
+            ]
+        )
+
+        assert template.required_modalities() == {"vision"}
