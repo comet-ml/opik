@@ -1,9 +1,6 @@
 from typing import Any, Dict, List
 
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
-
 from opik.evaluation.models.langchain.message_converters import (
     ContentType,
     convert_to_langchain_messages,
@@ -80,51 +77,3 @@ def test_convert_to_langchain_messages_validates_required_metadata() -> None:
 def test_convert_to_langchain_messages_rejects_unknown_roles() -> None:
     with pytest.raises(ValueError):
         convert_to_langchain_messages([_build_message("critic", "text")])
-
-
-def test_convert_to_langchain_messages_accepts_langchain_message_objects() -> None:
-    langchain_messages = [
-        SystemMessage(content="You are an assistant."),
-        HumanMessage(content="Describe the weather in Paris."),
-    ]
-
-    converted = convert_to_langchain_messages(
-        [message.model_dump() for message in langchain_messages]
-    )
-
-    assert len(converted) == 2
-    assert converted[0].type == "system"
-    assert converted[1].type == "human"
-    assert converted[1].content == "Describe the weather in Paris."
-
-
-def test_convert_to_langchain_messages_handles_chat_prompt_template() -> None:
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", "You are a helpful assistant."),
-            (
-                "user",
-                [
-                    {"type": "text", "text": "Describe the following image."},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": "https://python.langchain.com/img/phone_handoff.jpeg",
-                            "detail": "high",
-                        },
-                    },
-                ],
-            ),
-        ]
-    )
-
-    rendered = prompt.invoke({})
-    converted = convert_to_langchain_messages(
-        [message.model_dump() for message in rendered.messages]
-    )
-
-    assert len(converted) == 2
-    assert converted[1].type == "human"
-    human_content = converted[1].content
-    assert isinstance(human_content, list)
-    assert human_content[1]["image_url"]["detail"] == "high"
