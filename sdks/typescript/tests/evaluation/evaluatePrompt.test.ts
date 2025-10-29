@@ -34,7 +34,21 @@ class MockModel extends OpikBaseModel {
   async generateProviderResponse(
     messages: OpikMessage[]
   ): Promise<{ text: string }> {
-    return { text: `Response to: ${messages[0]?.content || ""}` };
+    const first = messages[0]?.content;
+    const normalized =
+      typeof first === "string"
+        ? first
+        : Array.isArray(first)
+          ? first
+              .map((part) =>
+                part.type === "text"
+                  ? part.text
+                  : `[image:${part.image_url?.url ?? ""}]`
+              )
+              .join(" ")
+          : "";
+
+    return { text: `Response to: ${normalized}` };
   }
 }
 
@@ -212,6 +226,48 @@ describe("evaluatePrompt", () => {
 
       expect(result).toBeDefined();
       // Config should include both custom params and auto-added params
+    });
+
+    it("should render multimodal messages when model lacks vision support", async () => {
+      const mockModel = new MockModel();
+      const multimodalMessages: OpikMessage[] = [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Describe {{question}}" },
+            { type: "image_url", image_url: { url: "{{image_url}}" } },
+          ],
+        },
+      ];
+
+      const multimodalItems: Array<Record<string, unknown> & { id: string }> = [
+        {
+          id: "550e8400-e29b-41d4-a716-446655440099",
+          question: "a cat sitting on a chair",
+          image_url: "https://example.com/cat.png",
+        },
+      ];
+
+      mockDataset.getItems = vi.fn().mockResolvedValue(multimodalItems);
+
+      const responseSpy = vi.spyOn(mockModel, "generateProviderResponse");
+
+      await evaluatePrompt({
+        dataset: mockDataset,
+        messages: multimodalMessages,
+        model: mockModel,
+        scoringMetrics: [],
+        client: mockClient,
+      });
+
+      expect(responseSpy).toHaveBeenCalled();
+      const callArguments = responseSpy.mock.calls[0]?.[0] ?? [];
+      expect(callArguments.length).toBeGreaterThan(0);
+
+      const content = callArguments[0]?.content;
+      expect(typeof content).toBe("string");
+      expect(content).toContain("<<<image>>>");
+      expect(content).toContain("https://example.com/cat.png");
     });
   });
 
