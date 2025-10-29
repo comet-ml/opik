@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from opik.exceptions import MetricComputationError
@@ -23,6 +25,11 @@ from opik.evaluation.metrics.heuristics.spearman import SpearmanRanking
 from opik.evaluation.metrics.heuristics.vader_sentiment import VADERSentiment
 from opik.evaluation.metrics.heuristics.readability import Readability
 from opik.evaluation.metrics.heuristics.tone import Tone
+
+# NLTK emits a noisy warning for BLEU test cases with zero higher-order overlaps.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:\\nThe hypothesis contains 0 counts of 2-gram overlaps\\.:UserWarning"
+)
 
 
 class CustomTokenizer:
@@ -290,7 +297,6 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
 
 
 def test_js_divergence_identical_text():
-    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDivergence(track=False)
     result = metric.score(
         output="The quick brown fox jumps over the lazy dog",
@@ -304,7 +310,6 @@ def test_js_divergence_identical_text():
 
 
 def test_js_divergence_different_text():
-    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDivergence(track=False)
     result = metric.score(output="apple pear", reference="zebra quokka")
 
@@ -315,7 +320,6 @@ def test_js_divergence_different_text():
 
 
 def test_js_divergence_requires_non_empty():
-    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDivergence(track=False)
 
     with pytest.raises(MetricComputationError):
@@ -326,7 +330,6 @@ def test_js_divergence_requires_non_empty():
 
 
 def test_js_distance_matches_metadata():
-    pytest.importorskip("scipy", reason="Jensen-Shannon metrics rely on SciPy")
     metric = JSDistance(track=False)
     result = metric.score(output="token token", reference="token other")
     assert 0.0 <= result.value <= 1.0
@@ -442,11 +445,54 @@ def test_vader_sentiment_metric_uses_custom_analyzer():
 
 
 def test_readability_metric_and_guard_behaviour():
-    pytest.importorskip(
-        "textstat", reason="Readability metric relies on the optional textstat package"
-    )
+    class StubTextStat:
+        def sentence_count(self, text: str) -> int:
+            count = sum(text.count(mark) for mark in ".!?")
+            return count or 1
 
-    readability = Readability(track=False)
+        def lexicon_count(self, text: str, removepunct: bool = True) -> int:
+            if removepunct:
+                text = text.translate({ord(ch): " " for ch in ",;:()[]"})
+            return len([word for word in text.split() if word])
+
+        def syllable_count(self, text: str, lang: str = "en_US") -> int:
+            def syllables(word: str) -> int:
+                cleaned = re.sub(r"[^a-z]", "", word.lower())
+                if not cleaned:
+                    return 1
+                vowels = "aeiouy"
+                count = 0
+                prev_is_vowel = False
+                for char in cleaned:
+                    is_vowel = char in vowels
+                    if is_vowel and not prev_is_vowel:
+                        count += 1
+                    prev_is_vowel = is_vowel
+                if cleaned.endswith("e") and count > 1:
+                    count -= 1
+                return max(1, count)
+
+            return sum(syllables(word) for word in text.split())
+
+        def _reading_stats(self, text: str) -> tuple[float, float]:
+            sentences = self.sentence_count(text)
+            words = self.lexicon_count(text)
+            syllables = self.syllable_count(text)
+            words_per_sentence = words / sentences if sentences else 0
+            syllables_per_word = syllables / words if words else 0
+            reading_ease = (
+                206.835 - 1.015 * words_per_sentence - 84.6 * syllables_per_word
+            )
+            fk_grade = 0.39 * words_per_sentence + 11.8 * syllables_per_word - 15.59
+            return reading_ease, fk_grade
+
+        def flesch_reading_ease(self, text: str) -> float:
+            return self._reading_stats(text)[0]
+
+        def flesch_kincaid_grade(self, text: str) -> float:
+            return self._reading_stats(text)[1]
+
+    readability = Readability(track=False, textstat_module=StubTextStat())
     easy_text = (
         "We processed your insurance claim and scheduled an adjuster visit for tomorrow "
         "morning."
@@ -472,8 +518,18 @@ def test_readability_metric_and_guard_behaviour():
     assert hard_result.metadata["within_grade_bounds"] is True
 
     threshold = easy_result.metadata["flesch_kincaid_grade"] + 1.0
-    guard = Readability(max_grade=threshold, enforce_bounds=True, track=False)
-    strict_guard = Readability(min_grade=threshold, enforce_bounds=True, track=False)
+    guard = Readability(
+        max_grade=threshold,
+        enforce_bounds=True,
+        track=False,
+        textstat_module=StubTextStat(),
+    )
+    strict_guard = Readability(
+        min_grade=threshold,
+        enforce_bounds=True,
+        track=False,
+        textstat_module=StubTextStat(),
+    )
 
     assert guard.score(output=easy_text).value == 1.0
     assert strict_guard.score(output=easy_text).value == 0.0
