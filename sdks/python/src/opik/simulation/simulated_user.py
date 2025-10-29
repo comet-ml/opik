@@ -8,9 +8,8 @@ class SimulatedUser:
     """
     A simulated user that generates responses using LLMs or fixed responses.
 
-    This class follows LangSmith's pattern where the user simulator generates
-    string responses that are then incorporated into the conversation by the
-    application logic.
+    The user simulator generates string responses that are then incorporated
+    into the conversation by the application logic.
     """
 
     def __init__(

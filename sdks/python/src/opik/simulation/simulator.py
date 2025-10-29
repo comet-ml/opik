@@ -17,7 +17,6 @@ def run_simulation(
     """
     Run a multi-turn conversation simulation between a simulated user and an app.
 
-    This function follows LangSmith's pattern where:
     1. The simulator passes single message strings to the app
     2. The app manages full conversation history internally using thread_id
     3. The app logs traces with thread_id for evaluation
