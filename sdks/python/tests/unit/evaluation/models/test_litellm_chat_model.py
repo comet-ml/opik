@@ -211,7 +211,9 @@ async def test_litellm_chat_model_agenerate_string_supports_dict_choices(monkeyp
             ]
         )
 
-    monkeypatch.setattr(base_model, "aget_provider_response", fake_aget_provider_response)
+    monkeypatch.setattr(
+        base_model, "aget_provider_response", fake_aget_provider_response
+    )
 
     model = litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o")
 
