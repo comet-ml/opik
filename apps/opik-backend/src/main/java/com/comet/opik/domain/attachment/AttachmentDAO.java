@@ -8,6 +8,7 @@ import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -201,6 +202,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<List<AttachmentInfo>> getAttachmentsByEntityIds(@NonNull EntityType entityType,
             @NonNull Set<UUID> entityIds) {
         if (CollectionUtils.isEmpty(entityIds)) {
@@ -245,6 +247,7 @@ class AttachmentDAOImpl implements AttachmentDAO {
     }
 
     @Override
+    @WithSpan
     public Mono<Long> deleteByFileNames(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds,
             @NonNull Set<String> fileNames) {
         if (CollectionUtils.isEmpty(entityIds) || CollectionUtils.isEmpty(fileNames)) {

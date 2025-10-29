@@ -15,6 +15,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.BadRequestException;
@@ -394,6 +395,7 @@ class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
+    @WithSpan
     public Mono<Long> deleteAutoStrippedAttachments(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
         if (entityIds.isEmpty()) {
             return Mono.just(0L);
