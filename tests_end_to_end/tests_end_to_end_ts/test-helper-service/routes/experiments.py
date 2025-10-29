@@ -2,7 +2,6 @@
 
 from flask import Blueprint, request, abort
 from werkzeug.exceptions import HTTPException
-from opik import Opik
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Contains
 from .utils import (
