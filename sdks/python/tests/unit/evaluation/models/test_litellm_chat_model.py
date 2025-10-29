@@ -38,8 +38,15 @@ def _install_litellm_stub(monkeypatch, *, supported_params=None):
     stub_module.get_llm_provider = get_llm_provider
     stub_module.utils = SimpleNamespace(UnsupportedParamsError=Exception)
     stub_module.exceptions = SimpleNamespace(BadRequestError=Exception)
+    stub_module.callbacks = []
 
     monkeypatch.setitem(sys.modules, "litellm", stub_module)
+    monkeypatch.setattr(
+        litellm_chat_model.opik_monitor, "enabled_in_config", lambda: False
+    )
+    monkeypatch.setattr(
+        litellm_chat_model.opik_monitor, "opik_is_misconfigured", lambda: True
+    )
     return stub_module
 
 

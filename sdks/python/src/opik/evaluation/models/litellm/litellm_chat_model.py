@@ -152,16 +152,34 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
     ) -> Dict[str, Any]:
         filtered_params = {**params}
 
-        for key in list(filtered_params.keys()):
-            if key not in self.supported_params:
-                filtered_params.pop(key)
-                if key not in self._unsupported_warned:
-                    _log_warning(
-                        "Parameter '%s' is not supported by model %s and will be ignored.",
-                        key,
-                        self.model_name,
-                    )
-                    self._unsupported_warned.add(key)
+        # Fix for impacted providers like Groq and OpenAI
+        if (
+            "response_format" in params
+            and "response_format" not in self.supported_params
+        ):
+            filtered_params.pop("response_format")
+            LOGGER.debug(
+                "This model does not support the response_format parameter and it will be ignored."
+            )
+        # NOTE: Filtering based on `supported_params` has been disabled temporarily
+        # because LiteLLM does not surface provider-specific connection fields via
+        # `get_supported_openai_params`. Dropping those kwargs breaks Azure/Groq
+        # users who rely on parameters such as `api_version` and `azure_endpoint`.
+        # The old logic is kept here commented for future restoration.
+        #
+        # for key in list(filtered_params.keys()):
+        #     if (
+        #         key not in self.supported_params
+        #         and not util.should_preserve_provider_param(key)
+        #     ):
+        #         filtered_params.pop(key)
+        #         if key not in self._unsupported_warned:
+        #             _log_warning(
+        #                 "Parameter '%s' is not supported by model %s and will be ignored.",
+        #                 key,
+        #                 self.model_name,
+        #             )
+        #             self._unsupported_warned.add(key)
 
         util.apply_model_specific_filters(
             model_name=self.model_name,

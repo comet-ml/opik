@@ -11,7 +11,7 @@ from .conversation.conversation_thread_metric import ConversationThreadMetric
 try:
     from .conversation import types as conversation_types
 except ImportError:  # pragma: no cover - runtime compatibility
-    conversation_types = None  # type: ignore
+    from . import conversation_types as conversation_types  # type: ignore
 from .heuristics.conversation.degeneration.metric import ConversationDegenerationMetric
 from .heuristics.conversation.knowledge_retention.metric import (
     KnowledgeRetentionMetric,
@@ -160,7 +160,10 @@ def __getattr__(name: str) -> Any:
     # demand so environments pinned to the old path keep working after the
     # conversation module refactor.
     if name == "conversation_types":
-        from .conversation import types as conv_types
+        try:
+            from .conversation import types as conv_types
+        except ImportError:  # pragma: no cover - runtime compatibility
+            from . import conversation_types as conv_types  # type: ignore
 
         globals()["conversation_types"] = conv_types
         return conv_types
