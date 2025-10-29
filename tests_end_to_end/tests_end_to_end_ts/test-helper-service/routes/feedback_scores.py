@@ -69,12 +69,11 @@ def create_feedback_definition():
     abort(500, "Failed to retrieve created feedback definition")
 
 
-@feedback_scores_bp.route("/get-feedback-definition", methods=["POST"])
+@feedback_scores_bp.route("/get-feedback-definition", methods=["GET"])
 def get_feedback_definition():
-    data = request.get_json()
-    validate_required_fields(data, ["name"])
-
-    name = data["name"]
+    name = request.args.get("name")
+    if not name:
+        abort(400, "Missing required parameter: name")
     client = get_opik_api_client()
 
     definitions = client.feedback_definitions.find_feedback_definitions(name=name)

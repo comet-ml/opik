@@ -49,13 +49,13 @@ def create_prompt():
     )
 
 
-@prompts_bp.route("/get-prompt", methods=["POST"])
+@prompts_bp.route("/get-prompt", methods=["GET"])
 def get_prompt():
-    data = request.get_json()
-    validate_required_fields(data, ["name"])
+    name = request.args.get("name")
+    if not name:
+        abort(400, "Missing required parameter: name")
 
-    name = data["name"]
-    commit = data.get("commit")
+    commit = request.args.get("commit")
     client = get_opik_client()
 
     retries = 0

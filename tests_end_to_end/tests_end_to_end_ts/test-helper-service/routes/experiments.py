@@ -66,12 +66,11 @@ def create_experiment():
     )
 
 
-@experiments_bp.route("/get-experiment", methods=["POST"])
+@experiments_bp.route("/get-experiment", methods=["GET"])
 def get_experiment():
-    data = request.get_json()
-    validate_required_fields(data, ["experiment_id"])
-
-    experiment_id = data["experiment_id"]
+    experiment_id = request.args.get("experiment_id")
+    if not experiment_id:
+        abort(400, "Missing required parameter: experiment_id")
     client = get_opik_api_client()
 
     try:

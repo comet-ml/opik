@@ -522,8 +522,8 @@ export class TestHelperClient {
 
   async getFeedbackDefinition(name: string): Promise<FeedbackDefinition> {
     try {
-      const response = await this.client.post('/api/feedback-scores/get-feedback-definition', {
-        name,
+      const response = await this.client.get('/api/feedback-scores/get-feedback-definition', {
+        params: { name },
       });
 
       return response.data;
@@ -581,8 +581,8 @@ export class TestHelperClient {
 
   async getExperiment(experimentId: string): Promise<Experiment> {
     try {
-      const response = await this.client.post('/api/experiments/get-experiment', {
-        experiment_id: experimentId,
+      const response = await this.client.get('/api/experiments/get-experiment', {
+        params: { experiment_id: experimentId },
       });
 
       return response.data;
@@ -617,9 +617,8 @@ export class TestHelperClient {
 
   async getPrompt(name: string, commit?: string): Promise<Prompt> {
     try {
-      const response = await this.client.post('/api/prompts/get-prompt', {
-        name,
-        commit,
+      const response = await this.client.get('/api/prompts/get-prompt', {
+        params: { name, ...(commit ? { commit } : {}) },
       });
 
       return response.data;
