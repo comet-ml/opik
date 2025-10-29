@@ -276,9 +276,7 @@ export class VercelAIChatModel extends OpikBaseModel {
 function convertToModelMessages(messages: OpikMessage[]): ModelMessage[] {
   return messages.map((message) => {
     const content = convertMessageContent(message.content);
-    const common = message.providerOptions
-      ? { content, providerOptions: message.providerOptions }
-      : { content }; 
+    const common = { content, ...(message.providerOptions && { providerOptions: message.providerOptions }) };
 
     if (message.role === "system") {
       return {
