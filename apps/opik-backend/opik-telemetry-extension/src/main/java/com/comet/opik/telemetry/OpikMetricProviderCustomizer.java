@@ -3,11 +3,15 @@ package com.comet.opik.telemetry;
 import io.opentelemetry.sdk.autoconfigure.spi.AutoConfigurationCustomizer;
 import io.opentelemetry.sdk.autoconfigure.spi.AutoConfigurationCustomizerProvider;
 import io.opentelemetry.sdk.autoconfigure.spi.ConfigProperties;
+import io.opentelemetry.sdk.metrics.Aggregation;
 import io.opentelemetry.sdk.metrics.InstrumentSelector;
 import io.opentelemetry.sdk.metrics.InstrumentType;
 import io.opentelemetry.sdk.metrics.SdkMeterProviderBuilder;
 import io.opentelemetry.sdk.metrics.View;
+import io.opentelemetry.sdk.metrics.ViewBuilder;
+
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Customizer for OpenTelemetry metric provider configuration.
@@ -58,10 +62,24 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
 
         // Create a single view that includes workspace context attributes
         // This view will be applied to all instruments without changing their names
-        View workspaceView = View.builder()
+        String histogramBoundaries = System.getenv().getOrDefault("OTEL_BUCKET_HISTOGRAM_BOUNDARIES", "");
+
+        ViewBuilder viewBuilder = View.builder()
                 .setDescription("Metric view that includes workspace context attributes")
-                .setAttributeFilter(value -> true)
-                .build();
+                .setAttributeFilter(value -> true);
+
+        if (!histogramBoundaries.trim().isEmpty()) {
+            List<Double> bucketBoundaries = Arrays.stream(histogramBoundaries.split(","))
+                    .map(String::trim)
+                    .map(Double::valueOf)
+                    .toList();
+
+            viewBuilder.setAggregation(
+                    Aggregation.explicitBucketHistogram(bucketBoundaries)
+            );
+        }
+
+        View workspaceView = viewBuilder.build();
         
         // Register the view for all instruments to include workspace context
         // Using a selector that matches all instruments by type
