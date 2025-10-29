@@ -49,10 +49,14 @@ MESSAGES: List[Dict[str, Any]] = [
 
 def _normalize_output(output: Any) -> str:
     if isinstance(output, list):
-        return " ".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in output
-        ).strip().lower()
+        return (
+            " ".join(
+                part.get("text", "") if isinstance(part, dict) else str(part)
+                for part in output
+            )
+            .strip()
+            .lower()
+        )
     return str(output).strip().lower()
 
 
@@ -84,6 +88,11 @@ def test_evaluate_prompt_supports_multimodal_images(
             "secondary_image_url": JPEG_FOX_DATA_URL,
             "reference": "dog fox",
         },
+        {
+            "image_url": CAT_IMAGE_URL,
+            "secondary_image_url": CAT_IMAGE_URL,
+            "reference": "cat cat",
+        },
     ]
 
     dataset.insert(dataset_items)
@@ -111,6 +120,8 @@ def test_evaluate_prompt_supports_multimodal_images(
     assert results["dog"].strip() == "dog"
     assert results["fox"].strip() == "fox"
 
-    merged = results["dog fox"].split()
-    assert "dog" in merged
-    assert "fox" in merged
+    merged_multi = set(results["dog fox"].split())
+    assert {"dog", "fox"}.issubset(merged_multi)
+
+    merged_cat_cat = set(results["cat cat"].split())
+    assert merged_cat_cat == {"cat"}
