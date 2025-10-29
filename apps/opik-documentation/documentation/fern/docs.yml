@@ -172,9 +172,12 @@ navigation:
           - page: Evaluate your agent
             path: docs/evaluation/evaluate_your_llm.mdx
             slug: evaluate_your_llm
-          - page: Evaluate multi-turn conversations
-            path: docs/evaluation/evaluate_threads.mdx
-            slug: evaluate_threads
+          - page: Evaluate agent trajectories
+            path: docs/evaluation/evaluate_agent_trajectory.mdx
+            slug: evaluate_agent_trajectory
+          - page: Evaluate multi-turn agents
+            path: docs/evaluation/evaluate_multi_turn_agents.mdx
+            slug: evaluate_multi_turn_agents
           - page: Manually logging experiments
             path: docs/evaluation/log_experiments_with_rest_api.mdx
             slug: log_experiments_with_rest_api
@@ -236,6 +239,9 @@ navigation:
               - page: Best practices for evaluating agents
                 path: docs/evaluation/evaluate_agents.mdx
                 slug: evaluate_agents
+              - page: Evaluate threads
+                path: docs/evaluation/evaluate_threads.mdx
+                slug: evaluate_threads
               - page: Cookbook - Evaluate hallucination metric
                 path: docs/cookbook/evaluate_hallucination_metric.mdx
                 slug: evaluate_hallucination_metric
