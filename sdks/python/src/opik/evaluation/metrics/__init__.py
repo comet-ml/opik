@@ -1,6 +1,17 @@
+from typing import Any
+
 from .aggregated_metric import AggregatedMetric
+
+# Keep the canonical import first for the new layout while still tolerating
+# older packaging artefacts (some environments import this module before the
+# conversation package is available).  If the eager import fails we fall back
+# to the lazy getter below, letting legacy entry-points keep working.
 from .conversation.conversation_thread_metric import ConversationThreadMetric
-from .conversation import types as conversation_types
+
+try:
+    from .conversation import types as conversation_types
+except ImportError:  # pragma: no cover - runtime compatibility
+    conversation_types = None  # type: ignore
 from .heuristics.conversation.degeneration.metric import ConversationDegenerationMetric
 from .heuristics.conversation.knowledge_retention.metric import (
     KnowledgeRetentionMetric,
@@ -142,3 +153,16 @@ __all__ = [
     "ConversationThreadMetric",
     # "Factuality",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    # Provide the legacy ``opik.evaluation.metrics.conversation_types`` symbol on
+    # demand so environments pinned to the old path keep working after the
+    # conversation module refactor.
+    if name == "conversation_types":
+        from .conversation import types as conv_types
+
+        globals()["conversation_types"] = conv_types
+        return conv_types
+
+    raise AttributeError(name)

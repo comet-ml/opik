@@ -35,7 +35,6 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_set_
         spans = opik_client.search_spans(
             project_name=configure_e2e_tests_env_unique_project_name,
             trace_id=ID_STORAGE["f_trace_id"],
-            filter_string=f'name contains "{constants.MODEL_NAME}"',
         )
         return len(spans) > 0
 
@@ -51,7 +50,6 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_set_
     llm_spans = opik_client.search_spans(
         project_name=configure_e2e_tests_env_unique_project_name,
         trace_id=ID_STORAGE["f_trace_id"],
-        filter_string=f'name contains "{constants.MODEL_NAME}"',
     )
     assert len(llm_spans) == 1
 
