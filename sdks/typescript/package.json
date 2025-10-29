@@ -50,7 +50,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
     "test": "vitest run --exclude 'tests/integration/**/*.test.ts'",
-    "test:integration": "vitest run tests/integration"
+    "test:integration": "vitest run tests/integration",
+    "update:model-capabilities": "tsc --project scripts/tsconfig.update.json && node scripts/.generated/update-model-capabilities.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",
