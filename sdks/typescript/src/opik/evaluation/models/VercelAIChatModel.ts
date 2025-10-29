@@ -1,6 +1,15 @@
-import { generateText, generateObject, type LanguageModel } from "ai";
+import {
+  generateText,
+  generateObject,
+  type LanguageModel,
+  type ModelMessage,
+} from "ai";
 import type { z } from "zod";
-import { OpikBaseModel, type OpikMessage } from "./OpikBaseModel";
+import {
+  OpikBaseModel,
+  type OpikMessage,
+  type MessageContentPart,
+} from "./OpikBaseModel";
 import { ModelConfigurationError, ModelGenerationError } from "./errors";
 import { logger } from "@/utils/logger";
 import { detectProvider, type SupportedModelId } from "./providerDetection";
@@ -241,9 +250,11 @@ export class VercelAIChatModel extends OpikBaseModel {
         `Generating provider response with model ${this.modelName}, messages count: ${messages.length}`
       );
 
+      const modelMessages = convertToModelMessages(messages);
+
       const result = await this._generateText({
         model: this.model,
-        messages,
+        messages: modelMessages,
         ...options,
       });
 
@@ -260,4 +271,74 @@ export class VercelAIChatModel extends OpikBaseModel {
       );
     }
   }
+}
+
+function convertToModelMessages(messages: OpikMessage[]): ModelMessage[] {
+  return messages.map((message) => {
+    const content = convertMessageContent(message.content);
+    const common = message.providerOptions
+      ? { content, providerOptions: message.providerOptions }
+      : { content }; 
+
+    if (message.role === "system") {
+      return {
+        role: "system",
+        ...common,
+      } as unknown as ModelMessage;
+    }
+
+    if (message.role === "assistant") {
+      return {
+        role: "assistant",
+        ...common,
+      } as unknown as ModelMessage;
+    }
+
+    return {
+      role: "user",
+      ...common,
+    } as unknown as ModelMessage;
+  });
+}
+
+function convertMessageContent(
+  content: OpikMessage["content"]
+): Array<{ type: string; text?: string; image?: unknown }> {
+  if (typeof content === "string") {
+    return [{ type: "text", text: content }];
+  }
+
+  if (!Array.isArray(content)) {
+    return [{ type: "text", text: String(content ?? "") }];
+  }
+
+  return content.map((part) => convertMessagePart(part));
+}
+
+function convertMessagePart(part: MessageContentPart) {
+  if (part.type === "text") {
+    return { type: "text", text: part.text ?? "" };
+  }
+
+  const url = part.image_url?.url ?? "";
+  if (url.startsWith("data:")) {
+    const commaIndex = url.indexOf(",");
+    const header = url.substring(5, commaIndex);
+    const data = url.substring(commaIndex + 1);
+    const mimeType = header.replace(/;base64$/, "");
+
+    return {
+      type: "image",
+      image: {
+        type: "base64",
+        data,
+        mimeType,
+      },
+    };
+  }
+
+  return {
+    type: "image",
+    image: { url },
+  };
 }

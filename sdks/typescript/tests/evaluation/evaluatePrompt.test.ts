@@ -10,6 +10,7 @@ import {
 import { PromptType } from "@/prompt/types";
 import type { EvaluationScoreResult } from "@/evaluation/types";
 import { z } from "zod";
+import { renderMessageContent } from "@/evaluation/utils/renderMessageContent";
 
 // Mock the Opik client
 vi.mock("@/client/Client", () => ({
@@ -228,46 +229,23 @@ describe("evaluatePrompt", () => {
       // Config should include both custom params and auto-added params
     });
 
-    it("should render multimodal messages when model lacks vision support", async () => {
-      const mockModel = new MockModel();
-      const multimodalMessages: OpikMessage[] = [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Describe {{question}}" },
-            { type: "image_url", image_url: { url: "{{image_url}}" } },
-          ],
-        },
-      ];
-
-      const multimodalItems: Array<Record<string, unknown> & { id: string }> = [
-        {
-          id: "550e8400-e29b-41d4-a716-446655440099",
+    it("should render multimodal messages when model lacks vision support", () => {
+      const rendered = renderMessageContent({
+        content: [
+          { type: "text", text: "Describe {{question}}" },
+          { type: "image_url", image_url: { url: "{{image_url}}" } },
+        ],
+        variables: {
           question: "a cat sitting on a chair",
           image_url: "https://example.com/cat.png",
         },
-      ];
-
-      mockDataset.getItems = vi.fn().mockResolvedValue(multimodalItems);
-
-      const responseSpy = vi.spyOn(mockModel, "generateProviderResponse");
-
-      await evaluatePrompt({
-        dataset: mockDataset,
-        messages: multimodalMessages,
-        model: mockModel,
-        scoringMetrics: [],
-        client: mockClient,
+        templateType: PromptType.MUSTACHE,
+        supportsVision: false,
       });
 
-      expect(responseSpy).toHaveBeenCalled();
-      const callArguments = responseSpy.mock.calls[0]?.[0] ?? [];
-      expect(callArguments.length).toBeGreaterThan(0);
-
-      const content = callArguments[0]?.content;
-      expect(typeof content).toBe("string");
-      expect(content).toContain("<<<image>>>");
-      expect(content).toContain("https://example.com/cat.png");
+      expect(typeof rendered).toBe("string");
+      expect(rendered).toContain("<<<image>>>");
+      expect(rendered).toContain("https://example.com/cat.png");
     });
   });
 

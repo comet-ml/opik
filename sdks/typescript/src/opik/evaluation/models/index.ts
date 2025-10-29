@@ -14,6 +14,10 @@ export type {
   OpikUserMessage,
   OpikAssistantMessage,
   OpikToolMessage,
+  MessageContent,
+  MessageContentPart,
+  MessageContentTextPart,
+  MessageContentImageUrlPart,
   ProviderOptions,
 } from "./OpikBaseModel";
 export { VercelAIChatModel } from "./VercelAIChatModel";

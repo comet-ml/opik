@@ -24,7 +24,9 @@ export function renderMessageContent({
   supportsVision,
 }: RenderMessageContentOptions): MessageContent {
   if (typeof content === "string") {
-    return formatPromptTemplate(content, variables, templateType);
+    return decodeHtmlEntities(
+      formatPromptTemplate(content, variables, templateType)
+    );
   }
 
   if (!Array.isArray(content)) {
@@ -40,10 +42,8 @@ export function renderMessageContent({
 
     if (part.type === "text") {
       const textPart = part as MessageContentTextPart;
-      const renderedText = formatPromptTemplate(
-        textPart.text ?? "",
-        variables,
-        templateType
+      const renderedText = decodeHtmlEntities(
+        formatPromptTemplate(textPart.text ?? "", variables, templateType)
       );
       if (renderedText) {
         renderedParts.push({
@@ -57,10 +57,8 @@ export function renderMessageContent({
     if (part.type === "image_url") {
       const imagePart = part as MessageContentImageUrlPart;
       const urlTemplate = imagePart.image_url?.url ?? "";
-      const renderedUrl = formatPromptTemplate(
-        urlTemplate,
-        variables,
-        templateType
+      const renderedUrl = decodeHtmlEntities(
+        formatPromptTemplate(urlTemplate, variables, templateType)
       );
       if (!renderedUrl) {
         continue;
@@ -115,3 +113,13 @@ export function flattenToText(parts: MessageContentPart[]): string {
 }
 
 export { IMAGE_PLACEHOLDER_PREFIX, IMAGE_PLACEHOLDER_SUFFIX };
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&#x2F;/g, "/")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
