@@ -308,3 +308,4 @@ There are many ways to contribute to Opik:
 - Upvoting [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22enhancement%22) to show your support
 
 To learn more about how to contribute to Opik, please see our [contributing guidelines](CONTRIBUTING.md).
+\n## Troubleshooting Agentic Workflow Tracing\n\nIf you encounter errors during agentic workflow tracing (such as missing step, span, or failed LLM calls), check that:\n\n- Your OpenAI or API keys are set correctly.\n- The opik client version matches the expected agent workflow.\n- Tracing is enabled in your config.yaml or via the OPK_TRACE environment variable.\n- Retry with debug logging.\n\n*Docs improved for Hacktoberfest 2025 by [Priyanshjain10](https://github.com/Priyanshjain10)*
