@@ -134,12 +134,12 @@ get_system_info() {
 get_docker_compose_cmd() {
   # Determine which Docker Compose command to use
   local compose_cmd
-  if docker compose version >/dev/null 2>&1; then
+  if command -v docker >/dev/null 2>&1 && docker compose --help >/dev/null 2>&1; then
     compose_cmd="docker compose"
   elif command -v docker-compose >/dev/null 2>&1; then
     compose_cmd="docker-compose"
   else
-    echo "Error: Neither 'docker compose' nor 'docker-compose' is available" >&2
+    echo "Error: Neither 'docker compose' nor 'docker-compose' is available or functional" >&2
     exit 1
   fi
 
