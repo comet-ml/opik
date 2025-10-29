@@ -10,6 +10,7 @@ class ChatMessageDict(TypedDict):
     role: str
     content: ContentType
 
+
 _ROLE_TO_MESSAGE_CLASS: Mapping[str, str] = {
     "system": "SystemMessage",
     "user": "HumanMessage",
