@@ -116,10 +116,10 @@ export { IMAGE_PLACEHOLDER_PREFIX, IMAGE_PLACEHOLDER_SUFFIX };
 
 function decodeHtmlEntities(value: string): string {
   return value
+    .replace(/&amp;/g, "&")
     .replace(/&#x2F;/g, "/")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&");
+    .replace(/&#39;/g, "'");
 }
