@@ -14,7 +14,10 @@ import {
 } from "@/store/PlaygroundStore";
 import useProjectByName from "@/api/projects/useProjectByName";
 import useRulesList from "@/api/automations/useRulesList";
+import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
 import MetricSelector from "./MetricSelector";
+import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
+import { useQueryClient } from "@tanstack/react-query";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
@@ -48,22 +51,41 @@ const PlaygroundOutputActions = ({
   loadingDatasetItems,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
+  const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
+  const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
+    string | undefined
+  >(undefined);
 
   const promptMap = usePromptMap();
   const promptCount = usePromptCount();
   const resetOutputMap = useResetOutputMap();
   const selectedRuleIds = useSelectedRuleIds();
   const setSelectedRuleIds = useSetSelectedRuleIds();
+  const queryClient = useQueryClient();
+  const createProjectMutation = useProjectCreateMutation();
 
   // Fetch playground project - always fetch to show metric selector
-  const { data: playgroundProject } = useProjectByName(
+  const {
+    data: playgroundProject,
+    isError: isProjectError,
+    error: projectError,
+    isLoading: isLoadingProject,
+  } = useProjectByName(
     {
       projectName: "playground",
     },
     {
       enabled: !!workspaceName,
+      retry: false,
     },
   );
+
+  // Check if error is a 404 (project not found)
+  const isProjectNotFound =
+    isProjectError &&
+    projectError &&
+    "response" in projectError &&
+    projectError.response?.status === 404;
 
   // Fetch automation rules for playground project - always fetch to show metric selector
   const { data: rulesData } = useRulesList(
@@ -130,6 +152,47 @@ const PlaygroundOutputActions = ({
     },
     [onChangeDatasetId, resetOutputMap, stopAll, datasetId],
   );
+
+  const handleCreateRuleClick = useCallback(async () => {
+    try {
+      let projectId = playgroundProject?.id;
+
+      // If project is still loading, wait a bit (shouldn't normally happen, but just in case)
+      if (isLoadingProject) {
+        // Wait a moment and try to get the project again
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        projectId = playgroundProject?.id;
+      }
+
+      // If project doesn't exist (404), create it
+      if (!projectId && isProjectNotFound) {
+        const result = await createProjectMutation.mutateAsync({
+          project: { name: "playground" },
+        });
+        projectId = result.id;
+
+        // Refetch the project query to get the updated project data
+        await queryClient.refetchQueries({
+          queryKey: ["project", { projectName: "playground" }],
+        });
+      }
+
+      // Set the project ID for the dialog and open it
+      if (projectId || playgroundProject?.id) {
+        setRuleDialogProjectId(projectId || playgroundProject?.id);
+        setIsRuleDialogOpen(true);
+      }
+    } catch (error) {
+      // Error handling is done by the mutation hook (toast notification)
+      console.error("Failed to create playground project:", error);
+    }
+  }, [
+    playgroundProject?.id,
+    isProjectNotFound,
+    isLoadingProject,
+    createProjectMutation,
+    queryClient,
+  ]);
 
   const renderActionButton = () => {
     if (isRunning) {
@@ -247,6 +310,24 @@ const PlaygroundOutputActions = ({
     );
   };
 
+  // Set default to "all selected" when dataset is selected and rules are available
+  useEffect(() => {
+    if (datasetId && rules.length > 0) {
+      // Ensure default is "all selected" (null)
+      // null = all selected, [] = none selected, [id1, id2] = specific rules selected
+      // If selectedRuleIds is an empty array, change it to null (all selected)
+      // If it's already null, it stays null (all selected by default)
+      if (selectedRuleIds && selectedRuleIds.length === 0) {
+        setSelectedRuleIds(null);
+      }
+      // Note: If selectedRuleIds is null or has specific IDs, we don't change it
+      // to preserve user selections
+    } else if (!datasetId) {
+      // Reset to null when dataset is deselected
+      setSelectedRuleIds(null);
+    }
+  }, [datasetId, rules.length, selectedRuleIds, setSelectedRuleIds]);
+
   useEffect(() => {
     // stop streaming whenever a user leaves a page
     return () => stopAll();
@@ -324,6 +405,7 @@ const PlaygroundOutputActions = ({
           selectedRuleIds={selectedRuleIds}
           onSelectionChange={setSelectedRuleIds}
           datasetId={datasetId}
+          onCreateRuleClick={handleCreateRuleClick}
         />
       </div>
       <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
@@ -333,6 +415,17 @@ const PlaygroundOutputActions = ({
         <Separator orientation="vertical" className="mx-2 h-4" />
       </div>
       {renderActionButton()}
+      <AddEditRuleDialog
+        open={isRuleDialogOpen}
+        setOpen={(open) => {
+          setIsRuleDialogOpen(open);
+          if (!open) {
+            // Reset project ID when dialog closes
+            setRuleDialogProjectId(undefined);
+          }
+        }}
+        projectId={ruleDialogProjectId || playgroundProject?.id}
+      />
     </div>
   );
 };

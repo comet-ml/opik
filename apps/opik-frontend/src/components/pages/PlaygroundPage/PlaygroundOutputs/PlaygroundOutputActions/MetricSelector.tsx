@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ interface MetricSelectorProps {
   selectedRuleIds: string[] | null;
   onSelectionChange: (ruleIds: string[] | null) => void;
   datasetId: string | null;
+  onCreateRuleClick?: () => void;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -26,6 +27,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   selectedRuleIds,
   onSelectionChange,
   datasetId,
+  onCreateRuleClick,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -75,11 +77,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   }, [onSelectionChange, isAllSelected]);
 
   const openChangeHandler = useCallback((newOpen: boolean) => {
+    // Prevent opening if disabled (no dataset selected)
+    if (newOpen && !datasetId) {
+      return;
+    }
     setOpen(newOpen);
     if (!newOpen) {
       setSearch("");
     }
-  }, []);
+  }, [datasetId]);
 
   const selectedRules = useMemo(() => {
     if (!selectedRuleIds) {
@@ -123,7 +129,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   );
 
   const hasNoRules = rules.length === 0;
-  const isDisabled = hasNoRules || !datasetId;
+  const isDisabled = !datasetId;
+
+  // Close popover when dataset is deselected
+  useEffect(() => {
+    if (!datasetId && open) {
+      setOpen(false);
+      setSearch("");
+    }
+  }, [datasetId, open]);
 
   const buttonElement = (
     <Button
@@ -139,10 +153,10 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   );
 
   return (
-    <Popover onOpenChange={openChangeHandler} open={open} modal>
+    <Popover onOpenChange={openChangeHandler} open={open && !isDisabled} modal>
       {tooltipContent ? (
         <TooltipWrapper content={tooltipContent}>
-          <PopoverTrigger asChild={!isDisabled}>
+          <PopoverTrigger asChild={!isDisabled} disabled={isDisabled}>
             {isDisabled ? (
               <span className="inline-block w-[280px]">{buttonElement}</span>
             ) : (
@@ -151,7 +165,9 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
           </PopoverTrigger>
         </TooltipWrapper>
       ) : (
-        <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
+        <PopoverTrigger asChild disabled={isDisabled}>
+          {buttonElement}
+        </PopoverTrigger>
       )}
       <PopoverContent
         align="end"
@@ -173,7 +189,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         )}
         <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
           {hasNoRules ? (
-            <div className="flex h-20 items-center justify-center text-center text-muted-foreground">
+            <div className="flex h-20 flex-col items-center justify-center text-center text-muted-foreground">
               <div className="px-4">
                 <div className="comet-body-s">No metrics configured</div>
                 <div className="comet-body-xs mt-1">
@@ -206,20 +222,40 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
           )}
         </div>
 
-        {!hasNoRules && filteredRules.length > 0 && (
-          <div className="sticky inset-x-0 bottom-0">
-            <Separator className="my-1" />
-            <div
-              className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
-              onClick={handleSelectAll}
-            >
-              <Checkbox checked={isAllSelected} className="shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="comet-body-s truncate">Select all</div>
+        <div className="sticky inset-x-0 bottom-0">
+          {!hasNoRules && filteredRules.length > 0 && (
+            <>
+              <Separator className="my-1" />
+              <div
+                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                onClick={handleSelectAll}
+              >
+                <Checkbox checked={isAllSelected} className="shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="comet-body-s truncate">Select all</div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            </>
+          )}
+          {onCreateRuleClick && (
+            <>
+              <Separator className="my-1" />
+              <div
+                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                onClick={() => {
+                  setOpen(false);
+                  onCreateRuleClick();
+                }}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="comet-body-s truncate text-primary">
+                    Create a new rule
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   );
