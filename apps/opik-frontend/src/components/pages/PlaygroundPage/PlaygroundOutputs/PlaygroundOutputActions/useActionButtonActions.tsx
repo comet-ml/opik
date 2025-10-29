@@ -45,7 +45,9 @@ const useActionButtonActions = ({
 
   const [isRunning, setIsRunning] = useState(false);
   const [isToStop, setIsToStop] = useState(false);
-  const [createdExperiments, setCreatedExperiments] = useState<LogExperiment[]>([]);
+  const [createdExperiments, setCreatedExperiments] = useState<LogExperiment[]>(
+    [],
+  );
   const promptIds = usePromptIds();
   const selectedRuleIds = useSelectedRuleIds();
   const abortControllersRef = useRef(new Map<string, AbortController>());
@@ -71,12 +73,9 @@ const useActionButtonActions = ({
     abortControllersRef.current.clear();
   }, []);
 
-  const storeExperiments = useCallback(
-    (experiments: LogExperiment[]) => {
-      setCreatedExperiments(experiments);
-    },
-    [],
-  );
+  const storeExperiments = useCallback((experiments: LogExperiment[]) => {
+    setCreatedExperiments(experiments);
+  }, []);
 
   const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
     return {

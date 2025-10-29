@@ -67,33 +67,41 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [selectedRuleIds, rules, onSelectionChange],
   );
 
-  const handleSelectAll = useCallback((checked?: boolean | "indeterminate") => {
-    // Toggle between all selected (null) and none selected ([])
-    if (checked !== undefined && checked !== "indeterminate") {
-      // Called from checkbox onCheckedChange - checked is the NEW desired state
-      // true = check = select all (null), false = uncheck = deselect all ([])
-      onSelectionChange(checked ? null : []);
-    } else {
-      // Called from div onClick or indeterminate state - toggle based on current state
-      const allSelected = 
-        selectedRuleIds === null || 
-        (Array.isArray(selectedRuleIds) && selectedRuleIds.length === rules.length && rules.length > 0);
-      
-      // Toggle: if all selected, deselect; if not all selected, select all
-      onSelectionChange(allSelected ? [] : null);
-    }
-  }, [onSelectionChange, selectedRuleIds, rules.length]);
+  const handleSelectAll = useCallback(
+    (checked?: boolean | "indeterminate") => {
+      // Toggle between all selected (null) and none selected ([])
+      if (checked !== undefined && checked !== "indeterminate") {
+        // Called from checkbox onCheckedChange - checked is the NEW desired state
+        // true = check = select all (null), false = uncheck = deselect all ([])
+        onSelectionChange(checked ? null : []);
+      } else {
+        // Called from div onClick or indeterminate state - toggle based on current state
+        const allSelected =
+          selectedRuleIds === null ||
+          (Array.isArray(selectedRuleIds) &&
+            selectedRuleIds.length === rules.length &&
+            rules.length > 0);
 
-  const openChangeHandler = useCallback((newOpen: boolean) => {
-    // Prevent opening if disabled (no dataset selected)
-    if (newOpen && !datasetId) {
-      return;
-    }
-    setOpen(newOpen);
-    if (!newOpen) {
-      setSearch("");
-    }
-  }, [datasetId]);
+        // Toggle: if all selected, deselect; if not all selected, select all
+        onSelectionChange(allSelected ? [] : null);
+      }
+    },
+    [onSelectionChange, selectedRuleIds, rules.length],
+  );
+
+  const openChangeHandler = useCallback(
+    (newOpen: boolean) => {
+      // Prevent opening if disabled (no dataset selected)
+      if (newOpen && !datasetId) {
+        return;
+      }
+      setOpen(newOpen);
+      if (!newOpen) {
+        setSearch("");
+      }
+    },
+    [datasetId],
+  );
 
   const selectedRules = useMemo(() => {
     if (!selectedRuleIds) {
@@ -238,8 +246,8 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                 className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
                 onClick={() => handleSelectAll()}
               >
-                <Checkbox 
-                  checked={isAllSelected} 
+                <Checkbox
+                  checked={isAllSelected}
                   className="shrink-0"
                   onCheckedChange={(checked) => handleSelectAll(checked)}
                 />

@@ -88,6 +88,7 @@ const PlaygroundOutputActions = ({
     isProjectError &&
     projectError &&
     "response" in projectError &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (projectError as any).response?.status === 404;
 
   // Fetch automation rules for playground project - always fetch to show metric selector
@@ -162,10 +163,6 @@ const PlaygroundOutputActions = ({
     [onChangeDatasetId, resetOutputMap, stopAll, datasetId],
   );
 
-  const handleCreateDatasetClick = useCallback(() => {
-    setIsDatasetDialogOpen(true);
-  }, []);
-
   const handleDatasetCreated = useCallback(
     (newDataset: Dataset) => {
       // Invalidate datasets query to refresh the list
@@ -189,6 +186,7 @@ const PlaygroundOutputActions = ({
       if (isLoadingProject) {
         // Wait a moment and try to get the project again
         await new Promise((resolve) => setTimeout(resolve, 500));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         projectId = (playgroundProject as any)?.id;
       }
 
@@ -215,7 +213,7 @@ const PlaygroundOutputActions = ({
       console.error("Failed to create playground project:", error);
     }
   }, [
-    playgroundProject?.id,
+    playgroundProject,
     isProjectNotFound,
     isLoadingProject,
     createProjectMutation,
@@ -378,106 +376,106 @@ const PlaygroundOutputActions = ({
   return (
     <>
       <div className="sticky right-0 ml-auto flex h-0 gap-2">
-      {createdExperiments.length > 0 && (
-        <TooltipWrapper
-          content={
-            createdExperiments.length === 1
-              ? "Your run was stored in this experiment. Explore your results to find insights."
-              : "Your run was stored in experiments. Explore comparison results to get insights."
-          }
-        >
-          <Button
-            size="sm"
-            className="mt-2.5"
-            onClick={navigateToExperiments}
-            variant="outline"
+        {createdExperiments.length > 0 && (
+          <TooltipWrapper
+            content={
+              createdExperiments.length === 1
+                ? "Your run was stored in this experiment. Explore your results to find insights."
+                : "Your run was stored in experiments. Explore comparison results to get insights."
+            }
           >
-            <FlaskConical className="mr-2 size-4" />
-            {createdExperiments.length === 1
-              ? "Explore experiment"
-              : "Compare experiments"}
-          </Button>
-        </TooltipWrapper>
-      )}
-      <div className="mt-2.5 flex">
+            <Button
+              size="sm"
+              className="mt-2.5"
+              onClick={navigateToExperiments}
+              variant="outline"
+            >
+              <FlaskConical className="mr-2 size-4" />
+              {createdExperiments.length === 1
+                ? "Explore experiment"
+                : "Compare experiments"}
+            </Button>
+          </TooltipWrapper>
+        )}
+        <div className="mt-2.5 flex">
           <LoadableSelectBox
-          options={datasetOptions}
-          value={datasetId || ""}
-          placeholder={
-            <div className="flex w-full items-center text-light-slate">
-              <Database className="mr-2 size-4" />
-              <span className="truncate font-normal">Test over dataset</span>
-            </div>
-          }
-          onChange={handleChangeDatasetId}
-          open={isDatasetDropdownOpen}
-          onOpenChange={setIsDatasetDropdownOpen}
-          buttonSize="sm"
-          onLoadMore={
-            (datasetTotal || 0) > DEFAULT_LOADED_DATASETS && !isLoadedMore
-              ? loadMoreHandler
-              : undefined
-          }
-          isLoading={isLoadingDatasets}
-          optionsCount={DEFAULT_LOADED_DATASETS}
-          buttonClassName={cn("w-[310px]", {
-            "rounded-r-none": !!datasetId,
-          })}
-          renderTitle={(option) => {
-            return (
-              <div className="flex w-full items-center text-foreground">
+            options={datasetOptions}
+            value={datasetId || ""}
+            placeholder={
+              <div className="flex w-full items-center text-light-slate">
                 <Database className="mr-2 size-4" />
-                <span className="max-w-[90%] truncate">{option.label}</span>
+                <span className="truncate font-normal">Test over dataset</span>
               </div>
-            );
-          }}
-          actionPanel={
-            <div className="sticky inset-x-0 bottom-0">
-              <Separator className="my-1" />
-              <div
-                className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
-                onClick={() => {
-                  setIsDatasetDropdownOpen(false);
-                  setIsDatasetDialogOpen(true);
-                }}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="comet-body-s truncate text-primary">
-                    Create a new dataset
+            }
+            onChange={handleChangeDatasetId}
+            open={isDatasetDropdownOpen}
+            onOpenChange={setIsDatasetDropdownOpen}
+            buttonSize="sm"
+            onLoadMore={
+              (datasetTotal || 0) > DEFAULT_LOADED_DATASETS && !isLoadedMore
+                ? loadMoreHandler
+                : undefined
+            }
+            isLoading={isLoadingDatasets}
+            optionsCount={DEFAULT_LOADED_DATASETS}
+            buttonClassName={cn("w-[310px]", {
+              "rounded-r-none": !!datasetId,
+            })}
+            renderTitle={(option) => {
+              return (
+                <div className="flex w-full items-center text-foreground">
+                  <Database className="mr-2 size-4" />
+                  <span className="max-w-[90%] truncate">{option.label}</span>
+                </div>
+              );
+            }}
+            actionPanel={
+              <div className="sticky inset-x-0 bottom-0">
+                <Separator className="my-1" />
+                <div
+                  className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                  onClick={() => {
+                    setIsDatasetDropdownOpen(false);
+                    setIsDatasetDialogOpen(true);
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="comet-body-s truncate text-primary">
+                      Create a new dataset
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          }
-        />
+            }
+          />
 
-        {datasetId && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="rounded-l-none border-l-0 "
-            onClick={() => handleChangeDatasetId(null)}
-          >
-            <X className="text-light-slate" />
-          </Button>
-        )}
-      </div>
-      <div className="mt-2.5 flex">
-        <MetricSelector
-          rules={rules}
-          selectedRuleIds={selectedRuleIds}
-          onSelectionChange={setSelectedRuleIds}
-          datasetId={datasetId}
-          onCreateRuleClick={handleCreateRuleClick}
-        />
-      </div>
-      <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
-        <ExplainerIcon
-          {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
-        />
-        <Separator orientation="vertical" className="mx-2 h-4" />
-      </div>
-      {renderActionButton()}
+          {datasetId && (
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="rounded-l-none border-l-0 "
+              onClick={() => handleChangeDatasetId(null)}
+            >
+              <X className="text-light-slate" />
+            </Button>
+          )}
+        </div>
+        <div className="mt-2.5 flex">
+          <MetricSelector
+            rules={rules}
+            selectedRuleIds={selectedRuleIds}
+            onSelectionChange={setSelectedRuleIds}
+            datasetId={datasetId}
+            onCreateRuleClick={handleCreateRuleClick}
+          />
+        </div>
+        <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
+          />
+          <Separator orientation="vertical" className="mx-2 h-4" />
+        </div>
+        {renderActionButton()}
       </div>
       <AddEditRuleDialog
         open={isRuleDialogOpen}
