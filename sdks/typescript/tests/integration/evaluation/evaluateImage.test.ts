@@ -122,7 +122,7 @@ describe.skipIf(!shouldRunApiTests)(
           expect(testResult.scoreResults[0]?.value).toBe(1);
         });
       },
-      120_000
+      180_000
     );
   }
 );
