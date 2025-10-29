@@ -22,9 +22,30 @@ export type ProviderOptions = Record<string, Record<string, JSONValue>>;
  * to increase the resilience against prompt injection attacks,
  * and because not all providers support several system messages.
  */
+export interface MessageContentImageUrl {
+  url: string;
+  detail?: string;
+}
+
+export interface MessageContentTextPart {
+  type: "text";
+  text: string;
+}
+
+export interface MessageContentImageUrlPart {
+  type: "image_url";
+  image_url: MessageContentImageUrl;
+}
+
+export type MessageContentPart =
+  | MessageContentTextPart
+  | MessageContentImageUrlPart;
+
+export type MessageContent = string | MessageContentPart[];
+
 export interface OpikSystemMessage {
   role: "system";
-  content: string;
+  content: MessageContent;
   providerOptions?: ProviderOptions;
 }
 
@@ -33,7 +54,7 @@ export interface OpikSystemMessage {
  */
 export interface OpikUserMessage {
   role: "user";
-  content: string;
+  content: MessageContent;
   providerOptions?: ProviderOptions;
 }
 
@@ -42,7 +63,7 @@ export interface OpikUserMessage {
  */
 export interface OpikAssistantMessage {
   role: "assistant";
-  content: string;
+  content: MessageContent;
   providerOptions?: ProviderOptions;
 }
 
@@ -51,7 +72,7 @@ export interface OpikAssistantMessage {
  */
 export interface OpikToolMessage {
   role: "tool";
-  content: string;
+  content: MessageContent;
   providerOptions?: ProviderOptions;
 }
 
