@@ -1,14 +1,37 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pytest
 
-from opik.evaluation.models import MessageContentRenderer
+import opik.api_objects.prompt.chat_prompt_template as chat_prompt_template
+from opik.api_objects.prompt.chat_prompt_template import (
+    ChatContentRendererRegistry,
+    ChatPromptTemplate,
+)
 
 
-class TestRenderMessageContent:
+def _render_content(
+    content: Any,
+    *,
+    variables: Optional[Dict[str, Any]] = None,
+    supported_modalities: Optional[Dict[str, bool]] = None,
+    registry: Optional[ChatContentRendererRegistry] = None,
+) -> Any:
+    template = ChatPromptTemplate(
+        messages=[{"role": "user", "content": content}],
+        registry=registry,
+    )
+    rendered = template.format(
+        variables=variables or {},
+        supported_modalities=supported_modalities,
+    )
+    assert len(rendered) == 1
+    return rendered[0]["content"]
+
+
+class TestChatPromptTemplate:
     def test_renders_plain_text(self) -> None:
-        rendered = MessageContentRenderer.render(
-            content="Hello {{name}}",
+        rendered = _render_content(
+            "Hello {{name}}",
             variables={"name": "Opik"},
             supported_modalities={"vision": False},
         )
@@ -20,8 +43,8 @@ class TestRenderMessageContent:
             {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
         ]
 
-        rendered = MessageContentRenderer.render(
-            content=content,
+        rendered = _render_content(
+            content,
             variables={"image_url": "https://example.com/cat.jpg"},
             supported_modalities={"vision": True},
         )
@@ -38,8 +61,8 @@ class TestRenderMessageContent:
             }
         ]
 
-        rendered = MessageContentRenderer.render(
-            content=content,
+        rendered = _render_content(
+            content,
             variables={},
             supported_modalities={"vision": True},
         )
@@ -57,8 +80,8 @@ class TestRenderMessageContent:
             {"type": "image_url", "image_url": {"url": data_url}},
         ]
 
-        rendered = MessageContentRenderer.render(
-            content=content,
+        rendered = _render_content(
+            content,
             variables={},
             supported_modalities={"vision": True},
         )
@@ -72,8 +95,8 @@ class TestRenderMessageContent:
             {"type": "text", "text": "Second"},
         ]
 
-        rendered = MessageContentRenderer.render(
-            content=content,
+        rendered = _render_content(
+            content,
             variables={},
             supported_modalities={"vision": False},
         )
@@ -87,46 +110,57 @@ class TestRenderMessageContent:
     def test_skips_invalid_parts(self) -> None:
         content = [{"type": "text", "text": "ok"}, "bad-part", None]
 
-        rendered = MessageContentRenderer.render(
-            content=content,
+        rendered = _render_content(
+            content,
             variables={},
             supported_modalities={"vision": True},
         )
 
         assert rendered == [{"type": "text", "text": "ok"}]
 
-    def test_custom_part_registration_allows_future_modalities(self) -> None:
-        custom_part = {
-            "type": "custom_media",
-            "custom_media": {"data": "AAA=", "format": "binary"},
-        }
+    def test_custom_part_registration_allows_new_parts(self) -> None:
+        registry = ChatContentRendererRegistry()
+        registry.register_part_renderer("text", chat_prompt_template.render_text_part)
+        registry.register_part_renderer(
+            "image_url",
+            chat_prompt_template.render_image_url_part,
+            modality="vision",
+            placeholder=("<<<image>>>", "<<</image>>>"),
+        )
 
-        def _render_custom(
-            part: Dict[str, Any], _variables: Dict[str, Any], _template_type: str
+        custom_part = {"type": "thumbnail", "image_url": {"url": "{{thumb_url}}"}}
+
+        def _render_thumbnail(
+            part: Dict[str, Any], variables: Dict[str, Any], template_type: Any
         ) -> Dict[str, Any]:
-            return part
+            rendered = chat_prompt_template.render_image_url_part(
+                part, variables, template_type
+            )
+            assert rendered is not None
+            return {"type": "thumbnail", "image_url": rendered["image_url"]}
 
-        MessageContentRenderer.register_part_renderer(
-            "custom_media",
-            _render_custom,
-            modality="custom",
-            placeholder=("<<<custom>>>", "<<</custom>>>"),
+        registry.register_part_renderer(
+            "thumbnail",
+            _render_thumbnail,
+            modality="vision",
         )
 
-        rendered = MessageContentRenderer.render(
-            content=[custom_part],
-            variables={},
-            supported_modalities={"vision": True, "custom": False},
+        rendered = _render_content(
+            [custom_part],
+            variables={"thumb_url": "https://example.com/thumb.png"},
+            supported_modalities={"vision": True},
+            registry=registry,
         )
 
-        assert isinstance(rendered, str)
-        assert "<<<custom>>>" in rendered
+        assert rendered[0]["type"] == "thumbnail"
+        assert rendered[0]["image_url"]["url"] == "https://example.com/thumb.png"
 
-        rendered_with_custom = MessageContentRenderer.render(
-            content=[custom_part],
-            variables={},
-            supported_modalities={"vision": True, "custom": True},
+        flattened = _render_content(
+            [custom_part],
+            variables={"thumb_url": "https://example.com/thumb.png"},
+            supported_modalities={"vision": False},
+            registry=registry,
         )
 
-        assert isinstance(rendered_with_custom, list)
-        assert rendered_with_custom[0]["type"] == "custom_media"
+        assert isinstance(flattened, str)
+        assert "thumbnail" in flattened

@@ -1,14 +1,23 @@
 from .base_model import OpikBaseModel
 from .litellm.litellm_chat_model import LiteLLMChatModel
 from .langchain.langchain_chat_model import LangchainChatModel
-from .message_renderer import MessageContent, MessageContentRenderer
-from .model_capabilities import ModelCapabilities
+from .model_capabilities import (
+    MODEL_CAPABILITIES_REGISTRY,
+    ModelCapabilities,
+    ModelCapabilitiesRegistry,
+)
+from opik.api_objects.prompt.chat_prompt_template import (
+    ChatPromptTemplate,
+    MessageContent,
+)
 
 __all__ = [
     "OpikBaseModel",
     "LiteLLMChatModel",
     "LangchainChatModel",
-    "MessageContent",
-    "MessageContentRenderer",
     "ModelCapabilities",
+    "ModelCapabilitiesRegistry",
+    "MODEL_CAPABILITIES_REGISTRY",
+    "ChatPromptTemplate",
+    "MessageContent",
 ]

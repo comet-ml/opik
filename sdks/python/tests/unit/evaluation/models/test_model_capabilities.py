@@ -12,3 +12,7 @@ def test_custom_capability_registration() -> None:
 
     assert ModelCapabilities.supports("custom", "custom-model") is True
     assert ModelCapabilities.supports("custom", "text-model") is False
+
+
+def test_supports_vision_handles_provider_prefix() -> None:
+    assert ModelCapabilities.supports_vision("anthropic/claude-3-opus") is True

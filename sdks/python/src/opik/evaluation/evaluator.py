@@ -16,10 +16,10 @@ from . import (
 )
 from .metrics import base_metric
 from .models import (
+    ChatPromptTemplate,
+    ModelCapabilities,
     base_model,
     models_factory,
-    MessageContentRenderer,
-    ModelCapabilities,
 )
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
@@ -304,22 +304,15 @@ def _build_prompt_evaluation_task(
     model_supports_vision = ModelCapabilities.supports_vision(
         getattr(model, "model_name", None)
     )
+    chat_prompt_template = ChatPromptTemplate(messages=messages)
 
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
-        processed_messages = []
-        for message in messages:
-            rendered_content = MessageContentRenderer.render(
-                content=message["content"],
-                variables=prompt_variables,
-                supported_modalities={"vision": model_supports_vision},
-                template_type=prompt_variables.get("type", "mustache"),
-            )
-            processed_messages.append(
-                {
-                    "role": message["role"],
-                    "content": rendered_content,
-                }
-            )
+        template_type_override = prompt_variables.get("type")
+        processed_messages = chat_prompt_template.format(
+            variables=prompt_variables,
+            supported_modalities={"vision": model_supports_vision},
+            template_type=template_type_override,
+        )
 
         with base_model.get_provider_response(
             model_provider=model, messages=processed_messages
