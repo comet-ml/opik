@@ -88,7 +88,7 @@ const PlaygroundOutputActions = ({
     isProjectError &&
     projectError &&
     "response" in projectError &&
-    projectError.response?.status === 404;
+    (projectError as any).response?.status === 404;
 
   // Fetch automation rules for playground project - always fetch to show metric selector
   const { data: rulesData } = useRulesList(
@@ -183,13 +183,13 @@ const PlaygroundOutputActions = ({
 
   const handleCreateRuleClick = useCallback(async () => {
     try {
-      let projectId = playgroundProject?.id;
+      let projectId: string | undefined = playgroundProject?.id;
 
       // If project is still loading, wait a bit (shouldn't normally happen, but just in case)
       if (isLoadingProject) {
         // Wait a moment and try to get the project again
         await new Promise((resolve) => setTimeout(resolve, 500));
-        projectId = playgroundProject?.id;
+        projectId = (playgroundProject as any)?.id;
       }
 
       // If project doesn't exist (404), create it
