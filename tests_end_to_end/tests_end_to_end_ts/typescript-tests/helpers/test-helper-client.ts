@@ -50,6 +50,29 @@ export interface ThreadConfig {
   outputs: string[];
 }
 
+export interface FeedbackDefinition {
+  id: string;
+  name: string;
+  type: 'categorical' | 'numerical';
+  details?: {
+    categories?: Record<string, number>;
+    min?: number;
+    max?: number;
+  };
+}
+
+export interface Experiment {
+  id: string;
+  name: string;
+  dataset_name?: string;
+}
+
+export interface Prompt {
+  name: string;
+  prompt: string;
+  commit?: string;
+}
+
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -475,6 +498,155 @@ export class TestHelperClient {
       return response.data.thread_configs;
     } catch (error) {
       throw this.handleError(error, 'Failed to create threads via client');
+    }
+  }
+
+  // Feedback definition methods
+  async createFeedbackDefinition(
+    name: string,
+    type: 'categorical' | 'numerical',
+    options?: { categories?: Record<string, number>; min?: number; max?: number }
+  ): Promise<FeedbackDefinition> {
+    try {
+      const response = await this.client.post('/api/feedback-scores/create-feedback-definition', {
+        name,
+        type,
+        ...options,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create feedback definition');
+    }
+  }
+
+  async getFeedbackDefinition(name: string): Promise<FeedbackDefinition> {
+    try {
+      const response = await this.client.get('/api/feedback-scores/get-feedback-definition', {
+        params: { name },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to get feedback definition');
+    }
+  }
+
+  async updateFeedbackDefinition(
+    id: string,
+    name: string,
+    options?: {
+      type?: 'categorical' | 'numerical';
+      categories?: Record<string, number>;
+      min?: number;
+      max?: number;
+    }
+  ): Promise<FeedbackDefinition> {
+    try {
+      const response = await this.client.post('/api/feedback-scores/update-feedback-definition', {
+        id,
+        name,
+        ...options,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to update feedback definition');
+    }
+  }
+
+  async deleteFeedbackDefinition(id: string): Promise<void> {
+    try {
+      await this.client.delete('/api/feedback-scores/delete-feedback-definition', {
+        data: { id },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete feedback definition');
+    }
+  }
+
+  // Experiment methods
+  async createExperiment(experimentName: string, datasetName: string): Promise<Experiment> {
+    try {
+      const response = await this.client.post('/api/experiments/create-experiment', {
+        experiment_name: experimentName,
+        dataset_name: datasetName,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create experiment');
+    }
+  }
+
+  async getExperiment(experimentId: string): Promise<Experiment> {
+    try {
+      const response = await this.client.get('/api/experiments/get-experiment', {
+        params: { experiment_id: experimentId },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to get experiment');
+    }
+  }
+
+  async deleteExperiment(experimentId: string): Promise<void> {
+    try {
+      await this.client.delete('/api/experiments/delete-experiment', {
+        data: { experiment_id: experimentId },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete experiment');
+    }
+  }
+
+  // Prompt methods
+  async createPrompt(name: string, prompt: string): Promise<Prompt> {
+    try {
+      const response = await this.client.post('/api/prompts/create-prompt', {
+        name,
+        prompt,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create prompt');
+    }
+  }
+
+  async getPrompt(name: string, commit?: string): Promise<Prompt> {
+    try {
+      const response = await this.client.get('/api/prompts/get-prompt', {
+        params: { name, ...(commit ? { commit } : {}) },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to get prompt');
+    }
+  }
+
+  async updatePrompt(name: string, prompt: string): Promise<Prompt> {
+    try {
+      const response = await this.client.post('/api/prompts/update-prompt', {
+        name,
+        prompt,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to update prompt');
+    }
+  }
+
+  async deletePrompt(name: string): Promise<void> {
+    try {
+      await this.client.delete('/api/prompts/delete-prompt', {
+        data: { name },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete prompt');
     }
   }
 
