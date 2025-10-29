@@ -7,6 +7,7 @@ from ...e2e import verifiers
 from ...testlib import ANY_DICT, ANY_STRING
 
 from opik.evaluation.models.litellm import litellm_chat_model
+from opik.evaluation.models.litellm import opik_monitor
 from . import constants
 
 
@@ -87,9 +88,17 @@ def test_litellm_chat_model__async_generation_is_tracked(
     async def f(input):
         ID_STORAGE["f_span_id"] = opik_context.get_current_span_data().id
         ID_STORAGE["f_trace_id"] = opik_context.get_current_trace_data().id
-        return await tested.agenerate_string(input)
+        result = await tested.agenerate_string(input)
+
+        logger = opik_monitor._callback_instance()
+        flush = getattr(logger, "flush_queue", None)
+        if flush is not None:
+            await flush()
+
+        return result
 
     asyncio.run(f("Why is tracking and evaluation of LLMs important?"))
+    opik.flush_tracker()
 
     def wait_condition_checker():
         spans = opik_client.search_spans(
