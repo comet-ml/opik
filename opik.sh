@@ -143,7 +143,7 @@ get_docker_compose_cmd() {
     exit 1
   fi
 
-  local cmd="$compose_cmd -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  local cmd="${compose_cmd} -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
