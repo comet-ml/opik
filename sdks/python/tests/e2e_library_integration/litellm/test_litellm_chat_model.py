@@ -16,6 +16,8 @@ def test_litellm_chat_model__call_made_inside_another_span__project_name_is_set_
     opik_client: Opik,
     configure_e2e_tests_env_unique_project_name: str,
 ):
+    opik_monitor._callback_instance.cache_clear()
+
     tested = litellm_chat_model.LiteLLMChatModel(
         model_name=constants.MODEL_NAME,
     )
@@ -79,6 +81,8 @@ def test_litellm_chat_model__async_generation_is_tracked(
     opik_client: Opik,
     configure_e2e_tests_env_unique_project_name: str,
 ):
+    opik_monitor._callback_instance.cache_clear()
+
     tested = litellm_chat_model.LiteLLMChatModel(
         model_name=constants.MODEL_NAME,
     )
