@@ -12,7 +12,7 @@ def get_opik_client():
     return opik.Opik()
 
 
-@datasets_bp.route("/api/datasets/create", methods=["POST"])
+@datasets_bp.route("/create", methods=["POST"])
 def create_dataset():
     data = request.json
     dataset_name = data.get("name")
@@ -23,7 +23,7 @@ def create_dataset():
     return jsonify({"id": dataset.id, "name": dataset.name})
 
 
-@datasets_bp.route("/api/datasets/find", methods=["POST"])
+@datasets_bp.route("/find", methods=["POST"])
 def find_dataset():
     data = request.json
     dataset_name = data.get("name")
@@ -42,7 +42,7 @@ def find_dataset():
         return jsonify({"error": "An internal error occurred"}), 500
 
 
-@datasets_bp.route("/api/datasets/update", methods=["POST"])
+@datasets_bp.route("/update", methods=["POST"])
 def update_dataset():
     data = request.json
     dataset_name = data.get("name")
@@ -60,7 +60,7 @@ def update_dataset():
     return jsonify({"id": dataset_id, "name": new_name})
 
 
-@datasets_bp.route("/api/datasets/delete", methods=["DELETE"])
+@datasets_bp.route("/delete", methods=["DELETE"])
 def delete_dataset():
     data = request.json
     dataset_name = data.get("name")
@@ -79,7 +79,7 @@ def delete_dataset():
         return jsonify({"error": "An internal error occurred"}), 500
 
 
-@datasets_bp.route("/api/datasets/wait-for-visible", methods=["POST"])
+@datasets_bp.route("/wait-for-visible", methods=["POST"])
 def wait_for_dataset_visible():
     data = request.json
     dataset_name = data.get("name")
@@ -107,7 +107,7 @@ def wait_for_dataset_visible():
     return jsonify({"error": "Dataset not visible within timeout"}), 404
 
 
-@datasets_bp.route("/api/datasets/wait-for-deleted", methods=["POST"])
+@datasets_bp.route("/wait-for-deleted", methods=["POST"])
 def wait_for_dataset_deleted():
     data = request.json
     dataset_name = data.get("name")
