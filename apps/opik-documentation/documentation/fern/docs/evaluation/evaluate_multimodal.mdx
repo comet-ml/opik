@@ -110,7 +110,7 @@ If the call returns `False`, Opik will log a warning and flatten image blocks. T
 Yes. Opik forwards the same OpenAI-style content blocks that LangChain expects, so structured messages with `image_url` dictionaries continue to work. A simple validation script is shown below:
 
 ```python
-from langchain.schema import messages_to_dict
+from langchain_core.messages import messages_to_dict
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from opik.evaluation.models.langchain.message_converters import convert_to_langchain_messages

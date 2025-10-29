@@ -2,5 +2,3 @@ pandas
 nltk
 respx
 rouge-score
-deepdiff
-langchain_core

@@ -1,10 +1,44 @@
-from langchain.schema import messages_to_dict
+"""
+Legacy LangChain compatibility smoke tests.
+
+Different LangChain releases expose ``messages_to_dict`` from different modules.
+Attempt each location and fail loudly if none are available so we get signal when
+new releases move the helper again.
+"""
+
+import importlib
+from typing import Callable, List
+
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from opik.evaluation.models.langchain.message_converters import (
     convert_to_langchain_messages,
 )
+
+
+def _resolve_messages_to_dict() -> Callable[[List[HumanMessage]], List[dict]]:
+    candidates = [
+        ("langchain.schema", "messages_to_dict"),
+        ("langchain_core.messages.utils", "messages_to_dict"),
+        ("langchain_core.messages", "messages_to_dict"),
+    ]
+
+    for module_name, attr in candidates:
+        try:
+            module = importlib.import_module(module_name)
+            fn = getattr(module, attr, None)
+            if fn is not None:
+                return fn  # type: ignore[return-value]
+        except ModuleNotFoundError:
+            continue
+
+    raise ImportError(
+        "LangChain messages_to_dict helper not available; please upgrade langchain-core"
+    )
+
+
+messages_to_dict = _resolve_messages_to_dict()
 
 
 def test_convert_to_langchain_messages_accepts_langchain_message_objects() -> None:

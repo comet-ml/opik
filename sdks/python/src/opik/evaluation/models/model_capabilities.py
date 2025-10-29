@@ -26,6 +26,10 @@ class ModelCapabilitiesRegistry:
             "gpt-4-turbo",
             "chatgpt-4o-latest",
             "gpt-5-mini",
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
+            "gpt-4.1-preview",
             # Anthropic
             "claude-3",
             "claude-3-5",

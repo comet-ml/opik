@@ -44,16 +44,26 @@ def convert_to_langchain_messages(
 
     langchain_messages: List["langchain_core.messages.BaseMessage"] = []
     for message in messages:
-        role_value = message.get("role") or message.get("type")
+        payload: Mapping[str, Any] = message
+
+        if "content" not in payload and isinstance(message.get("data"), Mapping):
+            payload = message["data"]  # type: ignore[index]
+
+        role_value = (
+            message.get("role")
+            or message.get("type")
+            or payload.get("role")
+            or payload.get("type")
+        )
         if role_value is None:
             raise ValueError("Message payload must include either 'role' or 'type'")
 
         role = str(role_value).lower()
 
-        if "content" not in message:
+        if "content" not in payload:
             raise ValueError("Message payload must include a 'content' field")
 
-        content_raw = message["content"]
+        content_raw = payload["content"]
 
         if not isinstance(content_raw, (str, list)):
             raise TypeError(
@@ -67,7 +77,7 @@ def convert_to_langchain_messages(
             continue
 
         if role == "tool":
-            tool_call_id = message.get("tool_call_id")
+            tool_call_id = payload.get("tool_call_id") or message.get("tool_call_id")
             if not isinstance(tool_call_id, str):
                 raise ValueError("Tool messages must include a 'tool_call_id' field")
             langchain_messages.append(
@@ -79,7 +89,7 @@ def convert_to_langchain_messages(
             continue
 
         if role == "function":
-            name = message.get("name")
+            name = payload.get("name") or message.get("name")
             if not isinstance(name, str):
                 raise ValueError("Function messages must include a 'name' field")
             langchain_messages.append(

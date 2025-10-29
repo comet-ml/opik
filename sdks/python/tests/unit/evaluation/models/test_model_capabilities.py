@@ -21,3 +21,5 @@ def test_supports_vision_handles_provider_prefix() -> None:
 def test_supports_vision_detects_common_suffixes() -> None:
     assert ModelCapabilities.supports_vision("provider/new-model-vision") is True
     assert ModelCapabilities.supports_vision("provider/new-model-vl") is True
+    assert ModelCapabilities.supports_vision("gpt-4.1") is True
+    assert ModelCapabilities.supports_vision("gpt-4.1-mini") is True
