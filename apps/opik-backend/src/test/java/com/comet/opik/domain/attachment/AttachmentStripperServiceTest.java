@@ -3,7 +3,6 @@ package com.comet.opik.domain.attachment;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.infrastructure.AttachmentsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
@@ -31,9 +30,6 @@ import static org.mockito.Mockito.when;
 class AttachmentStripperServiceTest {
 
     @Mock
-    private S3Config s3Config;
-
-    @Mock
     private AttachmentsConfig attachmentsConfig;
 
     @Mock
@@ -59,7 +55,6 @@ class AttachmentStripperServiceTest {
         when(attachmentsConfig.getStripMinSize()).thenReturn(5000L);
 
         // Mock OpikConfiguration to return the configs
-        when(opikConfiguration.getS3Config()).thenReturn(s3Config);
         when(opikConfiguration.getAttachmentsConfig()).thenReturn(attachmentsConfig);
 
         // Use OpenTelemetry no-op implementation and EventBus mock for async uploads
