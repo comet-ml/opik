@@ -40,8 +40,14 @@ export class ModelCapabilities {
     }
 
     const normalized = modelName.toLowerCase();
+    const normalizedWithoutProvider =
+      normalized.split(/[:/]/).pop() ?? normalized;
+
     for (const prefix of this.visionModels) {
-      if (normalized.startsWith(prefix)) {
+      if (
+        normalized.startsWith(prefix) ||
+        normalizedWithoutProvider.startsWith(prefix)
+      ) {
         return true;
       }
     }

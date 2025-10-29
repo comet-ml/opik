@@ -276,25 +276,41 @@ export class VercelAIChatModel extends OpikBaseModel {
 function convertToModelMessages(messages: OpikMessage[]): ModelMessage[] {
   return messages.map((message) => {
     const content = convertMessageContent(message.content);
-    const common = { content, ...(message.providerOptions && { providerOptions: message.providerOptions }) };
+    const commonBase =
+      message.providerOptions !== undefined
+        ? { providerOptions: message.providerOptions }
+        : {};
 
     if (message.role === "system") {
+      const systemContent = Array.isArray(content)
+        ? content
+            .map((part) =>
+              part.type === "text" ? part.text ?? "" : JSON.stringify(part)
+            )
+            .join("")
+        : typeof content === "string"
+          ? content
+          : String(content ?? "");
+
       return {
         role: "system",
-        ...common,
+        content: systemContent,
+        ...commonBase,
       } as unknown as ModelMessage;
     }
 
     if (message.role === "assistant") {
       return {
         role: "assistant",
-        ...common,
+        content,
+        ...commonBase,
       } as unknown as ModelMessage;
     }
 
     return {
       role: "user",
-      ...common,
+      content,
+      ...commonBase,
     } as unknown as ModelMessage;
   });
 }
@@ -319,24 +335,24 @@ function convertMessagePart(part: MessageContentPart) {
   }
 
   const url = part.image_url?.url ?? "";
+  if (!url) {
+    return { type: "text", text: "" };
+  }
+
   if (url.startsWith("data:")) {
     const commaIndex = url.indexOf(",");
-    const header = url.substring(5, commaIndex);
-    const data = url.substring(commaIndex + 1);
-    const mimeType = header.replace(/;base64$/, "");
+    const header = url.substring(5, commaIndex > -1 ? commaIndex : url.length);
+    const mimeType = header.split(";")[0] || undefined;
 
     return {
       type: "image",
-      image: {
-        type: "base64",
-        data,
-        mimeType,
-      },
+      image: url,
+      ...(mimeType ? { mediaType: mimeType } : {}),
     };
   }
 
   return {
     type: "image",
-    image: { url },
+    image: url,
   };
 }
