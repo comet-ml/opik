@@ -1,5 +1,6 @@
 from .aggregated_metric import AggregatedMetric
 from .conversation.conversation_thread_metric import ConversationThreadMetric
+from .conversation import types as conversation_types
 from .heuristics.conversation.degeneration.metric import ConversationDegenerationMetric
 from .heuristics.conversation.knowledge_retention.metric import (
     KnowledgeRetentionMetric,
@@ -89,6 +90,7 @@ __all__ = [
     "ConversationSummarizationCoherenceMetric",
     "ConversationSummarizationConsistencyMetric",
     "ConversationPromptUncertaintyMetric",
+    "conversation_types",
     "ComplianceRiskJudge",
     "Contains",
     "ContextPrecision",

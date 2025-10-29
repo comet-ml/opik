@@ -2,7 +2,7 @@ import json
 import logging
 import sys
 import types
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -191,3 +191,31 @@ def test_geval_passes_logprobs_only_when_supported(monkeypatch):
 
     assert "logprobs" not in captured["kwargs"]
     assert "top_logprobs" not in captured["kwargs"]
+
+
+@pytest.mark.asyncio
+async def test_litellm_chat_model_agenerate_string_supports_dict_choices(monkeypatch):
+    _install_litellm_stub(monkeypatch)
+
+    captured_kwargs = {}
+
+    @asynccontextmanager
+    async def fake_aget_provider_response(model_provider, messages, **kwargs):
+        captured_kwargs["messages"] = messages
+        yield SimpleNamespace(
+            choices=[
+                {
+                    "message": {"content": "async-ok"},
+                    "logprobs": None,
+                }
+            ]
+        )
+
+    monkeypatch.setattr(base_model, "aget_provider_response", fake_aget_provider_response)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o")
+
+    result = await model.agenerate_string(input="hello async")
+
+    assert result == "async-ok"
+    assert captured_kwargs["messages"][0]["content"] == "hello async"

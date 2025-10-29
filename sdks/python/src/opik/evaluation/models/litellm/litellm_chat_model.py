@@ -309,9 +309,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         async with base_model.aget_provider_response(
             model_provider=self, messages=request, **valid_litellm_params
         ) as response:
-            return base_model.check_model_output_string(
-                response.choices[0].message.content
-            )
+            choice = _first_choice(response)
+            content = _extract_message_content(choice)
+            return base_model.check_model_output_string(content)
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any
