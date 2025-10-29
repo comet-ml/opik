@@ -1,4 +1,8 @@
-import type { OpikMessage } from "../models";
+import type { MessageContentPart, OpikMessage } from "../models";
+import {
+  IMAGE_PLACEHOLDER_PREFIX,
+  IMAGE_PLACEHOLDER_SUFFIX,
+} from "./renderMessageContent";
 
 /**
  * Formats an array of OpikMessage objects into a human-readable string.
@@ -28,5 +32,32 @@ import type { OpikMessage } from "../models";
  * ```
  */
 export function formatMessagesAsString(messages: OpikMessage[]): string {
-  return messages.map((msg) => `${msg.role}: ${msg.content}`).join("\n");
+  return messages
+    .map((msg) => {
+      const content = Array.isArray(msg.content)
+        ? formatStructuredContent(msg.content)
+        : msg.content;
+      return `${msg.role}: ${content}`;
+    })
+    .join("\n");
+}
+
+function formatStructuredContent(parts: MessageContentPart[]): string {
+  return parts
+    .map((part) => {
+      if (part.type === "text") {
+        return part.text;
+      }
+
+      if (part.type === "image_url") {
+        const url = part.image_url?.url;
+        return url
+          ? `${IMAGE_PLACEHOLDER_PREFIX}${url}${IMAGE_PLACEHOLDER_SUFFIX}`
+          : "";
+      }
+
+      return "";
+    })
+    .filter((segment) => segment.length > 0)
+    .join("\n");
 }
