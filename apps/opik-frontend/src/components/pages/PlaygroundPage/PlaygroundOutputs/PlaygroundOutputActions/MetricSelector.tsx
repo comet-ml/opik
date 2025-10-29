@@ -47,17 +47,17 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         // If all selected (null) or all specific items selected, deselect this one
         const allRuleIds = rules.map((r) => r.id);
         const newSelection = allRuleIds.filter((id) => id !== ruleId);
-        onSelectionChange(newSelection.length > 0 ? newSelection : null);
+        onSelectionChange(newSelection.length > 0 ? newSelection : []);
       } else {
         // Some items selected or none selected
         const isSelected = selectedRuleIds.includes(ruleId);
         if (isSelected) {
           const newSelection = selectedRuleIds.filter((id) => id !== ruleId);
-          // If deselecting the last one, select all (null)
-          onSelectionChange(newSelection.length > 0 ? newSelection : null);
+          // If deselecting the last one, set to empty array (none selected)
+          onSelectionChange(newSelection.length > 0 ? newSelection : []);
         } else {
           const newSelection = [...selectedRuleIds, ruleId];
-          // If all are now selected, set to null (all)
+          // If all are now selected, set to null (all selected)
           onSelectionChange(
             newSelection.length === rules.length ? null : newSelection,
           );
@@ -67,14 +67,22 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [selectedRuleIds, rules, onSelectionChange],
   );
 
-  const handleSelectAll = useCallback(() => {
+  const handleSelectAll = useCallback((checked?: boolean | "indeterminate") => {
     // Toggle between all selected (null) and none selected ([])
-    if (isAllSelected) {
-      onSelectionChange([]);
+    if (checked !== undefined && checked !== "indeterminate") {
+      // Called from checkbox onCheckedChange - checked is the NEW desired state
+      // true = check = select all (null), false = uncheck = deselect all ([])
+      onSelectionChange(checked ? null : []);
     } else {
-      onSelectionChange(null);
+      // Called from div onClick or indeterminate state - toggle based on current state
+      const allSelected = 
+        selectedRuleIds === null || 
+        (Array.isArray(selectedRuleIds) && selectedRuleIds.length === rules.length && rules.length > 0);
+      
+      // Toggle: if all selected, deselect; if not all selected, select all
+      onSelectionChange(allSelected ? [] : null);
     }
-  }, [onSelectionChange, isAllSelected]);
+  }, [onSelectionChange, selectedRuleIds, rules.length]);
 
   const openChangeHandler = useCallback((newOpen: boolean) => {
     // Prevent opening if disabled (no dataset selected)
@@ -228,9 +236,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               <Separator className="my-1" />
               <div
                 className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
-                onClick={handleSelectAll}
+                onClick={() => handleSelectAll()}
               >
-                <Checkbox checked={isAllSelected} className="shrink-0" />
+                <Checkbox 
+                  checked={isAllSelected} 
+                  className="shrink-0"
+                  onCheckedChange={(checked) => handleSelectAll(checked)}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="comet-body-s truncate">Select all</div>
                 </div>

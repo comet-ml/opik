@@ -334,21 +334,14 @@ const PlaygroundOutputActions = ({
 
   // Set default to "all selected" when dataset is selected and rules are available
   useEffect(() => {
-    if (datasetId && rules.length > 0) {
-      // Ensure default is "all selected" (null)
-      // null = all selected, [] = none selected, [id1, id2] = specific rules selected
-      // If selectedRuleIds is an empty array, change it to null (all selected)
-      // If it's already null, it stays null (all selected by default)
-      if (selectedRuleIds && selectedRuleIds.length === 0) {
-        setSelectedRuleIds(null);
-      }
-      // Note: If selectedRuleIds is null or has specific IDs, we don't change it
-      // to preserve user selections
-    } else if (!datasetId) {
+    if (!datasetId) {
       // Reset to null when dataset is deselected
       setSelectedRuleIds(null);
     }
-  }, [datasetId, rules.length, selectedRuleIds, setSelectedRuleIds]);
+    // Note: We don't automatically normalize [] to null because [] is a valid state
+    // meaning "none selected". Users should be able to explicitly deselect all items.
+    // null = all selected (default), [] = none selected, [id1, id2] = specific rules selected
+  }, [datasetId, setSelectedRuleIds]);
 
   useEffect(() => {
     // stop streaming whenever a user leaves a page
