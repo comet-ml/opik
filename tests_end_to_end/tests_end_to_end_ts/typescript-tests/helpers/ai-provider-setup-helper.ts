@@ -27,7 +27,18 @@ export class AIProviderSetupHelper {
       );
     }
 
-    await this.aiProvidersPage.addProvider(providerName.toLowerCase() as 'OpenAI' | 'Anthropic', apiKey);
+    // Map input providerName to valid provider type
+    const providerTypeMap: Record<string, 'OpenAI' | 'Anthropic'> = {
+      openai: 'OpenAI',
+      anthropic: 'Anthropic',
+    };
+    const mappedProviderType = providerTypeMap[providerName.toLowerCase()];
+    if (!mappedProviderType) {
+      throw new Error(
+        `Invalid provider name: ${providerName}. Supported providers are: ${Object.keys(providerTypeMap).join(', ')}`
+      );
+    }
+    await this.aiProvidersPage.addProvider(mappedProviderType, apiKey);
 
     console.log(`Successfully set up AI provider for ${providerConfig.display_name}`);
   }
