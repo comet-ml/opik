@@ -12,6 +12,7 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
@@ -72,6 +73,7 @@ public class AttachmentUploadListener {
      * This method is called when AttachmentUploadRequested events are posted to the EventBus.
      */
     @Subscribe
+    @WithSpan
     public void processAttachmentUpload(@NonNull AttachmentUploadRequested event) {
         long startTime = System.currentTimeMillis();
         String status = "failure";
