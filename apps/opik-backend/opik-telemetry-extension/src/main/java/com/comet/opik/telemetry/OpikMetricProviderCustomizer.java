@@ -26,7 +26,7 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
 
     @Override
     public void customize(AutoConfigurationCustomizer customizer) {
-        System.out.println("[OpikTelemetryExtension] Applying Opik-specific OpenTelemetry metric provider customizations");
+        System.out.println("Applying Opik-specific OpenTelemetry metric provider customizations");
         
         // Customize the meter provider
         customizer.addMeterProviderCustomizer(this::customizeMeterProvider);
@@ -41,16 +41,16 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
      */
     SdkMeterProviderBuilder customizeMeterProvider(SdkMeterProviderBuilder builder, ConfigProperties config) {
         // Configure custom metric readers if needed
-        configureCustomMetricReaders(builder);
+        configureCustomMetricReaders(builder, config);
         return builder;
     }
 
     /**
      * Configures custom metric readers for specific use cases.
      */
-    private void configureCustomMetricReaders(SdkMeterProviderBuilder builder) {
+    private void configureCustomMetricReaders(SdkMeterProviderBuilder builder, ConfigProperties config) {
         // Configure metric view to include workspace context attribute
-        configureWorkspaceMetricView(builder);
+        configureWorkspaceMetricView(builder, config);
     }
 
     /**
@@ -58,25 +58,36 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
      * This ensures that metrics include the "http.request.header.comet-workspace" attribute
      * from the request context for better observability and filtering.
      */
-    private void configureWorkspaceMetricView(SdkMeterProviderBuilder builder) {
+    private void configureWorkspaceMetricView(SdkMeterProviderBuilder builder, ConfigProperties config) {
 
         // Create a single view that includes workspace context attributes
         // This view will be applied to all instruments without changing their names
-        String histogramBoundaries = System.getenv().getOrDefault("OTEL_BUCKET_HISTOGRAM_BOUNDARIES", "");
+        String histogramBoundaries = null;
+        if (config != null) {
+            // OTEL agent maps env var OTEL_BUCKET_HISTOGRAM_BOUNDARIES -> otel.bucket.histogram.boundaries
+            histogramBoundaries = config.getString("otel.bucket.histogram.boundaries");
+        }
+        if (histogramBoundaries == null) {
+            histogramBoundaries = System.getenv().getOrDefault("OTEL_BUCKET_HISTOGRAM_BOUNDARIES", "");
+        }
 
         ViewBuilder viewBuilder = View.builder()
                 .setDescription("Metric view that includes workspace context attributes")
                 .setAttributeFilter(value -> true);
 
         if (!histogramBoundaries.trim().isEmpty()) {
-            List<Double> bucketBoundaries = Arrays.stream(histogramBoundaries.split(","))
-                    .map(String::trim)
-                    .map(Double::valueOf)
-                    .toList();
+            try {
+                List<Double> bucketBoundaries = Arrays.stream(histogramBoundaries.split(","))
+                        .map(String::trim)
+                        .map(Double::valueOf)
+                        .toList();
 
-            viewBuilder.setAggregation(
-                    Aggregation.explicitBucketHistogram(bucketBoundaries)
-            );
+                viewBuilder.setAggregation(
+                        Aggregation.explicitBucketHistogram(bucketBoundaries)
+                );
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid OTEL_BUCKET_HISTOGRAM_BOUNDARIES: '"+histogramBoundaries+"'. Using defaults (no explicit buckets).");
+            }
         }
 
         View workspaceView = viewBuilder.build();
@@ -91,7 +102,7 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
                     workspaceView
             );
         });
-        System.out.println("[OpikTelemetryExtension] Workspace metric view configured successfully for all instruments");
+        System.out.println("Workspace metric view configured successfully for all instruments");
     }
 
     @Override
