@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { z } from "zod";
@@ -200,6 +200,18 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
 
   const formProjectId = form.watch("projectId");
+
+  // Update form projectId when dialog opens and projectId prop is provided
+  useEffect(() => {
+    if (open && projectId && !defaultRule) {
+      // Always update when dialog opens, even if formProjectId seems to match
+      // This ensures the project is selected even if the form was initialized before projectId was available
+      const currentProjectId = form.getValues("projectId");
+      if (projectId !== currentProjectId) {
+        form.setValue("projectId", projectId, { shouldValidate: true });
+      }
+    }
+  }, [open, projectId, defaultRule, form]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {

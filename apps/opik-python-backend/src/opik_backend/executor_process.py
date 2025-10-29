@@ -9,6 +9,7 @@ import sys
 from multiprocessing import Process, Pipe
 from queue import Queue, Empty
 from threading import Event, Thread
+from typing import Optional
 
 
 from opentelemetry import metrics
@@ -255,7 +256,7 @@ class ProcessExecutor(CodeExecutorBase):
             logger.error("Timeout getting a worker from the pool.")
             raise RuntimeError("No available workers in the pool.")
 
-    def run_scoring(self, code: str, data: dict, payload_type: str | None = None) -> dict:
+    def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
         worker = None

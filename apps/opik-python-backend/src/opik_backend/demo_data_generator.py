@@ -663,6 +663,30 @@ def create_demo_optimizer_project(context: DemoDataContext, base_url: str, works
                 client.flush()
                 client.end()
 
+def create_demo_playground_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
+    with tracer.start_as_current_span("create_demo_playground_project"):
+        try:
+            project_name = "playground"
+            if project_exists(base_url, workspace_name, comet_api_key, project_name):
+                logger.info("%s project already exists", project_name)
+                return
+
+            request = {
+                "url": "/v1/private/projects",
+                "method": "POST",
+                "payload": {
+                    "name": project_name,
+                },
+            }
+
+            _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+            if status_code in [201, 200]:
+                logger.info("%s project created successfully", project_name)
+            else:
+                logger.error("Failed to create playground project, status code: %s", status_code)
+        except Exception as e:
+            logger.error("Error creating playground project: %s", e)
+
 def create_demo_data(base_url: str, workspace_name, comet_api_key):
     with tracer.start_as_current_span("create_demo_data"):
         # Create a fresh context for this invocation to prevent race conditions
@@ -673,6 +697,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
             create_demo_evaluation_project(context, base_url, workspace_name, comet_api_key)
             create_demo_optimizer_project(context, base_url, workspace_name, comet_api_key)
             create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
+            create_demo_playground_project(context, base_url, workspace_name, comet_api_key)
             create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
             logger.info("Demo data created successfully")
         except Exception as e:

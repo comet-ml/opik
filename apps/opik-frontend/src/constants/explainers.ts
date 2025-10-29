@@ -314,7 +314,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_does_the_dataset_do_here]: {
     id: EXPLAINER_ID.what_does_the_dataset_do_here,
     description:
-      "Run a prompt on a dataset in the Playground to preview its performance across multiple inputs.",
+      "Run a prompt on a dataset in the Playground to preview its performance across multiple inputs. Select one or more metrics to automatically evaluate each dataset item.",
   },
   [EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground]: {
     id: EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground,

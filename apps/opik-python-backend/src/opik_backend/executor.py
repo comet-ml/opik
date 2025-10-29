@@ -37,6 +37,6 @@ class CodeExecutorBase(ABC):
                 return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
     
     @abstractmethod
-    def run_scoring(self, code: str, data: dict, payload_type: str | None = None) -> dict:
+    def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         """Execute code with data and return results."""
         pass
