@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset, DatasetItem } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
-import { Database, Pause, Play, X } from "lucide-react";
+import { Database, FlaskConical, Pause, Play, X } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 import {
@@ -123,7 +123,13 @@ const PlaygroundOutputActions = ({
 
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
-  const { stopAll, runAll, isRunning } = useActionButtonActions({
+  const {
+    stopAll,
+    runAll,
+    isRunning,
+    createdExperiments,
+    navigateToExperiments,
+  } = useActionButtonActions({
     workspaceName,
     datasetItems,
     datasetName,
@@ -370,9 +376,31 @@ const PlaygroundOutputActions = ({
   }, [runAll, isRunning, stopAll]);
 
   return (
-    <div className="sticky right-0 ml-auto flex h-0 gap-2">
+    <>
+      <div className="sticky right-0 ml-auto flex h-0 gap-2">
+      {createdExperiments.length > 0 && (
+        <TooltipWrapper
+          content={
+            createdExperiments.length === 1
+              ? "Your run was stored in this experiment. Explore your results to find insights."
+              : "Your run was stored in experiments. Explore comparison results to get insights."
+          }
+        >
+          <Button
+            size="sm"
+            className="mt-2.5"
+            onClick={navigateToExperiments}
+            variant="outline"
+          >
+            <FlaskConical className="mr-2 size-4" />
+            {createdExperiments.length === 1
+              ? "Explore experiment"
+              : "Compare experiments"}
+          </Button>
+        </TooltipWrapper>
+      )}
       <div className="mt-2.5 flex">
-        <LoadableSelectBox
+          <LoadableSelectBox
           options={datasetOptions}
           value={datasetId || ""}
           placeholder={
@@ -450,6 +478,7 @@ const PlaygroundOutputActions = ({
         <Separator orientation="vertical" className="mx-2 h-4" />
       </div>
       {renderActionButton()}
+      </div>
       <AddEditRuleDialog
         open={isRuleDialogOpen}
         setOpen={(open) => {
@@ -466,7 +495,7 @@ const PlaygroundOutputActions = ({
         setOpen={setIsDatasetDialogOpen}
         onDatasetCreated={handleDatasetCreated}
       />
-    </div>
+    </>
   );
 };
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -17,7 +17,6 @@ import createLogPlaygroundProcessor, {
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
-import { ToastAction } from "@/components/ui/toast";
 
 const LIMIT_STREAMING_CALLS = 5;
 
@@ -46,6 +45,7 @@ const useActionButtonActions = ({
 
   const [isRunning, setIsRunning] = useState(false);
   const [isToStop, setIsToStop] = useState(false);
+  const [createdExperiments, setCreatedExperiments] = useState<LogExperiment[]>([]);
   const promptIds = usePromptIds();
   const selectedRuleIds = useSelectedRuleIds();
   const abortControllersRef = useRef(new Map<string, AbortController>());
@@ -56,6 +56,7 @@ const useActionButtonActions = ({
     resetOutputMap();
     abortControllersRef.current.clear();
     setIsRunning(false);
+    setCreatedExperiments([]); // Clear experiments when resetting
   }, [resetOutputMap]);
 
   const stopAll = useCallback(() => {
@@ -70,45 +71,19 @@ const useActionButtonActions = ({
     abortControllersRef.current.clear();
   }, []);
 
-  const showMessageExperimentsLogged = useCallback(
+  const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
-      const title =
-        experiments.length === 1 ? "Experiment started" : "Experiments started";
-
-      toast({
-        title,
-        description:
-          "Analyze the results to identify strengths and weaknesses, then iterate by refining prompts, datasets, or evaluation rules to optimize your LLM application's performance.",
-        actions: [
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="px-0"
-            altText="Go to experiment"
-            key="Go to experiment"
-            onClick={() => {
-              navigate({
-                experimentIds: experiments.map((e) => e.id),
-                datasetId: datasetId,
-              });
-            }}
-          >
-            {experiments.length === 1
-              ? "Go to experiment"
-              : "Compare experiments"}
-          </ToastAction>,
-        ],
-      });
+      setCreatedExperiments(experiments);
     },
-    [datasetId, navigate, toast],
+    [],
   );
 
   const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
     return {
       onAddExperimentRegistry: (experiments) => {
-        // to check if all experiments have been created
+        // Only store experiments when all have been created
         if (experiments.length === promptIds.length) {
-          showMessageExperimentsLogged(experiments);
+          storeExperiments(experiments);
           queryClient.invalidateQueries({
             queryKey: ["experiments"],
           });
@@ -127,7 +102,7 @@ const useActionButtonActions = ({
         });
       },
     };
-  }, [queryClient, promptIds.length, showMessageExperimentsLogged, toast]);
+  }, [queryClient, promptIds.length, storeExperiments, toast]);
 
   const addAbortController = useCallback(
     (key: string, value: AbortController) => {
@@ -155,6 +130,7 @@ const useActionButtonActions = ({
   const runAll = useCallback(async () => {
     resetState();
     setIsRunning(true);
+    setCreatedExperiments([]); // Clear previous experiments when starting a new run
 
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
@@ -178,10 +154,21 @@ const useActionButtonActions = ({
     logProcessorHandlers,
   ]);
 
+  const navigateToExperiments = useCallback(() => {
+    if (createdExperiments.length > 0) {
+      navigate({
+        experimentIds: createdExperiments.map((e) => e.id),
+        datasetId: datasetId,
+      });
+    }
+  }, [createdExperiments, datasetId, navigate]);
+
   return {
     isRunning,
     runAll,
     stopAll,
+    createdExperiments,
+    navigateToExperiments,
   };
 };
 
