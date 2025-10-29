@@ -22,7 +22,6 @@ export type {
 } from "./OpikBaseModel";
 export { VercelAIChatModel } from "./VercelAIChatModel";
 export { ModelCapabilities } from "./modelCapabilities";
-export type { ModelCapability } from "./modelCapabilities";
 export {
   createModel,
   createModelFromInstance,
