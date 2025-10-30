@@ -8,8 +8,8 @@
 - TypeScript SDK: `sdks/typescript/.cursor/rules/` (`overview.mdc`, `code-structure.mdc`, `test-best-practices.mdc`).
 
 ## Project Structure & Module Organization
-- `apps/opik-backend`: Dropwizard services; migrations in `data-migrations`; see `.cursor/rules/architecture.mdc`.
-- `apps/opik-frontend`: Vite + React UI; modules under `src/features`; align with `.cursor/rules/frontend_rules.mdc`.
+- `apps/opik-backend`: Dropwizard services; migrations in `data-migrations`; see `apps/opik-backend/.cursor/rules/architecture.mdc`.
+- `apps/opik-frontend`: Vite + React UI; modules under `src/features`; align with `apps/opik-frontend/.cursor/rules/frontend_rules.mdc`.
 - SDKs (`sdks/python`, `sdks/typescript`, `sdks/opik_optimizer`): language-specific code with co-located `tests/` and rules in `sdks/*/.cursor/rules/`.
 - `tests_end_to_end`: Pytest suites (`tests/`) and Playwright flows (`tests_end_to_end_ts/`); fixtures in `installer_utils/`, `page_objects/`.
 - `scripts/` and `opik.sh`: Orchestrate local stacks, builds, linting.
@@ -17,29 +17,29 @@
 ## Build, Test, and Development Commands
 - Stack via Docker: `./opik.sh --build` (first run) then `./opik.sh`.
 - Hot-reload loop: `scripts/dev-runner.sh` with `--start`, `--build-fe`, `--build-be` as needed.
-- Backend build/tests: `mvn verify` in `apps/opik-backend`; respect `code_quality.mdc`.
-- Frontend checks: `pnpm install`, `pnpm lint`, `pnpm test`, `pnpm build`; follow `code-quality.mdc`, `unit-testing.mdc`.
-- Python SDK: `uv pip install -e .[dev]`, `ruff check`, `pytest`; align with `test-best-practices.mdc`.
-- TypeScript SDK: `pnpm install`, `pnpm lint`, `pnpm test`; observe `code-structure.mdc`.
+- Backend build/tests: `mvn verify` in `apps/opik-backend`; respect `apps/opik-backend/.cursor/rules/code_quality.mdc`.
+- Frontend checks: `npm install`, `npm lint`, `npm test`, `npm build`; follow `apps/opik-frontend/.cursor/rules/code-quality.mdc`, `apps/opik-frontend/.cursor/rules/unit-testing.mdc`.
+- Python SDK: `pip install -e .[dev]`, `ruff check`, `pytest`; align with `sdks/python/.cursor/rules/test-best-practices.mdc`.
+- TypeScript SDK: `npm install`, `npm lint`, `npm test`; observe `sdks/typescript/.cursor/rules/code-structure.mdc`.
 
 ## Coding Style & Naming Conventions
-- Java backend: Spotless (Google style); run `mvn spotless:apply`; check `code_style.mdc`, `logging.mdc`, `api_design.mdc`.
-- Frontend: ESLint + Prettier; PascalCase components, camelCase hooks, kebab-case styles; consult `ui-components.mdc`, `state-management.mdc`, `forms.mdc`.
-- Python SDK: PEP 8 enforced by Ruff; snake_case tests/functions; review `code-structure.mdc`, `error-handling.mdc`, `logging.mdc`.
-- Prefer environment variables over committed secrets; follow `tech-stack.mdc`.
+- Java backend: Spotless (Google style); run `mvn spotless:apply`; check `apps/opik-backend/.cursor/rules/code_style.mdc`, `apps/opik-backend/.cursor/rules/logging.mdc`, `apps/opik-backend/.cursor/rules/api_design.mdc`.
+- Frontend: ESLint + Prettier; PascalCase components, camelCase hooks, kebab-case styles; consult `apps/opik-frontend/.cursor/rules/ui-components.mdc`, `apps/opik-frontend/.cursor/rules/state-management.mdc`, `apps/opik-frontend/.cursor/rules/forms.mdc`.
+- Python SDK: PEP 8 enforced by Ruff; snake_case tests/functions; review `sdks/python/.cursor/rules/code-structure.mdc`, `sdks/python/.cursor/rules/error-handling.mdc`, `sdks/python/.cursor/rules/logging.mdc`.
+- Prefer environment variables over committed secrets; follow `.cursor/rules/tech-stack.mdc`.
 
 ## Testing Guidelines
-- Backend tests: `mvn test`; follow `testing.mdc`, `test_assertions.mdc`.
-- Frontend tests: `npm test`; UI smoke via `npm e2e`; include `accessibility-testing.mdc`.
+- Backend tests: `mvn test`; follow `apps/opik-backend/.cursor/rules/testing.mdc`, `apps/opik-backend/.cursor/rules/test_assertions.mdc`.
+- Frontend tests: `npm test`; UI smoke via `npm e2e`; include `apps/opik-frontend/.cursor/rules/accessibility-testing.mdc`.
 - End-to-end: from `tests_end_to_end`, set `PYTHONPATH='.'`, run `pytest`; sanity subset `pytest -m sanity`.
-- Capture coverage decisions in PRs and refresh fixtures only for API changes per `test-workflow.mdc`.
+- Capture coverage decisions in PRs and refresh fixtures only for API changes per `.cursor/rules/test-workflow.mdc`.
 
 ## Documentation Guidelines
-- Fern docs (`apps/opik-documentation/documentation`): `pnpm install`, `pnpm dev`; apply `feature-documentation-workflow.mdc`, `integration-documentation.mdc`.
-- Python SDK docs (`apps/opik-documentation/python-sdk-docs`): build with `make html`; use `documentation-style.mdc` and mirror Fern updates.
+- Fern docs (`apps/opik-documentation/documentation`): `npm install`, `npm dev`; apply `.cursor/rules/feature-documentation-workflow.mdc`, `.cursor/rules/integration-documentation.mdc`.
+- Python SDK docs (`apps/opik-documentation/python-sdk-docs`): build with `make html`; use `sdks/python/.cursor/rules/documentation-style.mdc` and mirror Fern updates.
 
 ## Commit & Pull Request Guidelines
-- Commits follow `<type>: <summary>` (≤72 chars, imperative) per `git-workflow.mdc`.
+- Commits follow `<type>: <summary>` (≤72 chars, imperative) per `.cursor/rules/git-workflow.mdc`.
 - Squash format-only noise; separate backend/frontend/SDK commits when practical.
-- PRs require overview, test evidence, linked issue/Jira, UI screenshots; see `feature-documentation-workflow.mdc`.
+- PRs require overview, test evidence, linked issue/Jira, UI screenshots; see `.cursor/rules/feature-documentation-workflow.mdc`.
 - Run lint/tests before review and note skips with rule references.
