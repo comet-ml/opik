@@ -169,6 +169,9 @@ navigation:
           - page: Evaluate single prompts
             path: docs/evaluation/evaluate_prompt.mdx
             slug: evaluate_prompt
+          - page: Multimodal evaluations
+            path: docs/evaluation/evaluate_multimodal.mdx
+            slug: evaluate_multimodal
           - page: Evaluate your agent
             path: docs/evaluation/evaluate_your_llm.mdx
             slug: evaluate_your_llm

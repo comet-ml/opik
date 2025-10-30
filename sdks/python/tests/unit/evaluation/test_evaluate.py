@@ -1,5 +1,4 @@
 from typing import Any, Dict, List
-
 from unittest import mock
 import pytest
 
@@ -7,9 +6,10 @@ import opik
 from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
-from opik.evaluation import metrics, samplers
+from opik.evaluation import evaluator as evaluator_module, metrics, samplers
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import models_factory
+from opik.evaluation.evaluator import _build_prompt_evaluation_task
 from ...testlib import ANY_BUT_NONE, ANY_STRING, ANY_LIST, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
 
@@ -728,6 +728,30 @@ def test_evaluate__with_random_sampler__happy_flow(
 
         assert actual_trace.output["output"] == expected_output
         assert feedback_score.value == expected_score
+
+
+def test_build_prompt_evaluation_task_logs_when_vision_missing() -> None:
+    model = mock.Mock()
+    model.model_name = "text-only-model"
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe the picture"},
+                {"type": "image_url", "image_url": {"url": "{{image_url}}"}},
+            ],
+        }
+    ]
+
+    with mock.patch.object(evaluator_module.LOGGER, "warning") as warning_mock:
+        _build_prompt_evaluation_task(model=model, messages=messages)
+
+    warning_mock.assert_called_once()
+    message_template, model_name, modal_list, doc_url = warning_mock.call_args[0]
+    assert "does not support %s content" in message_template
+    assert model_name == "text-only-model"
+    assert modal_list == "vision"
+    assert "comet.com/docs/opik" in doc_url
 
 
 def test_evaluate_prompt_happyflow(
