@@ -228,15 +228,8 @@ class DataProcessor:
 
 ### Architecture Review
 - [ ] Code belongs to correct layer (Public API vs Message Processing vs REST)
-- [ ] Observability operations use async path, resource operations use sync path
-- [ ] No business logic in Public API layer
-- [ ] Proper separation between API Object Clients and direct REST calls
-
-### Integration Review
-- [ ] Correct integration pattern selected (patching vs callback vs hybrid)
-- [ ] Idempotent wrapping (no double patching)
-- [ ] Proper streaming context management
-- [ ] Token usage and cost tracking implemented
+- [ ] No complex business logic in Public API layer
+- [ ] Module logic segregation (one responsibility per module)
 
 ### Testing Review
 - [ ] Appropriate test type used (unit vs integration vs e2e)
@@ -254,7 +247,7 @@ class DataProcessor:
 - [ ] Consistent parameter ordering and naming
 - [ ] Proper access control (private methods when appropriate)
 - [ ] Clean import organization
-- [ ] Type hints on all public APIs
+- [ ] Type hints where possible
 
 ## 🚫 Critical Anti-Patterns
 
@@ -767,48 +760,6 @@ def process(self, message: messages.BaseMessage) -> None:
         )
 ```
 
-## Logging Guidelines
-
-### Logger Setup
-```python
-# ✅ Good: Standard logger declaration
-import logging
-LOGGER = logging.getLogger(__name__)
-```
-
-### Appropriate Log Levels
-- **ERROR**: System errors, exceptions, critical failures
-- **WARNING**: Business rule violations, recoverable issues
-- **INFO**: Important business events, successful operations
-- **DEBUG**: Detailed debugging information
-
-### Logging Best Practices
-```python
-# ✅ Good: Appropriate log levels
-LOGGER.error("System error: %s", str(exception))  # ERROR for system failures
-LOGGER.warning("Rate limited, retrying")         # WARNING for recoverable issues
-LOGGER.info("Operation completed successfully")   # INFO for important events
-LOGGER.debug("Processing item: %s", item_id)      # DEBUG for detailed info
-
-# ✅ Good: Include relevant context without sensitive data
-LOGGER.error("API call failed for %s: %s", endpoint, error_msg)
-
-# ❌ Bad: Log sensitive information
-LOGGER.info("User authenticated: %s", user_api_key)  # Never log secrets!
-
-# ❌ Bad: Wrong log levels
-LOGGER.error("User logged in successfully")        # Should be INFO
-LOGGER.debug("Database connection failed")         # Should be ERROR
-LOGGER.info("Processing item 12345")               # Too detailed, use DEBUG
-
-# ❌ Bad: No context in logs
-LOGGER.error("Something failed")                   # What failed? Where?
-LOGGER.info("Operation completed")                 # Which operation?
-
-# ❌ Bad: Log entire objects
-LOGGER.info("User data: %s", user.__dict__)        # Exposes all user data
-LOGGER.debug("Full response: %s", response.json()) # Too verbose for DEBUG
-```
 
 ## Documentation and Style Guidelines
 
