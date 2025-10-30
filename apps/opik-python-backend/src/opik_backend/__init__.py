@@ -5,6 +5,8 @@ import sys
 from flask import Flask
 from opentelemetry import metrics, trace
 
+from flask import jsonify
+
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -103,6 +105,18 @@ def create_app(test_config=None, should_init_executor=True):
             app.logger.warning(f"Error closing Redis client: {e}")
 
     atexit.register(_close_redis_on_exit)
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        app.logger.exception("Unhandled exception occurred")
+    
+        message = str(e) if app.debug else "Something went wrong. Please try again later."
+        response = jsonify({
+            "error": "Internal Server Error",
+            "message": message
+        })
+        response.status_code = 500
+        return response
 
     return app
 
