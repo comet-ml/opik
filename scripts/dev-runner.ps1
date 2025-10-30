@@ -352,8 +352,8 @@ function Invoke-BackendLint {
 # Function to print migrations recovery message
 function Write-MigrationsRecoveryMessage {
     Write-LogError "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
-    Write-LogError "  1. Stop all services: $PSCommandPath --stop"
-    Write-LogError "  2. Remove Docker volumes (DANGER): docker volume prune -a -f"
+    Write-LogError "  1. Navigate to project root: cd $script:PROJECT_ROOT\deployment\docker-compose"
+    Write-LogError "  2. Stop services and remove volumes: docker compose down -v"
     Write-LogError "  3. Run again your current flow: $script:ORIGINAL_COMMAND"
 }
 
