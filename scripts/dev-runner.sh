@@ -209,8 +209,10 @@ lint_backend() {
 print_migrations_recovery_message() {
     log_error "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
     log_error "  1. Stop all services: $0 --stop"
-    log_error "  2. Remove Docker volumes (DANGER): docker volume prune -a -f"
-    log_error "  3. Run again your current flow: $ORIGINAL_COMMAND"
+    log_error "  2. Navigate to the docker compose dir: cd $PROJECT_ROOT/deployment/docker-compose"
+    log_error "  3. Remove Opik Docker volumes (DANGER): docker compose down -v"
+    log_error "  4. Go back to project root: cd ../.."
+    log_error "  5. Run again your current flow: $ORIGINAL_COMMAND"
 }
 
 # Function to run database migrations
