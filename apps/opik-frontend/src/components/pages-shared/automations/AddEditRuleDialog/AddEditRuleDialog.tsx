@@ -216,10 +216,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         samplingRate: 1,
         uiType: defaultUIType,
         scope: defaultScope,
-        type: getBackendRuleType(defaultScope, defaultUIType),
+        type: EVALUATORS_RULE_TYPE.llm_judge,
         enabled: true,
         filters: [],
-        pythonCodeDetails: cloneDeep(DEFAULT_PYTHON_CODE_DATA[defaultScope]),
         llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[defaultScope]),
       });
     }
