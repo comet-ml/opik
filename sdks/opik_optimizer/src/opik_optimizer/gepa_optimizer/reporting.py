@@ -60,6 +60,7 @@ class RichGEPAOptimizerLogger:
         self.max_trials = max_trials
         self.current_iteration = 0
         self._last_best_message: tuple[str, str] | None = None
+        self._last_raw_message: str | None = None
 
     def log(self, message: str) -> None:
         if self.verbose < 1:
@@ -74,6 +75,9 @@ class RichGEPAOptimizerLogger:
             return
 
         first = lines[0]
+
+        if first and first == self._last_raw_message:
+            return
 
         # Reset duplicate tracker when handling other messages
         if not first.startswith("Best "):
@@ -94,6 +98,7 @@ class RichGEPAOptimizerLogger:
 
                     self.optimizer._gepa_current_iteration = iteration  # type: ignore[attr-defined]
                     self.current_iteration = iteration
+                    self._last_raw_message = first
 
                     # Update progress bar
                     if self.progress and self.task_id is not None:
@@ -141,16 +146,19 @@ class RichGEPAOptimizerLogger:
             _, _, rest = first.partition("system_prompt:")
             snippet = format_prompt_snippet(rest, max_length=100)
             console.print(f"│ │  Proposed: {snippet}", style="dim")
+            self._last_raw_message = first
             return
 
         # Format subsample evaluation results
         if "New subsample score" in first and "is not better than" in first:
             console.print("│ └─ Rejected - no improvement", style="dim yellow")
             console.print("│")  # Add spacing after rejected trials
+            self._last_raw_message = first
             return
 
         if "New subsample score" in first and "is better than" in first:
             console.print("│ ├─ Promising! Running full validation...", style="green")
+            self._last_raw_message = first
             return
 
         # Format final validation score
@@ -162,6 +170,7 @@ class RichGEPAOptimizerLogger:
                 console.print(f"│ ├─ Validation complete: {score}", style="bold green")
             else:
                 console.print("│ ├─ Validation complete", style="green")
+            self._last_raw_message = first
             return
 
         # Format best score updates
@@ -178,18 +187,22 @@ class RichGEPAOptimizerLogger:
                     console.print(f"│ └─ New best: {score} ✓", style="bold green")
                     console.print("│")  # Add spacing after successful trials
                     self._last_best_message = key
+                    self._last_raw_message = first
             return
 
         if self.verbose >= 2:
             if "New valset pareto front scores" in first:
                 note = first.split(":", 1)[-1].strip()
                 console.print(f"│   Pareto front scores updated: {note}", style="cyan")
+                self._last_raw_message = first
                 return
             if "Updated valset pareto front programs" in first:
                 console.print("│   Pareto front programs updated", style="cyan")
+                self._last_raw_message = first
                 return
             if "New program is on the linear pareto front" in first:
                 console.print("│   Candidate added to Pareto front", style="cyan")
+                self._last_raw_message = first
                 return
 
         # Suppress redundant "Iteration X:" prefix from detailed messages
@@ -204,6 +217,7 @@ class RichGEPAOptimizerLogger:
         # Default: print with standard prefix only if not already handled
         if first:
             console.print(f"│ {first}", style="dim")
+            self._last_raw_message = first
 
 
 @contextmanager
