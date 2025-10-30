@@ -187,6 +187,16 @@ server:
     - type: http
       maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
 
+# Jackson JSON processing configuration
+# Controls limits for JSON deserialization to prevent memory exhaustion
+jacksonConfig:
+  # Default: 104857600 (100MB)
+  # Description: Maximum size for individual string values during JSON deserialization. 
+  #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
+  #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
+  #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
+  maxStringLength: ${JACKSON_MAX_STRING_LENGTH:-104857600}
+
 # Configuration for batch operations
 batchOperations:
   datasets:
@@ -429,8 +439,15 @@ clickHouseLogAppender:
 
 workspaceSettings:
   # Default: 50
-  # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
-    maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all workspace sizes).
+  # This value is calculated via estimated size based on spans table
+  maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Default: 100
+  # Description: Maximum size of a project in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all project sizes).
+  # This value is calculated via estimated size based on spans table.
+  maxProjectSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_PROJECT_SIZE_IN_GB_TO_ALLOW_SORTING:-100}
 
 # Configuration AWS S3
 s3Config:
@@ -443,6 +460,12 @@ s3Config:
   s3Url: ${S3_URL:-http://localhost:9001}
   # Description: Whether installation uses MinIO or AWS S3
   isMinIO: ${IS_MINIO:-true}
+
+# Attachments configuration
+attachmentsConfig:
+  # Description: Minimum size (bytes) for base64 strings to be considered attachments
+  # Default: 256000 (256KB)
+  stripMinSize: ${ATTACHMENTS_STRIP_MIN_SIZE:-256000}
 
 # Python evaluator configuration
 pythonEvaluator:

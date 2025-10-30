@@ -69,7 +69,7 @@ public class OpikConfiguration extends JobConfiguration {
     private OpenTelemetryConfig openTelemetry = new OpenTelemetryConfig();
 
     @Valid @NotNull @JsonProperty
-    private WorkspaceSettings workspaceSettings = new WorkspaceSettings();
+    private WorkspaceSettings workspaceSettings = WorkspaceSettings.builder().build();
 
     @Valid @NotNull @JsonProperty
     private S3Config s3Config = new S3Config();
@@ -94,4 +94,10 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @JsonProperty
     private QueuesConfig queues = new QueuesConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JacksonConfig jacksonConfig = new JacksonConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AttachmentsConfig attachmentsConfig = new AttachmentsConfig();
 }

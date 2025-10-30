@@ -6,8 +6,8 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.events.AttachmentUploadRequested;
+import com.comet.opik.infrastructure.AttachmentsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.S3Config;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,6 +17,9 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
@@ -27,9 +30,11 @@ import org.apache.tika.mime.MimeTypes;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.UncheckedIOException;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -53,7 +58,7 @@ import java.util.regex.Pattern;
 public class AttachmentStripperService {
 
     private final @NonNull ObjectMapper objectMapper;
-    private final @NonNull S3Config s3Config;
+    private final @NonNull AttachmentsConfig attachmentsConfig;
     private final @NonNull EventBus eventBus;
 
     // OpenTelemetry metrics for monitoring attachment detection and event posting
@@ -66,21 +71,24 @@ public class AttachmentStripperService {
     // Apache Tika for MIME type detection
     private static final Tika tika = new Tika();
 
+    private final Tracer tracer;
+
     // Base64 pattern compiled once during construction
     private final Pattern base64Pattern;
 
     // Minimum base64 size to look for
-    private final int minBase64Size;
+    private final long minBase64Size;
 
     @Inject
     public AttachmentStripperService(@NonNull ObjectMapper objectMapper,
             @NonNull OpikConfiguration opikConfig,
             @NonNull EventBus eventBus) {
         this.objectMapper = objectMapper;
-        this.s3Config = opikConfig.getS3Config();
+        this.attachmentsConfig = opikConfig.getAttachmentsConfig();
         this.eventBus = eventBus;
 
-        // Initialize OpenTelemetry metrics using global instance
+        // Initialize OpenTelemetry tracer and metrics using global instance
+        this.tracer = GlobalOpenTelemetry.get().getTracer("opik.attachments");
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.attachments");
 
         this.attachmentsProcessed = meter
@@ -103,16 +111,16 @@ public class AttachmentStripperService {
                 .build();
 
         // Compile the regex pattern once during construction based on configuration
-        int minLength = s3Config.getStripAttachmentsMinSize();
-        this.minBase64Size = minLength;
-        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minLength + ",}={0,2})");
+        this.minBase64Size = attachmentsConfig.getStripMinSize();
+        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minBase64Size + ",}={0,2})");
 
-        log.info("AttachmentStripperService initialized with minBase64Length: {}", minLength);
+        log.info("AttachmentStripperService initialized with minBase64Length: {}", minBase64Size);
     }
 
     /**
      * Strips attachments from a Trace entity.
      */
+    @WithSpan
     public Mono<Trace> stripAttachments(Trace trace, String workspaceId, String userName, String projectName) {
         var builder = trace.toBuilder();
         return stripAttachmentsCommon(
@@ -133,6 +141,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a TraceUpdate entity.
      */
+    @WithSpan
     public Mono<TraceUpdate> stripAttachments(TraceUpdate traceUpdate, UUID traceId, String workspaceId,
             String userName, String projectName) {
         var builder = traceUpdate.toBuilder();
@@ -154,6 +163,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a Span entity.
      */
+    @WithSpan
     public Mono<Span> stripAttachments(Span span, String workspaceId, String userName, String projectName) {
         var builder = span.toBuilder();
         return stripAttachmentsCommon(
@@ -174,6 +184,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a SpanUpdate entity.
      */
+    @WithSpan
     public Mono<SpanUpdate> stripAttachments(SpanUpdate spanUpdate, UUID spanId, String workspaceId,
             String userName, String projectName) {
         var builder = spanUpdate.toBuilder();
@@ -254,6 +265,9 @@ public class AttachmentStripperService {
             String userName,
             String projectName,
             String fieldName) {
+
+        io.opentelemetry.api.trace.Span.current().setAttribute("entity_field", fieldName);
+
         return Mono.justOrEmpty(value)
                 .flatMap(it -> Mono.fromCallable(
                         () -> stripAttachments(it, entityId, entityType, workspaceId, userName, projectName, fieldName))
@@ -269,6 +283,7 @@ public class AttachmentStripperService {
      * Attachments are uploaded using either direct upload (MinIO) or multipart upload (S3) based on configuration.
      * Generated filenames include context to avoid conflicts between input, output, and metadata attachments.
      */
+    @WithSpan
     public JsonNode stripAttachments(JsonNode node,
             UUID entityId,
             EntityType entityType,
@@ -281,13 +296,20 @@ public class AttachmentStripperService {
         }
 
         long startTime = System.currentTimeMillis();
+
         try {
-            // Step 1: Convert JSON to string
-            String jsonString = objectMapper.writeValueAsString(node);
+            String jsonString = wrapWithSpan("objectMapper.writeValueAsString", () -> {
+                try {
+                    return objectMapper.writeValueAsString(node);
+                } catch (JsonProcessingException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
 
             // Step 2: Process all base64 strings in the JSON
-            String processedJson = processBase64InJsonString(
-                    jsonString, entityId, entityType, workspaceId, userName, projectName, context);
+            String processedJson = wrapWithSpan("processBase64InJsonString",
+                    () -> processBase64InJsonString(jsonString, entityId, entityType, workspaceId, userName,
+                            projectName, context));
 
             // Step 3: Only create new JsonNode if changes were made (avoid unnecessary object creation)
             if (jsonString.equals(processedJson)) {
@@ -295,9 +317,14 @@ public class AttachmentStripperService {
             }
 
             // Convert back to JSON only if we made changes
-            return objectMapper.readTree(processedJson);
-
-        } catch (JsonProcessingException e) {
+            return wrapWithSpan("objectMapper.readTree", () -> {
+                try {
+                    return objectMapper.readTree(processedJson);
+                } catch (JsonProcessingException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
             log.error("Failed to process JSON for attachment stripping", e);
             // We cannot return the original large payload to ClickHouse
             throw new InternalServerErrorException("Failed to process attachments in payload", e);
@@ -307,12 +334,31 @@ public class AttachmentStripperService {
         }
     }
 
+    private <T> T wrapWithSpan(String spanName, Supplier<T> action) {
+        io.opentelemetry.api.trace.Span span = tracer.spanBuilder(spanName).startSpan();
+        try (Scope scope = span.makeCurrent()) {
+            return action.get();
+        } finally {
+            span.end();
+        }
+    }
+
+    private void wrapWithSpanVoid(String spanName, Runnable action) {
+        io.opentelemetry.api.trace.Span span = tracer.spanBuilder(spanName).startSpan();
+        try (Scope scope = span.makeCurrent()) {
+            action.run();
+        } finally {
+            span.end();
+        }
+    }
+
     /**
      * Processes all base64 strings found in a JSON string and replaces them with attachment references.
      *
      * Uses regex to find base64 strings longer than the minimum threshold, processes each one
      * as a potential attachment, and replaces valid attachments with reference strings.
      */
+
     private String processBase64InJsonString(String jsonString,
             UUID entityId,
             EntityType entityType,
@@ -328,23 +374,27 @@ public class AttachmentStripperService {
         }
 
         // Use the pre-compiled pattern from construction
-        Matcher matcher = base64Pattern.matcher(jsonString);
+        Matcher matcher = wrapWithSpan("base64Pattern.matcher", () -> base64Pattern.matcher(jsonString));
+
         StringBuilder result = new StringBuilder();
-        int attachmentCounter = 1;
+        AtomicInteger attachmentCounter = new AtomicInteger(1);
 
         while (matcher.find()) {
-            String base64Data = matcher.group(1); // Extract base64 without quotes
+            wrapWithSpanVoid("matcher.find", () -> {
 
-            // Try to process as attachment
-            String attachmentReference = processBase64Attachment(
-                    base64Data, attachmentCounter,
-                    entityId, entityType, workspaceId, userName, projectName, context);
+                String base64Data = matcher.group(1); // Extract base64 without quotes
 
-            if (attachmentReference != null) {
-                // Replace the base64 string with the reference
-                matcher.appendReplacement(result, attachmentReference);
-                attachmentCounter++; // Only increment if we actually processed an attachments
-            }
+                // Try to process as attachment
+                String attachmentReference = processBase64Attachment(
+                        base64Data, attachmentCounter,
+                        entityId, entityType, workspaceId, userName, projectName, context);
+
+                if (attachmentReference != null) {
+                    // Replace the base64 string with the reference
+                    matcher.appendReplacement(result, attachmentReference);
+                    attachmentCounter.addAndGet(1); // Only increment if we actually processed an attachment
+                }
+            });
             // If not an attachment, matcher.appendTail() will handle keeping the original
         }
 
@@ -368,8 +418,9 @@ public class AttachmentStripperService {
      * @param context the context where the attachment was found (input, output, metadata)
      * @return attachment reference string if processed, null if not a valid attachment
      */
+    @WithSpan
     private String processBase64Attachment(String base64Data,
-            int attachmentNumber,
+            AtomicInteger attachmentNumber,
             UUID entityId,
             EntityType entityType,
             String workspaceId,
@@ -378,8 +429,8 @@ public class AttachmentStripperService {
             String context) {
         try {
             // Decode base64 and detect MIME type using Tika
-            byte[] bytes = Base64.getDecoder().decode(base64Data);
-            String mimeType = tika.detect(bytes);
+            byte[] bytes = wrapWithSpan("base64.decode", () -> Base64.getDecoder().decode(base64Data));
+            String mimeType = wrapWithSpan("tika.detect", () -> tika.detect(bytes));
 
             // Skip if not a recognizable file type (Tika returns these for non-binary data)
             if ("application/octet-stream".equals(mimeType) || "text/plain".equals(mimeType)) {
@@ -388,8 +439,9 @@ public class AttachmentStripperService {
             }
 
             // Generate attachment info with appropriate extension and context
-            String extension = getFileExtension(mimeType);
-            String fileName = context + "-attachment-" + attachmentNumber + "-" + System.currentTimeMillis() + "."
+            String extension = wrapWithSpan("getFileExtension", () -> getFileExtension(mimeType));
+
+            String fileName = context + "-attachment-" + attachmentNumber.get() + "-" + System.currentTimeMillis() + "."
                     + extension;
 
             // Post event for async attachment upload
@@ -404,7 +456,7 @@ public class AttachmentStripperService {
                     entityType);
 
             // Post event to EventBus for async processing
-            eventBus.post(uploadEvent);
+            wrapWithSpanVoid("eventBus.post", () -> eventBus.post(uploadEvent));
 
             log.info("Posted async upload event for attachment: '{}'", fileName);
 
