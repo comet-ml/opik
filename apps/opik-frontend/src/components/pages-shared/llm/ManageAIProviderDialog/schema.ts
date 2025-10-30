@@ -44,7 +44,7 @@ export const CustomProviderDetailsFormSchema = z.object({
   url: z.string().url(),
   models: z
     .string()
-    .min(1, { message: "Models is required" })
+    .min(1, { message: "Models list is required" })
     .refine(
       (models) => {
         const modelsArray = models.split(",").map((m) => m.trim());
