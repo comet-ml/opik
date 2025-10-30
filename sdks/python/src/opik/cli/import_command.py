@@ -1,4 +1,8 @@
-"""Upload command for Opik CLI."""
+"""
+This module contains the CLI implementation for importing datasets, projects,
+experiments, and prompts from exported JSON files. Legacy single-file import helpers
+have been removed in favor of directory-based import functions below.
+"""
 
 import json
 import sys
@@ -8,20 +12,12 @@ from typing import Any, Dict, List, Optional
 
 import click
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
-from opik.rest_api.core.api_error import ApiError
-from opik.api_objects.trace import trace_data
-from opik.api_objects.span import span_data
-from opik.api_objects.trace.migration import prepare_traces_and_spans_for_copy
 from opik.api_objects.prompt.prompt import Prompt
 from opik.api_objects.prompt.types import PromptType
 
 console = Console()
-
-# Constants for import command
-DEFAULT_PROJECT_NAME = "default"
 
 
 def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
@@ -30,301 +26,6 @@ def _matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return True
     # Simple string matching - check if pattern is contained in name (case-insensitive)
     return pattern.lower() in name.lower()
-
-
-def _json_to_trace_data(
-    trace_info: Dict[str, Any], project_name: str
-) -> trace_data.TraceData:
-    """Convert JSON trace data to TraceData object."""
-    return trace_data.TraceData(
-        id=trace_info.get("id", ""),
-        name=trace_info.get("name"),
-        start_time=(
-            datetime.fromisoformat(trace_info["start_time"].replace("Z", "+00:00"))
-            if trace_info.get("start_time")
-            else None
-        ),
-        end_time=(
-            datetime.fromisoformat(trace_info["end_time"].replace("Z", "+00:00"))
-            if trace_info.get("end_time")
-            else None
-        ),
-        metadata=trace_info.get("metadata"),
-        input=trace_info.get("input"),
-        output=trace_info.get("output"),
-        tags=trace_info.get("tags"),
-        feedback_scores=trace_info.get("feedback_scores"),
-        project_name=project_name,
-        created_by=trace_info.get("created_by"),
-        error_info=trace_info.get("error_info"),
-        thread_id=trace_info.get("thread_id"),
-    )
-
-
-def _json_to_span_data(
-    span_info: Dict[str, Any], project_name: str
-) -> span_data.SpanData:
-    """Convert JSON span data to SpanData object."""
-    return span_data.SpanData(
-        trace_id=span_info.get("trace_id", ""),
-        id=span_info.get("id", ""),
-        parent_span_id=span_info.get("parent_span_id"),
-        name=span_info.get("name"),
-        type=span_info.get("type", "general"),
-        start_time=(
-            datetime.fromisoformat(span_info["start_time"].replace("Z", "+00:00"))
-            if span_info.get("start_time")
-            else None
-        ),
-        end_time=(
-            datetime.fromisoformat(span_info["end_time"].replace("Z", "+00:00"))
-            if span_info.get("end_time")
-            else None
-        ),
-        metadata=span_info.get("metadata"),
-        input=span_info.get("input"),
-        output=span_info.get("output"),
-        tags=span_info.get("tags"),
-        usage=span_info.get("usage"),
-        feedback_scores=span_info.get("feedback_scores"),
-        project_name=project_name,
-        model=span_info.get("model"),
-        provider=span_info.get("provider"),
-        error_info=span_info.get("error_info"),
-        total_cost=span_info.get("total_cost"),
-    )
-
-
-def _import_traces(
-    client: opik.Opik,
-    project_dir: Path,
-    dry_run: bool,
-    name_pattern: Optional[str] = None,
-) -> int:
-    """Import traces from JSON files."""
-    trace_files = list(project_dir.glob("trace_*.json"))
-
-    if not trace_files:
-        console.print(f"[yellow]No trace files found in {project_dir}[/yellow]")
-        return 0
-
-    imported_count = 0
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Uploading traces...", total=len(trace_files))
-
-        for trace_file in trace_files:
-            try:
-                with open(trace_file, "r", encoding="utf-8") as f:
-                    trace_data = json.load(f)
-
-                # Filter by name pattern if specified
-                trace_name = trace_data.get("trace", {}).get("name", "")
-                if name_pattern and not _matches_name_pattern(trace_name, name_pattern):
-                    continue
-
-                if dry_run:
-                    print(f"Would upload trace: {trace_data['trace']['id']}")
-                    imported_count += 1
-                    progress.update(
-                        task,
-                        description=f"Imported {imported_count}/{len(trace_files)} traces",
-                    )
-                    continue
-
-                # Extract trace information
-                trace_info = trace_data["trace"]
-                spans_info = trace_data.get("spans", [])
-
-                # Convert JSON data to TraceData and SpanData objects
-                # Use a temporary project name for the migration logic
-                temp_project_name = "temp_import"
-                trace_data_obj = _json_to_trace_data(trace_info, temp_project_name)
-
-                # Convert spans to SpanData objects, setting the correct trace_id
-                span_data_objects = []
-                for span_info in spans_info:
-                    span_info["trace_id"] = trace_data_obj.id  # Ensure trace_id is set
-                    span_data_obj = _json_to_span_data(span_info, temp_project_name)
-                    span_data_objects.append(span_data_obj)
-
-                # Use the migration logic to prepare traces and spans with new IDs
-                # This handles orphan spans, validates parent relationships, and logs issues
-                new_trace_data, new_span_data = prepare_traces_and_spans_for_copy(
-                    destination_project_name=client.project_name or "default",
-                    traces_data=[trace_data_obj],
-                    spans_data=span_data_objects,
-                )
-
-                # Create the trace using the prepared data
-                new_trace = new_trace_data[0]
-                trace_obj = client.trace(
-                    name=new_trace.name,
-                    start_time=new_trace.start_time,
-                    end_time=new_trace.end_time,
-                    input=new_trace.input,
-                    output=new_trace.output,
-                    metadata=new_trace.metadata,
-                    tags=new_trace.tags,
-                    thread_id=new_trace.thread_id,
-                    error_info=new_trace.error_info,
-                )
-
-                # Create spans using the prepared data
-                for span_data_obj in new_span_data:
-                    client.span(
-                        trace_id=trace_obj.id,
-                        parent_span_id=span_data_obj.parent_span_id,
-                        name=span_data_obj.name,
-                        type=span_data_obj.type,
-                        start_time=span_data_obj.start_time,
-                        end_time=span_data_obj.end_time,
-                        input=span_data_obj.input,
-                        output=span_data_obj.output,
-                        metadata=span_data_obj.metadata,
-                        tags=span_data_obj.tags,
-                        usage=span_data_obj.usage,
-                        model=span_data_obj.model,
-                        provider=span_data_obj.provider,
-                        error_info=span_data_obj.error_info,
-                    )
-
-                imported_count += 1
-                progress.update(
-                    task,
-                    description=f"Imported {imported_count}/{len(trace_files)} traces",
-                )
-
-            except Exception as e:
-                console.print(
-                    f"[red]Error importing trace from {trace_file.name}: {e}[/red]"
-                )
-                continue
-
-    return imported_count
-
-
-def _import_datasets(
-    client: opik.Opik,
-    project_dir: Path,
-    dry_run: bool,
-    name_pattern: Optional[str] = None,
-) -> int:
-    """Import datasets from JSON files."""
-    dataset_files = list(project_dir.glob("dataset_*.json"))
-
-    if not dataset_files:
-        console.print(f"[yellow]No dataset files found in {project_dir}[/yellow]")
-        return 0
-
-    imported_count = 0
-    for dataset_file in dataset_files:
-        try:
-            with open(dataset_file, "r", encoding="utf-8") as f:
-                dataset_data = json.load(f)
-
-            # Filter by name pattern if specified
-            dataset_name = dataset_data.get("name", "")
-            if name_pattern and not _matches_name_pattern(dataset_name, name_pattern):
-                continue
-
-            if dry_run:
-                print(f"Would upload dataset: {dataset_data['name']}")
-                imported_count += 1
-                continue
-
-            # Check if dataset already exists
-            try:
-                client.get_dataset(dataset_data["name"])
-                console.print(
-                    f"[yellow]Dataset '{dataset_data['name']}' already exists, skipping...[/yellow]"
-                )
-                imported_count += 1
-                continue
-            except ApiError as e:
-                if e.status_code == 404:
-                    # Dataset doesn't exist, create it
-                    pass
-                else:
-                    # Re-raise other API errors (network, auth, etc.)
-                    raise
-
-            # Create dataset
-            dataset = client.create_dataset(
-                name=dataset_data["name"], description=dataset_data.get("description")
-            )
-
-            # Insert dataset items
-            for item in dataset_data.get("items", []):
-                dataset.insert(
-                    [
-                        {
-                            "input": item["input"],
-                            "expected_output": item["expected_output"],
-                            "metadata": item.get("metadata"),
-                        }
-                    ]
-                )
-
-            imported_count += 1
-
-        except Exception as e:
-            console.print(
-                f"[red]Error importing dataset from {dataset_file.name}: {e}[/red]"
-            )
-            continue
-
-    return imported_count
-
-
-def _import_prompts(
-    client: opik.Opik,
-    project_dir: Path,
-    dry_run: bool,
-    name_pattern: Optional[str] = None,
-) -> int:
-    """Import prompts from JSON files."""
-    prompt_files = list(project_dir.glob("prompt_*.json"))
-
-    if not prompt_files:
-        console.print(f"[yellow]No prompt files found in {project_dir}[/yellow]")
-        return 0
-
-    imported_count = 0
-    for prompt_file in prompt_files:
-        try:
-            with open(prompt_file, "r", encoding="utf-8") as f:
-                prompt_data = json.load(f)
-
-            # Filter by name pattern if specified
-            prompt_name = prompt_data.get("name", "")
-            if name_pattern and not _matches_name_pattern(prompt_name, name_pattern):
-                continue
-
-            if dry_run:
-                print(f"Would upload prompt: {prompt_data['name']}")
-                imported_count += 1
-                continue
-
-            # Create prompt
-            client.create_prompt(
-                name=prompt_data["name"],
-                prompt=prompt_data["current_version"]["prompt"],
-                metadata=prompt_data["current_version"].get("metadata"),
-            )
-
-            imported_count += 1
-
-        except Exception as e:
-            console.print(
-                f"[red]Error importing prompt from {prompt_file.name}: {e}[/red]"
-            )
-            continue
-
-    return imported_count
 
 
 def _find_experiment_files(data_dir: Path) -> List[Path]:
@@ -338,16 +39,16 @@ def _load_experiment_data(experiment_file: Path) -> Dict[str, Any]:
         return json.load(f)
 
 
-def _find_trace_by_id(
-    client: opik.Opik, trace_id: str, project_name: str
-) -> Optional[Any]:
-    """Find a trace by ID in the specified project."""
-    try:
-        # Use the proper API method to get trace by ID
-        trace = client.get_trace_content(trace_id)
-        return trace
-    except Exception:
+def _translate_trace_id(
+    original_trace_id: str, trace_id_map: Optional[Dict[str, str]]
+) -> Optional[str]:
+    """Translate an original trace id from export to the newly created id.
+
+    Returns None if mapping is unavailable for this trace id.
+    """
+    if trace_id_map is None:
         return None
+    return trace_id_map.get(original_trace_id)
 
 
 def _find_dataset_item_by_content(
@@ -411,6 +112,7 @@ def _recreate_experiment(
     client: opik.Opik,
     experiment_data: Dict[str, Any],
     project_name: str,
+    trace_id_map: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
 ) -> bool:
     """Recreate a single experiment from exported data.
@@ -466,16 +168,11 @@ def _recreate_experiment(
                 skipped_items += 1
                 continue
 
-            # Find the trace by ID in the target workspace
-            # Note: When importing to a different workspace, traces get new IDs.
-            # This lookup will only succeed if:
-            # 1. The trace was imported with the same ID (same workspace), or
-            # 2. The trace was imported in this session and the ID mapping is preserved
-            trace = _find_trace_by_id(client, trace_id, project_name)
-            if not trace:
+            # Translate trace id from source (workspace A) to newly created trace id (workspace B)
+            new_trace_id = _translate_trace_id(trace_id, trace_id_map)
+            if not new_trace_id:
                 console.print(
-                    f"[yellow]Warning: Trace {trace_id} not found in target workspace. "
-                    f"Ensure traces are imported before importing experiments. Skipping item.[/yellow]"
+                    f"[yellow]Warning: No mapping for trace {trace_id}. Skipping item.[/yellow]"
                 )
                 skipped_items += 1
                 continue
@@ -490,18 +187,59 @@ def _recreate_experiment(
                 continue
 
             try:
-                # Find or create dataset item
+                # Find or create dataset item (prefer deterministic id to avoid extra reads)
                 dataset_item_id = _find_dataset_item_by_content(
                     dataset, dataset_item_data
                 )
                 if not dataset_item_id:
-                    dataset_item_id = _create_dataset_item(dataset, dataset_item_data)
+                    # Prefer using provided id if present, otherwise generate one
+                    provided_id = item_data.get(
+                        "dataset_item_id"
+                    ) or dataset_item_data.get("id")
+                    try:
+                        from opik.api_objects.dataset import dataset_item as ds_item
+                        import opik.id_helpers as id_helpers  # type: ignore
+                    except Exception:
+                        ds_item = None
+                        id_helpers = None
+
+                    if ds_item is not None:
+                        chosen_id = provided_id
+                        if chosen_id is None and id_helpers is not None:
+                            try:
+                                chosen_id = id_helpers.generate_id()  # type: ignore
+                            except Exception:
+                                chosen_id = None
+
+                        # Build DatasetItem with flexible extra fields
+                        content = {
+                            "input": dataset_item_data.get("input"),
+                            "expected_output": dataset_item_data.get("expected_output"),
+                            "metadata": dataset_item_data.get("metadata"),
+                        }
+                        content = {k: v for k, v in content.items() if v is not None}
+
+                        if chosen_id is not None:
+                            ds_obj = ds_item.DatasetItem(id=chosen_id, **content)  # type: ignore
+                        else:
+                            ds_obj = ds_item.DatasetItem(**content)  # type: ignore
+
+                        # Use internal API to avoid redundant downloads
+                        dataset.__internal_api__insert_items_as_dataclasses__(
+                            items=[ds_obj]
+                        )
+                        dataset_item_id = ds_obj.id
+                    else:
+                        # Fallback to public insert + search
+                        dataset_item_id = _create_dataset_item(
+                            dataset, dataset_item_data
+                        )
 
                 # Create experiment item reference
                 experiment_items.append(
                     opik.ExperimentItemReferences(
                         dataset_item_id=dataset_item_id,
-                        trace_id=trace_id,
+                        trace_id=new_trace_id,
                     )
                 )
                 successful_items += 1
@@ -545,6 +283,7 @@ def _recreate_experiments(
     project_name: str,
     dry_run: bool = False,
     name_pattern: Optional[str] = None,
+    trace_id_map: Optional[Dict[str, str]] = None,
 ) -> int:
     """Recreate experiments from JSON files."""
     experiment_files = _find_experiment_files(project_dir)
@@ -585,7 +324,9 @@ def _recreate_experiments(
         try:
             experiment_data = _load_experiment_data(experiment_file)
 
-            if _recreate_experiment(client, experiment_data, project_name, dry_run):
+            if _recreate_experiment(
+                client, experiment_data, project_name, trace_id_map, dry_run
+            ):
                 successful += 1
             else:
                 failed += 1
@@ -771,6 +512,8 @@ def _import_projects_from_directory(
         for project_dir in project_dirs:
             try:
                 project_name = project_dir.name
+                # Maintain a per-project mapping from original -> new trace ids
+                trace_id_map: Dict[str, str] = {}
 
                 # Filter by name pattern if specified
                 if name_pattern and not _matches_name_pattern(
@@ -802,6 +545,7 @@ def _import_projects_from_directory(
                         # Import trace and spans
                         trace_info = trace_data.get("trace", {})
                         spans_info = trace_data.get("spans", [])
+                        original_trace_id = trace_info.get("id")
 
                         # Create trace with full data
                         trace = client.trace(
@@ -829,6 +573,9 @@ def _import_projects_from_directory(
                             thread_id=trace_info.get("thread_id"),
                             project_name=project_name,
                         )
+
+                        if original_trace_id:
+                            trace_id_map[original_trace_id] = trace.id
 
                         # Create spans with full data
                         for span_info in spans_info:
@@ -884,7 +631,12 @@ def _import_projects_from_directory(
 
                         # Recreate experiments
                         experiments_recreated = _recreate_experiments(
-                            client, project_dir, project_name, dry_run, name_pattern
+                            client,
+                            project_dir,
+                            project_name,
+                            dry_run,
+                            name_pattern,
+                            trace_id_map,
                         )
 
                         if debug and experiments_recreated > 0:
@@ -959,11 +711,16 @@ def _import_experiments_from_directory(
                         f"[blue]Importing experiment: {experiment_name}[/blue]"
                     )
 
-                # Import experiment using the existing _recreate_experiment function
+                # Import experiment. We cannot translate trace ids here unless traces were
+                # imported in the same session; pass no mapping in this mode.
+                project_for_logs = (experiment_info.get("metadata") or {}).get(
+                    "project_name"
+                ) or "default"
                 success = _recreate_experiment(
                     client,
                     experiment_data,
-                    experiment_info.get("dataset_name", "default"),
+                    project_for_logs,
+                    None,
                     dry_run,
                 )
 
