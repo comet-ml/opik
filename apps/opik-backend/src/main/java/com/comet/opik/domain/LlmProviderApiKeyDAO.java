@@ -6,7 +6,7 @@ import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
-import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
@@ -18,17 +18,28 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-@RegisterConstructorMapper(ProviderApiKey.class)
+@RegisterRowMapper(ProviderApiKeyRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(MapFlatArgumentFactory.class)
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 public interface LlmProviderApiKeyDAO {
 
+    String NULL_SENTINEL = "__NULL__";
+
     @SqlUpdate("INSERT INTO llm_provider_api_key (id, provider, workspace_id, api_key, name, provider_name, created_by, last_updated_by, headers, base_url, configuration) "
             +
-            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :bean.providerName, :bean.createdBy, :bean.lastUpdatedBy, :bean.headers, :bean.baseUrl, :bean.configuration)")
-    void save(@Bind("workspaceId") String workspaceId,
+            "VALUES (:bean.id, :bean.provider, :workspaceId, :bean.apiKey, :bean.name, :providerName, :bean.createdBy, :bean.lastUpdatedBy, :bean.headers, :bean.baseUrl, :bean.configuration)")
+    void saveInternal(@Bind("workspaceId") String workspaceId,
+            @Bind("providerName") String providerName,
             @BindMethods("bean") ProviderApiKey providerApiKey);
+
+    default void save(String workspaceId, ProviderApiKey providerApiKey) {
+        // Convert null to sentinel value when saving
+        String providerName = providerApiKey.providerName() == null
+                ? NULL_SENTINEL
+                : providerApiKey.providerName();
+        saveInternal(workspaceId, providerName, providerApiKey);
+    }
 
     @SqlUpdate("UPDATE llm_provider_api_key SET " +
             "api_key = CASE WHEN :bean.apiKey IS NULL THEN api_key ELSE :bean.apiKey END, " +
@@ -50,29 +61,6 @@ public interface LlmProviderApiKeyDAO {
     @SqlQuery("SELECT * FROM llm_provider_api_key " +
             " WHERE workspace_id = :workspaceId ")
     List<ProviderApiKey> find(@Bind("workspaceId") String workspaceId);
-
-    @SqlQuery("SELECT * FROM llm_provider_api_key WHERE workspace_id = :workspaceId AND provider = :provider AND provider_name IS NULL LIMIT 1")
-    Optional<ProviderApiKey> findByProvider(
-            @Bind("workspaceId") String workspaceId,
-            @Bind("provider") String provider);
-
-    @SqlQuery("SELECT * FROM llm_provider_api_key WHERE workspace_id = :workspaceId AND provider = :provider " +
-            "AND provider_name = :providerName LIMIT 1")
-    Optional<ProviderApiKey> findByProviderAndProviderName(
-            @Bind("workspaceId") String workspaceId,
-            @Bind("provider") String provider,
-            @Bind("providerName") String providerName);
-
-    default Optional<ProviderApiKey> findByProviderAndName(
-            String workspaceId,
-            String provider,
-            String providerName) {
-        if (providerName == null) {
-            return findByProvider(workspaceId, provider);
-        } else {
-            return findByProviderAndProviderName(workspaceId, provider, providerName);
-        }
-    }
 
     @SqlUpdate("DELETE FROM llm_provider_api_key WHERE id IN (<ids>) AND workspace_id = :workspaceId")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);

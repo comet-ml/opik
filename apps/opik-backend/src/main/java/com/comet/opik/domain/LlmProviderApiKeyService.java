@@ -90,28 +90,16 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
 
                 var repository = handle.attach(LlmProviderApiKeyDAO.class);
 
-                // Check for duplicate provider before saving
-                // For non-custom providers: only one per workspace
-                // For custom providers: one per (workspace, provider_name) combination
-                var existingProvider = repository.findByProviderAndName(
-                        workspaceId,
-                        newProviderApiKey.provider().name(),
-                        newProviderApiKey.providerName());
-
-                if (existingProvider.isPresent()) {
-                    throw newConflict();
-                }
-
                 repository.save(workspaceId, newProviderApiKey);
 
                 return newProviderApiKey;
             });
 
             return find(apiKeyId, workspaceId);
-        } catch (EntityAlreadyExistsException e) {
-            throw e;
         } catch (UnableToExecuteStatementException e) {
             if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                log.warn("Attempted to create duplicate provider: workspace='{}', provider='{}', providerName='{}'",
+                        workspaceId, newProviderApiKey.provider(), newProviderApiKey.providerName());
                 throw newConflict();
             } else {
                 throw e;
