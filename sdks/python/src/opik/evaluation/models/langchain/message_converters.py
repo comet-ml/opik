@@ -46,6 +46,7 @@ def convert_to_langchain_messages(
     for message in messages:
         payload: Mapping[str, Any] = message
 
+        # messages_to_dict may wrap the payload under "data" for some message types
         if "content" not in payload and isinstance(message.get("data"), Mapping):
             payload = message["data"]  # type: ignore[index]
 
