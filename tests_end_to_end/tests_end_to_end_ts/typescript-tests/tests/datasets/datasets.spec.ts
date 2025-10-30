@@ -4,7 +4,7 @@ import { generateDatasetName } from '../../helpers/random';
 
 test.describe('Datasets CRUD Tests', () => {
   test.describe('with SDK-created datasets', () => {
-    test('should verify dataset visibility', async ({ page, helperClient, createDatasetSdk }) => {
+    test('should verify dataset visibility @sanity @regression @datasets', async ({ page, helperClient, createDatasetSdk }) => {
       const datasetsPage = new DatasetsPage(page);
       await datasetsPage.goto();
       await datasetsPage.checkDatasetExists(createDatasetSdk);
@@ -14,7 +14,7 @@ test.describe('Datasets CRUD Tests', () => {
       expect(dataset?.name).toBe(createDatasetSdk);
     });
 
-    test('should update dataset name via SDK', async ({ page, helperClient, createDatasetSdk }) => {
+    test('should update dataset name via SDK @regression @datasets', async ({ page, helperClient, createDatasetSdk }) => {
       const newName = generateDatasetName();
       let nameUpdated = false;
 
@@ -44,7 +44,7 @@ test.describe('Datasets CRUD Tests', () => {
       }
     });
 
-    test('should delete dataset via SDK', async ({ page, helperClient, createDatasetSdk }) => {
+    test('should delete dataset via SDK @regression @datasets', async ({ page, helperClient, createDatasetSdk }) => {
       await helperClient.deleteDataset(createDatasetSdk);
 
       const datasetsPage = new DatasetsPage(page);
@@ -55,7 +55,7 @@ test.describe('Datasets CRUD Tests', () => {
       expect(dataset).toBeNull();
     });
 
-    test('should delete dataset via UI', async ({ page, helperClient, createDatasetSdk }) => {
+    test('should delete dataset via UI @regression @datasets', async ({ page, helperClient, createDatasetSdk }) => {
       const datasetsPage = new DatasetsPage(page);
       await datasetsPage.goto();
       await datasetsPage.deleteDatasetByName(createDatasetSdk);
@@ -66,7 +66,7 @@ test.describe('Datasets CRUD Tests', () => {
   });
 
   test.describe('with UI-created datasets', () => {
-    test('should verify dataset visibility', async ({ page, helperClient, createDatasetUi }) => {
+    test('should verify dataset visibility @regression @datasets', async ({ page, helperClient, createDatasetUi }) => {
       const datasetsPage = new DatasetsPage(page);
       await datasetsPage.goto();
       await datasetsPage.checkDatasetExists(createDatasetUi);
@@ -76,7 +76,7 @@ test.describe('Datasets CRUD Tests', () => {
       expect(dataset?.name).toBe(createDatasetUi);
     });
 
-    test('should update dataset name via SDK', async ({ page, helperClient, createDatasetUi }) => {
+    test('should update dataset name via SDK @regression @datasets', async ({ page, helperClient, createDatasetUi }) => {
       const newName = generateDatasetName();
       let nameUpdated = false;
 
@@ -106,7 +106,7 @@ test.describe('Datasets CRUD Tests', () => {
       }
     });
 
-    test('should delete dataset via SDK', async ({ page, helperClient, createDatasetUi }) => {
+    test('should delete dataset via SDK @regression @datasets', async ({ page, helperClient, createDatasetUi }) => {
       await helperClient.deleteDataset(createDatasetUi);
 
       const datasetsPage = new DatasetsPage(page);
@@ -117,7 +117,7 @@ test.describe('Datasets CRUD Tests', () => {
       expect(dataset).toBeNull();
     });
 
-    test('should delete dataset via UI', async ({ page, helperClient, createDatasetUi }) => {
+    test('should delete dataset via UI @regression @datasets', async ({ page, helperClient, createDatasetUi }) => {
       const datasetsPage = new DatasetsPage(page);
       await datasetsPage.goto();
       await datasetsPage.deleteDatasetByName(createDatasetUi);

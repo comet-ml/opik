@@ -336,3 +336,88 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
     assert len(fake_backend.trace_trees) == 1
     assert len(opik_tracer.created_traces()) == 0
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langgraph__node_returning_command__output_captured_correctly(
+    fake_backend,
+):
+    """
+    Regression test for https://github.com/comet-ml/opik/issues/3687
+
+    Nodes returning Command objects should have their state updates captured in output.
+    """
+    from typing import Literal
+    from langchain_core.messages import AIMessage
+    from langgraph.types import Command
+
+    class State(TypedDict):
+        messages: Annotated[list, langgraph_message.add_messages]
+
+    def node_a(state: State) -> Dict[str, Any]:
+        return {"messages": [AIMessage(content="Node A answer")]}
+
+    def node_b_command(state: State) -> Command[Literal["node_c"]]:
+        return Command(
+            update={"messages": [AIMessage(content="Node B answer")]}, goto="node_c"
+        )
+
+    def node_c(state: State) -> Dict[str, Any]:
+        return {"messages": [AIMessage(content="Node C answer")]}
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("node_a", node_a)
+    graph_builder.add_node("node_b_command", node_b_command)
+    graph_builder.add_node("node_c", node_c)
+
+    graph_builder.add_edge(START, "node_a")
+    graph_builder.add_edge("node_a", "node_b_command")
+    graph_builder.add_edge("node_c", END)
+
+    graph = graph_builder.compile()
+
+    opik_tracer = OpikTracer(tags=["command-test"])
+    initial_state = {"messages": []}
+    result = graph.invoke(initial_state, config={"callbacks": [opik_tracer]})
+
+    opik_tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    def find_span_by_name(spans, name):
+        for span in spans:
+            if span.name == name:
+                return span
+            if span.spans:
+                found = find_span_by_name(span.spans, name)
+                if found:
+                    return found
+        return None
+
+    root_span = trace_tree.spans[0]
+    node_a_span = find_span_by_name(root_span.spans, "node_a")
+    node_b_span = find_span_by_name(root_span.spans, "node_b_command")
+    node_c_span = find_span_by_name(root_span.spans, "node_c")
+
+    assert node_a_span is not None
+    assert node_b_span is not None
+    assert node_c_span is not None
+
+    assert "messages" in node_a_span.output
+    assert len(node_a_span.output["messages"]) == 1
+    assert "Node A answer" in str(node_a_span.output["messages"][0])
+
+    assert "messages" in node_b_span.output
+    assert len(node_b_span.output["messages"]) == 1
+    assert "Node B answer" in str(node_b_span.output["messages"][0])
+
+    assert "messages" in node_c_span.output
+    assert len(node_c_span.output["messages"]) == 1
+    assert "Node C answer" in str(node_c_span.output["messages"][0])
+
+    assert "messages" in result
+    assert len(result["messages"]) == 3
+    messages_content = [msg.content for msg in result["messages"]]
+    assert "Node A answer" in messages_content
+    assert "Node B answer" in messages_content
+    assert "Node C answer" in messages_content

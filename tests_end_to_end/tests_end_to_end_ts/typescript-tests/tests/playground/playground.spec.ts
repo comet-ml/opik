@@ -11,7 +11,7 @@ test.describe('Playground Tests', () => {
   }
 
   for (const { providerName, modelConfig, providerConfig } of enabledModels) {
-    test(`${providerConfig.display_name} - ${modelConfig.name} should generate response`, async ({ page }) => {
+    test(`${providerConfig.display_name} - ${modelConfig.name} should generate response @regression @playground`, async ({ page }) => {
       const providerSetupHelper = new AIProviderSetupHelper(page);
       const playgroundPage = new PlaygroundPage(page);
 
