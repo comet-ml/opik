@@ -393,11 +393,10 @@ def test_no_scores_returns_bad_request(client):
 CONVERSATION_THREAD_METRIC = """
 from typing import Union, List, Any
 from opik.evaluation.metrics import score_result
-from opik.evaluation.metrics import conversation_types
-from opik.evaluation.metrics.conversation_metric_base import ConversationThreadMetric
+from opik.evaluation.metrics.conversation import conversation_thread_metric, types
 
 
-class TestConversationThreadMetric(ConversationThreadMetric):
+class TestConversationThreadMetric(conversation_thread_metric.ConversationThreadMetric):
     def __init__(
         self,
         name: str = "test_conversation_thread_metric",
@@ -407,7 +406,7 @@ class TestConversationThreadMetric(ConversationThreadMetric):
         )
 
     def score(
-        self, conversation: conversation_types.Conversation, **kwargs: Any
+        self, conversation: types.Conversation, **kwargs: Any
     ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
         # Simple test metric that counts the number of messages in conversation
         message_count = len(conversation)
