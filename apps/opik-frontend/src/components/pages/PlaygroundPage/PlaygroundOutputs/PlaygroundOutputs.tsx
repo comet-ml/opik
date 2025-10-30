@@ -75,6 +75,7 @@ const PlaygroundOutputs = ({
       <PlaygroundOutputActions
         datasetId={datasetId}
         datasetItems={datasetItems}
+        datasetColumns={datasetColumns}
         workspaceName={workspaceName}
         onChangeDatasetId={onChangeDatasetId}
         loadingDatasetItems={isLoadingDatasetItems}

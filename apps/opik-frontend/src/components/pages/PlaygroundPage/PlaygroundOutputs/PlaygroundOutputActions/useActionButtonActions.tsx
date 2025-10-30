@@ -9,6 +9,9 @@ import {
   usePromptIds,
   useResetOutputMap,
   useSelectedRuleIds,
+  useCreatedExperiments,
+  useSetCreatedExperiments,
+  useClearCreatedExperiments,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -45,9 +48,9 @@ const useActionButtonActions = ({
 
   const [isRunning, setIsRunning] = useState(false);
   const [isToStop, setIsToStop] = useState(false);
-  const [createdExperiments, setCreatedExperiments] = useState<LogExperiment[]>(
-    [],
-  );
+  const createdExperiments = useCreatedExperiments();
+  const setCreatedExperiments = useSetCreatedExperiments();
+  const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
   const selectedRuleIds = useSelectedRuleIds();
   const abortControllersRef = useRef(new Map<string, AbortController>());
@@ -58,8 +61,8 @@ const useActionButtonActions = ({
     resetOutputMap();
     abortControllersRef.current.clear();
     setIsRunning(false);
-    setCreatedExperiments([]); // Clear experiments when resetting
-  }, [resetOutputMap]);
+    clearCreatedExperiments(); // Clear experiments when resetting
+  }, [resetOutputMap, clearCreatedExperiments]);
 
   const stopAll = useCallback(() => {
     // nothing to stop
@@ -73,9 +76,12 @@ const useActionButtonActions = ({
     abortControllersRef.current.clear();
   }, []);
 
-  const storeExperiments = useCallback((experiments: LogExperiment[]) => {
-    setCreatedExperiments(experiments);
-  }, []);
+  const storeExperiments = useCallback(
+    (experiments: LogExperiment[]) => {
+      setCreatedExperiments(experiments);
+    },
+    [setCreatedExperiments],
+  );
 
   const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
     return {
@@ -129,7 +135,7 @@ const useActionButtonActions = ({
   const runAll = useCallback(async () => {
     resetState();
     setIsRunning(true);
-    setCreatedExperiments([]); // Clear previous experiments when starting a new run
+    clearCreatedExperiments(); // Clear previous experiments when starting a new run
 
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
@@ -148,6 +154,7 @@ const useActionButtonActions = ({
     );
   }, [
     resetState,
+    clearCreatedExperiments,
     createCombinations,
     processCombination,
     logProcessorHandlers,

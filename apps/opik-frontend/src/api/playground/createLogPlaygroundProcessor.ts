@@ -37,6 +37,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
+  datasetItemData?: object;
 }
 
 export interface LogProcessorArgs {
@@ -73,7 +74,7 @@ const createBatchExperimentItems = async (
   });
 };
 
-const PLAYGROUND_PROJECT_NAME = "playground";
+export const PLAYGROUND_PROJECT_NAME = "playground";
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",
@@ -97,6 +98,14 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     trace.metadata = {
       ...trace.metadata,
       selected_rule_ids: run.selectedRuleIds,
+    };
+  }
+
+  // Add dataset_item_data to trace metadata if provided
+  if (run.datasetItemData) {
+    trace.metadata = {
+      ...trace.metadata,
+      dataset_item_data: run.datasetItemData,
     };
   }
 
