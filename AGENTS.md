@@ -30,7 +30,7 @@
 
 ## Testing Guidelines
 - Backend tests: `mvn test`; follow `testing.mdc`, `test_assertions.mdc`.
-- Frontend tests: `pnpm test`; UI smoke via `pnpm e2e`; include `accessibility-testing.mdc`.
+- Frontend tests: `npm test`; UI smoke via `npm e2e`; include `accessibility-testing.mdc`.
 - End-to-end: from `tests_end_to_end`, set `PYTHONPATH='.'`, run `pytest`; sanity subset `pytest -m sanity`.
 - Capture coverage decisions in PRs and refresh fixtures only for API changes per `test-workflow.mdc`.
 
