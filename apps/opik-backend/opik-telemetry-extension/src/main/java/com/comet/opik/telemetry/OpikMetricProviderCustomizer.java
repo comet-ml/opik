@@ -86,7 +86,7 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
                         Aggregation.explicitBucketHistogram(bucketBoundaries)
                 );
             } catch (NumberFormatException e) {
-                System.out.println("Invalid OTEL_BUCKET_HISTOGRAM_BOUNDARIES: '"+histogramBoundaries+"'. Using defaults (no explicit buckets).");
+                System.out.printf("Invalid OTEL_BUCKET_HISTOGRAM_BOUNDARIES: '%s': %s. Using defaults (no explicit buckets).%n", histogramBoundaries, e.getMessage());
             }
         }
 
