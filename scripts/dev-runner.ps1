@@ -356,7 +356,7 @@ function Write-MigrationsRecoveryMessage {
     Write-LogError "  2. Navigate to docker compose dir: cd $script:PROJECT_ROOT\deployment\docker-compose"
     Write-LogError "  3. Remove volumes: docker compose down -v"
     Write-LogError "  4. Go back to project root: cd ..\.."
-    Write-LogError "  4. Run again your current flow: $script:ORIGINAL_COMMAND"
+    Write-LogError "  5. Run again your current flow: $script:ORIGINAL_COMMAND"
 }
 
 # Function to run database migrations
