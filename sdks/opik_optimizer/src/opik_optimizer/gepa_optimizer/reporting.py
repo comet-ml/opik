@@ -59,6 +59,7 @@ class RichGEPAOptimizerLogger:
         self.task_id = task_id
         self.max_trials = max_trials
         self.current_iteration = 0
+        self._last_best_message: tuple[str, str] | None = None
 
     def log(self, message: str) -> None:
         if self.verbose < 1:
@@ -73,6 +74,10 @@ class RichGEPAOptimizerLogger:
             return
 
         first = lines[0]
+
+        # Reset duplicate tracker when handling other messages
+        if not first.startswith("Best "):
+            self._last_best_message = None
 
         # Track iteration changes and add separation
         if first.startswith("Iteration "):
@@ -121,14 +126,15 @@ class RichGEPAOptimizerLogger:
                 except Exception:
                     pass
 
-        # Check if this message should be suppressed
-        for keyword in self.SUPPRESS_KEYWORDS:
-            if keyword in first:
-                return
+        # Check if this message should be suppressed (unless verbose >= 2)
+        if self.verbose <= 1:
+            for keyword in self.SUPPRESS_KEYWORDS:
+                if keyword in first:
+                    return
 
-        for prefix in self.SUPPRESS_PREFIXES:
-            if prefix in first:
-                return
+            for prefix in self.SUPPRESS_PREFIXES:
+                if prefix in first:
+                    return
 
         # Format proposed prompts
         if "Proposed new text" in first and "system_prompt:" in first:
@@ -167,9 +173,24 @@ class RichGEPAOptimizerLogger:
             parts = first.split(":")
             if len(parts) >= 2:
                 score = parts[-1].strip()
-                console.print(f"│ └─ New best: {score} ✓", style="bold green")
-                console.print("│")  # Add spacing after successful trials
+                key = ("new_best", score)
+                if self._last_best_message != key:
+                    console.print(f"│ └─ New best: {score} ✓", style="bold green")
+                    console.print("│")  # Add spacing after successful trials
+                    self._last_best_message = key
             return
+
+        if self.verbose >= 2:
+            if "New valset pareto front scores" in first:
+                note = first.split(":", 1)[-1].strip()
+                console.print(f"│   Pareto front scores updated: {note}", style="cyan")
+                return
+            if "Updated valset pareto front programs" in first:
+                console.print("│   Pareto front programs updated", style="cyan")
+                return
+            if "New program is on the linear pareto front" in first:
+                console.print("│   Candidate added to Pareto front", style="cyan")
+                return
 
         # Suppress redundant "Iteration X:" prefix from detailed messages
         if first.startswith(f"Iteration {self.current_iteration}:"):
@@ -279,6 +300,7 @@ def display_selected_candidate(
     *,
     verbose: int = 1,
     title: str = "Selected Candidate",
+    trial_info: dict[str, Any] | None = None,
 ) -> None:
     """Display the final selected candidate with its Opik score."""
     if verbose < 1:
@@ -286,11 +308,33 @@ def display_selected_candidate(
 
     snippet = system_prompt.strip() or "<empty>"
     text = Text(snippet)
+    subtitle: Text | None = None
+    if trial_info:
+        trial_parts: list[str] = []
+        trial_name = trial_info.get("experiment_name")
+        trial_ids = trial_info.get("trial_ids") or []
+        if trial_name:
+            trial_parts.append(f"Trial {trial_name}")
+        elif trial_ids:
+            trial_parts.append(f"Trial {trial_ids[0]}")
+
+        compare_url = trial_info.get("compare_url")
+        experiment_url = trial_info.get("experiment_url")
+        if compare_url:
+            trial_parts.append(f"[link={compare_url}]Compare run[/link]")
+        elif experiment_url:
+            trial_parts.append(f"[link={experiment_url}]View experiment[/link]")
+
+        if trial_parts:
+            subtitle = Text.from_markup(" • ".join(trial_parts))
+
     panel = Panel(
         text,
         title=f"{title} — Opik score {score:.4f}",
         border_style="green",
         expand=True,
+        subtitle=subtitle,
+        subtitle_align="left",
     )
     console.print(panel)
 
