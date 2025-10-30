@@ -112,7 +112,10 @@ class LanguageAdherenceMetric(BaseMetric):
         )
 
     def _predict_with_fasttext(self, text: str) -> tuple[str, float]:
-        assert self._fasttext_model is not None
+        if self._fasttext_model is None:
+            raise MetricComputationError(
+                "fastText model is not loaded. Ensure that LanguageAdherenceMetric was initialized with a valid model_path and fastText is installed."
+            )
         prediction = self._fasttext_model.predict(text)
         label = prediction[0][0] if prediction[0] else ""
         language = label.replace("__label__", "")
