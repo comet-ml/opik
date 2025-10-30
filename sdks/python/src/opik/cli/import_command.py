@@ -85,7 +85,9 @@ def _create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> st
             item.get("input") == new_item["input"]
             and item.get("expected_output") == new_item["expected_output"]
         ):
-            return item.get("id")
+            item_id = item.get("id")
+            if item_id is not None:
+                return item_id
 
     dataset_name = getattr(dataset, "name", None)
     dataset_info = f", Dataset: {dataset_name!r}" if dataset_name else ""
@@ -200,8 +202,8 @@ def _recreate_experiment(
                         from opik.api_objects.dataset import dataset_item as ds_item
                         import opik.id_helpers as id_helpers  # type: ignore
                     except Exception:
-                        ds_item = None
-                        id_helpers = None
+                        ds_item = None  # type: ignore
+                        id_helpers = None  # type: ignore
 
                     if ds_item is not None:
                         chosen_id = provided_id
@@ -236,12 +238,13 @@ def _recreate_experiment(
                         )
 
                 # Create experiment item reference
-                experiment_items.append(
-                    opik.ExperimentItemReferences(
-                        dataset_item_id=dataset_item_id,
-                        trace_id=new_trace_id,
+                if dataset_item_id is not None:
+                    experiment_items.append(
+                        opik.ExperimentItemReferences(
+                            dataset_item_id=dataset_item_id,
+                            trace_id=new_trace_id,
+                        )
                     )
-                )
                 successful_items += 1
 
             except Exception as e:
