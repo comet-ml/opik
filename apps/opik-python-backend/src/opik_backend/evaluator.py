@@ -57,13 +57,8 @@ def execute_evaluator_python():
     # Extract type information for conversation thread metrics
     payload_type = payload.get("type")
 
-    # Get the executor from app context and run the code safely
-    try:
-        response = get_executor().run_scoring(code, data, payload_type)
-    except Exception as e:
-        current_app.logger.exception("Error during code execution")
-        abort(500, f"Execution failed: {str(e)}")
-
+    # Get the executor from app context and run the code 
+    response = get_executor().run_scoring(code, data, payload_type)
 
     if "error" in response:
         abort(response["code"], response["error"])
