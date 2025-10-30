@@ -5,6 +5,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -83,47 +84,82 @@ public class ModelNameMatcher {
     }
 
     /**
-     * Find a value in a map using sophisticated matching:
-     * 1. Try exact matches with candidate keys (fast path)
-     * 2. Try suffix matching against stored keys (fallback for provider prefix variations)
+     * Build a reverse suffix index for efficient model name lookups.
+     * Maps all possible suffixes of stored keys back to their full keys.
      *
-     * This handles cases like:
-     * - "qwen/model" matching "deepinfra/Qwen/Model" (after normalization)
-     * - "model:free" matching "provider/model"
+     * Example:
+     * - Key "openrouter/qwen/model" generates mappings:
+     *   "openrouter/qwen/model" -> "openrouter/qwen/model"
+     *   "qwen/model" -> "openrouter/qwen/model"
+     *   "model" -> "openrouter/qwen/model"
+     *
+     * @param map The map with normalized keys to build index from
+     * @return Suffix index mapping suffixes to full keys
+     */
+    public static Map<String, String> buildSuffixIndex(Map<String, ?> map) {
+        var index = new HashMap<String, String>();
+
+        for (String fullKey : map.keySet()) {
+            // 1. Always index the full key first
+            index.putIfAbsent(fullKey, fullKey);
+
+            // 2. Find all suffixes starting after a '/'
+            int currentSeparatorIndex = -1;
+            while ((currentSeparatorIndex = fullKey.indexOf('/', currentSeparatorIndex + 1)) != -1) {
+                // The suffix starts one character *after* the current separator
+                String suffix = fullKey.substring(currentSeparatorIndex + 1);
+
+                // First match wins: putIfAbsent ensures that the first fullKey
+                // to claim this suffix is the one that remains mapped
+                index.putIfAbsent(suffix, fullKey);
+            }
+        }
+
+        return Collections.unmodifiableMap(index);
+    }
+
+    /**
+     * Find a value in a map using sophisticated matching with a pre-built suffix index.
+     * This is the optimized version that avoids O(n*m) iteration.
+     *
+     * Performance: O(n) where n = number of candidates (~5-10)
      *
      * @param map The map to search in (with normalized keys)
      * @param modelName The model name to search for
+     * @param suffixIndex Pre-built suffix index from buildSuffixIndex()
      * @param <V> The type of values in the map
      * @return Optional of the found value, or empty if not found
      */
-    public static <V> Optional<V> findInMap(Map<String, V> map, String modelName) {
+    public static <V> Optional<V> findInMap(Map<String, V> map, String modelName, Map<String, String> suffixIndex) {
         if (StringUtils.isBlank(modelName) || map.isEmpty()) {
             return Optional.empty();
         }
 
         var candidates = generateCandidateKeys(modelName);
 
-        // First pass: try exact matches (O(n) where n = number of candidates, typically ~5-10)
+        // First pass: Try exact matches for all candidates
+        // This ensures we prioritize exact matches over suffix matches
         for (var candidate : candidates) {
-            var found = map.get(candidate);
-            if (found != null) {
-                return Optional.of(found);
+            var exactMatch = map.get(candidate);
+            if (exactMatch != null) {
+                return Optional.of(exactMatch);
             }
         }
 
-        // Second pass: try suffix matching against stored keys
-        // This handles cases like "qwen/model" matching "deepinfra/qwen/model"
-        // Note: This is O(n*m) where m = map size - consider building a reverse index if performance is critical
+        // Second pass: Try suffix index matches
+        // Only do this if no exact match was found
         for (var candidate : candidates) {
-            for (var entry : map.entrySet()) {
-                var storedKey = entry.getKey();
-                // Check if the stored key ends with the candidate (with a slash separator)
-                if (storedKey.endsWith("/" + candidate) || storedKey.equals(candidate)) {
-                    return Optional.of(entry.getValue());
+            String fullKey = suffixIndex.get(candidate);
+            if (fullKey != null && !fullKey.equals(candidate)) {
+                // Only use suffix index result if it points to a different key
+                var value = map.get(fullKey);
+                if (value != null) {
+                    return Optional.of(value);
                 }
             }
         }
 
         return Optional.empty();
     }
+
 }

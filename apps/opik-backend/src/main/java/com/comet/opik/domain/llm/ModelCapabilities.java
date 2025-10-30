@@ -31,6 +31,11 @@ public class ModelCapabilities {
 
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 
+    // Pre-built suffix index for O(n) lookups instead of O(n*m) iteration
+    // This maps all suffixes to their full keys for efficient matching
+    private static final Map<String, String> SUFFIX_INDEX = ModelNameMatcher
+            .buildSuffixIndex(CAPABILITIES_BY_NORMALIZED_NAME);
+
     /**
      * Checks if a model name matches any of the hardcoded vision patterns.
      */
@@ -43,7 +48,8 @@ public class ModelCapabilities {
     }
 
     private Optional<ModelCapability> find(String modelName) {
-        return ModelNameMatcher.findInMap(CAPABILITIES_BY_NORMALIZED_NAME, modelName);
+        // Use optimized version with pre-built suffix index
+        return ModelNameMatcher.findInMap(CAPABILITIES_BY_NORMALIZED_NAME, modelName, SUFFIX_INDEX);
     }
 
     private Map<String, ModelCapability> loadCapabilities() {
