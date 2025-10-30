@@ -328,7 +328,8 @@ public class AttachmentStripperService {
         long startTime = System.currentTimeMillis();
 
         try {
-            AtomicInteger attachmentCounter = new AtomicInteger(1);
+            // Start at 0, will be incremented to 1 for first attachment (using incrementAndGet pattern)
+            AtomicInteger attachmentCounter = new AtomicInteger(0);
 
             // Process the JSON tree recursively, returning potentially modified node
             JsonNode processed = wrapWithSpan("processJsonNode",
@@ -405,8 +406,10 @@ public class AttachmentStripperService {
         var objectNode = objectMapper.createObjectNode();
         boolean hasChanges = false;
 
-        for (Iterator<Map.Entry<String, JsonNode>> it = node.properties().iterator(); it.hasNext();) {
-            Map.Entry<String, JsonNode> entry = it.next();
+        // Iterate over fields using while loop
+        Iterator<Map.Entry<String, JsonNode>> fields = node.properties().iterator();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
             String fieldName = entry.getKey();
             JsonNode fieldValue = entry.getValue();
 
@@ -478,8 +481,11 @@ public class AttachmentStripperService {
         while (matcher.find()) {
             String base64Data = matcher.group(1);
 
+            // Increment counter first (starts at 0, so first attachment becomes 1)
+            int currentAttachmentNumber = attachmentCounter.incrementAndGet();
+
             // Try to process as attachment
-            String attachmentReference = processBase64Attachment(base64Data, attachmentCounter, ctx);
+            String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
 
             if (attachmentReference != null) {
                 // Append text before the match
@@ -488,9 +494,6 @@ public class AttachmentStripperService {
                 result.append(attachmentReference);
                 lastEnd = matcher.end();
                 foundAttachment = true;
-
-                // Increment counter after successful processing
-                attachmentCounter.incrementAndGet();
             }
         }
 
@@ -511,12 +514,12 @@ public class AttachmentStripperService {
      * to the EventBus for background processing. The generated filename includes the context prefix to avoid conflicts.
      *
      * @param base64Data the base64 string to process
-     * @param attachmentNumber the sequential attachment number for this request
+     * @param attachmentNumber the sequential attachment number for this request (1-based)
      * @param ctx the attachment context containing entity and workspace information
      * @return attachment reference string if processed, null if not a valid attachment
      */
     @WithSpan
-    private String processBase64Attachment(String base64Data, AtomicInteger attachmentNumber, AttachmentContext ctx) {
+    private String processBase64Attachment(String base64Data, int attachmentNumber, AttachmentContext ctx) {
         try {
             // Decode base64 and detect MIME type using Tika
             byte[] bytes = wrapWithSpan("base64.decode", () -> Base64.getDecoder().decode(base64Data));
@@ -531,7 +534,7 @@ public class AttachmentStripperService {
             // Generate attachment info with appropriate extension and context
             String extension = wrapWithSpan("getFileExtension", () -> getFileExtension(mimeType));
 
-            String fileName = ctx.fieldContext() + "-attachment-" + attachmentNumber.get() + "-"
+            String fileName = ctx.fieldContext() + "-attachment-" + attachmentNumber + "-"
                     + System.currentTimeMillis() + "." + extension;
 
             // Post event for async attachment upload
