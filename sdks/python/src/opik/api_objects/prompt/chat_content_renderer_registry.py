@@ -199,4 +199,3 @@ __all__ = [
     "DEFAULT_CHAT_RENDERER_REGISTRY",
     "register_default_chat_part_renderer",
 ]
-
