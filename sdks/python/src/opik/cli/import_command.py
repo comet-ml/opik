@@ -14,8 +14,10 @@ import click
 from rich.console import Console
 
 import opik
+from opik.api_objects.dataset import dataset_item as ds_item
 from opik.api_objects.prompt.prompt import Prompt
 from opik.api_objects.prompt.types import PromptType
+import opik.id_helpers as id_helpers  # type: ignore
 
 console = Console()
 
@@ -198,12 +200,6 @@ def _recreate_experiment(
                     provided_id = item_data.get(
                         "dataset_item_id"
                     ) or dataset_item_data.get("id")
-                    try:
-                        from opik.api_objects.dataset import dataset_item as ds_item
-                        import opik.id_helpers as id_helpers  # type: ignore
-                    except Exception:
-                        ds_item = None  # type: ignore
-                        id_helpers = None  # type: ignore
 
                     if ds_item is not None:
                         chosen_id = provided_id
