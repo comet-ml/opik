@@ -4,7 +4,11 @@ import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PROVIDER_TYPE, ProviderKey, ProviderOption } from "@/types/providers";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import { PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
+import {
+  PROVIDERS,
+  PROVIDERS_OPTIONS,
+  CUSTOM_PROVIDER_DEFAULT_NAME,
+} from "@/constants/providers";
 import {
   SelectItem,
   SelectValue,
@@ -15,7 +19,7 @@ import { Tag } from "@/components/ui/tag";
 const ADD_CUSTOM_PROVIDER_VALUE = "__add_custom_provider__" as const;
 
 type ProviderSelectProps = {
-  value: PROVIDER_TYPE | string | "";
+  value: PROVIDER_TYPE | string;
   onChange: (provider: PROVIDER_TYPE | string) => void;
   disabled?: boolean;
   configuredProviderKeys?: PROVIDER_TYPE[]; // Deprecated: Use configuredProvidersList instead
@@ -27,7 +31,7 @@ type ProviderSelectProps = {
 
 // Helper function to get display name for custom providers
 const getCustomProviderDisplayName = (provider: ProviderKey): string => {
-  return provider.provider_name || provider.keyName || "Custom provider";
+  return provider.provider_name || provider.keyName || CUSTOM_PROVIDER_DEFAULT_NAME;
 };
 
 const ProviderSelect: React.FC<ProviderSelectProps> = ({
@@ -100,14 +104,14 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
 
   const renderTrigger = useCallback(
     (value: string) => {
-      // When adding a new custom provider, show "Custom provider" even if value is empty
+      // When adding a new custom provider, show the default name even if value is empty
       if (isAddingCustomProvider && !value) {
         const Icon = PROVIDERS[PROVIDER_TYPE.CUSTOM].icon;
         return (
           <div className="flex w-full items-center justify-between text-foreground">
             <div className="flex items-center gap-2">
               <Icon />
-              Custom provider
+              {CUSTOM_PROVIDER_DEFAULT_NAME}
             </div>
           </div>
         );
