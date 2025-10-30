@@ -537,17 +537,9 @@ class GepaOptimizer(BaseOptimizer):
         }
         final_prompt.model_kwargs = filtered_model_kwargs
 
-        suppress_logs: ContextManager[Any] = nullcontext()
-        try:
-            from ..reporting_utils import suppress_opik_logs as _suppress_logs
-
-            suppress_logs = _suppress_logs()
-        except Exception:
-            pass
-
         final_eval_result: Any | None = None
 
-        with suppress_logs:
+        with suppress_opik_logs():
             try:
                 final_agent_cls = create_litellm_agent_class(
                     final_prompt, optimizer_ref=self
