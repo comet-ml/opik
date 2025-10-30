@@ -174,6 +174,14 @@ class RichGEPAOptimizerLogger:
             return
 
         # Format best score updates
+        if "Best score on train_val" in first:
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                console.print(f"│   Best train_val score: {score}", style="cyan")
+                self._last_raw_message = first
+            return
+
         if (
             "Best valset aggregate score so far" in first
             or "Best score on valset" in first
