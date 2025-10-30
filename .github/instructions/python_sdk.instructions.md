@@ -254,9 +254,8 @@ class DataProcessor:
 1. **Monolithic modules** - Don't create `utils.py` dumping grounds with unrelated classes/functions
 2. **Direct REST calls in Public API** - Always use API Object Clients for complex operations
 3. **Silent error handling** - Never catch and ignore exceptions in metrics
-4. **Double integration wrapping** - Check for `@opik_tracked` markers
-5. **Incorrect test isolation** - Unit tests and library integration tests should use fake backend, not real backend
-6. **Public internal methods** - Make methods private if only used within class/module
+4. **Incorrect test isolation** - Unit tests and library integration tests should use fake backend, not real backend
+5. **Public internal methods** - Make methods private if only used within class/module
 
 ## 📖 Essential References
 
