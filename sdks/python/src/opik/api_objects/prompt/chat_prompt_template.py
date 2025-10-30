@@ -80,10 +80,11 @@ class ChatPromptTemplate:
             if role is None:
                 continue
 
-            content = message.get("content", "")
+            content = cast(MessageContent, message.get("content", ""))
+            rendered_content: MessageContent
             if isinstance(content, str):
                 rendered_content = _render_template_string(
-                    cast(str, content), variables, resolved_template_type
+                    content, variables, resolved_template_type
                 )
             else:
                 rendered_content = self._registry.render_content(
