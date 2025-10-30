@@ -222,6 +222,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         enabled: true,
         filters: [],
         llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[defaultScope]),
+        pythonCodeDetails: cloneDeep(DEFAULT_PYTHON_CODE_DATA[defaultScope]),
       });
     }
   }, [open, defaultRule, projectId, form]);
@@ -541,6 +542,19 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
                                 field.onChange(value);
                                 form.setValue("type", type);
+
+                                // Reset details when switching types
+                                if (value === UI_EVALUATORS_RULE_TYPE.llm_judge) {
+                                  form.setValue(
+                                    "llmJudgeDetails",
+                                    cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[scope]),
+                                  );
+                                } else {
+                                  form.setValue(
+                                    "pythonCodeDetails",
+                                    cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
+                                  );
+                                }
                               }}
                             >
                               <ToggleGroupItem
@@ -593,7 +607,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     datasetColumnNames={datasetColumnNames}
                   />
                 ) : (
-                  <PythonCodeRuleDetails form={form} />
+                  <PythonCodeRuleDetails
+                    form={form}
+                    projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
+                  />
                 )}
 
                 {/* Filtering Section */}

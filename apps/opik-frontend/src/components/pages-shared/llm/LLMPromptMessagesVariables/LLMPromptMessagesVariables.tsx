@@ -43,6 +43,9 @@ const LLMPromptMessagesVariables = ({
   datasetColumnNames,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
+    if (!variables || typeof variables !== "object") {
+      return [];
+    }
     return Object.entries(variables)
       .map((e) => ({ label: e[0], value: e[1] }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -50,7 +53,8 @@ const LLMPromptMessagesVariables = ({
 
   const handleChangeVariables = useCallback(
     (changes: DropdownOption<string>) => {
-      onChange({ ...variables, [changes.label]: changes.value });
+      const safeVariables = variables && typeof variables === "object" ? variables : {};
+      onChange({ ...safeVariables, [changes.label]: changes.value });
     },
     [onChange, variables],
   );
