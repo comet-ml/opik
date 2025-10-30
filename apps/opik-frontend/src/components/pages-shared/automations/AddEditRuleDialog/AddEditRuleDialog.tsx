@@ -209,7 +209,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       // Reset the entire form to default values
       const defaultScope = EVALUATORS_RULE_SCOPE.trace;
       const defaultUIType = UI_EVALUATORS_RULE_TYPE.llm_judge;
-      
+
       form.reset({
         ruleName: "",
         projectId: projectId || "",
