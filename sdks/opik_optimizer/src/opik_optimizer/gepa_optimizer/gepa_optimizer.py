@@ -213,6 +213,24 @@ class GepaOptimizer(BaseOptimizer):
         # Calculate max_metric_calls from max_trials and effective samples
         effective_n_samples = len(items)
         max_metric_calls = max_trials * effective_n_samples
+        potential_trials = (
+            max_metric_calls // effective_n_samples if effective_n_samples else 0
+        )
+        if reflection_minibatch_size > max_trials:
+            logger.warning(
+                "reflection_minibatch_size (%s) exceeds max_trials (%s); "
+                "GEPA reflection will not run. Increase max_trials or lower the minibatch.",
+                reflection_minibatch_size,
+                max_trials,
+            )
+        elif potential_trials and reflection_minibatch_size > potential_trials:
+            logger.warning(
+                "reflection_minibatch_size (%s) exceeds the maximum number of "
+                "candidates GEPA can evaluate with the current metric budget (%s). "
+                "Consider increasing max_trials or n_samples.",
+                reflection_minibatch_size,
+                potential_trials,
+            )
 
         data_insts = self._build_data_insts(items, input_key, output_key)
 
