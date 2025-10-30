@@ -1,6 +1,7 @@
 package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
+import com.comet.opik.domain.llm.ModelNameMatcher;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -11,11 +12,8 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -75,74 +73,32 @@ public class CostService {
             return DEFAULT_COST;
         }
 
-        var searchCandidates = candidateKeys(modelName, provider);
+        // Generate candidate keys for model+provider combinations
+        var modelCandidates = ModelNameMatcher.generateCandidateKeys(modelName);
+        var normalizedProvider = ModelNameMatcher.normalize(provider);
 
-        // First pass: try exact matches
-        for (var candidate : searchCandidates) {
-            var found = modelProviderPrices.get(candidate);
+        // Try each candidate with the provider
+        for (var modelCandidate : modelCandidates) {
+            var key = createModelProviderKey(modelCandidate, normalizedProvider);
+            var found = modelProviderPrices.get(key);
             if (found != null) {
                 return found;
             }
         }
 
         // Second pass: try suffix matching against stored keys
-        // This handles cases like "qwen2.5-vl-32b-instruct/openrouter" matching "qwen/qwen2.5-vl-32b-instruct/deepinfra"
-        for (var candidate : searchCandidates) {
+        for (var modelCandidate : modelCandidates) {
+            var key = createModelProviderKey(modelCandidate, normalizedProvider);
             for (var entry : modelProviderPrices.entrySet()) {
                 var storedKey = entry.getKey();
-                // Check if the stored key ends with the candidate (after a slash) or equals it
-                if (storedKey.endsWith("/" + candidate) || storedKey.equals(candidate)) {
+                if (storedKey.endsWith("/" + key) || storedKey.equals(key)) {
                     return entry.getValue();
                 }
             }
         }
 
+        log.debug("Model price not found for model='{}', provider='{}'", modelName, provider);
         return DEFAULT_COST;
-    }
-
-    /**
-     * Generate candidate search keys for model lookup.
-     * Handles variations like:
-     * - Full model name with provider
-     * - Model name without prefix
-     * - Model name with colons (:free, :extended, etc.)
-     */
-    private static List<String> candidateKeys(String modelName, String provider) {
-        var candidates = new HashSet<String>();
-        var normalizedModel = normalize(modelName);
-        var normalizedProvider = provider.trim().toLowerCase();
-
-        // Full model name with provider
-        candidates.add(createModelProviderKey(normalizedModel, normalizedProvider));
-
-        // Try stripping the first prefix (e.g., "openrouter/qwen/..." -> "qwen/...")
-        var slashIndex = normalizedModel.indexOf('/');
-        if (slashIndex > 0 && slashIndex < normalizedModel.length() - 1) {
-            var withoutFirstPrefix = normalizedModel.substring(slashIndex + 1);
-            candidates.add(createModelProviderKey(withoutFirstPrefix, normalizedProvider));
-        }
-
-        // Try model name after last slash
-        var lastSlashIndex = normalizedModel.lastIndexOf('/');
-        if (lastSlashIndex > 0 && lastSlashIndex < normalizedModel.length() - 1) {
-            var afterLastSlash = normalizedModel.substring(lastSlashIndex + 1);
-            candidates.add(createModelProviderKey(afterLastSlash, normalizedProvider));
-        }
-
-        // Handle colon suffixes (e.g., "model:free" -> "model")
-        var colonIndex = normalizedModel.indexOf(':');
-        if (colonIndex > 0) {
-            var withoutColon = normalizedModel.substring(0, colonIndex);
-            candidates.add(createModelProviderKey(withoutColon, normalizedProvider));
-
-            // Also try without prefix and without colon
-            if (slashIndex > 0 && slashIndex < colonIndex) {
-                var withoutPrefixOrColon = normalizedModel.substring(slashIndex + 1, colonIndex);
-                candidates.add(createModelProviderKey(withoutPrefixOrColon, normalizedProvider));
-            }
-        }
-
-        return new ArrayList<>(candidates);
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
@@ -194,17 +150,14 @@ public class CostService {
                 }
 
                 parsedModelPrices.put(
-                        normalize(createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider))),
+                        ModelNameMatcher.normalize(
+                                createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider))),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
                                 cacheReadInputTokenPrice, calculator));
             }
         });
 
         return parsedModelPrices;
-    }
-
-    private static String normalize(String key) {
-        return key.trim().toLowerCase();
     }
 
     private static String parseModelName(String modelName) {

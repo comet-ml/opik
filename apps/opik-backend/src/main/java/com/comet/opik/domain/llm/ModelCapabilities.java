@@ -9,11 +9,8 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -46,33 +43,7 @@ public class ModelCapabilities {
     }
 
     private Optional<ModelCapability> find(String modelName) {
-        if (StringUtils.isBlank(modelName)) {
-            return Optional.empty();
-        }
-
-        var searchCandidates = candidateKeys(modelName);
-
-        // First pass: try exact matches
-        for (var candidate : searchCandidates) {
-            var found = CAPABILITIES_BY_NORMALIZED_NAME.get(candidate);
-            if (found != null) {
-                return Optional.of(found);
-            }
-        }
-
-        // Second pass: try matching against the suffix of stored model names
-        // This handles cases like "qwen/qwen2.5-vl-32b-instruct" matching "deepinfra/Qwen/Qwen2.5-VL-32B-Instruct"
-        for (var candidate : searchCandidates) {
-            for (var entry : CAPABILITIES_BY_NORMALIZED_NAME.entrySet()) {
-                var normalizedStoredKey = entry.getKey();
-                // Check if the stored key ends with the candidate
-                if (normalizedStoredKey.endsWith("/" + candidate) || normalizedStoredKey.equals(candidate)) {
-                    return Optional.of(entry.getValue());
-                }
-            }
-        }
-
-        return Optional.empty();
+        return ModelNameMatcher.findInMap(CAPABILITIES_BY_NORMALIZED_NAME, modelName);
     }
 
     private Map<String, ModelCapability> loadCapabilities() {
@@ -91,11 +62,11 @@ public class ModelCapabilities {
                     return;
                 }
 
-                var normalizedName = normalize(modelName);
+                var normalizedName = ModelNameMatcher.normalize(modelName);
                 var canonicalName = modelName.trim();
 
                 // Check if model matches vision patterns - override JSON if it does
-                boolean supportsVision = modelData.supportsVision() || matchesVisionPattern(canonicalName);
+                boolean supportsVision = modelData.supportsVision() || matchesVisionPattern(normalizedName);
 
                 capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
                         .name(canonicalName)
@@ -112,29 +83,4 @@ public class ModelCapabilities {
         }
     }
 
-    private List<String> candidateKeys(String modelName) {
-        var candidates = new HashSet<String>();
-        var normalized = normalize(modelName);
-        candidates.add(normalized);
-
-        var slashIndex = normalized.lastIndexOf('/') + 1;
-        if (slashIndex > 0 && slashIndex < normalized.length()) {
-            candidates.add(normalized.substring(slashIndex));
-        }
-
-        var colonIndex = normalized.indexOf(':');
-        if (colonIndex > 0) {
-            candidates.add(normalized.substring(0, colonIndex));
-
-            if (slashIndex > 0 && slashIndex < colonIndex) {
-                candidates.add(normalized.substring(slashIndex, colonIndex));
-            }
-        }
-
-        return new ArrayList<>(candidates);
-    }
-
-    private String normalize(String modelName) {
-        return modelName.trim().toLowerCase();
-    }
 }
