@@ -50,7 +50,6 @@ type ManageAIProviderDialogProps = {
   onAddProvider?: (provider: PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: PROVIDER_TYPE) => void;
   configuredProvidersList?: ProviderKey[];
-  defaultProvider?: PROVIDER_TYPE;
 };
 
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
@@ -60,10 +59,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   onAddProvider,
   onDeleteProvider,
   configuredProvidersList,
-  defaultProvider,
 }) => {
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false);
   const [isAddingCustomProvider, setIsAddingCustomProvider] = useState(false);
+  const isProgrammaticChangeRef = React.useRef(false);
   const { mutate: createMutate } = useProviderKeysCreateMutation();
   const { mutate: updateMutate } = useProviderKeysUpdateMutation();
   const { mutate: deleteMutate } = useProviderKeysDeleteMutation();
@@ -77,7 +76,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       provider:
         providerKey?.provider === PROVIDER_TYPE.CUSTOM
           ? providerKey.id
-          : providerKey?.provider || defaultProvider || "",
+          : providerKey?.provider || "",
       apiKey: "",
       location: providerKey?.configuration?.location ?? "",
       url: providerKey?.base_url ?? "",
@@ -89,7 +88,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     } as AIProviderFormType,
   });
 
-  const provider = form.watch("provider") as PROVIDER_TYPE | string | "";
+  const provider = form.watch("provider") as PROVIDER_TYPE | string;
 
   const configuredProviderKeys = useMemo(
     () => (configuredProvidersList || []).map((p) => p.provider),
@@ -198,19 +197,29 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   );
 
   const handleSubmitClick = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
+    async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.preventDefault();
 
       // Ensure provider field is set before validation when adding custom provider
-      if (
-        isAddingCustomProvider &&
-        form.getValues("provider") !== PROVIDER_TYPE.CUSTOM
-      ) {
+      if (isAddingCustomProvider) {
+        // Mark that we're making a programmatic change
+        isProgrammaticChangeRef.current = true;
+        // Set the value - this will update the watched value
         form.setValue("provider", PROVIDER_TYPE.CUSTOM);
+        // Give React time to process the state update
+        await new Promise(resolve => setTimeout(resolve, 0));
+        // Reset the flag
+        isProgrammaticChangeRef.current = false;
+        // Then manually trigger validation for all fields
+        const isValid = await form.trigger();
+        if (!isValid) {
+          // Validation failed, stop here
+          return;
+        }
       }
 
       // Trigger form submission with validation and pass validated data to handler
-      form.handleSubmit(cloudConfigHandler)();
+      await form.handleSubmit(cloudConfigHandler)();
     },
     [form, isAddingCustomProvider, cloudConfigHandler],
   );
@@ -277,7 +286,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <DialogAutoScrollBody>
+        <DialogAutoScrollBody className="max-h-[60vh]">
           <ExplainerDescription
             className="mb-4"
             {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
@@ -302,8 +311,16 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
                           value={(field.value as string) || ""}
                           isAddingCustomProvider={isAddingCustomProvider}
                           onChange={(v) => {
+                            // If this is a programmatic change, ignore it completely
+                            if (isProgrammaticChangeRef.current) {
+                              return;
+                            }
+                            
                             // Reset isAddingCustomProvider when user manually selects a provider
-                            setIsAddingCustomProvider(false);
+                            if (isAddingCustomProvider) {
+                              // User manually selected a different provider, exit add mode
+                              setIsAddingCustomProvider(false);
+                            }
 
                             // Check if it's a custom provider ID
                             const customProvider =

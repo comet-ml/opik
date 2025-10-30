@@ -9,11 +9,10 @@ import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProvid
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { formatDate } from "@/lib/date";
-import { PROVIDERS } from "@/constants/providers";
+import { PROVIDERS, CUSTOM_PROVIDER_DEFAULT_NAME } from "@/constants/providers";
 import AIProviderCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import AIProvidersRowActionsCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
-import { areAllProvidersConfigured } from "@/lib/provider";
 import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -28,7 +27,7 @@ export const DEFAULT_COLUMNS: ColumnData<ProviderKey>[] = [
     type: COLUMN_TYPE.string,
     accessorFn: (row) =>
       row.provider === PROVIDER_TYPE.CUSTOM
-        ? row.keyName || "Custom Provider"
+        ? row.keyName || CUSTOM_PROVIDER_DEFAULT_NAME
         : PROVIDERS[row.provider]?.apiKeyName,
   },
   {
@@ -142,9 +141,6 @@ const AIProvidersTab = () => {
         <Button
           onClick={handleAddConfigurationClick}
           size="sm"
-          disabled={areAllProvidersConfigured(
-            providerKeys.filter((pk) => pk.provider !== PROVIDER_TYPE.CUSTOM),
-          )}
         >
           Add configuration
         </Button>

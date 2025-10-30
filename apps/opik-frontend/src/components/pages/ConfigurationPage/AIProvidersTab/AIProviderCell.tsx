@@ -2,7 +2,7 @@ import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { PROVIDERS } from "@/constants/providers";
+import { PROVIDERS, CUSTOM_PROVIDER_DEFAULT_NAME } from "@/constants/providers";
 import { ProviderKey, PROVIDER_TYPE } from "@/types/providers";
 
 const AIProviderCell = (context: CellContext<ProviderKey, PROVIDER_TYPE>) => {
@@ -14,7 +14,7 @@ const AIProviderCell = (context: CellContext<ProviderKey, PROVIDER_TYPE>) => {
   // For other providers, show the label from PROVIDERS constant
   const providerKeyLabel =
     provider === PROVIDER_TYPE.CUSTOM
-      ? row.keyName || "Custom Provider"
+      ? row.keyName || CUSTOM_PROVIDER_DEFAULT_NAME
       : PROVIDERS[provider]?.label || "";
 
   return (
