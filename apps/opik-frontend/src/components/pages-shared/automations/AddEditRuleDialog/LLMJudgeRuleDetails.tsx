@@ -60,11 +60,13 @@ const MESSAGE_TYPE_OPTIONS = [
 type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
   form: UseFormReturn<EvaluationRuleFormType>;
+  projectName?: string;
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
   form,
+  projectName,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
   const { calculateModelProvider, calculateDefaultModel } =
@@ -310,6 +312,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     projectId={form.watch("projectId")}
                     variables={field.value}
                     onChange={field.onChange}
+                    projectName={projectName}
                   />
                 </>
               );

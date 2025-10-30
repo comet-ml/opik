@@ -125,6 +125,7 @@ type AddEditRuleDialogProps = {
   setOpen: (open: boolean) => void;
   projectId?: string;
   rule?: EvaluatorsRule;
+  projectName?: string; // Optional: project name for pre-selected projects
 };
 
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
@@ -146,6 +147,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   setOpen,
   projectId,
   rule: defaultRule,
+  projectName,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -201,17 +203,26 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
   const formProjectId = form.watch("projectId");
 
-  // Update form projectId when dialog opens and projectId prop is provided
+  // Reset form to default values when dialog opens for creating a new rule
   useEffect(() => {
-    if (open && projectId && !defaultRule) {
-      // Always update when dialog opens, even if formProjectId seems to match
-      // This ensures the project is selected even if the form was initialized before projectId was available
-      const currentProjectId = form.getValues("projectId");
-      if (projectId !== currentProjectId) {
-        form.setValue("projectId", projectId, { shouldValidate: true });
-      }
+    if (open && !defaultRule) {
+      // Reset the entire form to default values
+      const defaultScope = EVALUATORS_RULE_SCOPE.trace;
+      const defaultUIType = UI_EVALUATORS_RULE_TYPE.llm_judge;
+
+      form.reset({
+        ruleName: "",
+        projectId: projectId || "",
+        samplingRate: 1,
+        uiType: defaultUIType,
+        scope: defaultScope,
+        type: EVALUATORS_RULE_TYPE.llm_judge,
+        enabled: true,
+        filters: [],
+        llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[defaultScope]),
+      });
     }
-  }, [open, projectId, defaultRule, form]);
+  }, [open, defaultRule, projectId, form]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -576,6 +587,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   <LLMJudgeRuleDetails
                     workspaceName={workspaceName}
                     form={form}
+                    projectName={projectName}
                   />
                 ) : (
                   <PythonCodeRuleDetails form={form} />
