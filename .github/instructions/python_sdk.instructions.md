@@ -187,8 +187,10 @@ def calculate_hash(...): ...
 ```
 
 ### Import Organization
+Always import modules, not names. General exceptions are standard library type hints and type aliases generally considered widely known types across the library (they are usually stored in `types.py` root module).
+
 ```python
-# ✅ Good: Module imports, grouped by type (except for common type hint primitives)
+# ✅ Good: Module imports, grouped by type (except for type hints and type aliases)
 import atexit
 import logging
 from typing import Any, Dict, List
@@ -198,10 +200,14 @@ import httpx
 from . import config, exceptions
 from .message_processing import messages
 
-# ❌ Bad: Name imports, unorganized
-from opik.exceptions import OpikException
+# ✅ Good: Type hints and type aliases are allowed directly
+from typing import Optional, Union, TypeVar
+from .types import ErrorInfoDict, FeedbackScoreDict
+
+# ❌ Bad: Importing names directly (violates "import module, not name" rule)
+from opik.exceptions import OpikException, ValidationError
+from opik.config import get_from_user_inputs
 from httpx import Client
-import sys
 ```
 
 ### Access Control
@@ -231,6 +237,16 @@ class DataProcessor:
 - [ ] No complex business logic in Public API layer
 - [ ] Module logic segregation (one responsibility per module)
 
+### Code Quality Review
+- [ ] Consistent parameter ordering and naming
+- [ ] Proper access control (private methods when appropriate)
+- [ ] Clean import organization
+- [ ] Type hints where possible
+
+### Error Handling Review
+- [ ] Specific OpikException subclasses used
+- [ ] Metrics raise MetricComputationError (never hide errors)
+
 ### Testing Review
 - [ ] Appropriate test type used (unit vs integration vs e2e)
 - [ ] Fake backend used for unit/library integration tests
@@ -238,24 +254,15 @@ class DataProcessor:
 - [ ] Verifiers used for E2E assertions
 - [ ] Always flush tracker in tests that create spans/traces
 
-### Error Handling Review
-- [ ] Specific OpikException subclasses used
-- [ ] Metrics raise MetricComputationError (never hide errors)
-- [ ] Proper exception chaining with `from e`
-
-### Code Quality Review
-- [ ] Consistent parameter ordering and naming
-- [ ] Proper access control (private methods when appropriate)
-- [ ] Clean import organization
-- [ ] Type hints where possible
 
 ## 🚫 Critical Anti-Patterns
 
-1. **Monolithic modules** - Don't create `utils.py` dumping grounds with unrelated classes/functions
-2. **Direct REST calls in Public API** - Always use API Object Clients for complex operations
-3. **Silent error handling** - Never catch and ignore exceptions in metrics
-4. **Incorrect test isolation** - Unit tests and library integration tests should use fake backend, not real backend
-5. **Public internal methods** - Make methods private if only used within class/module
+1. **Import names, not modules** - Always import modules, not names (except type hints and type aliases)
+2. **Monolithic modules** - Don't create `utils.py` dumping grounds with unrelated classes/functions, god modules.
+3. **Direct REST calls in Public API** - Always use API Object Clients for complex operations
+4. **Silent error handling** - Never catch and ignore exceptions in metrics
+5. **Incorrect test isolation** - Unit tests and library integration tests should use fake backend, not real backend
+6. **Public internal methods** - Make methods private if only used within class/module
 
 ## 📖 Essential References
 
