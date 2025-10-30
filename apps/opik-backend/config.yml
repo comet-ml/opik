@@ -439,8 +439,15 @@ clickHouseLogAppender:
 
 workspaceSettings:
   # Default: 50
-  # Description: Maximum size of a workspace in GB to allow dynamic sorting. This value is calculated via estimated size based on spans table
-    maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Description: Maximum size of a workspace in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all workspace sizes).
+  # This value is calculated via estimated size based on spans table
+  maxSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_SIZE_IN_GB_TO_ALLOW_SORTING:-50}
+  # Default: 100
+  # Description: Maximum size of a project in GB to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all project sizes).
+  # This value is calculated via estimated size based on spans table.
+  maxProjectSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_PROJECT_SIZE_IN_GB_TO_ALLOW_SORTING:-100}
 
 # Configuration AWS S3
 s3Config:

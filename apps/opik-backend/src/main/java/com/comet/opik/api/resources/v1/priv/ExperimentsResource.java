@@ -34,7 +34,6 @@ import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -125,12 +124,13 @@ public class ExperimentsResource {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
-        WorkspaceMetadata metadata = workspaceMetadataService
+        var metadata = workspaceMetadataService
                 .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        if (!sortingFields.isEmpty() && !metadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -155,7 +155,7 @@ public class ExperimentsResource {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
                 .map(experimentPage -> {
-                    if (!metadata.canUseDynamicSorting()) {
+                    if (metadata.cannotUseDynamicSorting()) {
                         return experimentPage.toBuilder().sortableBy(List.of()).build();
                     }
                     return experimentPage;

@@ -25,7 +25,6 @@ import com.comet.opik.domain.SpanSearchCriteria;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -120,11 +119,15 @@ public class SpansResource {
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var sortingFields = sortingFactory.newSorting(sorting);
 
-        WorkspaceMetadata workspaceMetadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        var workspaceMetadata = workspaceMetadataService
+                .getProjectMetadata(workspaceId, projectId, projectName)
+                // Context is required for resolving project ID
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && workspaceMetadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -140,13 +143,11 @@ public class SpansResource {
                 .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
                 .build();
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
         SpanPage spans = spanService.find(page, size, spanSearchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                    if (workspaceMetadata.cannotUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;

@@ -124,7 +124,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        model="anthropic:claude-3-5-sonnet-latest",
+        model="anthropic:claude-sonnet-4-5-20250929",
         messages=messages,
         max_tokens=10,
     )
@@ -156,7 +156,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING.starting_with("claude-3-5-sonnet"),
+                model=ANY_STRING.starting_with("claude-sonnet-4-5"),
                 provider="anthropic",
             )
         ],

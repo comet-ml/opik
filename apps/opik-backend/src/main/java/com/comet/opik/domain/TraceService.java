@@ -83,6 +83,8 @@ public interface TraceService {
 
     Mono<Trace> get(UUID id, boolean stripAttachments);
 
+    Flux<Trace> getByIds(List<UUID> ids);
+
     Mono<TraceDetails> getTraceDetailsById(UUID id);
 
     Mono<Void> delete(Set<UUID> ids, UUID projectId);
@@ -464,6 +466,15 @@ class TraceServiceImpl implements TraceService {
         return template.nonTransaction(connection -> dao.findById(id, connection))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace", id))))
                 .flatMap(trace -> attachmentReinjectorService.reinjectAttachments(trace, !stripAttachments));
+    }
+
+    @Override
+    @WithSpan
+    public Flux<Trace> getByIds(@NonNull List<UUID> ids) {
+        Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
+        log.info("Fetching '{}' traces by IDs", ids.size());
+
+        return template.stream(connection -> dao.findByIds(ids, connection));
     }
 
     @Override

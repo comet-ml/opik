@@ -61,6 +61,7 @@ SENSITIVE_PARAMS_TO_EXCLUDE: List[str] = [
 
 PROVIDER_MAPPING: Dict[str, LLMProvider] = {
     "openai": LLMProvider.OPENAI,
+    "vertex_ai": LLMProvider.GOOGLE_VERTEXAI,
     "vertex_ai-language-models": LLMProvider.GOOGLE_VERTEXAI,
     "gemini": LLMProvider.GOOGLE_AI,
     "anthropic": LLMProvider.ANTHROPIC,

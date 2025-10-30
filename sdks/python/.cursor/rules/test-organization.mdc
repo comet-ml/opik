@@ -127,24 +127,34 @@ tests/e2e/
 │   ├── test_experiment_evaluate.py
 │   └── test_threads_evaluate.py
 ├── test_dataset.py         # Dataset CRUD operations
-├── test_tracing.py        # Tracing functionality
+├── test_tracing.py         # Tracing functionality
 ├── test_prompt.py         # Prompt management
 ├── test_guardrails.py     # Guardrails functionality
 └── verifiers.py           # Domain-specific assertion helpers
 
 # Example test (from test_dataset.py)
 def test_create_and_populate_dataset__happyflow(opik_client: opik.Opik, dataset_name: str):
-    # Test complete dataset workflow
+    # Create dataset
     dataset = opik_client.create_dataset(name=dataset_name)
     dataset.insert([
-        {"input": {"query": "What is AI?"}, "expected_output": {"answer": "AI"}},
+        {"input": {"query": "What is AI?"}, "expected_output": {"answer": "Artificial Intelligence"}},
+        {"input": {"query": "What is ML?"}, "expected_output": {"answer": "Machine Learning"}},
     ])
 
-    # Use domain-specific verifiers
+    # Verify with domain-specific helper
     verifiers.verify_dataset(
         opik_client=opik_client,
         name=dataset_name,
-        dataset_items=[expected_items]
+        dataset_items=[
+            dataset_item.DatasetItem(
+                input={"query": "What is AI?"},
+                expected_output={"answer": "Artificial Intelligence"}
+            ),
+            dataset_item.DatasetItem(
+                input={"query": "What is ML?"},
+                expected_output={"answer": "Machine Learning"}
+            ),
+        ],
     )
 ```
 
@@ -215,6 +225,133 @@ tests/
     └── openai/requirements.txt  # Integration-specific dependencies
 ```
 
+## Writing Tests
+
+### Test Naming Convention
+
+Follow the pattern: `test_WHAT__CASE_DESCRIPTION__EXPECTED_RESULT`
+
+```python
+# ✅ Good
+def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name: str):
+def test_tracked_function__error_inside_inner_function__caught_in_top_level_span__inner_span_has_error_info():
+def test_insert_and_update_item__dataset_size_should_be_the_same__an_item_with_the_same_id_should_have_new_content():
+
+# ❌ Bad
+def test_tracking():
+def test_error():
+def test_evaluate():
+```
+
+### Using Fake Backend
+
+```python
+def test_my_feature(fake_backend):
+    # 1. Execute code that creates traces/spans
+    @opik.track
+    def my_function(x):
+        return x * 2
+
+    result = my_function(5)
+    opik.flush_tracker()  # Always flush!
+
+    # 2. Build expected structure
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="my_function",
+        input={"x": 5},
+        output={"output": 10},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="my_function",
+                input={"x": 5},
+                output={"output": 10},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[]
+            )
+        ]
+    )
+
+    # 3. Assert
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+```
+
+### Testing with Real Backend
+
+```python
+def test_my_e2e_feature(opik_client, temporary_project_name):
+    # 1. Create resources
+    trace_id = opik_client.trace(
+        name="test_trace",
+        project_name=temporary_project_name
+    )
+    opik_client.flush()
+
+    # 2. Verify using verifiers
+    verify_trace(
+        opik_client,
+        trace_id=trace_id,
+        name="test_trace",
+        project_name=temporary_project_name
+    )
+```
+
+### Parametrized Tests
+
+```python
+@pytest.mark.parametrize(
+    "input_value, expected_output",
+    [
+        (5, 10),
+        (10, 20),
+        (0, 0),
+    ],
+)
+def test_double_function__various_inputs__correct_outputs(
+    fake_backend, input_value, expected_output
+):
+    @opik.track
+    def double(x):
+        return x * 2
+
+    result = double(input_value)
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].spans[0].output == {"output": expected_output}
+```
+
+### Integration Test Requirements
+
+Each integration should have:
+1. `requirements.txt` with integration dependencies
+2. `conftest.py` with integration-specific fixtures
+3. `constants.py` for test constants (models, etc.)
+4. Tests for main integration features
+
+```python
+# library_integration/myintegration/requirements.txt
+myintegration>=1.0.0
+
+# library_integration/myintegration/conftest.py
+import pytest
+import os
+
+@pytest.fixture
+def ensure_myintegration_configured():
+    if not os.getenv("MYINTEGRATION_API_KEY"):
+        pytest.skip("MYINTEGRATION_API_KEY not configured")
+
+# library_integration/myintegration/test_myintegration.py
+def test_myintegration_basic(fake_backend, ensure_myintegration_configured):
+    # Test implementation
+```
+
 ## Best Practices
 
 ### Do's:
@@ -235,6 +372,7 @@ tests/
 
 ## Key References
 
+- [Testing Design Document](TESTING.md)
 - [Test Best Practices](test-best-practices.mdc)
 - [Test Implementation](test-implementation.mdc)
 - [Architecture Guidelines](architecture.mdc)

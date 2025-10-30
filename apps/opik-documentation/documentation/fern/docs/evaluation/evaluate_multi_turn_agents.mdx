@@ -1,0 +1,220 @@
+---
+subtitle: Step-by-step guide to evaluate multi-turn agents
+---
+
+When working on chatbots or multi-turn agents, it can become a challenge to evaluate the agent's
+behavior over multiple turns as you don't know what the user would have asked as a follow-up
+question based on the previous turns.
+
+To achieve multi-turn evaluation, we can turn to simulation techniques to simulate the user's
+response based on the previous turns. The core idea is that we can use an LLM to simulate what the
+user would have responded based on the previous turns and run this for a number of turns.
+
+Once we have this conversation, we can use Opik evaluation features to score the agent's behavior.
+
+<Frame>
+    <img src="/img/evaluation/multi_turn_evaluation.png" />
+</Frame>
+
+## Creating the user simulator
+
+In order to perform multi-turn evaluation, we need to create a user simulator that will generate
+the user's response based on previous turns
+
+```python title="User simulator" maxLines=1000
+from opik.simulation import SimulatedUser
+
+user_simulator = SimulatedUser(
+    persona="You are a frustrated user who wants a refund",
+    model="openai/gpt-4.1",
+)
+
+# Generate a user message that will start the conversation
+print(user_simulator.generate_response([
+    {"role": "assistant", "content": "Hello, how can I help you today?"}
+]))
+
+# Generate a user message based on a couple of back and forth turns
+print(user_simulator.generate_response([
+    {"role": "assistant", "content": "Hello, how can I help you today?"},
+    {"role": "user", "content": "My product just broke 2 days after I bought it, I want a refund."},
+    {"role": "assistant", "content": "I'm sorry to hear that. What happened?"}
+]))
+```
+
+Now that we have a way to simulate the user, we can create multiple simulations that we will in
+turn evaluate.
+
+## Running simulations
+
+Now that we have a way to simulate the user, we can create multiple simulations:
+
+<Steps>
+    <Step title="1. Create a list of scenarios">
+        In order to more easily keep track of the scenarios we will be running, let's create a
+        dataset with the user personas we will be using:
+
+        ```python title="Running simulations" maxLines=1000
+        import opik
+
+        opik_client = opik.Opik()
+        dataset = opik_client.get_or_create_dataset(name="Multi-turn evaluation")
+        dataset.insert([
+            {"user_persona": "You are a frustrated user who wants a refund"},
+            {"user_persona": "You are a user who is happy with your product and wants to buy more"},
+            {"user_persona": "You are a user who is having trouble with your product and wants to get help"}
+        ])
+        ```
+    </Step>
+    <Step title="2. Create our agent app">
+        In order to run the simulations, we need to create our agent app based on our existing
+        agent. The `run_agent` function we will be creating will have the following signature:
+
+        ```python title="Run agent function signature" maxLines=1000
+        from langchain.agents import create_agent
+        from opik.integrations.langchain import OpikTracer
+
+        opik_tracer = OpikTracer()
+
+        agent = create_agent(
+            model="openai:gpt-4.1",
+            tools=[],
+            system_prompt="You are a helpful assistant",
+        )
+
+        agent_history = {}
+
+        def run_agent(user_message: str, *, thread_id: str, **kwargs) -> dict[str, str]:
+            if thread_id not in agent_history:
+                agent_history[thread_id] = []
+            
+            agent_history[thread_id].append({"role": "user", "content": user_message})
+            messages = agent_history[thread_id]
+
+            response = agent.invoke({"messages": messages}, config={"callbacks": [opik_tracer]})
+            agent_history[thread_id] = response["messages"]
+
+            return response["messages"][-1].content
+        ```
+    </Step>
+    <Step title="3. Run the simulations">
+        Now that we have a dataset with the user personas, we can run the simulations:
+
+        ```python title="Running simulations" maxLines=1000
+        import opik
+        from opik.simulation import run_simulation
+
+        # Fetch the user personas
+        opik_client = opik.Opik()
+        dataset = opik_client.get_or_create_dataset(name="Multi-turn evaluation")
+
+        # Run the simulations
+        all_simulations = []
+        for item in dataset.get_items():
+            user_persona = item["user_persona"]
+            user_simulator = SimulatedUser(
+                persona=user_persona,
+                model="openai/gpt-4.1",
+            )
+            simulation = run_simulation(
+                app=run_agent,
+                user_simulator=user_simulator,
+                max_turns=5,
+            )
+
+            all_simulations.append(simulation)
+        ```
+
+        <Tip>
+        The `run_simulation` function keeps track of the internal conversation state by constructing
+        a list of messages with the result of the `run_agent` function as an assistant message and
+        the `UserSimulator`'s response as a user message.
+
+        If you need more complex conversation state, you can create threads using the `UserSimulator`'s
+        `generate_response` method directly.
+        </Tip>
+
+        The simulated threads will be available in the Opik thread UI:
+
+        <Frame>
+            <img src="/img/evaluation/multi_turn_evaluation_threads.png" />
+        </Frame>
+    </Step>
+</Steps>
+
+## Scoring threads
+
+When working on evaluating multi-turn conversations, you can use one of Opik's built-in conversation
+metrics or [create your own](/evaluation/metrics/custom_conversation_metric).
+
+If you've used the `run_simulation` function, you will already have a list of conversation messages
+that you can pass directly to the metrics, otherwise you can use the `evaluate_threads` function:
+<CodeBlock>
+    ```python title="Scoring simulations" maxLines=1000
+    import opik
+    from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
+
+    opik_client = opik.Opik()
+
+    # Define the metrics you want to use
+    conversation_coherence_metric = ConversationalCoherenceMetric()
+    user_frustration_metric = UserFrustrationMetric()
+
+    for simulation in all_simulations:
+        conversation = simulation["conversation_history"]
+
+        coherence_score = conversation_coherence_metric.score(conversation)
+        frustration_score = user_frustration_metric.score(conversation)
+
+        opik_client.log_threads_feedback_scores(
+            scores=[
+                {
+                    "id": simulation["thread_id"],
+                    "name": "conversation_coherence",
+                    "value": coherence_score.value,
+                    "reason": coherence_score.reason
+                },
+                {
+                    "id": simulation["thread_id"],
+                    "name": "user_frustration",
+                    "value": frustration_score.value,
+                    "reason": frustration_score.reason
+                }
+            ]
+        )
+    ```
+
+    ```python title="Using evaluate_threads"
+    from opik.evaluation import evaluate_threads
+    from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
+
+    opik_client = opik.Opik()
+
+    conversation_coherence_metric = ConversationalCoherenceMetric()
+    user_frustration_metric = UserFrustrationMetric()
+
+    results = evaluate_threads(
+        project_name="multi_turn_evaluation",
+        filter_string=f'thread_id = "<THREAD_ID>"',
+        metrics=[conversation_coherence_metric, user_frustration_metric],
+        trace_input_transform=lambda x: x["input"],
+        trace_output_transform=lambda x: x["output"],
+    )
+    ```
+</CodeBlock>
+
+<Tip>
+You can learn more about the `evaluate_threads` function in the [evaluate_threads guide](/evaluation/evaluate_threads).
+</Tip>
+
+Once the threads have been scored, you can view the results in the Opik thread UI:
+
+<Frame>
+    <img src="/img/evaluation/threads_user_frustration_score.png" />
+</Frame>
+
+## Next steps
+
+- Learn more about [conversation metrics](/evaluation/metrics/overview)
+- Learn more about [evaluate_threads](/evaluation/evaluate_threads)
+- Learn more about [agent trajectory evaluation](/evaluation/evaluate_agent_trajectory)

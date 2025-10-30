@@ -20,21 +20,23 @@ If you want to write an LLM as a Judge metric, you can use either the [G-Eval me
 
 ## Writing your own custom metrics
 
-To define a custom metric, you need to subclass the `BaseMetric` class and implement the `score` method and an optional `ascore` method:
+To define a custom metric, you need to subclass the `BaseMetric` class and implement the `score`
+method and an optional `ascore` method:
 
 ```python
 from typing import Any
 
 from opik.evaluation.metrics import base_metric, score_result
+from opik.message_processing.emulation.models import SpanModel
 
 
 class MyCustomMetric(base_metric.BaseMetric):
     def __init__(self, name: str):
         super().__init__(name)
 
-    def score(self, input: str, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+    def score(self, input: str, output: str, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
         # Add your logic here
-
+        
         return score_result.ScoreResult(
             value=0,
             name=self.name,
@@ -42,7 +44,17 @@ class MyCustomMetric(base_metric.BaseMetric):
         )
 ```
 
-The `score` method should return a `ScoreResult` object. The `ascore` method is optional and can be used to compute asynchronously if needed.
+The score method has access to the following parameters:
+1. Flattened dataset item: If your dataset item is of the format `{"input": "...", "expected_output": "..."}`,
+   the score method will receive `input` and `expected_output` parameters.
+2. Task output: If your task output is of the format `{"output": "..."}`, the score method will receive
+   an `output` parameter.
+3. Task span: If you define a parameter named `task_span`, we will pass the full evaluation task
+   trace to your score method. If you don't need access to the trajectory data, we recommend not
+   defining the `task_span` parameter.
+
+The `score` method should return a `ScoreResult` object. The `ascore` method is optional and can be
+used to compute asynchronously if needed.
 
 <Tip>
   You can also return a list of `ScoreResult` objects as part of your custom metric. This is useful if you want to
@@ -58,6 +70,34 @@ metric.score(input="What is the capital of France?", output="Paris")
 ```
 
 Also, this metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm).
+
+#### Example: Accessing trajectory data in a custom metric
+
+You can access the trajectory data in a custom metric by using the `task_span` parameter.
+
+```python
+from opik.evaluation.metrics import base_metric, score_result
+from opik.message_processing.emulation.models import SpanModel
+
+class MyCustomMetric(base_metric.BaseMetric):
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def score(self, task_span: SpanModel, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        # Add your logic here
+
+        return score_result.ScoreResult(
+            value=0,
+            name=self.name,
+            reason="Optional reason for the score"
+        )
+```
+
+<Tip>
+  In order to access the full trajectory data, make sure you have integrated your evaluation task
+  with Opik's tracing features. You learn more about how to evaluate agent trajectories in the
+  [Evaluate Agent Trajectory](/evaluation/evaluate_agent_trajectory) guide.
+</Tip>
 
 
 #### Example: Creating a metric with OpenAI model

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { Tag, Trash, Brain } from "lucide-react";
 import first from "lodash/first";
 import get from "lodash/get";
 import slugify from "slugify";
@@ -14,6 +14,7 @@ import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutati
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -104,6 +105,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         type={type}
         onSuccess={onClearSelection}
       />
+      {type === TRACE_DATA_TYPE.traces && (
+        <RunEvaluationDialog
+          key={`evaluation-${resetKeyRef.current}`}
+          open={open === 4}
+          setOpen={setOpen}
+          projectId={projectId}
+          entityIds={selectedRows.map((row) => row.id)}
+          entityType="trace"
+        />
+      )}
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
@@ -124,6 +135,22 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           Add tags
         </Button>
       </TooltipWrapper>
+      {type === TRACE_DATA_TYPE.traces && (
+        <TooltipWrapper content="Evaluate">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setOpen(4);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <Brain className="mr-2 size-4" />
+            Evaluate
+          </Button>
+        </TooltipWrapper>
+      )}
       <ExportToButton
         disabled={disabled || columnsToExport.length === 0}
         getData={mapRowData}

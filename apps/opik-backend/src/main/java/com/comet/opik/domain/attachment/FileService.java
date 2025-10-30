@@ -3,6 +3,7 @@ package com.comet.opik.domain.attachment;
 import com.comet.opik.api.attachment.MultipartUploadPart;
 import com.comet.opik.infrastructure.S3Config;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
@@ -104,6 +105,7 @@ class FileServiceImpl implements FileService {
     }
 
     @Override
+    @WithSpan
     public PutObjectResponse upload(@NonNull String key, @NonNull byte[] data, @NonNull String contentType) {
         PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(s3Config.getS3BucketName())
@@ -130,6 +132,7 @@ class FileServiceImpl implements FileService {
     }
 
     @Override
+    @WithSpan
     public void deleteObjects(@NonNull Set<String> keys) {
         List<ObjectIdentifier> objectsToDelete = keys.stream()
                 .map(key -> ObjectIdentifier.builder().key(key).build())

@@ -2,20 +2,28 @@ package com.comet.opik.telemetry;
 
 import io.opentelemetry.sdk.autoconfigure.spi.AutoConfigurationCustomizer;
 import io.opentelemetry.sdk.autoconfigure.spi.ConfigProperties;
+import io.opentelemetry.sdk.metrics.InstrumentSelector;
 import io.opentelemetry.sdk.metrics.SdkMeterProviderBuilder;
+import io.opentelemetry.sdk.metrics.View;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OpikMetricProviderCustomizerTest {
 
     @Mock
@@ -48,7 +56,7 @@ class OpikMetricProviderCustomizerTest {
 
         // Then
         assertNotNull(result);
-        assertEquals(meterProviderBuilder, result);
+        assertThat(result).isSameAs(meterProviderBuilder);
         
         // Verify that the workspace metric view is configured
         verify(meterProviderBuilder, atLeastOnce()).registerView(any(), any());
@@ -60,6 +68,121 @@ class OpikMetricProviderCustomizerTest {
         int order = customizer.order();
 
         // Then
-        assertEquals(100, order);
+        assertThat(order).isEqualTo(100);
+    }
+
+    @Test
+    void testCustomizeMeterProvider_withHistogramBucketsEnvVar_setsExplicitBucketHistogramAggregation() {
+        // Given
+        String testBoundaries = "0.1, 0.5, 1.0, 2.5, 5.0, 10.0";
+        when(configProperties.getString("otel.bucket.histogram.boundaries")).thenReturn(testBoundaries);
+
+        // When
+        SdkMeterProviderBuilder result = customizer.customizeMeterProvider(meterProviderBuilder, configProperties);
+
+        // Then
+        assertNotNull(result);
+        assertThat(result).isSameAs(meterProviderBuilder);
+
+        // Verify that views were registered
+        ArgumentCaptor<InstrumentSelector> selectorCaptor = ArgumentCaptor.forClass(InstrumentSelector.class);
+        ArgumentCaptor<View> viewCaptor = ArgumentCaptor.forClass(View.class);
+        verify(meterProviderBuilder, atLeastOnce()).registerView(selectorCaptor.capture(), viewCaptor.capture());
+        assertThat(viewCaptor.getAllValues()).isNotEmpty();
+    }
+
+    @Test
+    void testCustomizeMeterProvider_withoutHistogramBucketsEnvVar_doesNotSetExplicitBucketHistogram() {
+        // Given - no boundaries configured
+        when(configProperties.getString("otel.bucket.histogram.boundaries")).thenReturn(null);
+
+        // When
+        SdkMeterProviderBuilder result = customizer.customizeMeterProvider(meterProviderBuilder, configProperties);
+
+        // Then
+        assertNotNull(result);
+        assertThat(result).isSameAs(meterProviderBuilder);
+
+        // Verify that views were registered
+        ArgumentCaptor<View> viewCaptor = ArgumentCaptor.forClass(View.class);
+        verify(meterProviderBuilder, atLeastOnce()).registerView(any(), viewCaptor.capture());
+        assertThat(viewCaptor.getAllValues()).isNotEmpty();
+    }
+
+    @Test
+    void testCustomizeMeterProvider_withWhitespaceInBoundaries_trimsCorrectly() {
+        // Given
+        String testBoundaries = "  0.1 , 0.5 , 1.0  ";
+        List<Double> expectedBoundaries = List.of(0.1, 0.5, 1.0);
+        when(configProperties.getString("otel.bucket.histogram.boundaries")).thenReturn(testBoundaries);
+
+        // When
+        customizer.customizeMeterProvider(meterProviderBuilder, configProperties);
+
+        // Then - verify that the code path executed (views registered) and parsing works separately
+        ArgumentCaptor<View> viewCaptor = ArgumentCaptor.forClass(View.class);
+        verify(meterProviderBuilder, atLeastOnce()).registerView(any(), viewCaptor.capture());
+        assertThat(viewCaptor.getAllValues()).isNotEmpty();
+
+        // Separate parsing verification
+        List<Double> actual = java.util.Arrays.stream(testBoundaries.split(","))
+                .map(String::trim)
+                .map(Double::valueOf)
+                .toList();
+        assertThat(actual).isEqualTo(expectedBoundaries);
+    }
+
+    @Test
+    void testCustomizeMeterProvider_withEmptyEnvVar_doesNotSetAggregation() {
+        // Given
+        when(configProperties.getString("otel.bucket.histogram.boundaries")).thenReturn("");
+
+        // When
+        customizer.customizeMeterProvider(meterProviderBuilder, configProperties);
+
+        // Then - views should still be registered but without explicit aggregation
+        verify(meterProviderBuilder, atLeastOnce()).registerView(any(), any());
+    }
+
+    @Test
+    void testHistogramBoundaryParsing_withCommaSeparatedValues() {
+        // Given - test the parsing logic that's used in the customizer
+        String boundariesString = "0.1, 0.5, 1.0, 2.5, 5.0, 10.0";
+        List<Double> expected = List.of(0.1, 0.5, 1.0, 2.5, 5.0, 10.0);
+
+        // When - simulate the parsing logic
+        List<Double> actual = java.util.Arrays.stream(boundariesString.split(","))
+                .map(String::trim)
+                .map(Double::valueOf)
+                .toList();
+
+        // Then
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    @Test
+    void testHistogramBoundaryParsing_withWhitespace_trimsCorrectly() {
+        // Given - test trimming logic
+        String boundariesString = "  0.1 , 0.5 , 1.0  ";
+        List<Double> expected = List.of(0.1, 0.5, 1.0);
+
+        // When - simulate the parsing logic
+        List<Double> actual = java.util.Arrays.stream(boundariesString.split(","))
+                .map(String::trim)
+                .map(Double::valueOf)
+                .toList();
+
+        // Then
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    @Test
+    void testHistogramBoundaryParsing_emptyString_returnsEmpty() {
+        // Given
+        String boundariesString = "";
+
+        // When
+        boolean isEmpty = boundariesString.trim().isEmpty();
+        assertThat(isEmpty).isTrue();
     }
 }

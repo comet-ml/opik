@@ -2,9 +2,16 @@ package com.comet.opik.infrastructure.ratelimit;
 
 import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.Path;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
@@ -14,11 +21,14 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
@@ -28,6 +38,17 @@ import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 class RateLimitInterceptor implements MethodInterceptor {
 
     private static final String KEY = "rate-limit:%s-%s";
+
+    // OpenTelemetry metrics - initialized once at class loading
+    private static final Meter METER = GlobalOpenTelemetry.get().getMeter("opik.ratelimit");
+    private static final AttributeKey<String> HTTP_ROUTE_KEY = AttributeKey.stringKey("http_route");
+    private static final AttributeKey<String> HTTP_REQUEST_METHOD_KEY = AttributeKey.stringKey("http_request_method");
+
+    private static final LongCounter ENTITIES_CREATED_UPDATED = METER
+            .counterBuilder("opik.resources.entities")
+            .setDescription(
+                    "Number of entities created/updated through endpoints (tagged by http_route and http_request_method)")
+            .build();
 
     private final Provider<RequestContext> requestContext;
     private final Provider<RateLimitService> rateLimitService;
@@ -84,8 +105,18 @@ class RateLimitInterceptor implements MethodInterceptor {
 
         verifyRateLimit(events, limits);
 
+        // Extract HTTP route and method for metric tagging
+        String httpRoute = extractHttpRoute(invocation);
+        String httpMethod = extractHttpMethod(invocation);
+
         try {
-            return invocation.proceed();
+            Object result = invocation.proceed();
+
+            // Record metric for entities created/updated
+            ENTITIES_CREATED_UPDATED.add(events,
+                    Attributes.of(HTTP_ROUTE_KEY, httpRoute, HTTP_REQUEST_METHOD_KEY, httpMethod));
+
+            return result;
         } finally {
             setLimitHeaders(limits, null);
         }
@@ -177,5 +208,76 @@ class RateLimitInterceptor implements MethodInterceptor {
         }
 
         return null;
+    }
+
+    /**
+     * Extracts the HTTP route from the method invocation by combining class-level and method-level @Path annotations.
+     *
+     * @param invocation the method invocation
+     * @return the HTTP route path, or "unknown" if no @Path annotation is found
+     */
+    private String extractHttpRoute(MethodInvocation invocation) {
+        try {
+            Method method = invocation.getMethod();
+            Class<?> declaringClass = method.getDeclaringClass();
+
+            // Get class-level @Path annotation
+            String classPath = "";
+            Path classPathAnnotation = declaringClass.getAnnotation(Path.class);
+            if (classPathAnnotation != null) {
+                classPath = classPathAnnotation.value();
+            }
+
+            // Get method-level @Path annotation
+            String methodPath = "";
+            Path methodPathAnnotation = method.getAnnotation(Path.class);
+            if (methodPathAnnotation != null) {
+                methodPath = methodPathAnnotation.value();
+            }
+
+            // Combine class and method paths with proper "/" separator
+            String fullPath;
+            if (classPath.isEmpty()) {
+                fullPath = methodPath;
+            } else if (methodPath.isEmpty()) {
+                fullPath = classPath;
+            } else {
+                // Ensure proper "/" separator between class and method paths
+                String separator = classPath.endsWith("/") || methodPath.startsWith("/") ? "" : "/";
+                fullPath = classPath + separator + methodPath;
+            }
+
+            // Return the route or "unknown" if no path is found
+            return fullPath.isEmpty() ? "unknown" : fullPath;
+
+        } catch (Exception exception) {
+            log.warn("Failed to extract HTTP route from method invocation", exception);
+            return "unknown";
+        }
+    }
+
+    /**
+     * Extracts the HTTP method from the method invocation by checking JAX-RS HTTP method annotations.
+     *
+     * @param invocation the method invocation
+     * @return the HTTP method (GET, POST, PUT, DELETE, etc.), or "unknown" if no HTTP method annotation is found
+     */
+    private String extractHttpMethod(MethodInvocation invocation) {
+        try {
+            Method method = invocation.getMethod();
+
+            // Check for JAX-RS HTTP method annotations
+            return Arrays.stream(method.getAnnotations())
+                    .map(Annotation::annotationType)
+                    .map(t -> t.getAnnotation(HttpMethod.class)) // meta-annotation on @GET/@POST/...
+                    .filter(Objects::nonNull)
+                    .map(HttpMethod::value) // e.g., "GET"
+                    .findFirst()
+                    .orElse("unknown");
+
+        } catch (Exception exception) {
+            log.warn("Failed to extract HTTP method from method invocation", exception);
+            return "unknown";
+        }
     }
 }

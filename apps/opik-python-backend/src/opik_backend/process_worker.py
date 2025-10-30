@@ -5,7 +5,7 @@ import inspect
 import uuid
 import logging
 from types import ModuleType
-from typing import Type, Union, List
+from typing import Type, Union, List, Optional
 
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -37,7 +37,7 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
-def run_user_code(code: str, data: dict, payload_type: str | None = None) -> dict:
+def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
     """
     Run the scoring logic with the provided code and data.
     For trace_thread type, pass data as first positional argument.

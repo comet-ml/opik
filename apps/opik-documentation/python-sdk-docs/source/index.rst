@@ -211,6 +211,12 @@ You can learn more about the `opik` python SDK in the following sections:
    testing/llm_unit
 
 .. toctree::
+   :caption: Simulation
+   :maxdepth: 1
+   
+   simulation/index
+
+.. toctree::
    :caption: REST API Reference
    :maxdepth: 1
    
