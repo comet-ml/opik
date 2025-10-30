@@ -489,7 +489,7 @@ class GepaOptimizer(BaseOptimizer):
                 gepa_score = filtered_val_scores[idx]
                 gepa_numeric = (
                     float(gepa_score)
-                    if gepa_score is not None and isinstance(gepa_score, (int, float))
+                    if isinstance(gepa_score, (int, float))
                     else float("-inf")
                 )
                 return opik_score, gepa_numeric, idx
