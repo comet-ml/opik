@@ -135,7 +135,7 @@ class RichGEPAOptimizerLogger:
 
         first = lines[0]
 
-        if first and first == self._last_raw_message:
+        if first == self._last_raw_message:
             return
 
         # Reset duplicate tracker when handling other messages
