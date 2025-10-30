@@ -257,7 +257,7 @@ class DataProcessor:
 
 ## 🚫 Critical Anti-Patterns
 
-1. **Import names, not modules** - Always import modules, not names (except type hints and type aliases)
+1. **Import names instead of modules** - Always import modules, not names (except type hints and type aliases)
 2. **Monolithic modules** - Don't create `utils.py` dumping grounds with unrelated classes/functions, god modules.
 3. **Direct REST calls in Public API** - Always use API Object Clients for complex operations
 4. **Silent error handling** - Never catch and ignore exceptions in metrics
