@@ -125,6 +125,7 @@ type AddEditRuleDialogProps = {
   setOpen: (open: boolean) => void;
   projectId?: string;
   rule?: EvaluatorsRule;
+  projectName?: string; // Optional: project name for pre-selected projects
 };
 
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
@@ -146,6 +147,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   setOpen,
   projectId,
   rule: defaultRule,
+  projectName,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -576,6 +578,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   <LLMJudgeRuleDetails
                     workspaceName={workspaceName}
                     form={form}
+                    projectName={projectName}
                   />
                 ) : (
                   <PythonCodeRuleDetails form={form} />

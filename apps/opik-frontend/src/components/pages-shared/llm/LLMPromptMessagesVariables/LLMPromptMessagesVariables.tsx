@@ -27,6 +27,7 @@ interface LLMPromptMessagesVariablesProps {
   projectId: string;
   description?: string;
   errorText?: string;
+  projectName?: string;
 }
 
 const LLMPromptMessagesVariables = ({
@@ -37,6 +38,7 @@ const LLMPromptMessagesVariables = ({
   projectId,
   description = DEFAULT_DESCRIPTION,
   errorText = DEFAULT_ERROR_TEXT,
+  projectName,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     return Object.entries(variables)
@@ -73,6 +75,7 @@ const LLMPromptMessagesVariables = ({
             errorText={validationErrors?.[variable.label]?.message}
             onChange={(changes) => handleChangeVariables(changes)}
             projectId={projectId}
+            projectName={projectName}
           />
         ))}
       </div>
