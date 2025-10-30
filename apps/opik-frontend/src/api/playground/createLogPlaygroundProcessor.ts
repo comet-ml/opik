@@ -74,7 +74,7 @@ const createBatchExperimentItems = async (
   });
 };
 
-const PLAYGROUND_PROJECT_NAME = "playground";
+export const PLAYGROUND_PROJECT_NAME = "playground";
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",

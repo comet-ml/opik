@@ -11,6 +11,9 @@ import useTracesOrSpansList, {
 import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 import { PROJECTS_SELECT_QUERY_KEY } from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { Project } from "@/types/projects";
+import { PLAYGROUND_PROJECT_NAME } from "@/api/playground/createLogPlaygroundProcessor";
+
+type CachedProjectsData = { content: Project[]; total: number };
 
 export type TRACE_AUTOCOMPLETE_ROOT_KEY = "input" | "output" | "metadata";
 
@@ -74,8 +77,6 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       exact: false,
     });
 
-    type CachedProjectsData = { content: Project[]; total: number };
-
     for (const query of cachedQueries) {
       const queryData = query.state.data as CachedProjectsData | undefined;
       if (queryData?.content) {
@@ -89,7 +90,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
 
   const items = useMemo(() => {
     const hasTraces = data?.content && data.content.length > 0;
-    const isPlaygroundProject = projectName === "playground";
+    const isPlaygroundProject = projectName === PLAYGROUND_PROJECT_NAME;
 
     // If it's the playground project and there are no traces, use default suggestions
     if (isPlaygroundProject && !hasTraces) {
