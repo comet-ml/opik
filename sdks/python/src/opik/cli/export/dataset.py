@@ -10,7 +10,7 @@ from rich.console import Console
 
 import opik
 from opik.api_objects.dataset.dataset import Dataset
-from opik.cli.export_utils import (
+from .utils import (
     debug_print,
     dataset_to_csv_rows,
     should_skip_file,
@@ -144,7 +144,7 @@ def export_dataset_by_name(
 
 def export_experiment_datasets(
     client: opik.Opik,
-    datasets_to_export: set,
+    datasets_to_export: set[str],
     datasets_dir: Path,
     format: str,
     debug: bool,

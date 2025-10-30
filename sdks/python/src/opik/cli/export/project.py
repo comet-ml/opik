@@ -11,7 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
 from opik.rest_api.types.project_public import ProjectPublic
-from opik.cli.export_utils import (
+from .utils import (
     debug_print,
     dump_to_file,
     matches_name_pattern,

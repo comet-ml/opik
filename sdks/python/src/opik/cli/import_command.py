@@ -15,6 +15,8 @@ from opik.rest_api.core.api_error import ApiError
 from opik.api_objects.trace import trace_data
 from opik.api_objects.span import span_data
 from opik.api_objects.trace.migration import prepare_traces_and_spans_for_copy
+from opik.api_objects.prompt.prompt import Prompt
+from opik.api_objects.prompt.types import PromptType
 
 console = Console()
 
@@ -411,7 +413,13 @@ def _recreate_experiment(
     project_name: str,
     dry_run: bool = False,
 ) -> bool:
-    """Recreate a single experiment from exported data."""
+    """Recreate a single experiment from exported data.
+
+    Note: This function expects that traces have already been imported into the target workspace.
+    When traces are imported, they receive new IDs. The trace IDs from the exported experiment
+    data may not match the imported traces unless they were imported in the same session and
+    the trace IDs were preserved during import. Items referencing non-existent traces will be skipped.
+    """
     experiment_info = experiment_data["experiment"]
     items_data = experiment_data["items"]
 
@@ -430,19 +438,10 @@ def _recreate_experiment(
 
     try:
         # Get or create the dataset
-        try:
-            dataset = client.get_dataset(dataset_name)
-        except ApiError as e:
-            if e.status_code == 404:
-                console.print(
-                    f"[yellow]Dataset '{dataset_name}' not found, creating it...[/yellow]"
-                )
-                dataset = client.create_dataset(
-                    name=dataset_name,
-                    description=f"Recreated dataset for experiment {experiment_name}",
-                )
-            else:
-                raise
+        dataset = client.get_or_create_dataset(
+            name=dataset_name,
+            description=f"Recreated dataset for experiment {experiment_name}",
+        )
 
         # Create the experiment
         experiment = client.create_experiment(
@@ -467,11 +466,16 @@ def _recreate_experiment(
                 skipped_items += 1
                 continue
 
-            # Find the trace
+            # Find the trace by ID in the target workspace
+            # Note: When importing to a different workspace, traces get new IDs.
+            # This lookup will only succeed if:
+            # 1. The trace was imported with the same ID (same workspace), or
+            # 2. The trace was imported in this session and the ID mapping is preserved
             trace = _find_trace_by_id(client, trace_id, project_name)
             if not trace:
                 console.print(
-                    f"[yellow]Warning: Trace {trace_id} not found, skipping item[/yellow]"
+                    f"[yellow]Warning: Trace {trace_id} not found in target workspace. "
+                    f"Ensure traces are imported before importing experiments. Skipping item.[/yellow]"
                 )
                 skipped_items += 1
                 continue
@@ -512,6 +516,8 @@ def _recreate_experiment(
         # Insert experiment items
         if experiment_items:
             experiment.insert(experiment_items)
+            # Flush client to ensure experiment items are persisted before continuing
+            client.flush()
             console.print(
                 f"[green]Created experiment '{experiment_name}' with {successful_items} items[/green]"
             )
@@ -797,20 +803,61 @@ def _import_projects_from_directory(
                         trace_info = trace_data.get("trace", {})
                         spans_info = trace_data.get("spans", [])
 
-                        # Create trace
+                        # Create trace with full data
                         trace = client.trace(
                             name=trace_info.get("name", "imported_trace"),
+                            start_time=(
+                                datetime.fromisoformat(
+                                    trace_info["start_time"].replace("Z", "+00:00")
+                                )
+                                if trace_info.get("start_time")
+                                else None
+                            ),
+                            end_time=(
+                                datetime.fromisoformat(
+                                    trace_info["end_time"].replace("Z", "+00:00")
+                                )
+                                if trace_info.get("end_time")
+                                else None
+                            ),
                             input=trace_info.get("input", {}),
                             output=trace_info.get("output", {}),
+                            metadata=trace_info.get("metadata"),
+                            tags=trace_info.get("tags"),
+                            feedback_scores=trace_info.get("feedback_scores"),
+                            error_info=trace_info.get("error_info"),
+                            thread_id=trace_info.get("thread_id"),
                             project_name=project_name,
                         )
 
-                        # Create spans
+                        # Create spans with full data
                         for span_info in spans_info:
                             client.span(
                                 name=span_info.get("name", "imported_span"),
+                                start_time=(
+                                    datetime.fromisoformat(
+                                        span_info["start_time"].replace("Z", "+00:00")
+                                    )
+                                    if span_info.get("start_time")
+                                    else None
+                                ),
+                                end_time=(
+                                    datetime.fromisoformat(
+                                        span_info["end_time"].replace("Z", "+00:00")
+                                    )
+                                    if span_info.get("end_time")
+                                    else None
+                                ),
                                 input=span_info.get("input", {}),
                                 output=span_info.get("output", {}),
+                                metadata=span_info.get("metadata"),
+                                tags=span_info.get("tags"),
+                                usage=span_info.get("usage"),
+                                feedback_scores=span_info.get("feedback_scores"),
+                                model=span_info.get("model"),
+                                provider=span_info.get("provider"),
+                                error_info=span_info.get("error_info"),
+                                total_cost=span_info.get("total_cost"),
                                 trace_id=trace.id,
                                 project_name=project_name,
                             )
@@ -825,6 +872,9 @@ def _import_projects_from_directory(
 
                 # Handle experiment recreation if requested
                 if recreate_experiments:
+                    # Flush client before recreating experiments
+                    client.flush()
+
                     experiment_files = list(project_dir.glob("experiment_*.json"))
                     if experiment_files:
                         if debug:
@@ -997,10 +1047,6 @@ def _import_prompts_from_directory(
 
                 # Create the prompt
                 try:
-                    # Import the Prompt class and PromptType
-                    from opik.api_objects.prompt.prompt import Prompt
-                    from opik.api_objects.prompt.types import PromptType
-
                     # Convert string type to PromptType enum if needed
                     if prompt_type and isinstance(prompt_type, str):
                         try:

@@ -10,7 +10,7 @@ from rich.console import Console
 
 import opik
 from opik.api_objects.prompt.prompt import Prompt
-from opik.cli.export_utils import (
+from .utils import (
     debug_print,
     prompt_to_csv_rows,
     should_skip_file,

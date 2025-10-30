@@ -8,18 +8,18 @@ import click
 from rich.console import Console
 
 import opik
-from opik.cli.export_utils import (
+from .utils import (
     create_experiment_data_structure,
     debug_print,
     write_json_data,
     print_export_summary,
 )
-from opik.cli.export_dataset import export_experiment_datasets
-from opik.cli.export_prompt import (
+from .dataset import export_experiment_datasets
+from .prompt import (
     export_experiment_prompts,
     export_related_prompts_by_name,
 )
-from opik.cli.export_project import export_traces
+from .project import export_traces
 
 console = Console()
 
@@ -28,7 +28,6 @@ def export_experiment_by_id(
     client: opik.Opik,
     output_dir: Path,
     experiment_id: str,
-    dataset: Optional[str],
     max_traces: Optional[int],
     force: bool,
     debug: bool,
@@ -145,7 +144,7 @@ def export_experiment_by_name(
 
         # Export the experiment
         exported_count = export_experiment_by_id(
-            client, output_dir, experiment.id, dataset, max_traces, force, debug, format
+            client, output_dir, experiment.id, max_traces, force, debug, format
         )
 
         # Collect statistics for summary

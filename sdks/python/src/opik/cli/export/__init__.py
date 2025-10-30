@@ -2,10 +2,10 @@
 
 import click
 
-from opik.cli.export_dataset import export_dataset_command
-from opik.cli.export_experiment import export_experiment_command
-from opik.cli.export_prompt import export_prompt_command
-from opik.cli.export_project import export_project_command
+from .dataset import export_dataset_command
+from .experiment import export_experiment_command
+from .prompt import export_prompt_command
+from .project import export_project_command
 
 
 @click.group(name="export")
