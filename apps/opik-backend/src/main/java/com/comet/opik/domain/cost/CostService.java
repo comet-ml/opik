@@ -11,8 +11,11 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -29,7 +32,10 @@ public class CostService {
             "vertex_ai-anthropic_models", "anthropic_vertexai",
             "bedrock", "bedrock",
             "bedrock_converse", "bedrock",
-            "groq", "groq");
+            "groq", "groq",
+            "openrouter", "openrouter",
+            "deepinfra", "deepinfra");
+
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
@@ -52,15 +58,91 @@ public class CostService {
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
-        ModelPrice modelPrice = Optional.ofNullable(modelName)
-                .flatMap(mn -> Optional.ofNullable(provider).map(p -> createModelProviderKey(mn, p)))
-                .map(modelProviderPrices::get)
-                .orElse(DEFAULT_COST);
+        ModelPrice modelPrice = findModelPrice(modelName, provider);
 
         BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice,
                 Optional.ofNullable(usage).orElse(Map.of()));
 
         return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
+    }
+
+    /**
+     * Find model price with sophisticated matching including suffix matching.
+     * This handles cases like "qwen/qwen2.5-vl-32b-instruct" matching "deepinfra/Qwen/Qwen2.5-VL-32B-Instruct".
+     */
+    private static ModelPrice findModelPrice(@Nullable String modelName, @Nullable String provider) {
+        if (modelName == null || provider == null) {
+            return DEFAULT_COST;
+        }
+
+        var searchCandidates = candidateKeys(modelName, provider);
+
+        // First pass: try exact matches
+        for (var candidate : searchCandidates) {
+            var found = modelProviderPrices.get(candidate);
+            if (found != null) {
+                return found;
+            }
+        }
+
+        // Second pass: try suffix matching against stored keys
+        // This handles cases like "qwen2.5-vl-32b-instruct/openrouter" matching "qwen/qwen2.5-vl-32b-instruct/deepinfra"
+        for (var candidate : searchCandidates) {
+            for (var entry : modelProviderPrices.entrySet()) {
+                var storedKey = entry.getKey();
+                // Check if the stored key ends with the candidate (after a slash) or equals it
+                if (storedKey.endsWith("/" + candidate) || storedKey.equals(candidate)) {
+                    return entry.getValue();
+                }
+            }
+        }
+
+        return DEFAULT_COST;
+    }
+
+    /**
+     * Generate candidate search keys for model lookup.
+     * Handles variations like:
+     * - Full model name with provider
+     * - Model name without prefix
+     * - Model name with colons (:free, :extended, etc.)
+     */
+    private static List<String> candidateKeys(String modelName, String provider) {
+        var candidates = new HashSet<String>();
+        var normalizedModel = normalize(modelName);
+        var normalizedProvider = provider.trim().toLowerCase();
+
+        // Full model name with provider
+        candidates.add(createModelProviderKey(normalizedModel, normalizedProvider));
+
+        // Try stripping the first prefix (e.g., "openrouter/qwen/..." -> "qwen/...")
+        var slashIndex = normalizedModel.indexOf('/');
+        if (slashIndex > 0 && slashIndex < normalizedModel.length() - 1) {
+            var withoutFirstPrefix = normalizedModel.substring(slashIndex + 1);
+            candidates.add(createModelProviderKey(withoutFirstPrefix, normalizedProvider));
+        }
+
+        // Try model name after last slash
+        var lastSlashIndex = normalizedModel.lastIndexOf('/');
+        if (lastSlashIndex > 0 && lastSlashIndex < normalizedModel.length() - 1) {
+            var afterLastSlash = normalizedModel.substring(lastSlashIndex + 1);
+            candidates.add(createModelProviderKey(afterLastSlash, normalizedProvider));
+        }
+
+        // Handle colon suffixes (e.g., "model:free" -> "model")
+        var colonIndex = normalizedModel.indexOf(':');
+        if (colonIndex > 0) {
+            var withoutColon = normalizedModel.substring(0, colonIndex);
+            candidates.add(createModelProviderKey(withoutColon, normalizedProvider));
+
+            // Also try without prefix and without colon
+            if (slashIndex > 0 && slashIndex < colonIndex) {
+                var withoutPrefixOrColon = normalizedModel.substring(slashIndex + 1, colonIndex);
+                candidates.add(createModelProviderKey(withoutPrefixOrColon, normalizedProvider));
+            }
+        }
+
+        return new ArrayList<>(candidates);
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
@@ -112,13 +194,17 @@ public class CostService {
                 }
 
                 parsedModelPrices.put(
-                        createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider)),
+                        normalize(createModelProviderKey(parseModelName(modelName), PROVIDERS_MAPPING.get(provider))),
                         new ModelPrice(inputPrice, outputPrice, cacheCreationInputTokenPrice,
                                 cacheReadInputTokenPrice, calculator));
             }
         });
 
         return parsedModelPrices;
+    }
+
+    private static String normalize(String key) {
+        return key.trim().toLowerCase();
     }
 
     private static String parseModelName(String modelName) {

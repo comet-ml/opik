@@ -17,11 +17,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @UtilityClass
 public class ModelCapabilities {
 
+    // Hardcoded vision-capable models or patterns that should support vision
+    // This list overrides the JSON configuration to handle cases where:
+    // - The JSON uses different naming conventions (e.g., openrouter/ prefix)
+    // - Models are missing from the JSON
+    // - The JSON is not yet updated with new vision models
+    private static final Set<Pattern> VISION_MODEL_PATTERNS = Set.of(
+            // Made pattern more flexible to match anywhere in the name
+            Pattern.compile(".*qwen.*vl.*", Pattern.CASE_INSENSITIVE));
+
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
+
+    /**
+     * Checks if a model name matches any of the hardcoded vision patterns.
+     */
+    private boolean matchesVisionPattern(String modelName) {
+        return VISION_MODEL_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(modelName).matches());
+    }
 
     public boolean supportsVision(String modelName) {
         return find(modelName).map(ModelCapability::supportsVision).orElse(false);
@@ -32,12 +50,28 @@ public class ModelCapabilities {
             return Optional.empty();
         }
 
-        for (var candidate : candidateKeys(modelName)) {
+        var searchCandidates = candidateKeys(modelName);
+
+        // First pass: try exact matches
+        for (var candidate : searchCandidates) {
             var found = CAPABILITIES_BY_NORMALIZED_NAME.get(candidate);
             if (found != null) {
                 return Optional.of(found);
             }
         }
+
+        // Second pass: try matching against the suffix of stored model names
+        // This handles cases like "qwen/qwen2.5-vl-32b-instruct" matching "deepinfra/Qwen/Qwen2.5-VL-32B-Instruct"
+        for (var candidate : searchCandidates) {
+            for (var entry : CAPABILITIES_BY_NORMALIZED_NAME.entrySet()) {
+                var normalizedStoredKey = entry.getKey();
+                // Check if the stored key ends with the candidate
+                if (normalizedStoredKey.endsWith("/" + candidate) || normalizedStoredKey.equals(candidate)) {
+                    return Optional.of(entry.getValue());
+                }
+            }
+        }
+
         return Optional.empty();
     }
 
@@ -59,10 +93,14 @@ public class ModelCapabilities {
 
                 var normalizedName = normalize(modelName);
                 var canonicalName = modelName.trim();
+
+                // Check if model matches vision patterns - override JSON if it does
+                boolean supportsVision = modelData.supportsVision() || matchesVisionPattern(canonicalName);
+
                 capabilities.putIfAbsent(normalizedName, ModelCapability.builder()
                         .name(canonicalName)
                         .litellmProvider(Objects.requireNonNullElse(modelData.litellmProvider(), ""))
-                        .supportsVision(modelData.supportsVision())
+                        .supportsVision(supportsVision)
                         .build());
             });
 
