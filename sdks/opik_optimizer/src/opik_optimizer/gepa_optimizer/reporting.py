@@ -77,7 +77,7 @@ def _format_pareto_note(note: str) -> str:
             for item in data
         )
 
-    if isinstance(data, Number):
+    elif isinstance(data, Number):
         return (
             f"{float(data) if isinstance(data, (int, float)) else float(str(data)):.3f}"
         )
