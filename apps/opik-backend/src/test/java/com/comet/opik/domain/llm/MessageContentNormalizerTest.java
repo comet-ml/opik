@@ -327,4 +327,33 @@ class MessageContentNormalizerTest {
 
         assertThat(normalizedMessage.name()).isEqualTo("test-user");
     }
+
+    @Test
+    void normalizeRequestExpandsImageForQwenWithProviderPrefix() {
+        // Test that "qwen/qwen2.5-vl-32b-instruct" matches "deepinfra/Qwen/Qwen2.5-VL-32B-Instruct"
+        var base64Image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var userMessage = UserMessage.builder()
+                .content("What is the image <<<image>>>" + base64Image + "<<</image>>>?")
+                .build();
+
+        var request = ChatCompletionRequest.builder()
+                .messages(List.of(userMessage))
+                .model("qwen/qwen2.5-vl-32b-instruct")
+                .build();
+
+        var normalized = MessageContentNormalizer.normalizeRequest(request);
+
+        assertThat(normalized.messages()).hasSize(1);
+        var normalizedMessage = (UserMessage) normalized.messages().getFirst();
+
+        // Should be expanded because matching logic finds deepinfra/Qwen/Qwen2.5-VL-32B-Instruct
+        assertThat(normalizedMessage.content()).isInstanceOf(List.class);
+        @SuppressWarnings("unchecked")
+        var contentList = (List<Content>) normalizedMessage.content();
+
+        assertThat(contentList).hasSize(3);
+        assertThat(contentList.get(0).type()).isEqualTo(ContentType.TEXT);
+        assertThat(contentList.get(1).type()).isEqualTo(ContentType.IMAGE_URL);
+        assertThat(contentList.get(2).type()).isEqualTo(ContentType.TEXT);
+    }
 }
