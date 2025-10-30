@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Sparkles, ChevronDown } from "lucide-react";
 import {
@@ -13,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
+import { cn } from "@/lib/utils";
 import useRulesList from "@/api/automations/useRulesList";
 import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMutation";
 import useAppStore from "@/store/AppStore";
@@ -44,6 +51,7 @@ const RunEvaluationDialog: React.FunctionComponent<
   );
   const [openCreateRuleDialog, setOpenCreateRuleDialog] =
     useState<boolean>(false);
+  const hasPreSelectedRef = useRef(false);
 
   const { data, isLoading } = useRulesList(
     {
@@ -84,12 +92,18 @@ const RunEvaluationDialog: React.FunctionComponent<
     }
   }, [data?.content, entityType]);
 
-  // Pre-select all rules when dialog opens and rules are loaded
+  // Pre-select all rules when dialog opens and rules are loaded (only once per dialog opening)
   useEffect(() => {
-    if (open && rules.length > 0 && selectedRuleIds.size === 0) {
+    if (open && rules.length > 0 && !hasPreSelectedRef.current) {
       setSelectedRuleIds(new Set(rules.map((rule) => rule.id)));
+      hasPreSelectedRef.current = true;
     }
-  }, [open, rules, selectedRuleIds.size]);
+
+    // Reset the flag when dialog closes
+    if (!open) {
+      hasPreSelectedRef.current = false;
+    }
+  }, [open, rules]);
 
   const handleCheckboxChange = useCallback((ruleId: string) => {
     setSelectedRuleIds((prev) => {
@@ -133,9 +147,10 @@ const RunEvaluationDialog: React.FunctionComponent<
         },
       },
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedRuleIds,
-    manualEvaluationMutation,
+    manualEvaluationMutation.mutate,
     projectId,
     entityIds,
     entityType,
@@ -245,9 +260,10 @@ const RunEvaluationDialog: React.FunctionComponent<
                           className="h-auto p-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
                         >
                           <ChevronDown
-                            className={`mr-1 size-3 transition-transform ${
-                              isExpanded ? "rotate-180" : ""
-                            }`}
+                            className={cn(
+                              "mr-1 size-3 transition-transform",
+                              isExpanded && "rotate-180",
+                            )}
                           />
                           {isExpanded ? "Hide" : "Show"} prompt
                         </Button>
