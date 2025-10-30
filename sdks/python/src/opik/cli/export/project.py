@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import click
 from rich.console import Console
@@ -227,125 +227,6 @@ def export_traces(
 
     finally:
         # Close CSV file if it was opened
-        if csv_file_handle:
-            csv_file_handle.close()
-        if csv_file and csv_file.exists():
-            console.print(f"[green]CSV file saved to {csv_file}[/green]")
-
-    return exported_count, skipped_count
-
-
-def export_traces_by_ids(
-    client: opik.Opik,
-    project_name: str,
-    project_dir: Path,
-    trace_ids: List[str],
-    format: str = "json",
-    debug: bool = False,
-    force: bool = False,
-) -> tuple[int, int]:
-    """Export specific traces by their IDs."""
-    if debug:
-        debug_print(
-            f"DEBUG: _export_specific_traces called with {len(trace_ids)} trace IDs",
-            debug,
-        )
-
-    exported_count = 0
-    skipped_count = 0
-
-    # For CSV format, set up streaming writer
-    csv_file = None
-    csv_file_handle = None
-    csv_writer = None
-    csv_fieldnames = None
-
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task(
-                "Downloading specific traces...", total=len(trace_ids)
-            )
-
-            for i, trace_id in enumerate(trace_ids):
-                try:
-                    # Update progress
-                    progress.update(
-                        task,
-                        description=f"Downloading trace {i+1}/{len(trace_ids)}: {trace_id[:8]}...",
-                    )
-
-                    # Get the specific trace by ID
-                    try:
-                        trace = client.get_trace_content(trace_id)
-                    except Exception as e:
-                        if debug:
-                            debug_print(
-                                f"Warning: Trace {trace_id} not found: {e}", debug
-                            )
-                        continue
-
-                    # Get spans for this trace
-                    spans = client.search_spans(
-                        project_name=project_name,
-                        trace_id=trace_id,
-                        max_results=1000,
-                        truncate=False,
-                    )
-
-                    # Create trace data structure
-                    trace_data = {
-                        "trace": trace.model_dump(),
-                        "spans": [span.model_dump() for span in spans],
-                        "downloaded_at": datetime.now().isoformat(),
-                        "project_name": project_name,
-                    }
-
-                    # Determine file path based on format
-                    if format.lower() == "csv":
-                        file_path = project_dir / f"traces_{project_name}.csv"
-                    else:
-                        file_path = project_dir / f"trace_{trace_id}.json"
-
-                    # Check if file already exists and force is not set
-                    if should_skip_file(file_path, force):
-                        if debug:
-                            debug_print(
-                                f"Skipping trace {trace_id} (already exists)",
-                                debug,
-                            )
-                        skipped_count += 1
-                        progress.update(task, advance=1)
-                        continue
-
-                    # Use helper function to dump data
-                    csv_writer, csv_fieldnames = dump_to_file(
-                        trace_data,
-                        file_path,
-                        format,
-                        csv_writer,
-                        csv_fieldnames,
-                        "trace",
-                    )
-
-                    exported_count += 1
-
-                except Exception as e:
-                    if debug:
-                        debug_print(
-                            f"Warning: Could not export trace {trace_id}: {e}",
-                            debug,
-                        )
-                    continue
-
-                # Update progress
-                progress.update(task, advance=1)
-
-    finally:
-        # Clean up CSV file handle
         if csv_file_handle:
             csv_file_handle.close()
         if csv_file and csv_file.exists():

@@ -10,10 +10,6 @@ from rich.console import Console
 
 console = Console()
 
-# Constants for export command
-FALLBACK_PAGE_SIZE = 10  # Smaller page size for error recovery
-MAX_EXPERIMENT_ITEMS_PER_FETCH = 1000  # Maximum items to fetch per experiment
-
 
 def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
     """Check if a name matches the given pattern using simple string matching."""
@@ -21,20 +17,6 @@ def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
         return True
     # Simple string matching - check if pattern is contained in name (case-insensitive)
     return pattern.lower() in name.lower()
-
-
-def is_experiment_id(pattern: str) -> bool:
-    """Check if the pattern looks like an experiment ID (UUID format)."""
-    # Simple UUID format check: 8-4-4-4-12 hexadecimal digits with dashes
-    if len(pattern) != 36:
-        return False
-    if pattern.count("-") != 4:
-        return False
-    # Check that all characters are hex digits or dashes
-    for char in pattern:
-        if char not in "0123456789abcdefABCDEF-":
-            return False
-    return True
 
 
 def serialize_experiment_item(item: Any) -> Dict[str, Any]:
