@@ -4,7 +4,7 @@ import { ExperimentsPage } from '../../page-objects/experiments.page';
 
 test.describe('Experiments CRUD Tests', () => {
   test.describe('Experiment creation and visibility', () => {
-    test('should verify experiment visibility in UI and SDK', async ({
+    test('should verify experiment visibility in UI and SDK @sanity @regression @experiments', async ({
       page,
       helperClient,
       createExperiment,
@@ -37,7 +37,7 @@ test.describe('Experiments CRUD Tests', () => {
       }
     };
 
-    test('should delete experiment via UI', async ({
+    test('should delete experiment via UI @regression @experiments', async ({
       page,
       helperClient,
       createExperiment,
@@ -54,7 +54,7 @@ test.describe('Experiments CRUD Tests', () => {
       );
     });
 
-    test('should delete experiment via SDK', async ({
+    test('should delete experiment via SDK @regression @experiments', async ({
       page,
       helperClient,
       createExperiment,

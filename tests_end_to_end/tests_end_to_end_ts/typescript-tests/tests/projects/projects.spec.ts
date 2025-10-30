@@ -3,7 +3,7 @@ import { ProjectsPage } from '../../page-objects/projects.page';
 
 test.describe('Projects CRUD Tests', () => {
   test.describe('with API-created projects', () => {
-    test('should verify project visibility', async ({ page, helperClient, createProjectApi }) => {
+    test('should verify project visibility @sanity @regression @projects', async ({ page, helperClient, createProjectApi }) => {
       await helperClient.waitForProjectVisible(createProjectApi, 10);
       const projects = await helperClient.findProject(createProjectApi);
 
@@ -15,7 +15,7 @@ test.describe('Projects CRUD Tests', () => {
       await projectsPage.checkProjectExistsWithRetry(createProjectApi, 5000);
     });
 
-    test('should update project name via SDK', async ({ page, helperClient, createProjectApi }) => {
+    test('should update project name via SDK @regression @projects', async ({ page, helperClient, createProjectApi }) => {
       const newName = 'updated_test_project_name';
       let nameUpdated = false;
 
@@ -45,7 +45,7 @@ test.describe('Projects CRUD Tests', () => {
       }
     });
 
-    test('should delete project via SDK', async ({ page, helperClient, createProjectApi }) => {
+    test('should delete project via SDK @regression @projects', async ({ page, helperClient, createProjectApi }) => {
       await helperClient.deleteProject(createProjectApi);
 
       const projectsPage = new ProjectsPage(page);
@@ -56,7 +56,7 @@ test.describe('Projects CRUD Tests', () => {
       expect(projectsFound.length).toBe(0);
     });
 
-    test('should delete project via UI', async ({ page, helperClient, createProjectApi }) => {
+    test('should delete project via UI @regression @projects', async ({ page, helperClient, createProjectApi }) => {
       const projectsPage = new ProjectsPage(page);
       await projectsPage.goto();
       await projectsPage.deleteProjectByName(createProjectApi);
@@ -67,7 +67,7 @@ test.describe('Projects CRUD Tests', () => {
   });
 
   test.describe('with UI-created projects', () => {
-    test('should verify project visibility', async ({ page, helperClient, createProjectUi }) => {
+    test('should verify project visibility @regression @projects', async ({ page, helperClient, createProjectUi }) => {
       await helperClient.waitForProjectVisible(createProjectUi, 10);
       const projects = await helperClient.findProject(createProjectUi);
 
@@ -79,7 +79,7 @@ test.describe('Projects CRUD Tests', () => {
       await projectsPage.checkProjectExistsWithRetry(createProjectUi, 5000);
     });
 
-    test('should update project name via SDK', async ({ page, helperClient, createProjectUi }) => {
+    test('should update project name via SDK @regression @projects', async ({ page, helperClient, createProjectUi }) => {
       const newName = 'updated_test_project_name';
       let nameUpdated = false;
 
@@ -109,7 +109,7 @@ test.describe('Projects CRUD Tests', () => {
       }
     });
 
-    test('should delete project via SDK', async ({ page, helperClient, createProjectUi }) => {
+    test('should delete project via SDK @regression @projects', async ({ page, helperClient, createProjectUi }) => {
       await helperClient.deleteProject(createProjectUi);
 
       const projectsPage = new ProjectsPage(page);
@@ -120,7 +120,7 @@ test.describe('Projects CRUD Tests', () => {
       expect(projectsFound.length).toBe(0);
     });
 
-    test('should delete project via UI', async ({ page, helperClient, createProjectUi }) => {
+    test('should delete project via UI @regression @projects', async ({ page, helperClient, createProjectUi }) => {
       const projectsPage = new ProjectsPage(page);
       await projectsPage.goto();
       await projectsPage.deleteProjectByName(createProjectUi);

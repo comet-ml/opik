@@ -4,7 +4,7 @@ import { TracesPage } from '../../page-objects/traces.page';
 import { TracesPageSpansMenu } from '../../page-objects/traces-spans-menu.page';
 
 test.describe('Trace Attachments Tests', () => {
-  test('should verify attachment in trace created via low-level client', async ({
+  test('should verify attachment in trace created via low-level client @regression @tracing @attachments', async ({
     page,
     projectName,
     createTraceWithAttachmentClient,
@@ -33,7 +33,7 @@ test.describe('Trace Attachments Tests', () => {
     }
   });
 
-  test('should verify attachment in trace created via decorator', async ({
+  test('should verify attachment in trace created via decorator @regression @tracing @attachments', async ({
     page,
     projectName,
     createTraceWithAttachmentDecorator,

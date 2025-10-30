@@ -4,7 +4,7 @@ import { FeedbackScoresPage } from '../../page-objects/feedback-scores.page';
 
 test.describe('Feedback Scores CRUD Tests', () => {
   test.describe('Feedback definition creation and visibility', () => {
-    test('should verify categorical and numerical feedback definitions', async ({
+    test('should verify categorical and numerical feedback definitions @sanity @regression', async ({
       page,
       createCategoricalFeedback,
       createNumericalFeedback,
@@ -18,7 +18,7 @@ test.describe('Feedback Scores CRUD Tests', () => {
   });
 
   test.describe('Feedback definition editing', () => {
-    test('should edit categorical and numerical feedback definitions', async ({
+    test('should edit categorical and numerical feedback definitions @regression', async ({
       page,
       createCategoricalFeedback,
       createNumericalFeedback,
@@ -61,7 +61,7 @@ test.describe('Feedback Scores CRUD Tests', () => {
   });
 
   test.describe('Feedback definition deletion', () => {
-    test('should delete categorical and numerical feedback definitions', async ({
+    test('should delete categorical and numerical feedback definitions @regression', async ({
       page,
       createCategoricalFeedback,
       createNumericalFeedback,

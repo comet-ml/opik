@@ -30,7 +30,7 @@ test.describe('Threads (Conversations) Tests', () => {
       }
     };
 
-    test('should verify threads created via decorator', async ({
+    test('should verify threads created via decorator @sanity @regression @tracing @threads', async ({
       page,
       projectName,
       createThreadsDecorator,
@@ -38,7 +38,7 @@ test.describe('Threads (Conversations) Tests', () => {
       await verifyThreads(page, projectName, createThreadsDecorator);
     });
 
-    test('should verify threads created via low-level client', async ({
+    test('should verify threads created via low-level client @regression @tracing @threads', async ({
       page,
       projectName,
       createThreadsClient,
@@ -48,7 +48,7 @@ test.describe('Threads (Conversations) Tests', () => {
   });
 
   test.describe('Thread removal', () => {
-    test('should remove threads via UI actions', async ({
+    test('should remove threads via UI actions @regression @tracing @threads', async ({
       page,
       projectName,
       createThreadsClient,
