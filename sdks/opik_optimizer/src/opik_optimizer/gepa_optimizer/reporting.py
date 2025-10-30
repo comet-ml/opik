@@ -39,7 +39,9 @@ def _format_pareto_note(note: str) -> str:
         new_scores = data.get("new_scores") or data.get("scores")
         if isinstance(new_scores, list):
             formatted_scores = ", ".join(
-                f"{float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}" if isinstance(score, Number) else str(score)
+                f"{float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}"
+                if isinstance(score, Number)
+                else str(score)
                 for score in new_scores
             )
             parts.append(f"scores=[{formatted_scores}]")
@@ -54,7 +56,9 @@ def _format_pareto_note(note: str) -> str:
             if isinstance(chosen_entry, dict):
                 score = chosen_entry.get("score")
                 if isinstance(score, Number):
-                    parts.append(f"train_val={float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}")
+                    parts.append(
+                        f"train_val={float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}"
+                    )
 
         pareto_front = data.get("pareto_front")
         if isinstance(pareto_front, dict):
@@ -67,12 +71,14 @@ def _format_pareto_note(note: str) -> str:
 
     if isinstance(data, list):
         return ", ".join(
-            f"{float(item) if isinstance(item, (int, float)) else float(str(item)):.3f}" if isinstance(item, Number) else str(item)
+            f"{float(item) if isinstance(item, (int, float)) else float(str(item)):.3f}"
+            if isinstance(item, Number)
+            else str(item)
             for item in data
         )
 
     if isinstance(data, Number):
-        return f"{float(data):.3f}"
+        return f"{float(data) if isinstance(data, (int, float)) else float(str(data)):.3f}"
 
     return str(data)
 
