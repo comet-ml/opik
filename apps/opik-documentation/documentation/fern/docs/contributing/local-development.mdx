@@ -596,12 +596,12 @@ pytest tests/
 
 3. **Clean up regularly** to free disk space:
    ```bash
-   # Clean up Opik Docker resources (safe - only affects Opik)
+   # Clean up Opik Docker resources (WARNING: DATA LOSS - removes Opik databases)
    cd deployment/docker-compose
    docker compose down -v  # Removes Opik containers and volumes
    cd ../..
    
-   # Or clean up unused Docker images (affects all projects)
+   # Or clean up dangling Docker containers, networks, images (affects all projects)
    docker system prune
    ```
 

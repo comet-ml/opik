@@ -299,7 +299,7 @@ cd apps/opik-frontend && rm -rf node_modules && npm install
 tail -100 /tmp/opik-backend.log           # Check migration errors
 ./scripts/dev-runner.sh --stop
 cd deployment/docker-compose
-docker compose down -v                    # ⚠️ DATA LOSS - removes Opik volumes (MySQL, ClickHouse data)
+docker compose down -v                    # ⚠️ DATA LOSS - removes Opik volumes (MySQL, ClickHouse etc. data)
 cd ../..
 ./scripts/dev-runner.sh --restart
 ```
@@ -323,7 +323,7 @@ rm -f /tmp/opik-*.pid
 # Hard reset (⚠️ DATA LOSS - removes Opik databases and storage)
 ./scripts/dev-runner.sh --stop
 cd deployment/docker-compose
-docker compose down -v                    # Removes Opik volumes (MySQL, ClickHouse data)
+docker compose down -v                    # Removes Opik volumes (MySQL, ClickHouse etc. data)
 cd ../..
 ./scripts/dev-runner.sh --restart
 ```
@@ -344,10 +344,8 @@ docker logs opik-clickhouse-1
 # Follow logs in real-time
 docker logs -f opik-backend-1
 
-# Stop and clean up Opik Docker resources
-cd deployment/docker-compose
-docker compose down -v                    # ⚠️ DATA LOSS - removes Opik containers and volumes
-cd ../..
+# Clean up Docker resources (⚠️ removes all stopped containers, networks, images)
+docker system prune -a
 ```
 
 ### **Resource Management**
@@ -363,6 +361,10 @@ cd ../..
 
 # Clean up unused Docker images (affects all projects)
 docker image prune -a                     # Remove unused images (⚠️ affects other projects)
+
+# Full cleanup (⚠️ DATA LOSS - removes ALL Docker data including databases)
+./opik.sh --stop
+docker system prune -a                    # Removes unused containers, networks, images (⚠️ may affect other projects)
 
 # Show disk usage
 docker system df                          # Show disk usage across all projects
