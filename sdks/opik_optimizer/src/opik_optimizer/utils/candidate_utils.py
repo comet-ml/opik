@@ -35,7 +35,7 @@ def unique_ordered_by_key(
     for item in items:
         try:
             item_key = key(item)
-        except Exception:
+        except (TypeError, AttributeError, KeyError):
             # If the key extractor fails, fall back to stringifying the item.
             item_key = str(item)
 

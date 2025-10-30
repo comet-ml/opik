@@ -1,3 +1,5 @@
+import json
+from numbers import Number
 from contextlib import contextmanager
 from typing import Any
 
@@ -24,6 +26,55 @@ from ..reporting_utils import (  # noqa: F401
 )
 
 console = get_console()
+
+
+def _format_pareto_note(note: str) -> str:
+    try:
+        data = json.loads(note)
+    except json.JSONDecodeError:
+        return note
+
+    if isinstance(data, dict):
+        parts: list[str] = []
+        new_scores = data.get("new_scores") or data.get("scores")
+        if isinstance(new_scores, list):
+            formatted_scores = ", ".join(
+                f"{float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}" if isinstance(score, Number) else str(score)
+                for score in new_scores
+            )
+            parts.append(f"scores=[{formatted_scores}]")
+
+        chosen = data.get("chosen")
+        if chosen is not None:
+            parts.append(f"chosen={chosen}")
+
+        train_val = data.get("pareto_front_train_val_score")
+        if isinstance(train_val, dict) and chosen is not None:
+            chosen_entry = train_val.get(str(chosen))
+            if isinstance(chosen_entry, dict):
+                score = chosen_entry.get("score")
+                if isinstance(score, Number):
+                    parts.append(f"train_val={float(score) if isinstance(score, (int, float)) else float(str(score)):.3f}")
+
+        pareto_front = data.get("pareto_front")
+        if isinstance(pareto_front, dict):
+            parts.append(f"front_size={len(pareto_front)}")
+
+        if parts:
+            return ", ".join(parts)
+
+        return note
+
+    if isinstance(data, list):
+        return ", ".join(
+            f"{float(item) if isinstance(item, (int, float)) else float(str(item)):.3f}" if isinstance(item, Number) else str(item)
+            for item in data
+        )
+
+    if isinstance(data, Number):
+        return f"{float(data):.3f}"
+
+    return str(data)
 
 
 class RichGEPAOptimizerLogger:
@@ -182,6 +233,17 @@ class RichGEPAOptimizerLogger:
                 self._last_raw_message = first
             return
 
+        if "Best score on train_val" in first:
+            parts = first.split(":")
+            if len(parts) >= 2:
+                score = parts[-1].strip()
+                console.print(
+                    f"│   Best train_val score: {score}",
+                    style="cyan",
+                )
+                self._last_raw_message = first
+            return
+
         if (
             "Best valset aggregate score so far" in first
             or "Best score on valset" in first
@@ -201,7 +263,10 @@ class RichGEPAOptimizerLogger:
         if self.verbose >= 2:
             if "New valset pareto front scores" in first:
                 note = first.split(":", 1)[-1].strip()
-                console.print(f"│   Pareto front scores updated: {note}", style="cyan")
+                console.print(
+                    f"│   Pareto front scores updated: {_format_pareto_note(note)}",
+                    style="cyan",
+                )
                 self._last_raw_message = first
                 return
             if "Updated valset pareto front programs" in first:

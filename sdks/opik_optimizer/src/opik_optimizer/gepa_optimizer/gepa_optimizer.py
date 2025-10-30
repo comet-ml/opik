@@ -18,7 +18,6 @@ from ..utils import (
     disable_experiment_reporting,
     enable_experiment_reporting,
     unique_ordered_by_key,
-    get_trial_compare_url,
 )
 from ..task_evaluator import _create_metric_class
 from ..reporting_utils import suppress_opik_logs
@@ -217,7 +216,7 @@ class GepaOptimizer(BaseOptimizer):
         # Calculate max_metric_calls from max_trials and effective samples
         effective_n_samples = len(items)
         max_metric_calls = max_trials * effective_n_samples
-        potential_trials = (
+        budget_limited_trials = (
             max_metric_calls // effective_n_samples if effective_n_samples else 0
         )
         if reflection_minibatch_size > max_trials:
@@ -227,12 +226,14 @@ class GepaOptimizer(BaseOptimizer):
                 reflection_minibatch_size,
                 max_trials,
             )
-        elif potential_trials and reflection_minibatch_size > potential_trials:
+        elif (
+            budget_limited_trials and reflection_minibatch_size > budget_limited_trials
+        ):
             logger.warning(
                 "reflection_minibatch_size (%s) exceeds the number of candidates allowed by the metric budget (%s). "
                 "Consider increasing max_trials or n_samples.",
                 reflection_minibatch_size,
-                potential_trials,
+                budget_limited_trials,
             )
 
         data_insts = self._build_data_insts(items, input_key, output_key)
@@ -482,13 +483,14 @@ class GepaOptimizer(BaseOptimizer):
                     )
 
         if rescored:
+
             def _tie_break(idx: int) -> tuple[float, float, int]:
                 opik_score = rescored[idx]
                 gepa_score = filtered_val_scores[idx]
                 gepa_numeric = (
                     float(gepa_score)
                     if isinstance(gepa_score, (int, float))
-                    else float('-inf')
+                    else float("-inf")
                 )
                 return opik_score, gepa_numeric, idx
 
@@ -500,7 +502,9 @@ class GepaOptimizer(BaseOptimizer):
                 best_idx = next(
                     (
                         i
-                        for i, (original_idx, _) in enumerate(filtered_indexed_candidates)
+                        for i, (original_idx, _) in enumerate(
+                            filtered_indexed_candidates
+                        )
                         if original_idx == gepa_best_idx
                     ),
                     0,
@@ -649,15 +653,6 @@ class GepaOptimizer(BaseOptimizer):
                 "experiment_url": experiment_url,
                 "trial_ids": trial_ids,
             }
-
-            if trial_ids and opt_id and ds_id:
-                try:
-                    compare_url = get_trial_compare_url(
-                        dataset_id=ds_id, optimization_id=opt_id, trial_ids=trial_ids
-                    )
-                    trial_info["compare_url"] = compare_url
-                except Exception:
-                    logger.debug("Failed to build trial compare URL", exc_info=True)
 
         details: dict[str, Any] = {
             "model": self.model,
