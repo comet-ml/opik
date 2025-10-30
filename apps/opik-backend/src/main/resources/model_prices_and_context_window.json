@@ -7073,19 +7073,7 @@
         "output_cost_per_token": 6e-07,
         "litellm_provider": "deepinfra",
         "mode": "chat",
-        "supports_tool_choice": true,
-        "supports_vision": true
-    },
-    "qwen/qwen2.5-vl-32b-instruct": {
-        "max_tokens": 128000,
-        "max_input_tokens": 128000,
-        "max_output_tokens": 128000,
-        "input_cost_per_token": 2e-07,
-        "output_cost_per_token": 6e-07,
-        "litellm_provider": "openrouter",
-        "mode": "chat",
-        "supports_tool_choice": true,
-        "supports_vision": true
+        "supports_tool_choice": true
     },
     "deepinfra/Qwen/Qwen3-14B": {
         "max_tokens": 40960,
@@ -8270,6 +8258,46 @@
         "output_cost_per_token": 6e-06,
         "supports_function_calling": true,
         "supports_tool_choice": false
+    },
+    "fal_ai/bria/text-to-image/3.2": {
+        "litellm_provider": "fal_ai",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.0398,
+        "supported_endpoints": [
+            "/v1/images/generations"
+        ]
+    },
+    "fal_ai/fal-ai/flux-pro/v1.1-ultra": {
+        "litellm_provider": "fal_ai",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.0398,
+        "supported_endpoints": [
+            "/v1/images/generations"
+        ]
+    },
+    "fal_ai/fal-ai/imagen4/preview": {
+        "litellm_provider": "fal_ai",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.0398,
+        "supported_endpoints": [
+            "/v1/images/generations"
+        ]
+    },
+    "fal_ai/fal-ai/recraft/v3/text-to-image": {
+        "litellm_provider": "fal_ai",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.0398,
+        "supported_endpoints": [
+            "/v1/images/generations"
+        ]
+    },
+    "fal_ai/fal-ai/stable-diffusion-v35-medium": {
+        "litellm_provider": "fal_ai",
+        "mode": "image_generation",
+        "output_cost_per_image": 0.0398,
+        "supported_endpoints": [
+            "/v1/images/generations"
+        ]
     },
     "featherless_ai/featherless-ai/Qwerky-72B": {
         "litellm_provider": "featherless_ai",
@@ -15856,6 +15884,20 @@
     },
     "mistral/mistral-embed": {
         "input_cost_per_token": 1e-07,
+        "litellm_provider": "mistral",
+        "max_input_tokens": 8192,
+        "max_tokens": 8192,
+        "mode": "embedding"
+    },
+    "mistral/codestral-embed": {
+        "input_cost_per_token": 0.15e-06,
+        "litellm_provider": "mistral",
+        "max_input_tokens": 8192,
+        "max_tokens": 8192,
+        "mode": "embedding"
+    },
+    "mistral/codestral-embed-2505": {
+        "input_cost_per_token": 0.15e-06,
         "litellm_provider": "mistral",
         "max_input_tokens": 8192,
         "max_tokens": 8192,
