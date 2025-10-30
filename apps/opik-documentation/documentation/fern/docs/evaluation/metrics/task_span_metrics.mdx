@@ -330,7 +330,7 @@ evaluation = evaluate(
 )
 ```
 
-### Quickly testing task span metrics locally (Python)
+### Quickly testing task span metrics locally
 
 You can validate a task span metric without running a full evaluation by recording spans locally. The SDK provides a context manager that captures all spans/traces created inside its block and exposes them in-memory.
 
@@ -377,7 +377,7 @@ with opik.record_traces_locally() as storage:
 
 Note:
 - Local recording cannot be nested. If a recording block is already active, entering another will raise an error.
-- See the Python SDK reference for more details: [Local Recording Context Manager](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/local_recording.html).
+- See the Python SDK reference for more details: [Local Recording Context Manager](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/local_recording.html)
 
 ## Best Practices
 
