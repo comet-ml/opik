@@ -482,7 +482,17 @@ class GepaOptimizer(BaseOptimizer):
                     )
 
         if rescored:
-            best_idx = max(range(len(rescored)), key=lambda i: rescored[i])
+            def _tie_break(idx: int) -> tuple[float, float, int]:
+                opik_score = rescored[idx]
+                gepa_score = filtered_val_scores[idx]
+                gepa_numeric = (
+                    float(gepa_score)
+                    if isinstance(gepa_score, (int, float))
+                    else float('-inf')
+                )
+                return opik_score, gepa_numeric, idx
+
+            best_idx = max(range(len(rescored)), key=_tie_break)
             best_score = rescored[best_idx]
         else:
             if filtered_indexed_candidates:
@@ -490,9 +500,7 @@ class GepaOptimizer(BaseOptimizer):
                 best_idx = next(
                     (
                         i
-                        for i, (original_idx, _) in enumerate(
-                            filtered_indexed_candidates
-                        )
+                        for i, (original_idx, _) in enumerate(filtered_indexed_candidates)
                         if original_idx == gepa_best_idx
                     ),
                     0,
