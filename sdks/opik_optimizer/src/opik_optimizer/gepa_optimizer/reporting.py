@@ -19,6 +19,7 @@ from ..reporting_utils import (  # noqa: F401
     display_result,
     get_console,
     convert_tqdm_to_rich,
+    format_prompt_snippet,
     suppress_opik_logs,
 )
 
@@ -132,9 +133,7 @@ class RichGEPAOptimizerLogger:
         # Format proposed prompts
         if "Proposed new text" in first and "system_prompt:" in first:
             _, _, rest = first.partition("system_prompt:")
-            snippet = rest.strip()
-            if len(snippet) > 100:
-                snippet = snippet[:100] + "…"
+            snippet = format_prompt_snippet(rest, max_length=100)
             console.print(f"│ │  Proposed: {snippet}", style="dim")
             return
 
