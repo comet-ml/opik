@@ -6,10 +6,6 @@ from .model_capabilities import (
     ModelCapabilities,
     ModelCapabilitiesRegistry,
 )
-from opik.api_objects.prompt.chat_prompt_template import (
-    ChatPromptTemplate,
-    MessageContent,
-)
 
 __all__ = [
     "OpikBaseModel",
@@ -18,6 +14,4 @@ __all__ = [
     "ModelCapabilities",
     "ModelCapabilitiesRegistry",
     "MODEL_CAPABILITIES_REGISTRY",
-    "ChatPromptTemplate",
-    "MessageContent",
 ]

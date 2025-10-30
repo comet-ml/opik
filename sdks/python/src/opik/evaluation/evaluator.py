@@ -15,15 +15,11 @@ from . import (
     samplers,
 )
 from .metrics import base_metric
-from .models import (
-    ChatPromptTemplate,
-    ModelCapabilities,
-    base_model,
-    models_factory,
-)
+from .models import ModelCapabilities, base_model, models_factory
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
-from opik.api_objects.prompt.chat_prompt_template import SupportedModalities
+from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
+from opik.api_objects.prompt.types import SupportedModalities
 
 LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
