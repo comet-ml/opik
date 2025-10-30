@@ -31,7 +31,6 @@ The context yields a lightweight handle having these properties:
 
 - ``span_trees``: List of :class:`opik.message_processing.emulation.models.SpanModel`
 - ``trace_trees``: List of :class:`opik.message_processing.emulation.models.TraceModel`
-- ``experiment_items``: List of :class:`opik.message_processing.emulation.models.ExperimentItemModel`
 
 Each accessor flushes the Opik client to ensure all in-flight messages are processed before reading the local state.
 
@@ -45,6 +44,6 @@ Notes
 
 - Uses the SDK's local emulator to mirror what would be sent to the backend.
 - Data is kept in memory only for the life of the context. On exit, the local recorder is disabled and state is reset.
-- Ideal for writing tests or ad-hoc scripts that need access to the span/trace tree structure.
+- Ideal for `task_span` metrics validation, writing tests or ad-hoc scripts that need access to the span/trace tree structure.
 
 
