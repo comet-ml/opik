@@ -220,6 +220,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         enabled: true,
         filters: [],
         llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[defaultScope]),
+        pythonCodeDetails: cloneDeep(DEFAULT_PYTHON_CODE_DATA[defaultScope]),
       });
     }
   }, [open, defaultRule, projectId, form]);
