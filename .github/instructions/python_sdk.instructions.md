@@ -1,5 +1,5 @@
 ---
-applyTo: "sdks/python/*"
+applyTo: "sdks/python/**/*.py"
 ---
 
 # Opik Python SDK Code Review Guidelines
