@@ -8,7 +8,6 @@ import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.events.AttachmentUploadRequested;
 import com.comet.opik.infrastructure.AttachmentsConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
@@ -30,8 +29,9 @@ import org.apache.tika.mime.MimeTypes;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.UncheckedIOException;
 import java.util.Base64;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,12 +43,17 @@ import java.util.regex.Pattern;
 /**
  * Service responsible for detecting and stripping attachments from trace/span payloads.
  *
- * This service uses a simplified string-based approach with async upload processing:
- * 1. Convert JSON to string
- * 2. Find all base64 strings using regex
- * 3. Process each base64 string with Tika for MIME type detection
- * 4. Post attachment upload events to EventBus for async processing
- * 5. Replace base64 strings in the JSON with references to the attachments
+ * This service uses an optimized JSON tree traversal approach with async upload processing:
+ * 1. Recursively walk the JSON tree (objects, arrays, text nodes)
+ * 2. For each text/string field, check if it matches base64 pattern
+ * 3. Fast-path for small strings (< minBase64Size)
+ * 4. Process base64 strings with Tika for MIME type detection
+ * 5. Post attachment upload events to EventBus for async processing
+ * 6. Replace base64 strings with attachment references
+ *
+ * This approach dramatically reduces CPU usage compared to string-based regex on large payloads
+ * by only processing individual fields that might contain attachments, avoiding the need to
+ * convert the entire JSON to string and back.
  *
  * Filenames are generated to include context (input, output, metadata) to prevent naming conflicts.
  * Actual uploads are handled asynchronously by AttachmentUploadListener.
@@ -204,6 +209,19 @@ public class AttachmentStripperService {
     }
 
     /**
+     * Context for attachment processing operations.
+     * Encapsulates the entity and workspace information needed throughout the attachment stripping process.
+     */
+    private record AttachmentContext(
+            UUID entityId,
+            EntityType entityType,
+            String workspaceId,
+            String userName,
+            String projectName,
+            String fieldContext) {
+    }
+
+    /**
      * Common logic for stripping attachments from trace/span entities.
      *
      * This method handles the reactive processing of input, output, and metadata fields,
@@ -238,14 +256,17 @@ public class AttachmentStripperService {
             Consumer<JsonNode> metadataSetter,
             Supplier<T> buildFunction) {
 
-        Mono<Optional<JsonNode>> inputMono = processField(
-                input, entityId, entityType, workspaceId, userName, projectName, "input");
+        // Create context records for each field (input, output, metadata)
+        AttachmentContext inputCtx = new AttachmentContext(entityId, entityType, workspaceId, userName, projectName,
+                "input");
+        AttachmentContext outputCtx = new AttachmentContext(entityId, entityType, workspaceId, userName, projectName,
+                "output");
+        AttachmentContext metadataCtx = new AttachmentContext(entityId, entityType, workspaceId, userName, projectName,
+                "metadata");
 
-        Mono<Optional<JsonNode>> outputMono = processField(
-                output, entityId, entityType, workspaceId, userName, projectName, "output");
-
-        Mono<Optional<JsonNode>> metadataMono = processField(
-                metadata, entityId, entityType, workspaceId, userName, projectName, "metadata");
+        Mono<Optional<JsonNode>> inputMono = processField(input, inputCtx);
+        Mono<Optional<JsonNode>> outputMono = processField(output, outputCtx);
+        Mono<Optional<JsonNode>> metadataMono = processField(metadata, metadataCtx);
 
         return Mono.zip(inputMono, outputMono, metadataMono)
                 .map(tuple -> {
@@ -257,20 +278,12 @@ public class AttachmentStripperService {
                 });
     }
 
-    private Mono<Optional<JsonNode>> processField(
-            JsonNode value,
-            UUID entityId,
-            EntityType entityType,
-            String workspaceId,
-            String userName,
-            String projectName,
-            String fieldName) {
+    private Mono<Optional<JsonNode>> processField(JsonNode value, AttachmentContext ctx) {
 
-        io.opentelemetry.api.trace.Span.current().setAttribute("entity_field", fieldName);
+        io.opentelemetry.api.trace.Span.current().setAttribute("entity_field", ctx.fieldContext());
 
         return Mono.justOrEmpty(value)
-                .flatMap(it -> Mono.fromCallable(
-                        () -> stripAttachments(it, entityId, entityType, workspaceId, userName, projectName, fieldName))
+                .flatMap(it -> Mono.fromCallable(() -> stripAttachments(it, ctx))
                         .subscribeOn(Schedulers.boundedElastic()))
                 .map(Optional::of)
                 .defaultIfEmpty(Optional.empty());
@@ -279,9 +292,7 @@ public class AttachmentStripperService {
     /**
      * Strips attachments from a JSON payload and returns the processed JSON with attachment references.
      *
-     * Uses a simplified string-based approach for maximum simplicity and robustness.
-     * Attachments are uploaded using either direct upload (MinIO) or multipart upload (S3) based on configuration.
-     * Generated filenames include context to avoid conflicts between input, output, and metadata attachments.
+     * Public API for external callers that creates the attachment context internally.
      */
     @WithSpan
     public JsonNode stripAttachments(JsonNode node,
@@ -291,6 +302,25 @@ public class AttachmentStripperService {
             String userName,
             String projectName,
             String context) {
+        AttachmentContext ctx = new AttachmentContext(entityId, entityType, workspaceId, userName, projectName,
+                context);
+        return stripAttachments(node, ctx);
+    }
+
+    /**
+     * Strips attachments from a JSON payload and returns the processed JSON with attachment references.
+     *
+     * Uses an optimized field-by-field approach that avoids converting the entire JSON to string:
+     * 1. Recursively walks the JSON tree (objects, arrays, text nodes)
+     * 2. For each text/string field, checks if it matches base64 pattern
+     * 3. Fast-path for small strings (< minBase64Size)
+     * 4. Only processes individual fields that might contain attachments
+     *
+     * This approach dramatically reduces CPU usage compared to string-based regex on large payloads.
+     * Generated filenames include context to avoid conflicts between input, output, and metadata attachments.
+     */
+    @WithSpan
+    private JsonNode stripAttachments(JsonNode node, AttachmentContext ctx) {
         if (node == null || node.isNull()) {
             return node;
         }
@@ -298,33 +328,15 @@ public class AttachmentStripperService {
         long startTime = System.currentTimeMillis();
 
         try {
-            String jsonString = wrapWithSpan("objectMapper.writeValueAsString", () -> {
-                try {
-                    return objectMapper.writeValueAsString(node);
-                } catch (JsonProcessingException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
+            // Start at 0, will be incremented to 1 for first attachment (using incrementAndGet pattern)
+            AtomicInteger attachmentCounter = new AtomicInteger(0);
 
-            // Step 2: Process all base64 strings in the JSON
-            String processedJson = wrapWithSpan("processBase64InJsonString",
-                    () -> processBase64InJsonString(jsonString, entityId, entityType, workspaceId, userName,
-                            projectName, context));
+            // Process the JSON tree recursively, returning potentially modified node
+            JsonNode processed = wrapWithSpan("processJsonNode",
+                    () -> processJsonNode(node, attachmentCounter, ctx));
 
-            // Step 3: Only create new JsonNode if changes were made (avoid unnecessary object creation)
-            if (jsonString.equals(processedJson)) {
-                return node; // No attachments found, return original node
-            }
-
-            // Convert back to JSON only if we made changes
-            return wrapWithSpan("objectMapper.readTree", () -> {
-                try {
-                    return objectMapper.readTree(processedJson);
-                } catch (JsonProcessingException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
-        } catch (UncheckedIOException e) {
+            return processed;
+        } catch (Exception e) {
             log.error("Failed to process JSON for attachment stripping", e);
             // We cannot return the original large payload to ClickHouse
             throw new InternalServerErrorException("Failed to process attachments in payload", e);
@@ -353,53 +365,146 @@ public class AttachmentStripperService {
     }
 
     /**
-     * Processes all base64 strings found in a JSON string and replaces them with attachment references.
+     * Recursively processes a JSON node, checking each text field for potential attachments.
      *
-     * Uses regex to find base64 strings longer than the minimum threshold, processes each one
-     * as a potential attachment, and replaces valid attachments with reference strings.
+     * This method walks the JSON tree without converting to string, which is much more efficient
+     * for large payloads. It handles:
+     * - Object nodes: recursively processes each field
+     * - Array nodes: recursively processes each element
+     * - Text nodes: checks if content matches base64 pattern and processes as attachment
+     * - Other nodes: returns as-is (numbers, booleans, null, etc.)
+     *
+     * @return the processed JsonNode (may be the same instance if no attachments found)
      */
+    private JsonNode processJsonNode(
+            JsonNode node,
+            AtomicInteger attachmentCounter,
+            AttachmentContext ctx) {
 
-    private String processBase64InJsonString(String jsonString,
-            UUID entityId,
-            EntityType entityType,
-            String workspaceId,
-            String userName,
-            String projectName,
-            String context) {
-
-        // Early exit: if the entire JSON string is smaller than our minimum base64 size,
-        // it can't possibly contain any base64 attachments worth processing
-        if (jsonString.length() < minBase64Size) {
-            return jsonString;
+        if (node == null || node.isNull()) {
+            return node;
         }
 
-        // Use the pre-compiled pattern from construction
-        Matcher matcher = wrapWithSpan("base64Pattern.matcher", () -> base64Pattern.matcher(jsonString));
+        return switch (node.getNodeType()) {
+            case OBJECT -> processObjectNode(node, attachmentCounter, ctx);
+            case ARRAY -> processArrayNode(node, attachmentCounter, ctx);
+            case STRING -> processTextNode(node, attachmentCounter, ctx);
+            default -> node; // Numbers, booleans, null, etc. pass through unchanged
+        };
+    }
 
+    /**
+     * Processes a JSON object node by recursively processing each field.
+     *
+     * @return the processed object node, or the original if no changes were made
+     */
+    private JsonNode processObjectNode(
+            JsonNode node,
+            AtomicInteger attachmentCounter,
+            AttachmentContext ctx) {
+
+        var objectNode = objectMapper.createObjectNode();
+        boolean hasChanges = false;
+
+        // Iterate over fields using while loop
+        Iterator<Map.Entry<String, JsonNode>> fields = node.properties().iterator();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            String fieldName = entry.getKey();
+            JsonNode fieldValue = entry.getValue();
+
+            // Recursively process the field value
+            JsonNode processed = processJsonNode(fieldValue, attachmentCounter, ctx);
+
+            objectNode.set(fieldName, processed);
+
+            // Track if we made any changes
+            if (processed != fieldValue) {
+                hasChanges = true;
+            }
+        }
+
+        // Return original if no changes were made (avoid unnecessary object creation)
+        return hasChanges ? objectNode : node;
+    }
+
+    /**
+     * Processes a JSON array node by recursively processing each element.
+     *
+     * @return the processed array node, or the original if no changes were made
+     */
+    private JsonNode processArrayNode(
+            JsonNode node,
+            AtomicInteger attachmentCounter,
+            AttachmentContext ctx) {
+
+        var arrayNode = objectMapper.createArrayNode();
+        boolean hasChanges = false;
+
+        for (JsonNode element : node) {
+            JsonNode processed = processJsonNode(element, attachmentCounter, ctx);
+            arrayNode.add(processed);
+
+            // Track if we made any changes
+            if (processed != element) {
+                hasChanges = true;
+            }
+        }
+
+        // Return original if no changes were made (avoid unnecessary array creation)
+        return hasChanges ? arrayNode : node;
+    }
+
+    /**
+     * Processes a JSON text node by searching for base64 attachments and replacing them with references.
+     *
+     * @return the processed text node with attachment references, or the original if no attachments found
+     */
+    private JsonNode processTextNode(
+            JsonNode node,
+            AtomicInteger attachmentCounter,
+            AttachmentContext ctx) {
+
+        String text = node.asText();
+
+        // Fast path: skip small strings that can't possibly contain attachments
+        if (text.length() < minBase64Size) {
+            return node;
+        }
+
+        // Search for base64 patterns within the text (not just exact matches)
+        Matcher matcher = wrapWithSpan("regex.match", () -> base64Pattern.matcher(text));
         StringBuilder result = new StringBuilder();
-        AtomicInteger attachmentCounter = new AtomicInteger(1);
+        int lastEnd = 0;
+        boolean foundAttachment = false;
 
-        while (matcher.find()) {
-            wrapWithSpanVoid("matcher.find", () -> {
+        while (wrapWithSpan("regex.find", matcher::find)) {
+            String base64Data = matcher.group(1);
 
-                String base64Data = matcher.group(1); // Extract base64 without quotes
+            // Increment counter first (starts at 0, so first attachment becomes 1)
+            int currentAttachmentNumber = attachmentCounter.incrementAndGet();
 
-                // Try to process as attachment
-                String attachmentReference = processBase64Attachment(
-                        base64Data, attachmentCounter,
-                        entityId, entityType, workspaceId, userName, projectName, context);
+            // Try to process as attachment
+            String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
 
-                if (attachmentReference != null) {
-                    // Replace the base64 string with the reference
-                    matcher.appendReplacement(result, attachmentReference);
-                    attachmentCounter.addAndGet(1); // Only increment if we actually processed an attachment
-                }
-            });
-            // If not an attachment, matcher.appendTail() will handle keeping the original
+            if (attachmentReference != null) {
+                // Append text before the match
+                result.append(text, lastEnd, matcher.start());
+                // Append the attachment reference
+                result.append(attachmentReference);
+                lastEnd = matcher.end();
+                foundAttachment = true;
+            }
         }
 
-        matcher.appendTail(result);
-        return result.toString();
+        // If we found and replaced attachments, return new node with modified text
+        if (foundAttachment) {
+            result.append(text, lastEnd, text.length());
+            return objectMapper.getNodeFactory().textNode(result.toString());
+        }
+
+        // No attachments found, return original node
+        return node;
     }
 
     /**
@@ -409,24 +514,12 @@ public class AttachmentStripperService {
      * to the EventBus for background processing. The generated filename includes the context prefix to avoid conflicts.
      *
      * @param base64Data the base64 string to process
-     * @param attachmentNumber the sequential attachment number for this request
-     * @param entityId the entity ID (trace or span ID) to link the attachment to
-     * @param entityType the entity type (TRACE or SPAN)
-     * @param workspaceId the workspace ID
-     * @param userName the user name
-     * @param projectName the project name
-     * @param context the context where the attachment was found (input, output, metadata)
+     * @param attachmentNumber the sequential attachment number for this request (1-based)
+     * @param ctx the attachment context containing entity and workspace information
      * @return attachment reference string if processed, null if not a valid attachment
      */
     @WithSpan
-    private String processBase64Attachment(String base64Data,
-            AtomicInteger attachmentNumber,
-            UUID entityId,
-            EntityType entityType,
-            String workspaceId,
-            String userName,
-            String projectName,
-            String context) {
+    private String processBase64Attachment(String base64Data, int attachmentNumber, AttachmentContext ctx) {
         try {
             // Decode base64 and detect MIME type using Tika
             byte[] bytes = wrapWithSpan("base64.decode", () -> Base64.getDecoder().decode(base64Data));
@@ -441,19 +534,19 @@ public class AttachmentStripperService {
             // Generate attachment info with appropriate extension and context
             String extension = wrapWithSpan("getFileExtension", () -> getFileExtension(mimeType));
 
-            String fileName = context + "-attachment-" + attachmentNumber.get() + "-" + System.currentTimeMillis() + "."
-                    + extension;
+            String fileName = ctx.fieldContext() + "-attachment-" + attachmentNumber + "-"
+                    + System.currentTimeMillis() + "." + extension;
 
             // Post event for async attachment upload
             AttachmentUploadRequested uploadEvent = new AttachmentUploadRequested(
                     fileName,
                     mimeType,
                     base64Data, // Keep original base64 data for async processing
-                    workspaceId,
-                    userName,
-                    projectName,
-                    entityId,
-                    entityType);
+                    ctx.workspaceId(),
+                    ctx.userName(),
+                    ctx.projectName(),
+                    ctx.entityId(),
+                    ctx.entityType());
 
             // Post event to EventBus for async processing
             wrapWithSpanVoid("eventBus.post", () -> eventBus.post(uploadEvent));
@@ -472,7 +565,7 @@ public class AttachmentStripperService {
         } catch (Exception e) {
             // Unexpected errors during attachment processing
             log.error("Error processing attachment #{} in context '{}': {}",
-                    attachmentNumber, context, e.getMessage(), e);
+                    attachmentNumber, ctx.fieldContext(), e.getMessage(), e);
             attachmentErrors.add(1);
             return null; // Graceful degradation - continue without this attachment
         }
