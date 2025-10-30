@@ -126,6 +126,7 @@ type AddEditRuleDialogProps = {
   projectId?: string;
   rule?: EvaluatorsRule;
   projectName?: string; // Optional: project name for pre-selected projects
+  datasetColumnNames?: string[]; // Optional: dataset column names from playground
 };
 
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
@@ -148,6 +149,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   projectId,
   rule: defaultRule,
   projectName,
+  datasetColumnNames,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -588,6 +590,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     workspaceName={workspaceName}
                     form={form}
                     projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
                   />
                 ) : (
                   <PythonCodeRuleDetails form={form} />

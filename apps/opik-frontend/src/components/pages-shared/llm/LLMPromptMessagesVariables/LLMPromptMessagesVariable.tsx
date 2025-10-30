@@ -18,6 +18,7 @@ interface LLMPromptMessagesVariableProps {
   onChange: (changes: DropdownOption<string>) => void;
   projectId: string;
   projectName?: string;
+  datasetColumnNames?: string[];
 }
 
 const LLMPromptMessagesVariable = ({
@@ -26,6 +27,7 @@ const LLMPromptMessagesVariable = ({
   onChange,
   projectId,
   projectName,
+  datasetColumnNames,
 }: LLMPromptMessagesVariableProps) => {
   return (
     <div className="relative flex justify-between">
@@ -45,6 +47,7 @@ const LLMPromptMessagesVariable = ({
               onChange({ ...variable, value: value })
             }
             projectName={projectName}
+            datasetColumnNames={datasetColumnNames}
           />
           {errorText && (
             <FormErrorSkeleton className="mt-2">{errorText}</FormErrorSkeleton>

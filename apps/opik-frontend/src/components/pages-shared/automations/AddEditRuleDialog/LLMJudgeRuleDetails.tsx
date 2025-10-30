@@ -61,12 +61,14 @@ type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
   form: UseFormReturn<EvaluationRuleFormType>;
   projectName?: string;
+  datasetColumnNames?: string[];
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
   form,
   projectName,
+  datasetColumnNames,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
   const { calculateModelProvider, calculateDefaultModel } =
@@ -313,6 +315,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     variables={field.value}
                     onChange={field.onChange}
                     projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
                   />
                 </>
               );

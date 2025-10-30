@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { Dataset, DatasetItem } from "@/types/datasets";
+import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
 import { Database, FlaskConical, Pause, Play, X } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -36,6 +36,7 @@ interface PlaygroundOutputActionsProps {
   onChangeDatasetId: (id: string | null) => void;
   workspaceName: string;
   datasetItems: DatasetItem[];
+  datasetColumns: DatasetItemColumn[];
   loadingDatasetItems: boolean;
 }
 
@@ -49,6 +50,7 @@ const PlaygroundOutputActions = ({
   onChangeDatasetId,
   workspaceName,
   datasetItems,
+  datasetColumns,
   loadingDatasetItems,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -488,6 +490,7 @@ const PlaygroundOutputActions = ({
         }}
         projectId={ruleDialogProjectId || playgroundProject?.id}
         projectName="playground"
+        datasetColumnNames={datasetColumns.map((c) => c.name)}
       />
       <AddEditDatasetDialog
         open={isDatasetDialogOpen}

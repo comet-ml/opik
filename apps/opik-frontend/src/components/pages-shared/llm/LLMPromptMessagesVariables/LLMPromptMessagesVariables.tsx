@@ -28,6 +28,7 @@ interface LLMPromptMessagesVariablesProps {
   description?: string;
   errorText?: string;
   projectName?: string;
+  datasetColumnNames?: string[];
 }
 
 const LLMPromptMessagesVariables = ({
@@ -39,6 +40,7 @@ const LLMPromptMessagesVariables = ({
   description = DEFAULT_DESCRIPTION,
   errorText = DEFAULT_ERROR_TEXT,
   projectName,
+  datasetColumnNames,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     return Object.entries(variables)
@@ -76,6 +78,7 @@ const LLMPromptMessagesVariables = ({
             onChange={(changes) => handleChangeVariables(changes)}
             projectId={projectId}
             projectName={projectName}
+            datasetColumnNames={datasetColumnNames}
           />
         ))}
       </div>
