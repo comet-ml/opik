@@ -6,7 +6,6 @@ set -euo pipefail
 
 # Variables
 DEBUG_MODE=${DEBUG_MODE:-false}
-CREATE_DEMO_DATA=${CREATE_DEMO_DATA:-false}
 ORIGINAL_COMMAND="$0 $@"
 
 # Configuration
@@ -732,26 +731,18 @@ verify_be_only_services() {
 start_services() {
     log_info "=== Starting Opik Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    
-    local total_steps=4
-    [ "$CREATE_DEMO_DATA" = "true" ] && total_steps=5
-    
-    log_info "Step 1/$total_steps: Starting infrastructure..."
+    log_info "Step 1/5: Starting infrastructure..."
     start_infrastructure
-    log_info "Step 2/$total_steps: Running DB migrations..."
+    log_info "Step 2/5: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/$total_steps: Starting backend..."
+    log_info "Step 3/5: Starting backend..."
     start_backend
-    log_info "Step 4/$total_steps: Starting frontend..."
+    log_info "Step 4/5: Starting frontend..."
     start_frontend
-    
-    if [ "$CREATE_DEMO_DATA" = "true" ]; then
-        log_info "Step 5/$total_steps: Creating demo data..."
-        if ! create_demo_data; then
-            log_warning "Demo data creation failed, but services are running"
-        fi
+    log_info "Step 5/5: Creating demo data..."
+    if ! create_demo_data; then
+        log_warning "Demo data creation failed, but services are running"
     fi
-    
     log_success "=== Start Complete ==="
     verify_services
 }
@@ -783,36 +774,28 @@ migrate_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    
-    local total_steps=9
-    [ "$CREATE_DEMO_DATA" = "true" ] && total_steps=10
-    
-    log_info "Step 1/$total_steps: Stopping frontend..."
+    log_info "Step 1/10: Stopping frontend..."
     stop_frontend
-    log_info "Step 2/$total_steps: Stopping backend..."
+    log_info "Step 2/10: Stopping backend..."
     stop_backend
-    log_info "Step 3/$total_steps: Stopping infrastructure..."
+    log_info "Step 3/10: Stopping infrastructure..."
     stop_infrastructure
-    log_info "Step 4/$total_steps: Starting infrastructure..."
+    log_info "Step 4/10: Starting infrastructure..."
     start_infrastructure
-    log_info "Step 5/$total_steps: Building backend..."
+    log_info "Step 5/10: Building backend..."
     build_backend
-    log_info "Step 6/$total_steps: Building frontend..."
+    log_info "Step 6/10: Building frontend..."
     build_frontend
-    log_info "Step 7/$total_steps: Running DB migrations..."
+    log_info "Step 7/10: Running DB migrations..."
     run_db_migrations
-    log_info "Step 8/$total_steps: Starting backend..."
+    log_info "Step 8/10: Starting backend..."
     start_backend
-    log_info "Step 9/$total_steps: Starting frontend..."
+    log_info "Step 9/10: Starting frontend..."
     start_frontend
-    
-    if [ "$CREATE_DEMO_DATA" = "true" ]; then
-        log_info "Step 10/$total_steps: Creating demo data..."
-        if ! create_demo_data; then
-            log_warning "Demo data creation failed, but services are running"
-        fi
+    log_info "Step 10/10: Creating demo data..."
+    if ! create_demo_data; then
+        log_warning "Demo data creation failed, but services are running"
     fi
-    
     log_success "=== Restart Complete ==="
     verify_services
 }
@@ -821,24 +804,16 @@ restart_services() {
 start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    
-    local total_steps=3
-    [ "$CREATE_DEMO_DATA" = "true" ] && total_steps=4
-    
-    log_info "Step 1/$total_steps: Starting infrastructure and Docker frontend..."
+    log_info "Step 1/4: Starting infrastructure and Docker frontend..."
     start_local_be_docker_services
-    log_info "Step 2/$total_steps: Running DB migrations..."
+    log_info "Step 2/4: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/$total_steps: Starting backend process..."
+    log_info "Step 3/4: Starting backend process..."
     start_backend
-    
-    if [ "$CREATE_DEMO_DATA" = "true" ]; then
-        log_info "Step 4/$total_steps: Creating demo data..."
-        if ! create_demo_data; then
-            log_warning "Demo data creation failed, but services are running"
-        fi
+    log_info "Step 4/4: Creating demo data..."
+    if ! create_demo_data; then
+        log_warning "Demo data creation failed, but services are running"
     fi
-    
     log_success "=== BE-Only Start Complete ==="
     verify_be_only_services
 }
@@ -856,30 +831,22 @@ stop_be_only_services() {
 # Function to restart BE-only services (stop, build, start)
 restart_be_only_services() {
     log_info "=== Restarting Opik BE-Only Development Environment ==="
-    
-    local total_steps=6
-    [ "$CREATE_DEMO_DATA" = "true" ] && total_steps=7
-    
-    log_info "Step 1/$total_steps: Stopping backend process..."
+    log_info "Step 1/7: Stopping backend process..."
     stop_backend
-    log_info "Step 2/$total_steps: Stopping infrastructure and Docker frontend..."
+    log_info "Step 2/7: Stopping infrastructure and Docker frontend..."
     stop_local_be_docker_services
-    log_info "Step 3/$total_steps: Starting infrastructure and Docker frontend..."
+    log_info "Step 3/7: Starting infrastructure and Docker frontend..."
     start_local_be_docker_services
-    log_info "Step 4/$total_steps: Building backend..."
+    log_info "Step 4/7: Building backend..."
     build_backend
-    log_info "Step 5/$total_steps: Running DB migrations..."
+    log_info "Step 5/7: Running DB migrations..."
     run_db_migrations
-    log_info "Step 6/$total_steps: Starting backend process..."
+    log_info "Step 6/7: Starting backend process..."
     start_backend
-    
-    if [ "$CREATE_DEMO_DATA" = "true" ]; then
-        log_info "Step 7/$total_steps: Creating demo data..."
-        if ! create_demo_data; then
-            log_warning "Demo data creation failed, but services are running"
-        fi
+    log_info "Step 7/7: Creating demo data..."
+    if ! create_demo_data; then
+        log_warning "Demo data creation failed, but services are running"
     fi
-    
     log_success "=== BE-Only Restart Complete ==="
     verify_be_only_services
 }
@@ -901,19 +868,20 @@ show_usage() {
     echo "  --be-only-verify   - Verify status of Docker infrastructure and FE, and backend process"
     echo ""
     echo "Other options:"
-    echo "  --build-be         - Build backend"
-    echo "  --build-fe         - Build frontend"
-    echo "  --migrate          - Run database migrations"
-    echo "  --lint-be          - Lint backend code"
-    echo "  --lint-fe          - Lint frontend code"
-    echo "  --create-demo-data - Create demo data (meant to be combined with --start or --restart)"
-    echo "  --debug            - Enable debug mode (meant to be combined with other flags)"
-    echo "  --logs             - Show logs for backend and frontend services"
-    echo "  --help             - Show this help message"
+    echo "  --build-be     - Build backend"
+    echo "  --build-fe     - Build frontend"
+    echo "  --migrate      - Run database migrations"
+    echo "  --lint-be      - Lint backend code"
+    echo "  --lint-fe      - Lint frontend code"
+    echo "  --debug        - Enable debug mode (meant to be combined with other flags)"
+    echo "  --logs         - Show logs for backend and frontend services"
+    echo "  --help         - Show this help message"
     echo ""
     echo "Environment Variables:"
-    echo "  DEBUG_MODE=true        - Enable debug mode"
-    echo "  CREATE_DEMO_DATA=true  - Enable demo data creation on startup"
+    echo "  DEBUG_MODE=true  - Enable debug mode"
+    echo ""
+    echo "Note:"
+    echo "  Demo data is automatically created on every start/restart"
 }
 
 # Function to handle unknown options
@@ -944,17 +912,13 @@ show_logs() {
     echo "  Frontend: tail -f /tmp/opik-frontend.log"
 }
 
-# Parse arguments to handle debug and create-demo-data flags
+# Parse arguments to handle debug flag
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case $1 in
     --debug)
       DEBUG_MODE=true
       shift # Remove --debug from arguments
-      ;;
-    --create-demo-data)
-      CREATE_DEMO_DATA=true
-      shift # Remove --create-demo-data from arguments
       ;;
     *)
       ARGS+=("$1") # Keep other arguments
@@ -963,7 +927,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Restore arguments without --debug and --create-demo-data
+# Restore arguments without --debug
 if [ ${#ARGS[@]} -gt 0 ]; then
   set -- "${ARGS[@]}"
 else
@@ -973,11 +937,6 @@ fi
 # Show debug mode status
 if [ "$DEBUG_MODE" = "true" ]; then
     log_debug "Debug mode is ENABLED"
-fi
-
-# Show demo data creation status
-if [ "$CREATE_DEMO_DATA" = "true" ]; then
-    log_debug "Demo data creation is ENABLED"
 fi
 
 # Main script logic
