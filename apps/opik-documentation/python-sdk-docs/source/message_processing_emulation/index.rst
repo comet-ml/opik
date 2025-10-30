@@ -23,6 +23,7 @@ Key Classes
    FeedbackScoreModel
    SpanModel
    TraceModel
+   local_recording
 
 Class Hierarchy
 ---------------
