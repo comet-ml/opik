@@ -69,7 +69,7 @@ def _format_pareto_note(note: str) -> str:
 
         return note
 
-    if isinstance(data, list):
+    elif isinstance(data, list):
         return ", ".join(
             f"{float(item) if isinstance(item, (int, float)) else float(str(item)):.3f}"
             if isinstance(item, Number)
