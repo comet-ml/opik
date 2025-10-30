@@ -241,7 +241,6 @@ class RichGEPAOptimizerLogger:
                 self._last_raw_message = first
             return
 
-
         if (
             "Best valset aggregate score so far" in first
             or "Best score on valset" in first
