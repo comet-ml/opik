@@ -115,7 +115,8 @@ class ROUGE(base_metric.BaseMetric):
                     raise MetricComputationError("Encountered empty reference.")
 
         rouge_score_type = self._rouge_type
-        assert self._rouge is not None
+        if self._rouge is None:
+            raise MetricComputationError("ROUGE backend is not initialized.")
         results = self._rouge.score_multi(reference, output)
         rouge_f1_value = results[rouge_score_type].fmeasure
 
