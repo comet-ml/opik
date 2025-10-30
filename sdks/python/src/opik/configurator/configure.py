@@ -414,12 +414,11 @@ class OpikConfigurator:
     def _log_project_configuration_message(self) -> None:
         """
         Log an informative message about project configuration after successful setup.
-
-        This message helps users understand that traces will be logged to the Default Project
-        by default and provides a link to documentation for changing the project name.
         """
+        project_name = self.current_config.project_name
+
         LOGGER.info(
-            "Configuration completed successfully. Traces will be logged to 'Default Project' by default. "
+            f"Configuration completed successfully. Traces will be logged to '{project_name}' project. "
             "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name"
         )
 

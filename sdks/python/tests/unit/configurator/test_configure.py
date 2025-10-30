@@ -911,7 +911,7 @@ class TestConfigureCloud:
                 Path("/some/path/.opik.config"),
             ),
             (
-                "Configuration completed successfully. Traces will be logged to 'Default Project' by default. "
+                f"Configuration completed successfully. Traces will be logged to '{mock_config_instance.project_name}' project. "
                 "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
             ),
         ]
@@ -1161,7 +1161,7 @@ class TestConfigureLocal:
                 f"Opik is already configured to local instance at {OPIK_BASE_URL_LOCAL}.",
             ),
             (
-                "Configuration completed successfully. Traces will be logged to 'Default Project' by default. "
+                f"Configuration completed successfully. Traces will be logged to '{mock_config_instance.project_name}' project. "
                 "To change the destination project, see: https://www.comet.com/docs/opik/tracing/log_traces#configuring-the-project-name",
             ),
         ]
