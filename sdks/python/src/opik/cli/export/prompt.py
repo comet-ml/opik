@@ -51,17 +51,17 @@ def export_single_prompt(
         prompt_data = {
             "name": prompt.name,
             "current_version": {
-                "prompt": prompt.prompt,
-                "metadata": prompt.metadata,
-                "type": prompt.type if prompt.type else None,
-                "commit": prompt.commit,
+                "prompt": getattr(prompt, "prompt", None),
+                "metadata": getattr(prompt, "metadata", None),
+                "type": getattr(prompt, "type", None) or None,
+                "commit": getattr(prompt, "commit", None),
             },
             "history": [
                 {
-                    "prompt": version.prompt,
-                    "metadata": version.metadata,
-                    "type": version.type if version.type else None,
-                    "commit": version.commit,
+                    "prompt": getattr(version, "prompt", None),
+                    "metadata": getattr(version, "metadata", None),
+                    "type": getattr(version, "type", None) or None,
+                    "commit": getattr(version, "commit", None),
                 }
                 for version in prompt_history
             ],
@@ -158,7 +158,7 @@ def export_experiment_prompts(
 ) -> int:
     """Export prompts referenced by an experiment."""
     try:
-        if not experiment.prompt_versions:
+        if not getattr(experiment, "prompt_versions", None):
             return 0
 
         prompts_dir = output_dir.parent / "prompts"
@@ -203,17 +203,17 @@ def export_experiment_prompts(
                         ),
                     },
                     "current_version": {
-                        "prompt": prompt.prompt,
-                        "metadata": prompt.metadata,
-                        "type": prompt.type if prompt.type else None,
-                        "commit": prompt.commit,
+                        "prompt": getattr(prompt, "prompt", None),
+                        "metadata": getattr(prompt, "metadata", None),
+                        "type": getattr(prompt, "type", None) or None,
+                        "commit": getattr(prompt, "commit", None),
                     },
                     "history": [
                         {
-                            "prompt": version.prompt,
-                            "metadata": version.metadata,
-                            "type": version.type if version.type else None,
-                            "commit": version.commit,
+                            "prompt": getattr(version, "prompt", None),
+                            "metadata": getattr(version, "metadata", None),
+                            "type": getattr(version, "type", None) or None,
+                            "commit": getattr(version, "commit", None),
                         }
                         for version in prompt_history
                     ],
@@ -288,7 +288,7 @@ def export_related_prompts_by_name(
         experiment_id = experiment.id or ""
 
         for prompt in all_prompts:
-            prompt_name = prompt.name.lower()
+            prompt_name = getattr(prompt, "name", "").lower()
             is_related = False
 
             # Check if prompt name contains experiment keywords
@@ -340,17 +340,17 @@ def export_related_prompts_by_name(
                         "last_updated_at": getattr(prompt, "last_updated_at", None),
                     },
                     "current_version": {
-                        "prompt": prompt.prompt,
-                        "metadata": prompt.metadata,
-                        "type": prompt.type if prompt.type else None,
-                        "commit": prompt.commit,
+                        "prompt": getattr(prompt, "prompt", None),
+                        "metadata": getattr(prompt, "metadata", None),
+                        "type": getattr(prompt, "type", None) or None,
+                        "commit": getattr(prompt, "commit", None),
                     },
                     "history": [
                         {
-                            "prompt": version.prompt,
-                            "metadata": version.metadata,
-                            "type": version.type if version.type else None,
-                            "commit": version.commit,
+                            "prompt": getattr(version, "prompt", None),
+                            "metadata": getattr(version, "metadata", None),
+                            "type": getattr(version, "type", None) or None,
+                            "commit": getattr(version, "commit", None),
                         }
                         for version in prompt_history
                     ],

@@ -132,7 +132,7 @@ def create_experiment_data_structure(
             "id": experiment.id,
             "name": experiment.name,
             "dataset_name": experiment.dataset_name,
-            "metadata": experiment.metadata,
+            "metadata": getattr(experiment, "metadata", None),
             "type": experiment.type,
             "status": experiment.status,
             "created_at": experiment.created_at,
