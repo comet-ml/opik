@@ -29,7 +29,7 @@ test.describe('Traces CRUD Tests', () => {
       expectedNames.forEach((name) => expect(traceSdkNames).toContain(name));
     };
 
-    test('should verify traces created via decorator', async ({
+    test('should verify traces created via decorator @sanity @regression @tracing', async ({
       page,
       helperClient,
       projectName,
@@ -38,7 +38,7 @@ test.describe('Traces CRUD Tests', () => {
       await verifyTraces(page, projectName, helperClient);
     });
 
-    test('should verify traces created via client', async ({
+    test('should verify traces created via client @regression @tracing', async ({
       page,
       helperClient,
       projectName,

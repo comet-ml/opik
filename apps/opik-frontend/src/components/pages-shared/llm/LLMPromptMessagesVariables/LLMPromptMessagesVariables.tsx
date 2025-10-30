@@ -27,6 +27,8 @@ interface LLMPromptMessagesVariablesProps {
   projectId: string;
   description?: string;
   errorText?: string;
+  projectName?: string;
+  datasetColumnNames?: string[];
 }
 
 const LLMPromptMessagesVariables = ({
@@ -37,8 +39,13 @@ const LLMPromptMessagesVariables = ({
   projectId,
   description = DEFAULT_DESCRIPTION,
   errorText = DEFAULT_ERROR_TEXT,
+  projectName,
+  datasetColumnNames,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
+    if (!variables || typeof variables !== "object") {
+      return [];
+    }
     return Object.entries(variables)
       .map((e) => ({ label: e[0], value: e[1] }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -46,7 +53,9 @@ const LLMPromptMessagesVariables = ({
 
   const handleChangeVariables = useCallback(
     (changes: DropdownOption<string>) => {
-      onChange({ ...variables, [changes.label]: changes.value });
+      const safeVariables =
+        variables && typeof variables === "object" ? variables : {};
+      onChange({ ...safeVariables, [changes.label]: changes.value });
     },
     [onChange, variables],
   );
@@ -73,6 +82,8 @@ const LLMPromptMessagesVariables = ({
             errorText={validationErrors?.[variable.label]?.message}
             onChange={(changes) => handleChangeVariables(changes)}
             projectId={projectId}
+            projectName={projectName}
+            datasetColumnNames={datasetColumnNames}
           />
         ))}
       </div>
