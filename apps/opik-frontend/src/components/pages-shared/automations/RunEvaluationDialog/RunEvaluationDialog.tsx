@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { ExternalLink, Sparkles, ChevronDown } from "lucide-react";
+import { Sparkles, ChevronDown } from "lucide-react";
 import {
   Dialog,
   DialogClose,
@@ -18,6 +18,7 @@ import useManualEvaluationMutation from "@/api/automations/useManualEvaluationMu
 import useAppStore from "@/store/AppStore";
 import { EVALUATORS_RULE_TYPE, EvaluatorsRule } from "@/types/automations";
 import Loader from "@/components/shared/Loader/Loader";
+import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 
 type ManualEvaluationEntityType = "trace" | "thread";
 
@@ -41,6 +42,8 @@ const RunEvaluationDialog: React.FunctionComponent<
   const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(
     new Set(),
   );
+  const [openCreateRuleDialog, setOpenCreateRuleDialog] =
+    useState<boolean>(false);
 
   const { data, isLoading } = useRulesList(
     {
@@ -150,10 +153,9 @@ const RunEvaluationDialog: React.FunctionComponent<
     [setOpen],
   );
 
-  const handleManageRules = useCallback(() => {
-    const url = `/${workspaceName}/online-evaluation`;
-    window.location.href = url;
-  }, [workspaceName]);
+  const handleCreateRule = useCallback(() => {
+    setOpenCreateRuleDialog(true);
+  }, []);
 
   const renderEmptyState = () => {
     return (
@@ -165,16 +167,15 @@ const RunEvaluationDialog: React.FunctionComponent<
               This project doesn&apos;t have any online evaluation rules yet
             </p>
             <p className="comet-body-s text-center text-muted-foreground">
-              Create a new rule or link an existing one to this project.
+              Create a new online evaluation rule for this project.
             </p>
             <Button
               variant="outline"
               size="sm"
-              onClick={handleManageRules}
+              onClick={handleCreateRule}
               className="mt-2"
             >
-              Manage rules
-              <ExternalLink className="ml-2 size-4" />
+              Create a new rule
             </Button>
           </div>
         </CardContent>
@@ -275,37 +276,44 @@ const RunEvaluationDialog: React.FunctionComponent<
     selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-screen-sm">
-        <DialogHeader>
-          <DialogTitle>Run online evaluation rules</DialogTitle>
-        </DialogHeader>
-        <div className="w-full overflow-hidden">
-          <p className="comet-body-s mb-4 text-muted-foreground">
-            Choose the online evaluation rules you want to apply to the selected{" "}
-            {entityLabel}. Each rule will generate new scores based on its
-            configuration.
-          </p>
-          <div className="my-4 flex max-h-[500px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
-            {renderRulesList()}
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="max-w-lg sm:max-w-screen-sm">
+          <DialogHeader>
+            <DialogTitle>Run online evaluation rules</DialogTitle>
+          </DialogHeader>
+          <div className="w-full overflow-hidden">
+            <p className="comet-body-s mb-4 text-muted-foreground">
+              Choose the online evaluation rules you want to apply to the
+              selected {entityLabel}. Each rule will generate new scores based
+              on its configuration.
+            </p>
+            <div className="my-4 flex max-h-[500px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
+              {renderRulesList()}
+            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button
-            type="submit"
-            disabled={isRunDisabled}
-            onClick={handleRunEvaluation}
-          >
-            {manualEvaluationMutation.isPending
-              ? "Evaluating..."
-              : `Evaluate ${capitalizedEntityLabel.toLowerCase()}`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={isRunDisabled}
+              onClick={handleRunEvaluation}
+            >
+              {manualEvaluationMutation.isPending
+                ? "Evaluating..."
+                : `Evaluate ${capitalizedEntityLabel.toLowerCase()}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AddEditRuleDialog
+        open={openCreateRuleDialog}
+        setOpen={setOpenCreateRuleDialog}
+        projectId={projectId}
+      />
+    </>
   );
 };
 
