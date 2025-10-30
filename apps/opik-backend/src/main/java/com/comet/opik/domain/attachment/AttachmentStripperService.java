@@ -473,12 +473,12 @@ public class AttachmentStripperService {
         }
 
         // Search for base64 patterns within the text (not just exact matches)
-        Matcher matcher = base64Pattern.matcher(text);
+        Matcher matcher = wrapWithSpan("regex.match", () -> base64Pattern.matcher(text));
         StringBuilder result = new StringBuilder();
         int lastEnd = 0;
         boolean foundAttachment = false;
 
-        while (matcher.find()) {
+        while (wrapWithSpan("regex.find", matcher::find)) {
             String base64Data = matcher.group(1);
 
             // Increment counter first (starts at 0, so first attachment becomes 1)
