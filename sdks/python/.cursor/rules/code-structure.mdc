@@ -1,11 +1,44 @@
 ---
-description: Import organization and access control guidelines for the Python SDK
+description: Module logic segregation, import organization and access control guidelines for the Python SDK
 globs: sdks/python/src/opik/**/*
 alwaysApply: false
 ---
 # Python SDK Code Structure Guidelines
 
-Comprehensive guidelines for organizing imports and implementing proper access control in the Opik Python SDK.
+Comprehensive guidelines for organizing imports, implementing proper access control, and maintaining clean module structure in the Opik Python SDK.
+
+## Module Logic Segregation
+
+### Single Responsibility Principle for Modules
+
+- **One module, one responsibility**: Each module should have a single, well-defined purpose
+- **Avoid monolithic modules**: Don't create modules with many unrelated classes/functions
+- **Group related functionality**: Keep related classes and functions together
+- **Split when modules grow**: Break large modules into focused, cohesive units
+
+```python
+# ✅ Good: Focused module (one responsibility - HTTP client)
+# httpx_client.py - Only HTTP client utilities
+class HttpxClient:
+    """HTTP client wrapper."""
+    pass
+
+# ✅ Good: Focused module (one responsibility - configuration)
+# config.py - Only configuration management
+class OpikConfig:
+    """Configuration management."""
+    pass
+
+# ❌ Bad: Monolithic module (multiple responsibilities)
+# utils.py - Everything dumped here!
+class HttpClient: ...
+class ConfigManager: ...
+class DataProcessor: ...
+class FileHandler: ...
+def parse_json(...): ...
+def format_date(...): ...
+def calculate_hash(...): ...
+```
 
 ## Import Organization
 
