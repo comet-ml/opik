@@ -215,7 +215,7 @@ class RichGEPAOptimizerLogger:
             self._last_raw_message = first
             return
 
-        if "New subsample score" in first and "is better than" in first:
+        elif "New subsample score" in first and "is better than" in first:
             console.print("│ ├─ Promising! Running full validation...", style="green")
             self._last_raw_message = first
             return
