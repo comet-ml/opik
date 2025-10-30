@@ -39,6 +39,9 @@ on:
 
 run-name: Application E2E Tests (TypeScript) - ${{ github.event.inputs.suite || 'regression' }}
 
+permissions:
+  contents: read
+
 jobs:
     run_suite:
         name: "Run TS suite: ${{ github.event.inputs.suite || 'regression' }}"
