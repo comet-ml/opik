@@ -53,7 +53,8 @@ const LLMPromptMessagesVariables = ({
 
   const handleChangeVariables = useCallback(
     (changes: DropdownOption<string>) => {
-      const safeVariables = variables && typeof variables === "object" ? variables : {};
+      const safeVariables =
+        variables && typeof variables === "object" ? variables : {};
       onChange({ ...safeVariables, [changes.label]: changes.value });
     },
     [onChange, variables],

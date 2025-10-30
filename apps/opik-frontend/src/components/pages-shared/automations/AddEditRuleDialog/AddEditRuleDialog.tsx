@@ -543,7 +543,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 form.setValue("type", type);
 
                                 // Reset details when switching types
-                                if (value === UI_EVALUATORS_RULE_TYPE.llm_judge) {
+                                if (
+                                  value === UI_EVALUATORS_RULE_TYPE.llm_judge
+                                ) {
                                   form.setValue(
                                     "llmJudgeDetails",
                                     cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[scope]),
