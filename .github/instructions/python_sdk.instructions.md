@@ -278,7 +278,7 @@ class DataProcessor:
 
 #### Import Grouping and Order
 
-- **Always import modules, not names** (except from `typing` or similar commonly used modules)
+- **Always import modules, not names**: Allowed exceptions for this rule - `typing` module or similar commonly used types across the project (usually stored in `opik/types.py`)
 - **Keep the namespace clean**
 - **Group imports**: standard library, third-party, local imports
 - **Order**: Standard library → Third-party → Local imports
