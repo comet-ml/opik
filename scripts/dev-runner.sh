@@ -88,7 +88,7 @@ start_docker_services() {
     log_info "Starting Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
     
-    if ./opik.sh "$mode" --port-mapping; then
+    if ./opik.sh "$mode"; then
         log_success "Docker services started successfully"
     else
         log_error "Failed to start Docker services"
@@ -121,28 +121,27 @@ verify_docker_services() {
     return $?
 }
 
-# Wrapper functions for backward compatibility and clearer intent
-start_infrastructure() {
-    start_docker_services "--infra"
+start_local_be_fe() {
+    start_docker_services "--local-be-fe"
 }
 
-stop_infrastructure() {
-    stop_docker_services "--infra"
+stop_local_be_fe() {
+    stop_docker_services "--local-be-fe"
 }
 
-verify_infrastructure() {
-    verify_docker_services "--infra"
+verify_local_be_fe() {
+    verify_docker_services "--local-be-fe"
 }
 
-start_local_be_docker_services() {
+start_local_be() {
     start_docker_services "--local-be"
 }
 
-stop_local_be_docker_services() {
+stop_local_be() {
     stop_docker_services "--local-be"
 }
 
-verify_local_be_docker_services() {
+verify_local_be() {
     verify_docker_services "--local-be"
 }
 
@@ -209,10 +208,8 @@ lint_backend() {
 print_migrations_recovery_message() {
     log_error "To recover, you may need to clean up Docker volumes (WARNING: ALL DATA WILL BE LOST):"
     log_error "  1. Stop all services: $0 --stop"
-    log_error "  2. Navigate to the docker compose dir: cd $PROJECT_ROOT/deployment/docker-compose"
-    log_error "  3. Remove Opik Docker volumes (DANGER): docker compose down -v"
-    log_error "  4. Go back to project root: cd ../.."
-    log_error "  5. Run again your current flow: $ORIGINAL_COMMAND"
+    log_error "  2. Clean all data volumes (DANGER): cd $PROJECT_ROOT && ./opik.sh --clean"
+    log_error "  3. Run again your current flow: $ORIGINAL_COMMAND"
 }
 
 # Function to run database migrations
@@ -564,56 +561,69 @@ show_access_information() {
     echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
 }
 
+create_demo_data() {
+    local mode="$1"
+    
+    log_info "Creating demo data..."
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
+
+    if ./opik.sh "$mode" --demo-data; then
+        log_success "Demo data created"
+        return 0
+    else
+        log_error "Failed to create demo data"
+        return 1
+    fi
+}
+
 # Function to verify services
 verify_services() {
     log_info "=== Opik Development Status ==="
     
-    # Infrastructure status
-    local infra_running=false
-    if verify_infrastructure; then
-        echo -e "Infrastructure: ${GREEN}RUNNING${NC} (Docker containers)"
-        infra_running=true
+    local docker_services_running=false
+    if verify_local_be_fe; then
+        echo -e "Docker Services: ${GREEN}RUNNING${NC}"
+        docker_services_running=true
     else
-        echo -e "Infrastructure: ${RED}STOPPED${NC} (Docker containers)"
+        echo -e "Docker Services: ${RED}STOPPED${NC}"
     fi
     
-    # Backend status
+    # Backend process status
     local backend_running=false
     if display_backend_process_status; then
         backend_running=true
     fi
     
-    # Frontend status
+    # Frontend process status
     local frontend_running=false
     if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
-        echo -e "Frontend: ${GREEN}RUNNING${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
+        echo -e "Frontend Process: ${GREEN}RUNNING${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
         frontend_running=true
     else
-        echo -e "Frontend: ${RED}STOPPED${NC}"
+        echo -e "Frontend Process: ${RED}STOPPED${NC}"
     fi
 
     # Show access information if all services are running
-    if [ "$infra_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
+    if [ "$docker_services_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
         show_access_information "http://localhost:5174" true
     fi
 
     echo ""
     echo "Logs:"
-    echo "  Backend:  tail -f /tmp/opik-backend.log"
-    echo "  Frontend: tail -f /tmp/opik-frontend.log"
+    echo "  Backend Process:  tail -f /tmp/opik-backend.log"
+    echo "  Frontend Process: tail -f /tmp/opik-frontend.log"
 }
 
 # Function to verify BE-only services
 verify_be_only_services() {
     log_info "=== Opik BE-Only Development Status ==="
     
-    # Infrastructure and Docker Frontend status
     local docker_services_running=false
-    if verify_local_be_docker_services; then
-        echo -e "Infrastructure + Docker Frontend: ${GREEN}RUNNING${NC} (Docker containers)"
+    if verify_local_be; then
+        echo -e "Docker Services: ${GREEN}RUNNING${NC}"
         docker_services_running=true
     else
-        echo -e "Infrastructure + Docker Frontend: ${RED}STOPPED${NC} (Docker containers)"
+        echo -e "Docker Services: ${RED}STOPPED${NC}"
     fi
     
     # Backend process status
@@ -629,22 +639,26 @@ verify_be_only_services() {
 
     echo ""
     echo "Logs:"
-    echo "  Backend Process: tail -f /tmp/opik-backend.log"
-    echo "  Docker Services: docker logs -f opik-frontend-1"
+    echo "  Backend Process:  tail -f /tmp/opik-backend.log"
+    echo "  Frontend:         docker logs -f opik-frontend-1"
 }
 
 # Function to start services (without building)
 start_services() {
     log_info "=== Starting Opik Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    log_info "Step 1/4: Starting infrastructure..."
-    start_infrastructure
-    log_info "Step 2/4: Running DB migrations..."
+    log_info "Step 1/5: Starting Docker services..."
+    start_local_be_fe
+    log_info "Step 2/5: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/4: Starting backend..."
+    log_info "Step 3/5: Starting backend process..."
     start_backend
-    log_info "Step 4/4: Starting frontend..."
+    log_info "Step 4/5: Starting frontend process..."
     start_frontend
+    log_info "Step 5/5: Creating demo data..."
+    if ! create_demo_data "--local-be-fe"; then
+        log_warning "Demo data creation failed, but services are running"
+    fi
     log_success "=== Start Complete ==="
     verify_services
 }
@@ -656,16 +670,16 @@ stop_services() {
     stop_frontend
     log_info "Step 2/3: Stopping backend..."
     stop_backend
-    log_info "Step 3/3: Stopping infrastructure..."
-    stop_infrastructure
+    log_info "Step 3/3: Stopping Docker services..."
+    stop_local_be_fe
     log_success "=== Stop Complete ==="
 }
 
 # Function to run migrations
 migrate_services() {
     log_info "=== Running Database Migrations ==="
-    log_info "Step 1/3: Starting infrastructure..."
-    start_infrastructure
+    log_info "Step 1/3: Starting Docker services..."
+    start_local_be_fe
     log_info "Step 2/3: Building backend..."
     build_backend
     log_info "Step 3/3: Running DB migrations..."
@@ -676,24 +690,28 @@ migrate_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/9: Stopping frontend..."
+    log_info "Step 1/10: Stopping frontend process..."
     stop_frontend
-    log_info "Step 2/9: Stopping backend..."
+    log_info "Step 2/10: Stopping backend process..."
     stop_backend
-    log_info "Step 3/9: Stopping infrastructure..."
-    stop_infrastructure
-    log_info "Step 4/9: Starting infrastructure..."
-    start_infrastructure
-    log_info "Step 5/9: Building backend..."
+    log_info "Step 3/10: Stopping Docker services..."
+    stop_local_be_fe
+    log_info "Step 4/10: Starting Docker services..."
+    start_local_be_fe
+    log_info "Step 5/10: Building backend..."
     build_backend
-    log_info "Step 6/9: Building frontend..."
+    log_info "Step 6/10: Building frontend..."
     build_frontend
-    log_info "Step 7/9: Running DB migrations..."
+    log_info "Step 7/10: Running DB migrations..."
     run_db_migrations
-    log_info "Step 8/9: Starting backend..."
+    log_info "Step 8/10: Starting backend process..."
     start_backend
-    log_info "Step 9/9: Starting frontend..."
+    log_info "Step 9/10: Starting frontend process..."
     start_frontend
+    log_info "Step 10/10: Creating demo data..."
+    if ! create_demo_data "--local-be-fe"; then
+        log_warning "Demo data creation failed, but services are running"
+    fi
     log_success "=== Restart Complete ==="
     verify_services
 }
@@ -745,12 +763,16 @@ quick_restart_services() {
 start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    log_info "Step 1/3: Starting infrastructure and Docker frontend..."
-    start_local_be_docker_services
-    log_info "Step 2/3: Running DB migrations..."
+    log_info "Step 1/4: Starting Docker services..."
+    start_local_be
+    log_info "Step 2/4: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/3: Starting backend process..."
+    log_info "Step 3/4: Starting backend process..."
     start_backend
+    log_info "Step 4/4: Creating demo data..."
+    if ! create_demo_data "--local-be"; then
+        log_warning "Demo data creation failed, but services are running"
+    fi
     log_success "=== BE-Only Start Complete ==="
     verify_be_only_services
 }
@@ -760,26 +782,30 @@ stop_be_only_services() {
     log_info "=== Stopping Opik BE-Only Development Environment ==="
     log_info "Step 1/2: Stopping backend process..."
     stop_backend
-    log_info "Step 2/2: Stopping infrastructure and Docker frontend..."
-    stop_local_be_docker_services
+    log_info "Step 2/2: Stopping Docker services..."
+    stop_local_be
     log_success "=== BE-Only Stop Complete ==="
 }
 
 # Function to restart BE-only services (stop, build, start)
 restart_be_only_services() {
     log_info "=== Restarting Opik BE-Only Development Environment ==="
-    log_info "Step 1/6: Stopping backend process..."
+    log_info "Step 1/7: Stopping backend process..."
     stop_backend
-    log_info "Step 2/6: Stopping infrastructure and Docker frontend..."
-    stop_local_be_docker_services
-    log_info "Step 3/6: Starting infrastructure and Docker frontend..."
-    start_local_be_docker_services
-    log_info "Step 4/6: Building backend..."
+    log_info "Step 2/7: Stopping Docker services..."
+    stop_local_be
+    log_info "Step 3/7: Starting Docker services..."
+    start_local_be
+    log_info "Step 4/7: Building backend..."
     build_backend
-    log_info "Step 5/6: Running DB migrations..."
+    log_info "Step 5/7: Running DB migrations..."
     run_db_migrations
-    log_info "Step 6/6: Starting backend process..."
+    log_info "Step 6/7: Starting backend process..."
     start_backend
+    log_info "Step 7/7: Creating demo data..."
+    if ! create_demo_data "--local-be"; then
+        log_warning "Demo data creation failed, but services are running"
+    fi
     log_success "=== BE-Only Restart Complete ==="
     verify_be_only_services
 }
@@ -889,9 +915,6 @@ case "${1:-}" in
         ;;
     "--restart")
         restart_services
-        ;;
-    "--quick-restart")
-        quick_restart_services
         ;;
     "--quick-restart")
         quick_restart_services
