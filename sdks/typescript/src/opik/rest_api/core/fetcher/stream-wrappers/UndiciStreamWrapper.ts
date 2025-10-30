@@ -164,7 +164,7 @@ export class UndiciStreamWrapper<ReadFormat extends Uint8Array | Uint16Array | U
                 break;
             }
             if (value) {
-                chunks.push(value);
+                chunks.push(value as unknown as BlobPart);
             }
         }
 

@@ -7,9 +7,10 @@ import {
 } from "./models";
 import { EvaluationResult, EvaluationTask } from "./types";
 import { evaluate, EvaluateOptions } from "./evaluate";
-import { formatPromptTemplate } from "@/prompt/formatting";
 import { PromptType } from "@/prompt/types";
 import { formatMessagesAsString } from "./utils/formatMessages";
+import { renderMessageContent } from "./utils/renderMessageContent";
+import { ModelCapabilities } from "./models/modelCapabilities";
 
 /**
  * Options for evaluating prompt templates against a dataset.
@@ -113,11 +114,14 @@ export async function evaluatePrompt(
     ...(options.seed !== undefined && { seed: options.seed }),
   };
 
+  const modelSupportsVision = ModelCapabilities.supportsVision(model.modelName);
+
   // Build task function that wraps prompt formatting
   const task = _buildPromptEvaluationTask(
     model,
     options.messages,
     options.templateType ?? PromptType.MUSTACHE,
+    modelSupportsVision,
     {
       temperature: options.temperature,
       seed: options.seed,
@@ -157,14 +161,34 @@ function _buildPromptEvaluationTask(
   model: OpikBaseModel,
   messages: OpikMessage[],
   templateType: PromptType,
+  modelSupportsVision: boolean,
   modelOptions?: { temperature?: number; seed?: number }
 ): EvaluationTask<Record<string, unknown>> {
   return async (datasetItem: Record<string, unknown>) => {
     // Format each message's content with dataset variables
-    const formattedMessages: OpikMessage[] = messages.map((msg) => ({
-      ...msg,
-      content: formatPromptTemplate(msg.content, datasetItem, templateType),
-    }));
+    const formattedMessages: OpikMessage[] = messages
+      .map((msg) => {
+        const renderedContent = renderMessageContent({
+          content: msg.content,
+          variables: datasetItem,
+          templateType,
+          supportsVision: modelSupportsVision,
+        });
+
+        if (
+          (typeof renderedContent === "string" &&
+            renderedContent.trim().length === 0) ||
+          (Array.isArray(renderedContent) && renderedContent.length === 0)
+        ) {
+          return undefined;
+        }
+
+        return {
+          ...msg,
+          content: renderedContent,
+        };
+      })
+      .filter((msg): msg is OpikMessage => msg !== undefined);
 
     // Generate response from model with optional temperature and seed
     const response = await model.generateProviderResponse(

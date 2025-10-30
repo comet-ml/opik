@@ -10,6 +10,7 @@ import {
 import { PromptType } from "@/prompt/types";
 import type { EvaluationScoreResult } from "@/evaluation/types";
 import { z } from "zod";
+import { renderMessageContent } from "@/evaluation/utils/renderMessageContent";
 
 // Mock the Opik client
 vi.mock("@/client/Client", () => ({
@@ -34,7 +35,21 @@ class MockModel extends OpikBaseModel {
   async generateProviderResponse(
     messages: OpikMessage[]
   ): Promise<{ text: string }> {
-    return { text: `Response to: ${messages[0]?.content || ""}` };
+    const first = messages[0]?.content;
+    const normalized =
+      typeof first === "string"
+        ? first
+        : Array.isArray(first)
+          ? first
+              .map((part) =>
+                part.type === "text"
+                  ? part.text
+                  : `[image:${part.image_url?.url ?? ""}]`
+              )
+              .join(" ")
+          : "";
+
+    return { text: `Response to: ${normalized}` };
   }
 }
 
@@ -212,6 +227,25 @@ describe("evaluatePrompt", () => {
 
       expect(result).toBeDefined();
       // Config should include both custom params and auto-added params
+    });
+
+    it("should render multimodal messages when model lacks vision support", () => {
+      const rendered = renderMessageContent({
+        content: [
+          { type: "text", text: "Describe {{question}}" },
+          { type: "image_url", image_url: { url: "{{image_url}}" } },
+        ],
+        variables: {
+          question: "a cat sitting on a chair",
+          image_url: "https://example.com/cat.png",
+        },
+        templateType: PromptType.MUSTACHE,
+        supportsVision: false,
+      });
+
+      expect(typeof rendered).toBe("string");
+      expect(rendered).toContain("<<<image>>>");
+      expect(rendered).toContain("https://example.com/cat.png");
     });
   });
 
