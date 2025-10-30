@@ -9,7 +9,6 @@ import click
 from rich.console import Console
 
 import opik
-from opik.api_objects.dataset.dataset import Dataset
 from .utils import (
     debug_print,
     dataset_to_csv_rows,
@@ -23,7 +22,7 @@ console = Console()
 
 
 def export_single_dataset(
-    dataset: Dataset,
+    dataset: opik.Dataset,
     output_dir: Path,
     max_results: Optional[int],
     force: bool,
@@ -153,7 +152,7 @@ def export_experiment_datasets(
     exported_count = 0
     for dataset_name in datasets_to_export:
         try:
-            dataset_obj = Dataset(
+            dataset_obj = opik.Dataset(
                 name=dataset_name,
                 description=None,  # Description not available from experiment
                 rest_client=client.rest_client,

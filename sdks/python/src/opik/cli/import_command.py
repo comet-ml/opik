@@ -52,7 +52,7 @@ def _translate_trace_id(
 
 
 def _find_dataset_item_by_content(
-    dataset: Any, expected_content: Dict[str, Any]
+    dataset: opik.Dataset, expected_content: Dict[str, Any]
 ) -> Optional[str]:
     """Find a dataset item by matching its content."""
     try:
@@ -68,7 +68,7 @@ def _find_dataset_item_by_content(
     return None
 
 
-def _create_dataset_item(dataset: Any, item_data: Dict[str, Any]) -> str:
+def _create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> str:
     """Create a dataset item and return its ID."""
     new_item = {
         "input": item_data.get("input"),
