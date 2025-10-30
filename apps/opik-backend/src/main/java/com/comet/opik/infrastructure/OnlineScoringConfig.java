@@ -34,6 +34,13 @@ public class OnlineScoringConfig {
     @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
     private Duration longPollingDuration;
 
+    @JsonProperty
+    @Min(2) private int claimIntervalRatio;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration pendingMessageDuration;
+
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
 
@@ -59,5 +66,12 @@ public class OnlineScoringConfig {
         @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
         @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
         private Duration longPollingDuration;
+
+        @JsonProperty
+        @Min(2) private Integer claimIntervalRatio;
+
+        @Valid @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        private Duration pendingMessageDuration;
     }
 }
