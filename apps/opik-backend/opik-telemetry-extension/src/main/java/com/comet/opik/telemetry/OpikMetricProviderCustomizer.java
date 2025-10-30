@@ -75,6 +75,10 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
                 .setDescription("Metric view that includes workspace context attributes")
                 .setAttributeFilter(value -> true);
 
+        ViewBuilder viewHistogramBuilder = View.builder()
+                .setDescription("Metric view that includes explicit bucket attributes")
+                .setAttributeFilter(value -> true);
+
         if (!histogramBoundaries.trim().isEmpty()) {
             try {
                 List<Double> bucketBoundaries = Arrays.stream(histogramBoundaries.split(","))
@@ -82,7 +86,7 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
                         .map(Double::valueOf)
                         .toList();
 
-                viewBuilder.setAggregation(
+                viewHistogramBuilder.setAggregation(
                         Aggregation.explicitBucketHistogram(bucketBoundaries)
                 );
             } catch (NumberFormatException e) {
@@ -91,16 +95,26 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
         }
 
         View workspaceView = viewBuilder.build();
+        View histogramView = viewHistogramBuilder.build();
         
         // Register the view for all instruments to include workspace context
         // Using a selector that matches all instruments by type
         Arrays.stream(InstrumentType.values()).forEach(instrumentType -> {
-            builder.registerView(
-                    InstrumentSelector.builder()
-                            .setType(instrumentType)
-                            .build(),
-                    workspaceView
-            );
+
+            if (instrumentType == InstrumentType.HISTOGRAM) {
+                builder.registerView(
+                        InstrumentSelector.builder()
+                                .setType(instrumentType)
+                                .build(),
+                        histogramView);
+            } else {
+                builder.registerView(
+                        InstrumentSelector.builder()
+                                .setType(instrumentType)
+                                .build(),
+                        workspaceView
+                );
+            }
         });
         System.out.println("Workspace metric view configured successfully for all instruments");
     }
