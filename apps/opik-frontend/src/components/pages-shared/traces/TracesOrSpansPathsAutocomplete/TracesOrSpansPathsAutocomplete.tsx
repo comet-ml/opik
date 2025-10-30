@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
@@ -8,8 +9,16 @@ import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
 } from "@/hooks/useTracesOrSpansList";
 import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
+import { PROJECTS_SELECT_QUERY_KEY } from "@/components/pages-shared/automations/ProjectsSelectBox";
+import { Project } from "@/types/projects";
 
 export type TRACE_AUTOCOMPLETE_ROOT_KEY = "input" | "output" | "metadata";
+
+const PLAYGROUND_DEFAULT_SUGGESTIONS = [
+  "output.output",
+  "input.messages[0].role",
+  "input.messages[0].content",
+];
 
 type TracesOrSpansPathsAutocompleteProps = {
   projectId: string | "";
@@ -20,6 +29,7 @@ type TracesOrSpansPathsAutocompleteProps = {
   type?: TRACE_DATA_TYPE;
   placeholder?: string;
   excludeRoot?: boolean;
+  projectName?: string; // Optional: if provided, avoids cache lookup
 };
 
 const TracesOrSpansPathsAutocomplete: React.FC<
@@ -33,8 +43,11 @@ const TracesOrSpansPathsAutocomplete: React.FC<
   type = TRACE_DATA_TYPE.traces,
   placeholder = "Select a key from recent trace",
   excludeRoot = false,
+  projectName: projectNameProp,
 }) => {
   const isProjectId = Boolean(projectId);
+  const queryClient = useQueryClient();
+
   const { data, isPending } = useTracesOrSpansList(
     {
       projectId,
@@ -48,7 +61,44 @@ const TracesOrSpansPathsAutocomplete: React.FC<
     },
   );
 
+  // Get project name from prop if provided, otherwise look up from cached projects data
+  const projectName = useMemo(() => {
+    // If projectName is provided as prop, use it directly
+    if (projectNameProp) return projectNameProp;
+
+    // Otherwise, look up from cached projects data (already fetched by ProjectsSelectBox)
+    if (!projectId) return null;
+
+    const cachedQueries = queryClient.getQueryCache().findAll({
+      queryKey: [PROJECTS_SELECT_QUERY_KEY],
+      exact: false,
+    });
+
+    type CachedProjectsData = { content: Project[]; total: number };
+
+    for (const query of cachedQueries) {
+      const queryData = query.state.data as CachedProjectsData | undefined;
+      if (queryData?.content) {
+        const project = queryData.content.find((p) => p.id === projectId);
+        if (project) return project.name;
+      }
+    }
+
+    return null;
+  }, [projectId, queryClient, projectNameProp]);
+
   const items = useMemo(() => {
+    const hasTraces = data?.content && data.content.length > 0;
+    const isPlaygroundProject = projectName === "playground";
+
+    // If it's the playground project and there are no traces, use default suggestions
+    if (isPlaygroundProject && !hasTraces) {
+      return PLAYGROUND_DEFAULT_SUGGESTIONS.filter((p) =>
+        value ? p.toLowerCase().includes(value.toLowerCase()) : true,
+      ).sort();
+    }
+
+    // Otherwise, use the existing logic to extract paths from traces
     return uniq(
       (data?.content || []).reduce<string[]>((acc, d) => {
         return acc.concat(
@@ -72,7 +122,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
         value ? p.toLowerCase().includes(value.toLowerCase()) : true,
       )
       .sort();
-  }, [data, rootKeys, value, excludeRoot]);
+  }, [data, rootKeys, value, excludeRoot, projectName]);
 
   return (
     <Autocomplete

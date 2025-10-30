@@ -37,6 +37,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   promptLibraryVersions?: LogExperimentPromptVersion[];
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
+  datasetItemData?: object;
 }
 
 export interface LogProcessorArgs {
@@ -97,6 +98,14 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     trace.metadata = {
       ...trace.metadata,
       selected_rule_ids: run.selectedRuleIds,
+    };
+  }
+
+  // Add dataset_item_data to trace metadata if provided
+  if (run.datasetItemData) {
+    trace.metadata = {
+      ...trace.metadata,
+      dataset_item_data: run.datasetItemData,
     };
   }
 

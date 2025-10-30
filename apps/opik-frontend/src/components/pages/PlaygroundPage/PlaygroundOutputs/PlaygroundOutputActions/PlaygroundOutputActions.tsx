@@ -487,6 +487,7 @@ const PlaygroundOutputActions = ({
           }
         }}
         projectId={ruleDialogProjectId || playgroundProject?.id}
+        projectName="playground"
       />
       <AddEditDatasetDialog
         open={isDatasetDialogOpen}
