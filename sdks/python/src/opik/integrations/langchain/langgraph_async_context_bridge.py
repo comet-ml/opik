@@ -6,7 +6,7 @@ from opik.integrations.langchain import opik_tracer
 from opik import exceptions
 
 if TYPE_CHECKING:
-    from langchain_core.callbacks.manager import AsyncCallbackManager
+    pass
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,12 +58,16 @@ def extract_current_langgraph_span_data(
         # Get the AsyncCallbackManager from config
         callback_manager = runnable_config.get("callbacks")
         if callback_manager is None:
-            raise exceptions.OpikException("No langchain callback manager found in runnable config")
+            raise exceptions.OpikException(
+                "No langchain callback manager found in runnable config"
+            )
 
         # Extract parent_run_id from the callback manager
         parent_run_id = getattr(callback_manager, "parent_run_id", None)
         if parent_run_id is None:
-            raise exceptions.OpikException("parent_run_id not found in langchain callback manager")
+            raise exceptions.OpikException(
+                "parent_run_id not found in langchain callback manager"
+            )
 
         # Extract opik tracer from handlers
         handlers = getattr(callback_manager, "handlers", [])
@@ -83,7 +87,9 @@ def extract_current_langgraph_span_data(
         # Get the span data associated with this run id
         span_data = opik_tracer_instance._span_data_map.get(parent_run_id)
         if span_data is None:
-            raise exceptions.OpikException(f"Span data not found for run_id: {parent_run_id}")
+            raise exceptions.OpikException(
+                f"Span data not found for run_id: {parent_run_id}"
+            )
 
         return span_data
 

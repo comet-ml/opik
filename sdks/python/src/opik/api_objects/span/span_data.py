@@ -203,7 +203,7 @@ class SpanData:
             "total_cost": self.total_cost,
             "attachments": self.attachments,
         }
-    
+
     def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
         return DistributedTraceHeadersDict(
             opik_trace_id=self.trace_id,

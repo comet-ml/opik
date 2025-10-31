@@ -26,6 +26,8 @@ from .constants import (
 )
 
 import pytest
+
+
 def test_langgraph__happyflow(
     fake_backend,
 ):
@@ -450,7 +452,9 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
         assert span_data is not None
 
         # Use the span data to propagate trace context to a tracked function
-        result = inner_tracked_function(21, opik_distributed_trace_headers=span_data.get_distributed_trace_headers())
+        result = inner_tracked_function(
+            21, opik_distributed_trace_headers=span_data.get_distributed_trace_headers()
+        )
 
         # Store the extracted data for verification
         extracted_data_store["span_data"] = span_data
@@ -463,7 +467,7 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
                 "trace_id": span_data.trace_id,
                 "span_id": span_data.id,
                 "computation_result": result,
-            }
+            },
         }
 
     # Create graph with OpikTracer
@@ -479,13 +483,10 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
     # Execute with OpikTracer in config
     initial_state = {
         "messages": [HumanMessage(content="Test span extraction")],
-        "extracted_trace_data": {}
+        "extracted_trace_data": {},
     }
 
-    await compiled_graph.ainvoke(
-        initial_state,
-        config={"callbacks": [opik_tracer]}
-    )
+    await compiled_graph.ainvoke(initial_state, config={"callbacks": [opik_tracer]})
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
