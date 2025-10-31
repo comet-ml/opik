@@ -348,25 +348,8 @@ create_demo_data() {
   check_docker_status
   echo "📊 Creating demo data..."
   
-  # Determine the correct PYTHON_BACKEND_URL based on mode
-  local python_backend_url
-  if [[ "$LOCAL_BE" == "true" ]]; then
-    # In local-be mode, python-backend is in Docker but exposed on localhost
-    python_backend_url="http://localhost:8000"
-  elif [[ "$BACKEND" == "true" ]] || [[ "$LOCAL_BE_FE" == "true" ]]; then
-    # In backend or local-be-fe mode, use the internal Docker network name
-    python_backend_url="http://python-backend:8000"
-  else
-    # In other modes (infra, full opik), python-backend may not be available
-    echo "⚠️  Demo data creation requires Python backend to be running."
-    echo "   Please use --backend, --local-be, or --local-be-fe mode."
-    return 1
-  fi
-  
-  debugLog "[DEBUG] Using PYTHON_BACKEND_URL: $python_backend_url"
-  
-  # Export the URL for docker-compose
-  export PYTHON_BACKEND_URL="$python_backend_url"
+  # demo-data-generator runs as a Docker container on the Docker network
+  # It will use the default PYTHON_BACKEND_URL from docker-compose.yaml: http://python-backend:8000
   export CREATE_DEMO_DATA=true
   
   local cmd
