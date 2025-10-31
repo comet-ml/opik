@@ -507,6 +507,7 @@ const PlaygroundOutputActions = ({
         open={isDatasetDialogOpen}
         setOpen={setIsDatasetDialogOpen}
         onDatasetCreated={handleDatasetCreated}
+        csvRequired={true}
       />
     </>
   );

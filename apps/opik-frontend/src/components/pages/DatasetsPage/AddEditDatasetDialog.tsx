@@ -39,11 +39,19 @@ type AddEditDatasetDialogProps = {
   setOpen: (open: boolean) => void;
   onDatasetCreated?: (dataset: Dataset) => void;
   hideUpload?: boolean;
+  csvRequired?: boolean;
 };
 
 const AddEditDatasetDialog: React.FunctionComponent<
   AddEditDatasetDialogProps
-> = ({ dataset, open, setOpen, onDatasetCreated, hideUpload }) => {
+> = ({
+  dataset,
+  open,
+  setOpen,
+  onDatasetCreated,
+  hideUpload,
+  csvRequired = false,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
 
@@ -64,9 +72,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
   const isEdit = Boolean(dataset);
   const hasValidCsvData = csvData && csvData.length > 0;
-  // Validation: name is required, and CSV is required for new datasets (unless hideUpload is true)
+  // Validation: name is required, and CSV is required only if csvRequired is true
   const isValid =
-    Boolean(name.length) && (isEdit || hideUpload || hasValidCsvData);
+    Boolean(name.length) &&
+    (isEdit || hideUpload || !csvRequired || hasValidCsvData);
   const title = isEdit ? "Edit dataset" : "Create a new dataset";
   const buttonText = isEdit ? "Update dataset" : "Create dataset";
 
