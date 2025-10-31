@@ -1,6 +1,6 @@
 import React from "react";
 
-import { cn, getAlphabetLetter } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import {
@@ -11,13 +11,11 @@ import {
 
 interface PlaygroundOutputProps {
   promptId: string;
-  index: number;
   totalOutputs: number;
 }
 
 const PlaygroundOutput = ({
   promptId,
-  index,
   totalOutputs,
 }: PlaygroundOutputProps) => {
   const value = useOutputValueByPromptDatasetItemId(promptId);
