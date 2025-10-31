@@ -4,6 +4,7 @@ export enum ATTACHMENT_TYPE {
   AUDIO = "audio",
   PDF = "pdf",
   TEXT = "text",
+  CSV = "csv",
   OTHER = "other",
 }
 
