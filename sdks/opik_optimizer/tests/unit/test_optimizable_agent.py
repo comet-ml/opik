@@ -1,6 +1,7 @@
 import os
 from unittest.mock import Mock
 
+os.environ.setdefault("LITELLM_CACHE_TYPE", "memory")
 
 from opik_optimizer.optimizable_agent import OptimizableAgent
 from opik_optimizer.optimization_config import chat_prompt
