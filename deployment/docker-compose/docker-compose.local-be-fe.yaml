@@ -36,7 +36,10 @@ services:
 
   demo-data-generator:
     profiles: !override
-      - disabled
+      - local-be-fe
+    depends_on: !override
+      python-backend:
+        condition: service_healthy
 
   # Disable the frontend service entirely, meant to be run as local process
   frontend:

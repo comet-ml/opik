@@ -564,13 +564,11 @@ show_access_information() {
 }
 
 create_demo_data() {
-    local mode="$1"  # Mode flag (e.g., "--local-be-fe" or "--local-be")
+    local mode="$1"
     
     log_info "Creating demo data..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
-    
-    # Pass the mode to opik.sh so it uses the same docker-compose configuration
-    # as the running services (same network, same compose files)
+
     if ./opik.sh "$mode" --demo-data; then
         log_success "Demo data created"
         return 0
