@@ -1,56 +1,30 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 os.environ.setdefault("LITELLM_CACHE_TYPE", "memory")
 
 from opik_optimizer.utils.core import create_litellm_agent_class
+from opik_optimizer.optimization_config.chat_prompt import ChatPrompt
 
-
-class DummyPrompt:
-    def __init__(
-        self,
-        *,
-        name: str,
-        messages: list[dict[str, str]],
-        invoke: Callable[[str | None, list[dict[str, str]], Any, Any], str] | None,
-        model: str | None = None,
-        model_kwargs: dict[str, Any] | None = None,
-    ) -> None:
-        self.name = name
-        self._messages = messages
-        self.invoke = invoke
-        self.model = model or "gpt-4o-mini"
-        self.model_kwargs = model_kwargs or {}
-        self.tools = None
-
-    def get_messages(self, _: Any | None = None) -> list[dict[str, str]]:
-        return [dict(msg) for msg in self._messages]
-
-    def copy(self) -> "DummyPrompt":
-        return DummyPrompt(
-            name=self.name,
-            messages=self.get_messages(),
-            invoke=self.invoke,
-            model=self.model,
-            model_kwargs=dict(self.model_kwargs),
-        )
+InvokeCallable = Callable[..., str]
 
 
 def _build_prompt(
     *,
     name: str,
-    invoke: Callable[[str | None, list[dict[str, str]], Any, Any], str] | None,
+    invoke: InvokeCallable | None,
     model: str | None = None,
     model_kwargs: dict[str, Any] | None = None,
-) -> DummyPrompt:
-    return DummyPrompt(
+) -> ChatPrompt:
+    return ChatPrompt(
         name=name,
         messages=[{"role": "user", "content": "Hello {user}"}],
         invoke=invoke,
-        model=model,
-        model_kwargs=model_kwargs,
+        model=model or "gpt-4o-mini",
+        model_parameters=model_kwargs or {},
     )
 
 
