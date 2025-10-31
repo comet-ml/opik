@@ -3,15 +3,17 @@ import sqlite3
 import shutil
 import os
 import litellm
-from litellm.caching import Cache
 import requests  # type: ignore
+import warnings
+
+from ..cache_config import get_cache_directory, initialize_cache
 
 NAMED_CACHES = {
     "test": "https://drive.google.com/file/d/1RifNtpN-pl0DW49daRaAMJwW7MCsOh6y/view?usp=sharing",
     "test2": "https://drive.google.com/uc?id=1RifNtpN-pl0DW49daRaAMJwW7MCsOh6y&export=download",
     "opik-workshop": "https://drive.google.com/file/d/1l0aK6KhDPs2bFsQTkfzvOvfacJlhdmHr/view?usp=sharing",
 }
-CACHE_DIR = os.path.expanduser("~/.litellm_cache")
+CACHE_DIR = get_cache_directory()
 
 
 def get_litellm_cache(name: str) -> None:
@@ -19,6 +21,11 @@ def get_litellm_cache(name: str) -> None:
     Get a LiteLLM cache from a remote location, and add it to the
     local cache
     """
+    warnings.warn(
+        "opik_optimizer.demo is deprecated; use cache_config.initialize_cache() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Try to close an existing one, if there is one:
     try:
         litellm.cache.cache.disk_cache.close()
@@ -49,7 +56,7 @@ def get_litellm_cache(name: str) -> None:
         shutil.copy(file_path, dest_path)
 
     # Update the cache to use the new database:
-    litellm.cache = Cache(type="disk", disk_cache_dir=CACHE_DIR)
+    initialize_cache()
 
 
 def _copy_cache(source_path: str, dest_path: str) -> None:
