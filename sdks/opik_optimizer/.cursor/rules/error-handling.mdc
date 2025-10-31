@@ -28,4 +28,3 @@ Optimizers make heavy use of third-party services and background evaluations. Su
 - Use `logging.getLogger(__name__)` and include optimisation ids or candidate identifiers in log messages to aid debugging.
 - Populate `OptimizationResult.details` with failure metadata (for example, skipped candidates, retry counts) when it helps users understand degraded results.
 - Never log API keys, raw dataset contents, or PII. Truncate long prompts and outputs before logging.
-

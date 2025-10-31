@@ -29,4 +29,3 @@ Use consistent logging so optimisation runs can be monitored locally and inside 
 
 - Reserve logging for machine-readable diagnostics. Use `reporting_utils` context managers for user-facing console output; they already respect the `verbose` flag.
 - Avoid mixing `print` statements with logging. If temporary prints are necessary during debugging, remove them before committing.
-
