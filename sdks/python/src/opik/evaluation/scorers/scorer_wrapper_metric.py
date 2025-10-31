@@ -1,7 +1,7 @@
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 from opik.evaluation.metrics import base_metric, score_result
-from .scorer_function import ScorerFunction, AsyncScorerFunction
+from . import scorer_function
 
 
 class ScorerWrapperMetric(base_metric.BaseMetric):
@@ -12,10 +12,13 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
     providing compatibility between the two interfaces.
 
     Args:
-        scorer_function: The ScorerFunction to wrap
+        scorer: The ScorerFunction to wrap
         name: Optional name for the metric. If not provided, uses the class name.
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name for tracking.
+
+    Returns:
+        ValueError if the scorer function is invalid.
 
     Example:
         >>> def my_scorer(scoring_inputs: Dict[str, Any], task_outputs: Dict[str, Any]) -> score_result.ScoreResult:
@@ -27,14 +30,17 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
 
     def __init__(
         self,
-        scorer_function: Union[ScorerFunction, AsyncScorerFunction],
+        scorer: scorer_function.ScorerFunction,
         name: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> None:
-        self.scorer_function = scorer_function
-        name = name if name is not None else self.scorer_function.__name__
+        self.scorer = scorer
+        name = name if name is not None else self.scorer.__name__
         super().__init__(name=name, track=track, project_name=project_name)
+
+        # validate scorer function
+        scorer_function.validate_scorer_function(scorer)
 
     def score(
         self,
@@ -53,12 +59,4 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         Returns:
             ScoreResult from the wrapped scorer function
         """
-        return self.scorer_function(scoring_inputs, task_outputs)
-
-    async def ascore(
-        self,
-        scoring_inputs: Dict[str, Any],
-        task_outputs: Dict[str, Any],
-        **kwargs: Any,
-    ) -> score_result.ScoreResult:
-        return await self.scorer_function(scoring_inputs, task_outputs)
+        return self.scorer(scoring_inputs, task_outputs)

@@ -1,24 +1,21 @@
 import inspect
-from typing import Any, Callable, Dict, Awaitable
+from typing import Any, Callable, Dict
 
 from opik.evaluation.metrics import score_result
 
 ScorerFunction = Callable[[Dict[str, Any], Dict[str, Any]], score_result.ScoreResult]
-AsyncScorerFunction = Callable[
-    [Dict[str, Any], Dict[str, Any]], Awaitable[score_result.ScoreResult]
-]
 
 
 EXPECTED_SCORER_FUNCTION_PARAMETERS = ["scoring_inputs", "task_outputs"]
 
 
-def validate_scorer_function(scorer_functions: ScorerFunction) -> None:
-    if not callable(scorer_functions):
+def validate_scorer_function(scorer_function: ScorerFunction) -> None:
+    if not callable(scorer_function):
         raise ValueError(
             f"scorer_function must be a callable function that takes two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS}"
         )
 
-    parameters = inspect.signature(scorer_functions).parameters
+    parameters = inspect.signature(scorer_function).parameters
     if len(parameters) < 2:
         raise ValueError(
             f"scorer_function must take at least two arguments: {EXPECTED_SCORER_FUNCTION_PARAMETERS}"
