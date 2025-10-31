@@ -16,7 +16,7 @@ endif
 
 define warn_if_no_venv
 @if [ ! -f "$(VENV_PY)" ]; then \
-  echo "[warn] Virtualenv $(VENV) not found; using system-level interpreters/tools."; \
+  echo "[warn] Virtual environment $(VENV) not found; using system-level interpreters/tools."; \
 fi
 endef
 
