@@ -1,0 +1,31 @@
+---
+description: Test naming conventions and performance guidelines for Opik Optimizer SDK
+globs: sdks/opik_optimizer/tests/**/*
+alwaysApply: false
+---
+# Opik Optimizer Test Best Practices
+
+The test suite is pytest-based and aims to keep optimizers deterministic, fast, and affordable.
+
+## Determinism and Isolation
+
+- Seed randomness where behaviour depends on stochastic operators (`random.seed`, `numpy.random.seed`). Many optimizers accept a `seed` parameter - set it explicitly in tests. Our default value for seed is "42".
+- Reset global state (LiteLLM cache, logging configuration, environment variables) with fixtures or `monkeypatch` as seen in `tests/unit/test_logging_config.py`.
+- Avoid touching the real LiteLLM cache directory in unit tests; point cache-dependent code to a temporary directory when practical.
+
+## Fast Feedback
+
+- Configure optimizers with tiny populations, low iteration counts, and reduced thread pools. Unit tests should replace LiteLLM calls with fakes or patches so they run offline.
+- Prefer dataset stubs from `tests/unit` or `opik_optimizer.datasets.tiny_test()` for smoke coverage.
+- Use parametrisation to cover edge cases without introducing nested loops.
+
+## Assertions
+
+- Assert both positive paths (best score improves, result shape) and failure handling (invalid config, evaluation failure fallback).
+- When verifying prompts or histories, rely on helper models (for example, `OptimizationResult`) and compare essential fields rather than entire nested structures.
+- Use `caplog` to assert log-level behaviour in logging-sensitive code.
+
+## External Services
+
+- End-to-end tests may require provider credentials (for example, `OPENAI_API_KEY`). Guard them with explicit failure messages so contributors understand the prerequisite before running the suite.
+- When adding a new e2e test, document any required environment variables in the test docstring.

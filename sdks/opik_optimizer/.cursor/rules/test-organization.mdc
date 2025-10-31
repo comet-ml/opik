@@ -1,0 +1,26 @@
+---
+description: Test organization and patterns for Opik Optimizer SDK
+globs: sdks/opik_optimizer/tests/**/*
+alwaysApply: false
+---
+# Opik Optimizer Test Organization
+
+Tests live under `sdks/opik_optimizer/tests` and mirror the package structure so contributors can find coverage quickly.
+
+## Layout
+
+- `test_setup.py`: ensures `src/` is on the import path for the test suite.
+- `unit/`: deterministic tests for helpers, configuration models, mutation operators, logging config, MCP utilities, etc. Subdirectories (like `unit/mcp/`) group related helper modules.
+- `e2e/optimizers/`: high-level runs for each optimizer family with reduced populations/iterations. These tests may require provider keys.
+- `test_requirements.txt`: pinned list of packages needed to run the suite locally or in CI.
+
+## Markers and Configuration
+
+- `pytest.ini` defines an `integration` marker for slower scenarios and filters noisy warnings. Tag new long-running tests accordingly.
+- Keep new fixtures in the closest `conftest.py` (prefer local fixtures over globals). Autouse fixtures should document the state they reset.
+
+## Adding Tests
+
+- Co-locate tests with the feature they exercise. For a new optimizer, add unit coverage for operators/helpers under `tests/unit/<optimizer>/` and an e2e smoke test under `tests/e2e/optimizers/`.
+- Use descriptive test names (for example, `test_evolutionary_optimizer__improves_score`), and include docstrings when context is not obvious.
+- Skip e2e tests gracefully when required environment variables or credentials are missing, and mention the requirement at the top of the file.

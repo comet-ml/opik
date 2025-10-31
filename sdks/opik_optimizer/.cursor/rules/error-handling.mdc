@@ -1,0 +1,30 @@
+---
+description: Exception handling and failure management for Opik Optimizer SDK
+globs: sdks/opik_optimizer/src/opik_optimizer/**/*
+alwaysApply: false
+---
+# Opik Optimizer Error Handling
+
+Optimizers make heavy use of third-party services and background evaluations. Surface actionable errors while keeping optimisation runs resilient.
+
+## Validation
+
+- `_validate_optimization_inputs` should raise `ValueError` with descriptive messages when prompts, datasets, or metrics are invalid. Mirror this pattern in new optimizers before any remote calls occur.
+- Configuration parsing (for example, `optimization_config` models, MCP configs) should use `pydantic.ValidationError` or custom exceptions that describe which field failed.
+
+## Remote Calls and Retries
+
+- Interactions with Opik (`opik.api_objects.optimization.Optimization`) can raise `ApiError`. Catch these at the boundary, log a warning, and continue without optimisation tracking when possible so the user can still receive results.
+- For LiteLLM calls, use `_throttle.rate_limited` or the shared rate limiter instead of ad-hoc sleep loops. When retries are required, limit attempts and propagate the final error with context.
+- When evaluation fails for a candidate, decide whether to penalise, skip, or abort. Log the failure at `warning` level with the candidate summary and propagate the exception only if the optimizer cannot continue safely.
+
+## Task Evaluation
+
+- `task_evaluator.evaluate` already guards against empty datasets and metric failures by returning 0.0 and marking scores as failed. When extending it, keep error handling consistent and avoid leaking provider-specific exceptions.
+- When a metric is a `MultiMetricObjective`, ensure the returned `ScoreResult` list preserves the underlying metrics so downstream consumers can diagnose failures.
+
+## Logging and Result Surfacing
+
+- Use `logging.getLogger(__name__)` and include optimisation ids or candidate identifiers in log messages to aid debugging.
+- Populate `OptimizationResult.details` with failure metadata (for example, skipped candidates, retry counts) when it helps users understand degraded results.
+- Never log API keys, raw dataset contents, or PII. Truncate long prompts and outputs before logging.
