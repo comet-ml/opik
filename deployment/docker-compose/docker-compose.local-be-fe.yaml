@@ -6,12 +6,33 @@ name: opik
 
 services:
 
-  # Python backend runs in Docker with backend profile, but we add local-be-fe profile
+  # Expose infrastructure ports for local backend and frontend to connect
+  mysql:
+    ports:
+      - "3306:3306"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  clickhouse:
+    ports:
+      - "8123:8123" # ClickHouse HTTP port
+      - "9000:9000" # ClickHouse Native Protocol port
+
+  minio:
+    ports:
+      - "9001:9000"   # MinIO API Port
+      - "9090:9090"   # MinIO Web UI Console
+
+  # Python backend runs in Docker with local-be-fe profile
   python-backend:
     profiles: !override
       - backend
       - opik
       - local-be-fe
+    ports:
+      - "8000:8000" # Python backend HTTP port
 
   # Disable the Java backend service entirely
   backend:
@@ -23,7 +44,7 @@ services:
     profiles: !override
       - disabled
 
-  # Disable demo-data-generator (will be run manually via opik.sh --demo-data)
+  # Enable demo-data-generator for local-be-fe profile
   demo-data-generator:
     profiles: !override
       - opik

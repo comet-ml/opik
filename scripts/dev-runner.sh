@@ -627,13 +627,13 @@ verify_services() {
 verify_be_only_services() {
     log_info "=== Opik BE-Only Development Status ==="
     
-    # Infrastructure and Docker Frontend status
+    # Infrastructure, Python backend and Docker Frontend status
     local docker_services_running=false
     if verify_local_be_docker_services; then
-        echo -e "Infrastructure + Docker Frontend: ${GREEN}RUNNING${NC} (Docker containers)"
+        echo -e "Infrastructure + Python Backend + Frontend: ${GREEN}RUNNING${NC} (Docker containers)"
         docker_services_running=true
     else
-        echo -e "Infrastructure + Docker Frontend: ${RED}STOPPED${NC} (Docker containers)"
+        echo -e "Infrastructure + Python Backend + Frontend: ${RED}STOPPED${NC} (Docker containers)"
     fi
     
     # Backend process status
@@ -649,8 +649,9 @@ verify_be_only_services() {
 
     echo ""
     echo "Logs:"
-    echo "  Backend Process: tail -f /tmp/opik-backend.log"
-    echo "  Docker Services: docker logs -f opik-frontend-1"
+    echo "  Backend Process:  tail -f /tmp/opik-backend.log"
+    echo "  Python Backend:   docker logs -f opik-python-backend-1"
+    echo "  Frontend:         docker logs -f opik-frontend-1"
 }
 
 # Function to start services (without building)
@@ -730,7 +731,7 @@ restart_services() {
 start_be_only_services() {
     log_info "=== Starting Opik BE-Only Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    log_info "Step 1/4: Starting infrastructure and Docker frontend..."
+    log_info "Step 1/4: Starting infrastructure, Python backend, and frontend..."
     start_local_be_docker_services
     log_info "Step 2/4: Running DB migrations..."
     run_db_migrations
@@ -749,7 +750,7 @@ stop_be_only_services() {
     log_info "=== Stopping Opik BE-Only Development Environment ==="
     log_info "Step 1/2: Stopping backend process..."
     stop_backend
-    log_info "Step 2/2: Stopping infrastructure and Docker frontend..."
+    log_info "Step 2/2: Stopping infrastructure, Python backend, and frontend..."
     stop_local_be_docker_services
     log_success "=== BE-Only Stop Complete ==="
 }
@@ -759,9 +760,9 @@ restart_be_only_services() {
     log_info "=== Restarting Opik BE-Only Development Environment ==="
     log_info "Step 1/7: Stopping backend process..."
     stop_backend
-    log_info "Step 2/7: Stopping infrastructure and Docker frontend..."
+    log_info "Step 2/7: Stopping infrastructure, Python backend, and frontend..."
     stop_local_be_docker_services
-    log_info "Step 3/7: Starting infrastructure and Docker frontend..."
+    log_info "Step 3/7: Starting infrastructure, Python backend, and frontend..."
     start_local_be_docker_services
     log_info "Step 4/7: Building backend..."
     build_backend
