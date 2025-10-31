@@ -150,9 +150,10 @@ All optimizers inherit from `BaseOptimizer` and support these common parameters:
 - **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
 
 **Optimization Parameters (via optimize_prompt kwargs):**
-- **`max_metric_calls`** (int): Maximum number of metric evaluations (optimization budget)
-- **`reflection_minibatch_size`** (int, default: 3): Items considered per reflection step
+- **`max_metric_calls`** (int): Effective metric budget used by GEPA (`max_trials × evaluated_samples`). The Opik wrapper still runs its own baseline/final rescoring outside this budget, so plan for those extra evaluations when sizing API usage.
+- **`reflection_minibatch_size`** (int, default: 3): Minimum number of *unique* prompts GEPA must evaluate before it will run a reflection step. If the minibatch size is larger than the available candidates, reflection is skipped entirely.
 - **`candidate_selection_strategy`** (str, default: "pareto"): Strategy for selecting candidates ("pareto" or "best")
+- **Runtime warnings**: The optimizer emits a warning when `reflection_minibatch_size` exceeds the number of candidates that can be evaluated with the current metric budget (`max_trials`). Reduce the minibatch or increase the budget if you see this message.
 
 **Use Cases:**
 - Single-turn tasks with clear input-output pairs

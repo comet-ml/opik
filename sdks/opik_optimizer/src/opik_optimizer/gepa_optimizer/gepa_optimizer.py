@@ -1,10 +1,10 @@
 import logging
-from contextlib import nullcontext
-from typing import Any, ContextManager
+from typing import Any
 from collections.abc import Callable
 
 import opik
 from opik import Dataset, opik_context
+from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from ..base_optimizer import BaseOptimizer
@@ -16,7 +16,9 @@ from ..utils import (
     create_litellm_agent_class,
     disable_experiment_reporting,
     enable_experiment_reporting,
+    unique_ordered_by_key,
 )
+from ..task_evaluator import _create_metric_class
 from ..reporting_utils import suppress_opik_logs
 from .. import task_evaluator
 from . import reporting as gepa_reporting
@@ -213,6 +215,25 @@ class GepaOptimizer(BaseOptimizer):
         # Calculate max_metric_calls from max_trials and effective samples
         effective_n_samples = len(items)
         max_metric_calls = max_trials * effective_n_samples
+        budget_limited_trials = (
+            max_metric_calls // effective_n_samples if effective_n_samples else 0
+        )
+        if reflection_minibatch_size > max_trials:
+            logger.warning(
+                "reflection_minibatch_size (%s) exceeds max_trials (%s); GEPA reflection will not run. "
+                "Increase max_trials or lower the minibatch.",
+                reflection_minibatch_size,
+                max_trials,
+            )
+        elif (
+            budget_limited_trials and reflection_minibatch_size > budget_limited_trials
+        ):
+            logger.warning(
+                "reflection_minibatch_size (%s) exceeds the number of candidates allowed by the metric budget (%s). "
+                "Consider increasing max_trials or n_samples.",
+                reflection_minibatch_size,
+                budget_limited_trials,
+            )
 
         data_insts = self._build_data_insts(items, input_key, output_key)
 
@@ -375,6 +396,23 @@ class GepaOptimizer(BaseOptimizer):
         candidates: list[dict[str, str]] = getattr(gepa_result, "candidates", []) or []
         val_scores: list[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
 
+        indexed_candidates: list[tuple[int, dict[str, str]]] = list(
+            enumerate(candidates)
+        )
+        filtered_indexed_candidates = unique_ordered_by_key(
+            indexed_candidates,
+            key=lambda item: self._extract_system_text_from_candidate(
+                item[1], seed_prompt_text
+            ).strip(),
+        )
+        filtered_candidates: list[dict[str, str]] = [
+            candidate for _, candidate in filtered_indexed_candidates
+        ]
+        filtered_val_scores: list[float | None] = [
+            val_scores[idx] if idx < len(val_scores) else None
+            for idx, _ in filtered_indexed_candidates
+        ]
+
         rescored: list[float] = []
         candidate_rows: list[dict[str, Any]] = []
         history: list[dict[str, Any]] = []
@@ -385,7 +423,9 @@ class GepaOptimizer(BaseOptimizer):
         # Wrap rescoring to prevent OPIK messages and experiment link displays
         with suppress_opik_logs():
             with convert_tqdm_to_rich(verbose=0):
-                for idx, candidate in enumerate(candidates):
+                for idx, (original_idx, candidate) in enumerate(
+                    filtered_indexed_candidates
+                ):
                     candidate_prompt = self._extract_system_text_from_candidate(
                         candidate, seed_prompt_text
                     )
@@ -421,9 +461,7 @@ class GepaOptimizer(BaseOptimizer):
                         {
                             "iteration": idx + 1,
                             "system_prompt": candidate_prompt,
-                            "gepa_score": val_scores[idx]
-                            if idx < len(val_scores)
-                            else None,
+                            "gepa_score": filtered_val_scores[idx],
                             "opik_score": score,
                             "source": self.__class__.__name__,
                         }
@@ -435,9 +473,7 @@ class GepaOptimizer(BaseOptimizer):
                             "scores": [
                                 {
                                     "metric_name": f"GEPA-{metric.__name__}",
-                                    "score": val_scores[idx]
-                                    if idx < len(val_scores)
-                                    else None,
+                                    "score": filtered_val_scores[idx],
                                 },
                                 {"metric_name": metric.__name__, "score": score},
                             ],
@@ -446,14 +482,45 @@ class GepaOptimizer(BaseOptimizer):
                     )
 
         if rescored:
-            best_idx = max(range(len(rescored)), key=lambda i: rescored[i])
+
+            def _tie_break(idx: int) -> tuple[float, float, int]:
+                opik_score = rescored[idx]
+                gepa_score = filtered_val_scores[idx]
+                gepa_numeric = (
+                    float(gepa_score)
+                    if isinstance(gepa_score, (int, float))
+                    else float("-inf")
+                )
+                return opik_score, gepa_numeric, idx
+
+            best_idx = max(range(len(rescored)), key=_tie_break)
             best_score = rescored[best_idx]
         else:
-            best_idx = getattr(gepa_result, "best_idx", 0) or 0
-            best_score = float(val_scores[best_idx]) if val_scores else 0.0
+            if filtered_indexed_candidates:
+                gepa_best_idx = getattr(gepa_result, "best_idx", 0) or 0
+                best_idx = next(
+                    (
+                        i
+                        for i, (original_idx, _) in enumerate(
+                            filtered_indexed_candidates
+                        )
+                        if original_idx == gepa_best_idx
+                    ),
+                    0,
+                )
+                if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores):
+                    score_value = filtered_val_scores[best_idx]
+                    best_score = float(score_value) if score_value is not None else 0.0
+                else:
+                    best_score = float(initial_score)
+            else:
+                best_idx = 0
+                best_score = float(initial_score)
 
         best_candidate = (
-            candidates[best_idx] if candidates else {"system_prompt": seed_prompt_text}
+            filtered_candidates[best_idx]
+            if filtered_candidates
+            else {"system_prompt": seed_prompt_text}
         )
         best_prompt_text = self._extract_system_text_from_candidate(
             best_candidate, seed_prompt_text
@@ -469,26 +536,62 @@ class GepaOptimizer(BaseOptimizer):
         }
         final_prompt.model_kwargs = filtered_model_kwargs
 
-        final_eval_kwargs = dict(
-            prompt=final_prompt,
-            dataset=dataset,
-            metric=metric,
-            n_samples=n_samples,
-            optimization_id=opt_id,
-            extra_metadata={"phase": "final", "selected": True},
-            verbose=0,
-        )
-        suppress_logs: ContextManager[Any] = nullcontext()
-        try:
-            from ..reporting_utils import suppress_opik_logs as _suppress_logs
+        final_eval_result: Any | None = None
 
-            suppress_logs = _suppress_logs()
-        except Exception:
-            pass
-
-        with suppress_logs:
+        with suppress_opik_logs():
             try:
-                self._evaluate_prompt_logged(**final_eval_kwargs)
+                final_agent_cls = create_litellm_agent_class(
+                    final_prompt, optimizer_ref=self
+                )
+                final_agent = final_agent_cls(final_prompt)
+
+                def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
+                    messages = final_prompt.get_messages(dataset_item)
+                    raw = final_agent.invoke(messages)
+                    if self.current_optimization_id:
+                        opik_context.update_current_trace(
+                            tags=[self.current_optimization_id, "Evaluation"]
+                        )
+                    return {mappers.EVALUATED_LLM_TASK_OUTPUT: raw.strip()}
+
+                configuration_updates = self._drop_none(
+                    {"gepa": {"phase": "final", "selected": True}}
+                )
+                final_experiment_config = self._prepare_experiment_config(
+                    prompt=final_prompt,
+                    dataset=dataset,
+                    metric=metric,
+                    experiment_config=experiment_config,
+                    configuration_updates=configuration_updates,
+                )
+
+                metric_class = _create_metric_class(metric)
+
+                if opt_id:
+                    final_eval_result = opik_evaluator.evaluate_optimization_trial(
+                        optimization_id=opt_id,
+                        dataset=dataset,
+                        task=final_llm_task,
+                        project_name=final_experiment_config.get("project_name"),
+                        dataset_item_ids=None,
+                        scoring_metrics=[metric_class],
+                        task_threads=self.n_threads,
+                        nb_samples=n_samples,
+                        experiment_config=final_experiment_config,
+                        verbose=0,
+                    )
+                else:
+                    final_eval_result = opik_evaluator.evaluate(
+                        dataset=dataset,
+                        task=final_llm_task,
+                        project_name=final_experiment_config.get("project_name"),
+                        dataset_item_ids=None,
+                        scoring_metrics=[metric_class],
+                        task_threads=self.n_threads,
+                        nb_samples=n_samples,
+                        experiment_config=final_experiment_config,
+                        verbose=0,
+                    )
             except Exception:
                 logger.debug("Final evaluation failed", exc_info=True)
 
@@ -518,28 +621,55 @@ class GepaOptimizer(BaseOptimizer):
         except Exception:
             logger.debug("Per-item diagnostics failed", exc_info=True)
 
+        trial_info: dict[str, Any] | None = None
+        if final_eval_result is not None:
+            experiment_name = getattr(final_eval_result, "experiment_name", None)
+            experiment_url = getattr(final_eval_result, "experiment_url", None)
+            trial_ids = []
+            try:
+                trial_ids = sorted(
+                    {
+                        str(test_result.trial_id)
+                        for test_result in getattr(
+                            final_eval_result, "test_results", []
+                        )
+                        if getattr(test_result, "trial_id", None) is not None
+                    }
+                )
+            except Exception:
+                logger.debug("Failed to extract trial IDs", exc_info=True)
+
+            trial_info = {
+                "experiment_name": experiment_name,
+                "experiment_url": experiment_url,
+                "trial_ids": trial_ids,
+            }
+
         details: dict[str, Any] = {
             "model": self.model,
             "temperature": self.model_parameters.get("temperature"),
             "optimizer": self.__class__.__name__,
-            "num_candidates": getattr(gepa_result, "num_candidates", None),
+            "num_candidates": len(filtered_candidates),
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
             "parents": getattr(gepa_result, "parents", None),
-            "val_scores": val_scores,
+            "val_scores": filtered_val_scores,
             "opik_rescored_scores": rescored,
             "candidate_summary": candidate_rows,
             "best_candidate_iteration": (
                 candidate_rows[best_idx]["iteration"] if candidate_rows else 0
             ),
-            "selected_candidate_index": best_idx,
+            "selected_candidate_index": best_idx if filtered_candidates else None,
             "selected_candidate_gepa_score": (
-                val_scores[best_idx] if best_idx < len(val_scores) else None
+                filtered_val_scores[best_idx]
+                if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores)
+                else None
             ),
             "selected_candidate_opik_score": best_score,
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
             "selected_candidate_item_scores": per_item_scores,
             "dataset_item_ids": [item.get("id") for item in items],
+            "selected_candidate_trial_info": trial_info,
         }
         if experiment_config:
             details["experiment"] = experiment_config
@@ -551,7 +681,10 @@ class GepaOptimizer(BaseOptimizer):
                 candidate_rows, verbose=self.verbose
             )
             gepa_reporting.display_selected_candidate(
-                best_prompt_text, best_score, verbose=self.verbose
+                best_prompt_text,
+                best_score,
+                verbose=self.verbose,
+                trial_info=trial_info,
             )
 
         if logger.isEnabledFor(logging.DEBUG):
