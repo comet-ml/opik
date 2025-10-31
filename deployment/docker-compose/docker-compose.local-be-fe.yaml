@@ -33,6 +33,9 @@ services:
       - local-be-fe
     ports:
       - "8000:8000" # Python backend HTTP port
+    environment:
+      # Point to local backend process (not Docker)
+      OPIK_REVERSE_PROXY_URL: http://host.docker.internal:8080
 
   demo-data-generator:
     profiles: !override
