@@ -91,7 +91,6 @@ public class OpikMetricProviderCustomizer implements AutoConfigurationCustomizer
         }
 
         View workspaceView = viewBuilder.build();
-        View histogramView = viewHistogramBuilder.build();
         
         // Register workspace view for all other instruments (generic, matched after specific views)
         Arrays.stream(InstrumentType.values()).forEach(instrumentType -> {
