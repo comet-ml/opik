@@ -123,15 +123,23 @@ verify_docker_services() {
 
 # Wrapper functions for backward compatibility and clearer intent
 start_infrastructure() {
-    start_docker_services "--infra"
+    # Start with --local-be-fe to get Python backend (needed for demo data)
+    start_docker_services "--local-be-fe"
+    
+    # Stop the Java backend container to avoid conflicts with local process
+    log_debug "Stopping Java backend container to avoid conflict with local process..."
+    cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
+    docker stop opik-backend-1 >/dev/null 2>&1 || log_debug "Java backend container was not running"
 }
 
 stop_infrastructure() {
-    stop_docker_services "--infra"
+    stop_docker_services "--local-be-fe"
 }
 
 verify_infrastructure() {
-    verify_docker_services "--infra"
+    # Verify infrastructure and Python backend are running
+    # (Java backend container should be stopped in standard mode)
+    verify_docker_services "--local-be-fe"
 }
 
 start_local_be_docker_services() {
@@ -566,7 +574,7 @@ show_access_information() {
 
 # Function to create demo data using opik.sh
 create_demo_data() {
-    local mode="$1"  # Either "--backend" or "--local-be"
+    local mode="$1"  # Either "--local-be-fe" or "--local-be"
     
     log_info "Creating demo data..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
@@ -585,39 +593,40 @@ create_demo_data() {
 verify_services() {
     log_info "=== Opik Development Status ==="
     
-    # Infrastructure status
-    local infra_running=false
+    # Infrastructure + Python backend status
+    local docker_services_running=false
     if verify_infrastructure; then
-        echo -e "Infrastructure: ${GREEN}RUNNING${NC} (Docker containers)"
-        infra_running=true
+        echo -e "Infrastructure + Python Backend: ${GREEN}RUNNING${NC} (Docker containers)"
+        docker_services_running=true
     else
-        echo -e "Infrastructure: ${RED}STOPPED${NC} (Docker containers)"
+        echo -e "Infrastructure + Python Backend: ${RED}STOPPED${NC} (Docker containers)"
     fi
     
-    # Backend status
+    # Backend process status
     local backend_running=false
     if display_backend_process_status; then
         backend_running=true
     fi
     
-    # Frontend status
+    # Frontend process status
     local frontend_running=false
     if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
-        echo -e "Frontend: ${GREEN}RUNNING${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
+        echo -e "Frontend Process: ${GREEN}RUNNING${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
         frontend_running=true
     else
-        echo -e "Frontend: ${RED}STOPPED${NC}"
+        echo -e "Frontend Process: ${RED}STOPPED${NC}"
     fi
 
     # Show access information if all services are running
-    if [ "$infra_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
+    if [ "$docker_services_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
         show_access_information "http://localhost:5174" true
     fi
 
     echo ""
     echo "Logs:"
-    echo "  Backend:  tail -f /tmp/opik-backend.log"
-    echo "  Frontend: tail -f /tmp/opik-frontend.log"
+    echo "  Backend Process:  tail -f /tmp/opik-backend.log"
+    echo "  Frontend Process: tail -f /tmp/opik-frontend.log"
+    echo "  Python Backend:   docker logs -f opik-python-backend-1"
 }
 
 # Function to verify BE-only services
@@ -654,16 +663,16 @@ verify_be_only_services() {
 start_services() {
     log_info "=== Starting Opik Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    log_info "Step 1/5: Starting infrastructure..."
+    log_info "Step 1/5: Starting infrastructure and Python backend..."
     start_infrastructure
     log_info "Step 2/5: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/5: Starting backend..."
+    log_info "Step 3/5: Starting backend process..."
     start_backend
-    log_info "Step 4/5: Starting frontend..."
+    log_info "Step 4/5: Starting frontend process..."
     start_frontend
     log_info "Step 5/5: Creating demo data..."
-    if ! create_demo_data "--backend"; then
+    if ! create_demo_data "--local-be-fe"; then
         log_warning "Demo data creation failed, but services are running"
     fi
     log_success "=== Start Complete ==="
@@ -697,13 +706,13 @@ migrate_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/10: Stopping frontend..."
+    log_info "Step 1/10: Stopping frontend process..."
     stop_frontend
-    log_info "Step 2/10: Stopping backend..."
+    log_info "Step 2/10: Stopping backend process..."
     stop_backend
-    log_info "Step 3/10: Stopping infrastructure..."
+    log_info "Step 3/10: Stopping infrastructure and Python backend..."
     stop_infrastructure
-    log_info "Step 4/10: Starting infrastructure..."
+    log_info "Step 4/10: Starting infrastructure and Python backend..."
     start_infrastructure
     log_info "Step 5/10: Building backend..."
     build_backend
@@ -711,12 +720,12 @@ restart_services() {
     build_frontend
     log_info "Step 7/10: Running DB migrations..."
     run_db_migrations
-    log_info "Step 8/10: Starting backend..."
+    log_info "Step 8/10: Starting backend process..."
     start_backend
-    log_info "Step 9/10: Starting frontend..."
+    log_info "Step 9/10: Starting frontend process..."
     start_frontend
     log_info "Step 10/10: Creating demo data..."
-    if ! create_demo_data "--backend"; then
+    if ! create_demo_data "--local-be-fe"; then
         log_warning "Demo data creation failed, but services are running"
     fi
     log_success "=== Restart Complete ==="
